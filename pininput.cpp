@@ -1970,6 +1970,28 @@ void PinInput::ProcessKeys(/*const U32 curr_sim_msec,*/ int curr_time_msec) // l
                }
             }
          }
+         else if (input->dwOfs == (DWORD)DIK_C)
+         {
+            if (input->dwData & 0x80)
+            {
+               g_pplayer->m_BallHistory.m_Control = !g_pplayer->m_BallHistory.m_Control;
+               g_pplayer->m_BallHistory.Process(*g_pplayer);
+            }
+         }
+         else if (g_pplayer->m_BallHistory.m_Control && input->dwOfs == (DWORD)DIK_LEFT)
+         {
+            if (input->dwData & 0x80)
+            {
+               g_pplayer->m_BallHistory.ControlPrev();
+            }
+         }
+         else if (g_pplayer->m_BallHistory.m_Control && input->dwOfs == (DWORD)DIK_RIGHT)
+         {
+            if (input->dwData & 0x80)
+            {
+               g_pplayer->m_BallHistory.ControlNext();
+            }
+         }
          else
             FireKeyEvent((input->dwData & 0x80) ? DISPID_GameEvents_KeyDown : DISPID_GameEvents_KeyUp, input->dwOfs);
       }

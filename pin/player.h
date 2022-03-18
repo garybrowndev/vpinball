@@ -245,6 +245,63 @@ struct TimerOnOff
    bool m_enabled;
 };
 
+struct BallHistoryState
+{
+   BallHistoryState();
+   
+   Vertex3Ds m_Pos;
+   Vertex3Ds m_Vel;
+   Vertex3Ds m_AngMom;
+   Vertex3Ds m_LastEventPos;
+
+   Matrix3 m_Orientation;
+
+   Vertex3Ds m_OldPos[MAX_BALL_TRAIL_POS];
+   unsigned int m_RingCounter_OldPos;
+};
+
+struct BallHistoryRecord
+{
+   BallHistoryRecord();
+   BallHistoryRecord(U32 time_msec);
+
+   U32 m_Time_msec;
+   std::vector<BallHistoryState> m_BallHistoryStates;
+};
+
+struct BallHistory
+{
+public:
+   BallHistory();
+   void Init(std::size_t ballHistoriesMax, std::size_t ballHistoryControlStepMs, float ballHistoryControlPixels, Player &player);
+   void UnInit();
+   void ControlNext();
+   void ControlPrev();
+   void Process(Player &player);
+
+   bool m_Control;
+
+public: // TODO GB - put back to private
+   bool m_Save;
+   bool m_WasControl;
+   std::size_t m_CurrentControlIndex;
+
+   U32 m_BallHistoryControlStepMs;
+   float m_BallHistoryControlStepPixels;
+
+   std::vector<BallHistoryRecord> m_BallHistoryRecords;
+   std::size_t m_BallHistoryRecordsHeadIndex;
+   std::size_t m_BallHistoryRecordsSize;
+
+   VertexBuffer *m_ControlHistoryVertexBuffer;
+
+   void OutputStats(Player &pPlayer);
+   void Update(Player &player);
+   void Add(std::vector<Ball*> &vballs, U32 time_msec);
+   BallHistoryRecord& Get(std::size_t index);
+   std::size_t GetTailIndex();
+};
+
 class Player : public CWnd
 {
 public:
@@ -344,6 +401,8 @@ public:
    Ball *m_pactiveballDebug; // ball the debugger will use as Activeball when firing events
    Ball *m_pactiveballBC;    // ball that the ball control UI will use
    Vertex3Ds *m_pBCTarget;   // If non-null, the target location for the ball to roll towards
+
+   BallHistory m_BallHistory;
 
    std::vector<Ball*> m_vball;
    std::vector<HitFlipper*> m_vFlippers;
@@ -597,9 +656,6 @@ private:
    // only called from dtor
    void Shutdown();
 
-   void CreateDebugFont();
-   void SetDebugOutputPosition(const float x, const float y);
-   void DebugPrint(int x, int y, LPCSTR text, bool center = false);
 
    void SetScreenOffset(const float x, const float y);     // set render offset in screen coordinates, e.g., for the nudge shake
 
@@ -613,6 +669,10 @@ private:
    unsigned int ProfilingMode() const;
 
 public:
+   void CreateDebugFont();
+   void SetDebugOutputPosition(const float x, const float y);
+   void DebugPrint(int x, int y, LPCSTR text, bool center = false);
+
    void StopPlayer();
    void ToggleFPS();
    void InitFPS();
