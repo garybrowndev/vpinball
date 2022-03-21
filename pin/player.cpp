@@ -544,11 +544,8 @@ void BallHistory::Process(Player &player)
                   ballHistoryState.m_Pos.x,
                   ballHistoryState.m_Pos.y,
                   ballHistoryState.m_Pos.z,
-                  D3DCOLOR_XRGB(0x00, 0xFF, 0x00),
-                  // old range = 0 - m_MaxBallVelocityPixels
-                  // new range = 5 - 20
-                  ((((VelocityPixels(ballHistoryState.m_Vel) - 0.0f) * (20.0f - 5.0f)) / (m_MaxBallVelocityPixels - 0.f)) + 5.0f) * (player.m_width / 1080.f)
-                  //5.0f * player.m_width / 1080.0f //VelocityPixels(ballHistoryState.m_Vel)
+                  D3DCOLOR_XRGB(0x00, 0x00, 0x00),
+                  ((((min(VelocityPixels(ballHistoryState.m_Vel), (m_MaxBallVelocityPixels / 4.0f))) * (20.0f - 5.0f)) / (m_MaxBallVelocityPixels / 4.0f)) + 5.0f) * (player.m_width / 1080.f)
                };
                controlHistoryVertices.push_back(vtx);
             }
@@ -571,6 +568,14 @@ void BallHistory::Process(Player &player)
                }
             }
             std::vector<float> distancePixelsTraveled(ballCount, 0.0f);
+         }
+
+         std::size_t controlHistorySize = controlHistoryVertices.size();
+         for (std::size_t chvIndex = 0; chvIndex < controlHistoryVertices.size(); chvIndex++)
+         {
+            unsigned char red = 0xFF - (chvIndex * 0xFF / controlHistorySize);
+            unsigned char blue = chvIndex * 0xFF / controlHistorySize;
+            controlHistoryVertices[chvIndex].color = D3DCOLOR_XRGB(red, 0x00, blue);
          }
 
          void *buf;
