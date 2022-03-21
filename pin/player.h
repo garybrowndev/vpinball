@@ -269,6 +269,7 @@ struct BallHistoryState
    Vertex3Ds m_Vel;
    Vertex3Ds m_AngMom;
    Vertex3Ds m_LastEventPos;
+   bool m_Frozen;
 
    Matrix3 m_Orientation;
 
@@ -288,8 +289,14 @@ struct BallHistoryRecord
 struct BallHistory
 {
 public:
+   enum NextPreviousByType
+   {
+      eTimeMs,
+      eDistancePixels
+   };
+
    BallHistory();
-   void Init(std::size_t ballHistoriesMax, std::size_t ballHistoryControlStepMs, float ballHistoryControlPixels, Player &player);
+   void Init(std::size_t ballHistoriesMax, NextPreviousByType nextPreviousBy, std::size_t ballHistoryControlStepMs, float ballHistoryControlPixels, Player &player);
    void UnInit();
    void ControlNext();
    void ControlPrev();
@@ -302,12 +309,14 @@ public: // TODO GB - put back to private
    bool m_WasControl;
    std::size_t m_CurrentControlIndex;
 
+   NextPreviousByType m_NextPreviousBy;
    U32 m_BallHistoryControlStepMs;
    float m_BallHistoryControlStepPixels;
 
    std::vector<BallHistoryRecord> m_BallHistoryRecords;
    std::size_t m_BallHistoryRecordsHeadIndex;
    std::size_t m_BallHistoryRecordsSize;
+   float m_MaxBallVelocityPixels;
 
    VertexBuffer *m_ControlHistoryVertexBuffer;
 
@@ -316,6 +325,11 @@ public: // TODO GB - put back to private
    void Add(std::vector<Ball*> &vballs, U32 time_msec);
    BallHistoryRecord& Get(std::size_t index);
    std::size_t GetTailIndex();
+
+   float DistancePixels(Vertex3Ds &pos1, Vertex3Ds &pos2);
+   float VelocityPixels(Vertex3Ds &vel);
+   bool ControlNextMove();
+   bool ControlPrevMove();
 };
 
 class Player : public CWnd
