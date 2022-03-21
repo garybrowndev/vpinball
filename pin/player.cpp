@@ -92,6 +92,7 @@ BallHistory::BallHistory() :
    m_BallHistoryControlStepPixels(0.0f),
    m_BallHistoryRecordsHeadIndex(0),
    m_BallHistoryRecordsSize(0),
+   m_MaxBallVelocityPixels(0.0f),
    m_ControlHistoryVertexBuffer(nullptr)
 {
 }
@@ -99,7 +100,7 @@ BallHistory::BallHistory() :
 // TODO GB
 // Crash on Diner, after hit into right eject, hit control, then move ball around
 
-void BallHistory::Init(std::size_t ballHistoriesMax, std::size_t ballHistoryControlStepMs, float ballHistoryControlStepPixels, Player &player)
+void BallHistory::Init(std::size_t ballHistoriesMax, NextPreviousByType nextPreviousBy, std::size_t ballHistoryControlStepMs, float ballHistoryControlStepPixels, Player &player)
 {
    m_Save = true;
    m_Control = false;
@@ -107,12 +108,14 @@ void BallHistory::Init(std::size_t ballHistoriesMax, std::size_t ballHistoryCont
 
    m_CurrentControlIndex = 0;
 
+   m_NextPreviousBy = nextPreviousBy;
    m_BallHistoryControlStepMs = ballHistoryControlStepMs;
    m_BallHistoryControlStepPixels = ballHistoryControlStepPixels;
 
    m_BallHistoryRecords.resize(ballHistoriesMax);
    m_BallHistoryRecordsSize = 0;
    m_BallHistoryRecordsHeadIndex = 0;
+   m_MaxBallVelocityPixels = 0.0f;
 
    if (m_ControlHistoryVertexBuffer == nullptr)
    {
@@ -131,6 +134,9 @@ void BallHistory::Add(std::vector<Ball*> &vball, U32 time_msec)
 {
    if (!vball.empty())
    {
+      std::size_t prevBallHistoryRecordsSize = m_BallHistoryRecordsSize;
+      std::size_t prevBallHistoryRecordsHeadIndex = m_BallHistoryRecordsHeadIndex;
+      std::size_t prevCurrentControlIndex = m_CurrentControlIndex;
       if (m_BallHistoryRecordsSize)
       {
          m_BallHistoryRecordsHeadIndex++;
@@ -139,11 +145,11 @@ void BallHistory::Add(std::vector<Ball*> &vball, U32 time_msec)
             m_BallHistoryRecordsHeadIndex = 0;
          }
       }
-
       if (m_BallHistoryRecordsSize < m_BallHistoryRecords.size())
       {
          m_BallHistoryRecordsSize++;
       }
+      m_CurrentControlIndex = m_BallHistoryRecordsHeadIndex;
 
       BallHistoryRecord &ballHistoryRecordHead = m_BallHistoryRecords[m_BallHistoryRecordsHeadIndex];
       ballHistoryRecordHead.m_BallHistoryStates.clear();
@@ -154,17 +160,35 @@ void BallHistory::Add(std::vector<Ball*> &vball, U32 time_msec)
          BallHistoryState &newBhr = ballHistoryRecordHead.m_BallHistoryStates.back();
          newBhr.m_Pos = (*it)->m_d.m_pos;
          newBhr.m_Vel = (*it)->m_d.m_vel;
+         newBhr.m_Frozen = (*it)->m_d.m_frozen;
          newBhr.m_AngMom = (*it)->m_angularmomentum;
          newBhr.m_LastEventPos = (*it)->m_lastEventPos;
          newBhr.m_Orientation = (*it)->m_orientation;
          memcpy(newBhr.m_OldPos, (*it)->m_oldpos, sizeof(newBhr.m_OldPos));
          newBhr.m_RingCounter_OldPos = (*it)->m_ringcounter_oldpos;
-         /*
-         (*it)->m_d.m_frozen = false;
-         */
+         m_MaxBallVelocityPixels = max(VelocityPixels((*it)->m_d.m_vel), m_MaxBallVelocityPixels);
       }
 
-      m_CurrentControlIndex = m_BallHistoryRecordsHeadIndex;
+      if (m_BallHistoryRecordsSize > 1)
+      {
+         bool differenceFound = false;
+         BallHistoryRecord &prevBallHistoryRecordHead = m_BallHistoryRecords[prevBallHistoryRecordsHeadIndex];
+         for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < prevBallHistoryRecordHead.m_BallHistoryStates.size(); ballHistoryStateIndex++)
+         {
+            if (DistancePixels(ballHistoryRecordHead.m_BallHistoryStates[ballHistoryStateIndex].m_Pos, prevBallHistoryRecordHead.m_BallHistoryStates[ballHistoryStateIndex].m_Pos) > 1.0f)
+            {
+               differenceFound = true;
+               break;
+            }
+         }
+
+         if (!differenceFound)
+         {
+            m_BallHistoryRecordsSize = prevBallHistoryRecordsSize;
+            m_BallHistoryRecordsHeadIndex = prevBallHistoryRecordsHeadIndex;
+            m_CurrentControlIndex = prevCurrentControlIndex;
+         }
+      }
    }
 }
 
@@ -186,6 +210,27 @@ std::size_t BallHistory::GetTailIndex()
    return tailIndex;
 }
 
+float BallHistory::DistancePixels(Vertex3Ds &pos1, Vertex3Ds &pos2)
+{
+   return sqrtf(powf((pos1.x - pos2.x), 2) + powf((pos1.y - pos2.y), 2) + powf((pos1.z - pos2.z), 2));
+}
+
+float BallHistory::VelocityPixels(Vertex3Ds &vel)
+{
+   return sqrtf(powf(vel.x, 2) + powf(vel.y, 2) + powf(vel.z, 2));
+}
+
+bool BallHistory::ControlNextMove()
+{
+   m_CurrentControlIndex++;
+   if (m_CurrentControlIndex >= m_BallHistoryRecords.size())
+   {
+      m_CurrentControlIndex = 0;
+   }
+
+   return m_CurrentControlIndex != m_BallHistoryRecordsHeadIndex;
+}
+
 void BallHistory::ControlNext()
 {
    if (m_CurrentControlIndex == m_BallHistoryRecordsHeadIndex)
@@ -194,20 +239,67 @@ void BallHistory::ControlNext()
    }
    else
    {
-      U32 nextTimeMsec = m_BallHistoryRecords[m_CurrentControlIndex].m_Time_msec + m_BallHistoryControlStepMs;      while (m_BallHistoryRecords[m_CurrentControlIndex].m_Time_msec <= nextTimeMsec)
+      switch (m_NextPreviousBy)
       {
-         m_CurrentControlIndex++;
-         if (m_CurrentControlIndex >= m_BallHistoryRecords.size())
+         case NextPreviousByType::eTimeMs:
          {
-            m_CurrentControlIndex = 0;
+            U32 nextTimeMsec = m_BallHistoryRecords[m_CurrentControlIndex].m_Time_msec + m_BallHistoryControlStepMs;
+            while (m_BallHistoryRecords[m_CurrentControlIndex].m_Time_msec <= nextTimeMsec && ControlNextMove());
          }
+         break;
 
-         if (m_CurrentControlIndex == m_BallHistoryRecordsHeadIndex)
+         case NextPreviousByType::eDistancePixels:
          {
-            break;
+            bool exceededTravel = false;
+            std::size_t ballCount = m_BallHistoryRecords[m_CurrentControlIndex].m_BallHistoryStates.size();
+            std::vector<float> distancePixelsTraveled(ballCount, 0.0f);
+            BallHistoryRecord *lastBallHistoryRecord = &m_BallHistoryRecords[m_CurrentControlIndex];
+            while (!exceededTravel && ControlNextMove())
+            {
+               for (std::size_t bhsIndex = 0; bhsIndex < ballCount; bhsIndex++)
+               {
+                  distancePixelsTraveled[bhsIndex] += DistancePixels(m_BallHistoryRecords[m_CurrentControlIndex].m_BallHistoryStates[bhsIndex].m_Pos, lastBallHistoryRecord->m_BallHistoryStates[bhsIndex].m_Pos);
+
+                  if (distancePixelsTraveled[bhsIndex] > m_BallHistoryControlStepPixels)
+                  {
+                     exceededTravel = true;
+                     break;
+                  }
+               }
+            }
          }
+         break;
+
+         default:
+            g_pvp->ProfileLog("Unknown NextPreviousByType");
+            break;
       }
    }
+}
+
+bool BallHistory::ControlPrevMove()
+{
+   // TODO GB - "Frozen" fix - if any of the m_CurrentControlIndex BallHistory States (any of the current balls, which could be more than one)
+   // that you are about to return as the correct next value and subsequently exit the function
+   // has m_frozen == true AND there is a non-zero velocity state more forward in time, then instead set the m_CurrentControlIndex to the first
+   // ball state with the non-zero velocity that is forward in time from the "Frozen" ball state. ALSO, if the logic described before triggers,
+   // then double check to see if the m_CurrentControlIndex you are about to return is not the same as it was when you first came in, in that case
+   // go back farther before the frozen and return the m_CurrentControlIndex that is the first ball state that is NOT frozen before the last ball
+   // state that was frozen
+   if (m_CurrentControlIndex == 0)
+   {
+      m_CurrentControlIndex = m_BallHistoryRecords.size() - 1;
+   }
+   else
+   {
+      m_CurrentControlIndex--;
+   }
+
+   if (m_CurrentControlIndex == GetTailIndex())
+   {
+      return false;
+   }
+   return true;
 }
 
 void BallHistory::ControlPrev()
@@ -218,29 +310,40 @@ void BallHistory::ControlPrev()
    }
    else
    {
-      U32 prevTimeMsec = m_BallHistoryRecords[m_CurrentControlIndex].m_Time_msec - m_BallHistoryControlStepMs;
-      if (m_BallHistoryRecords[m_CurrentControlIndex].m_Time_msec < m_BallHistoryControlStepMs)
+      switch (m_NextPreviousBy)
       {
-         m_CurrentControlIndex = GetTailIndex();
-      }
-      else
-      {
-         while (m_BallHistoryRecords[m_CurrentControlIndex].m_Time_msec >= prevTimeMsec)
+         case NextPreviousByType::eTimeMs:
          {
-            if (m_CurrentControlIndex == 0)
-            {
-               m_CurrentControlIndex = m_BallHistoryRecords.size() - 1;
-            }
-            else
-            {
-               m_CurrentControlIndex--;
-            }
+            U32 prevTimeMsec = m_BallHistoryRecords[m_CurrentControlIndex].m_Time_msec - m_BallHistoryControlStepMs;
+            while (m_BallHistoryRecords[m_CurrentControlIndex].m_Time_msec >= prevTimeMsec && ControlPrevMove());
+         }
+         break;
 
-            if (m_CurrentControlIndex == GetTailIndex())
+         case NextPreviousByType::eDistancePixels:
+         {
+            bool exceededTravel = false;
+            std::size_t ballCount = m_BallHistoryRecords[m_CurrentControlIndex].m_BallHistoryStates.size();
+            std::vector<float> distancePixelsTraveled(ballCount, 0.0f);
+            BallHistoryRecord *lastBallHistoryRecord = &m_BallHistoryRecords[m_CurrentControlIndex];
+            while (!exceededTravel && ControlPrevMove())
             {
-               break;
+               for (std::size_t bhsIndex = 0; bhsIndex < ballCount; bhsIndex++)
+               {
+                  distancePixelsTraveled[bhsIndex] += DistancePixels(m_BallHistoryRecords[m_CurrentControlIndex].m_BallHistoryStates[bhsIndex].m_Pos, lastBallHistoryRecord->m_BallHistoryStates[bhsIndex].m_Pos);
+
+                  if (distancePixelsTraveled[bhsIndex] > m_BallHistoryControlStepPixels)
+                  {
+                     exceededTravel = true;
+                     break;
+                  }
+               }
             }
          }
+         break;
+
+         default:
+            g_pvp->ProfileLog("Unknown NextPreviousByType");
+            break;
       }
    }
 }
@@ -267,8 +370,30 @@ void BallHistory::OutputStats(Player &player)
    sprintf_s(szFoo, "CurrentControlIndex = %zu", m_CurrentControlIndex);
    player.DebugPrint(textX, textY+=textYStep, szFoo);
 
-   sprintf_s(szFoo, "m_BallHistoryRecords Size = %zu", m_BallHistoryRecords.size());
+   sprintf_s(szFoo, "BallHistoryRecords Size = %zu", m_BallHistoryRecords.size());
    player.DebugPrint(textX, textY+=textYStep, szFoo);
+
+   sprintf_s(szFoo, "Ball Count = %zu", m_BallHistoryRecordsSize ? m_BallHistoryRecords[0].m_BallHistoryStates.size() : 0u);
+   player.DebugPrint(textX, textY += textYStep, szFoo);
+
+   sprintf_s(szFoo, "MaxBallVelocityPixels = %.2f", m_MaxBallVelocityPixels);
+   player.DebugPrint(textX, textY += textYStep, szFoo);
+
+   switch (m_NextPreviousBy)
+   {
+      case NextPreviousByType::eTimeMs:
+         sprintf_s(szFoo, "NextPreviousBy = TimeMs");
+         break;
+
+      case NextPreviousByType::eDistancePixels:
+         sprintf_s(szFoo, "NextPreviousBy = DistancePixel");
+         break;
+
+      default :
+         sprintf_s(szFoo, "NextPreviousBy = **UNKNOWN**");
+         break;
+   };
+   player.DebugPrint(textX, textY += textYStep, szFoo);
 
    sprintf_s(szFoo, "BallHistoryControlStepMs = %u", m_BallHistoryControlStepMs);
    player.DebugPrint(textX, textY+=textYStep, szFoo);
@@ -282,6 +407,7 @@ void BallHistory::OutputStats(Player &player)
    sprintf_s(szFoo, "BallHistoryRecordsHeadIndex = %zu", m_BallHistoryRecordsHeadIndex);
    player.DebugPrint(textX, textY+=textYStep, szFoo);
 
+   /*
    const U32 recordsOutputStatsCount = std::min(m_BallHistoryRecordsSize, 5u);
 
    sprintf_s(szFoo, "BallHistoryRecords (%u most recent / 'head')", recordsOutputStatsCount);
@@ -347,6 +473,7 @@ void BallHistory::OutputStats(Player &player)
          recordsOutputIndex = 0;
       }
    }
+   */
 }
 
 void BallHistory::Update(Player &player)
@@ -355,6 +482,7 @@ void BallHistory::Update(Player &player)
    for (std::size_t vballIndex = 0; vballIndex < player.m_vball.size(); ++vballIndex)
    {
       player.m_vball[vballIndex]->m_d.m_pos = currentControlBhr.m_BallHistoryStates[vballIndex].m_Pos;
+      player.m_vball[vballIndex]->m_d.m_frozen = currentControlBhr.m_BallHistoryStates[vballIndex].m_Frozen;
       if (m_Control)
       {
          player.m_vball[vballIndex]->m_d.m_vel = { 0.0f, 0.0f, 0.0f };
@@ -371,11 +499,6 @@ void BallHistory::Update(Player &player)
    }
 }
 
-float Distance(Vertex3Ds &p1, Vertex3Ds &p2)
-{
-   return ::sqrt(p2.x - p1.x) * (p2.x - p1.x) + (p2.y - p1.y) * (p2.y - p1.y) + (p2.z - p1.z) * (p2.z - p1.z);
-}
-
 void BallHistory::Process(Player &player)
 {
    U32 time_msec = msec();
@@ -384,7 +507,7 @@ void BallHistory::Process(Player &player)
       BallHistoryRecord& headBhr = Get(m_BallHistoryRecordsHeadIndex);
       if (!m_BallHistoryRecordsSize || (player.m_vball.size() != headBhr.m_BallHistoryStates.size()))
       {
-         Init(m_BallHistoryRecords.size(), m_BallHistoryControlStepMs, m_BallHistoryControlStepPixels, player);
+         Init(m_BallHistoryRecords.size(), m_NextPreviousBy, m_BallHistoryControlStepMs, m_BallHistoryControlStepPixels, player);
          m_Control = false;
       }
 
@@ -394,25 +517,38 @@ void BallHistory::Process(Player &player)
 
          Update(player);
 
-         std::vector<Vertex3D_TexelOnly> controlHistoryVertices;
+         std::vector<Vertex3D_Color_Size> controlHistoryVertices;
          std::size_t tempCurrentIndex = m_CurrentControlIndex;
          std::size_t tailIndex = GetTailIndex();
-         float distanceTraversed = 0.0f;
-         const float totalDistanceTraversedMax = 1000.0f;
-         while (tempCurrentIndex != tailIndex && controlHistoryVertices.size() < 100)
+
+         std::size_t ballCount = m_BallHistoryRecords[m_CurrentControlIndex].m_BallHistoryStates.size();
+         std::vector<float> distancePixelsTraveled(ballCount, 0.0f);
+         bool maxDistanceTraveled = false;
+         const float totalDistanceTraversedMax = 2000.0f;
+         BallHistoryRecord * lastBhr = nullptr;
+
+         while (tempCurrentIndex != tailIndex && !maxDistanceTraveled)
          {
             BallHistoryRecord &tempCurrentBhr = m_BallHistoryRecords[tempCurrentIndex];
             for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < tempCurrentBhr.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
             {
                BallHistoryState &ballHistoryState = tempCurrentBhr.m_BallHistoryStates[ballHistoryStateIndex];
 
-               Vertex3D_TexelOnly vtx =
+               if (lastBhr)
+               {
+                  distancePixelsTraveled[ballHistoryStateIndex] += DistancePixels(lastBhr->m_BallHistoryStates[ballHistoryStateIndex].m_Pos, ballHistoryState.m_Pos);
+               }
+
+               Vertex3D_Color_Size vtx =
                {
                   ballHistoryState.m_Pos.x,
                   ballHistoryState.m_Pos.y,
                   ballHistoryState.m_Pos.z,
-                  500.0f,
-                  500.0f
+                  D3DCOLOR_XRGB(0x00, 0xFF, 0x00),
+                  // old range = 0 - m_MaxBallVelocityPixels
+                  // new range = 5 - 20
+                  ((((VelocityPixels(ballHistoryState.m_Vel) - 0.0f) * (20.0f - 5.0f)) / (m_MaxBallVelocityPixels - 0.f)) + 5.0f) * (player.m_width / 1080.f)
+                  //5.0f * player.m_width / 1080.0f //VelocityPixels(ballHistoryState.m_Vel)
                };
                controlHistoryVertices.push_back(vtx);
             }
@@ -426,7 +562,15 @@ void BallHistory::Process(Player &player)
                tempCurrentIndex--;
             }
 
-            //distanceTraveled += Distance(m_BallHistory
+            lastBhr = &tempCurrentBhr;
+            for each (const float &dpt in distancePixelsTraveled)
+            {
+               if (dpt > totalDistanceTraversedMax)
+               {
+                  maxDistanceTraveled = true;
+               }
+            }
+            std::vector<float> distancePixelsTraveled(ballCount, 0.0f);
          }
 
          void *buf;
@@ -434,9 +578,8 @@ void BallHistory::Process(Player &player)
          memcpy(buf, controlHistoryVertices.data(), controlHistoryVertices.size() * sizeof(controlHistoryVertices[0]));
          m_ControlHistoryVertexBuffer->unlock();
 
-         constexpr float ptsize = 10.0f;
-         player.m_pin3d.m_pd3dPrimaryDevice->SetRenderState((RenderDevice::RenderStates)D3DRS_POINTSIZE, *((DWORD*)&ptsize));
-         player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::POINTLIST, MY_D3DFVF_TEX, m_ControlHistoryVertexBuffer, 0, controlHistoryVertices.size());
+         DWORD color = D3DCOLOR_XRGB(0x00, 0xFF, 0x00);
+         player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::POINTLIST, MY_D3DFVF_SIZE_COLOR_VERTEX, m_ControlHistoryVertexBuffer, 0, controlHistoryVertices.size());
       }
       else
       {
@@ -462,7 +605,7 @@ void BallHistory::Process(Player &player)
          }
       }
 
-      //OutputStats(player);
+      OutputStats(player);
    }   
 }
 
@@ -1915,7 +2058,7 @@ HRESULT Player::Init()
    assert(m_ballTrailVertexBuffer == nullptr);
    m_pin3d.m_pd3dPrimaryDevice->CreateVertexBuffer((MAX_BALL_TRAIL_POS-2)*2+4, USAGE_DYNAMIC, MY_D3DFVF_NOTEX2_VERTEX, &m_ballTrailVertexBuffer);
 
-   m_BallHistory.Init(8 * 1024, 250, 50, *this);
+   m_BallHistory.Init(8 * 1024, BallHistory::NextPreviousByType::eDistancePixels, 250, 200.0f, *this);
 
    m_ptable->m_pcv->Start(); // Hook up to events and start cranking script
 

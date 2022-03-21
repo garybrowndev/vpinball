@@ -77,6 +77,14 @@ bool IsWindows10_1803orAbove()
    return false;
 }
 
+constexpr VertexElement VertexColorSizeElement[] =
+{
+   { 0, 0 * sizeof(float), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 },  // pos
+   { 0, 3 * sizeof(DWORD), D3DDECLTYPE_D3DCOLOR, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR, 0 }, // color
+   { 0, 4 * sizeof(DWORD), D3DDECLTYPE_FLOAT1, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_PSIZE, 0 }, // size
+   D3DDECL_END() };
+VertexDeclaration* RenderDevice::m_pVertexColorSizeDeclaration = nullptr;
+
 constexpr VertexElement VertexTexelElement[] =
 {
    { 0, 0 * sizeof(float), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 },  // pos
@@ -124,6 +132,8 @@ static unsigned int fvfToSize(const DWORD fvf)
       return sizeof(Vertex3D_NoTex2);
    case MY_D3DFVF_TEX:
       return sizeof(Vertex3D_TexelOnly);
+   case MY_D3DFVF_SIZE_COLOR_VERTEX:
+      return sizeof(Vertex3D_Color_Size);
    default:
       assert(0 && "Unknown FVF type in fvfToSize");
       return 0;
@@ -140,6 +150,8 @@ static VertexDeclaration* fvfToDecl(const DWORD fvf)
       return RenderDevice::m_pVertexTrafoTexelDeclaration;
    case MY_D3DFVF_TEX:
       return RenderDevice::m_pVertexTexelDeclaration;
+   case MY_D3DFVF_SIZE_COLOR_VERTEX:
+      return RenderDevice::m_pVertexColorSizeDeclaration;
    default:
       assert(0 && "Unknown FVF type in fvfToDecl");
       return nullptr;
@@ -745,6 +757,7 @@ void RenderDevice::CreateDevice(int &refreshrate, UINT adapterIndex)
       ShowError("SMAA or DLAA post-processing AA should not be combined with 10Bit-output rendering (will result in visible artifacts)!");
 
    // create default vertex declarations for shaders
+   CreateVertexDeclaration(VertexColorSizeElement, &m_pVertexColorSizeDeclaration);
    CreateVertexDeclaration(VertexTexelElement, &m_pVertexTexelDeclaration);
    CreateVertexDeclaration(VertexNormalTexelElement, &m_pVertexNormalTexelDeclaration);
    //CreateVertexDeclaration( VertexNormalTexelTexelElement, &m_pVertexNormalTexelTexelDeclaration );
@@ -938,6 +951,7 @@ RenderDevice::~RenderDevice()
 
    FreeShader();
 
+   SAFE_RELEASE(m_pVertexColorSizeDeclaration);
    SAFE_RELEASE(m_pVertexTexelDeclaration);
    SAFE_RELEASE(m_pVertexNormalTexelDeclaration);
    //SAFE_RELEASE(m_pVertexNormalTexelTexelDeclaration);

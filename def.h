@@ -164,6 +164,7 @@ enum SaveDirtyState
 #define MY_D3DFVF_TEX                   0
 #define MY_D3DFVF_NOTEX2_VERTEX         1
 #define MY_D3DTRANSFORMED_NOTEX2_VERTEX 2 //!! delete
+#define MY_D3DFVF_SIZE_COLOR_VERTEX     3
 
 //These Structs are used for rendering and loading meshes. They must match the VertexDeclaration in RenderDevice.cpp and the loaded meshes.
 class Vertex3D_TexelOnly // for rendering, uses MY_D3DFVF_TEX
@@ -197,6 +198,21 @@ public:
    // Texture coordinates (0)
    D3DVALUE tu;
    D3DVALUE tv;
+};
+
+class Vertex3D_Color_Size // for rendering, uses MY_D3DFVF_SIZE_COLOR_VERTEX
+{
+public:
+   // Position
+   D3DVALUE x;
+   D3DVALUE y;
+   D3DVALUE z;
+
+   // Color
+   D3DCOLOR color;
+
+   // Size
+   float size;
 };
 
 class LocalString
