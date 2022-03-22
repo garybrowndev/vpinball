@@ -1978,6 +1978,20 @@ void PinInput::ProcessKeys(/*const U32 curr_sim_msec,*/ int curr_time_msec) // l
                g_pplayer->m_BallHistory.Process(*g_pplayer);
             }
          }
+         else if (input->dwOfs == (DWORD)DIK_F)
+         {
+            if (input->dwData & 0x80)
+            {
+               g_pplayer->m_BallHistory.ToggleFavorite();
+            }
+         }
+         else if (input->dwOfs == (DWORD)DIK_R)
+         {
+            if (input->dwData & 0x80)
+            {
+               g_pplayer->m_BallHistory.RecallFavorite();
+            }
+         }
          else if (g_pplayer->m_BallHistory.m_Control && input->dwOfs == (DWORD)DIK_LEFT)
          {
             if (input->dwData & 0x80)

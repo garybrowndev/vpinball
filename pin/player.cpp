@@ -83,11 +83,18 @@ BallHistoryRecord::BallHistoryRecord(U32 time_msec):
 {
 }
 
+const float BallHistory::m_BallHistoryMinPointSize = 5.0f;
+const float BallHistory::m_BallHistoryMaxPointSize = 20.0f;
+const float BallHistory::m_FavoritePointSize = BallHistory::m_BallHistoryMaxPointSize * 1.25f;
+
 BallHistory::BallHistory() :
    m_Save(false),
    m_Control(false),
-   m_WasControl(false),
+   m_WasControlled(false),
+   m_WasRecalled(false),
    m_CurrentControlIndex(0),
+   m_FavoriteControlIndexSet(false),
+   m_FavoriteControlIndex(0),
    m_BallHistoryControlStepMs(0),
    m_BallHistoryControlStepPixels(0.0f),
    m_BallHistoryRecordsHeadIndex(0),
@@ -104,9 +111,13 @@ void BallHistory::Init(std::size_t ballHistoriesMax, NextPreviousByType nextPrev
 {
    m_Save = true;
    m_Control = false;
-   m_WasControl = false;
+   m_WasControlled = false;
+   m_WasRecalled = false;
 
    m_CurrentControlIndex = 0;
+
+   m_FavoriteControlIndexSet = false;
+   m_FavoriteControlIndex = 0;
 
    m_NextPreviousBy = nextPreviousBy;
    m_BallHistoryControlStepMs = ballHistoryControlStepMs;
@@ -348,6 +359,26 @@ void BallHistory::ControlPrev()
    }
 }
 
+void BallHistory::ToggleControl()
+{
+   m_Control = !m_Control;
+}
+
+void BallHistory::ToggleFavorite()
+{
+   m_FavoriteControlIndexSet = true;
+   m_FavoriteControlIndex = m_CurrentControlIndex;
+}
+
+void BallHistory::RecallFavorite()
+{
+   if (m_FavoriteControlIndexSet)
+   {
+      m_CurrentControlIndex = m_FavoriteControlIndex;
+      m_WasRecalled = true;
+   }
+}
+
 void BallHistory::OutputStats(Player &player)
 {
    int textX = 0;
@@ -364,11 +395,14 @@ void BallHistory::OutputStats(Player &player)
    sprintf_s(szFoo, "Control = %s", m_Control ? "true" : "false");
    player.DebugPrint(textX, textY+=textYStep, szFoo);
 
-   sprintf_s(szFoo, "WasControl = %s", m_WasControl ? "true" : "false");
-   player.DebugPrint(textX, textY+=textYStep, szFoo);
-
    sprintf_s(szFoo, "CurrentControlIndex = %zu", m_CurrentControlIndex);
    player.DebugPrint(textX, textY+=textYStep, szFoo);
+
+   sprintf_s(szFoo, "Favorite Control Index Set = %s", m_FavoriteControlIndexSet ? "true" : "false");
+   player.DebugPrint(textX, textY += textYStep, szFoo);
+
+   sprintf_s(szFoo, "Favorite Control Index = %zu", m_FavoriteControlIndex);
+   player.DebugPrint(textX, textY += textYStep, szFoo);
 
    sprintf_s(szFoo, "BallHistoryRecords Size = %zu", m_BallHistoryRecords.size());
    player.DebugPrint(textX, textY+=textYStep, szFoo);
@@ -499,21 +533,39 @@ void BallHistory::Update(Player &player)
    }
 }
 
+bool BallHistory::BallCountChanged(std::vector<Ball*> &vball, BallHistoryRecord &headBhr)
+{
+   return vball.size() != headBhr.m_BallHistoryStates.size();
+}
+
+bool BallHistory::BallFrozenChanged(std::vector<Ball*> &vball, BallHistoryRecord &headBhr)
+{
+   for (std::size_t vballIndex = 0; vballIndex < vball.size(); ++vballIndex)
+   {
+      if ((vball[vballIndex]->m_d.m_frozen == false && headBhr.m_BallHistoryStates[vballIndex].m_Frozen == true) ||
+         (vball[vballIndex]->m_d.m_frozen == true && headBhr.m_BallHistoryStates[vballIndex].m_Frozen == false))
+      {
+         m_Control = false;
+         return true;
+      }
+   }
+   return false;
+}
+
 void BallHistory::Process(Player &player)
 {
    U32 time_msec = msec();
    if (m_Save)
    {
       BallHistoryRecord& headBhr = Get(m_BallHistoryRecordsHeadIndex);
-      if (!m_BallHistoryRecordsSize || (player.m_vball.size() != headBhr.m_BallHistoryStates.size()))
+      if (!m_BallHistoryRecordsSize || BallCountChanged(player.m_vball, headBhr) || BallFrozenChanged(player.m_vball, headBhr))
       {
          Init(m_BallHistoryRecords.size(), m_NextPreviousBy, m_BallHistoryControlStepMs, m_BallHistoryControlStepPixels, player);
-         m_Control = false;
       }
 
       if (m_Control)
       {
-         m_WasControl = true;
+         m_WasControlled = true;
 
          Update(player);
 
@@ -526,6 +578,7 @@ void BallHistory::Process(Player &player)
          bool maxDistanceTraveled = false;
          const float totalDistanceTraversedMax = 2000.0f;
          BallHistoryRecord * lastBhr = nullptr;
+         std::vector<std::size_t> favoriteVertexIndexes;
 
          while (tempCurrentIndex != tailIndex && !maxDistanceTraveled)
          {
@@ -539,13 +592,18 @@ void BallHistory::Process(Player &player)
                   distancePixelsTraveled[ballHistoryStateIndex] += DistancePixels(lastBhr->m_BallHistoryStates[ballHistoryStateIndex].m_Pos, ballHistoryState.m_Pos);
                }
 
+               if (m_FavoriteControlIndexSet && tempCurrentIndex == m_FavoriteControlIndex)
+               {
+                  favoriteVertexIndexes.push_back(controlHistoryVertices.size());
+               }
+
                Vertex3D_Color_Size vtx =
                {
                   ballHistoryState.m_Pos.x,
                   ballHistoryState.m_Pos.y,
                   ballHistoryState.m_Pos.z,
                   D3DCOLOR_XRGB(0x00, 0x00, 0x00),
-                  ((((min(VelocityPixels(ballHistoryState.m_Vel), (m_MaxBallVelocityPixels / 4.0f))) * (20.0f - 5.0f)) / (m_MaxBallVelocityPixels / 4.0f)) + 5.0f) * (player.m_width / 1080.f)
+                  ((((min(VelocityPixels(ballHistoryState.m_Vel), (m_MaxBallVelocityPixels / 4.0f))) * (m_BallHistoryMaxPointSize - m_BallHistoryMinPointSize)) / (m_MaxBallVelocityPixels / 4.0f)) + m_BallHistoryMinPointSize) * (player.m_width / 1080.f)
                };
                controlHistoryVertices.push_back(vtx);
             }
@@ -573,9 +631,15 @@ void BallHistory::Process(Player &player)
          std::size_t controlHistorySize = controlHistoryVertices.size();
          for (std::size_t chvIndex = 0; chvIndex < controlHistoryVertices.size(); chvIndex++)
          {
-            unsigned char red = 0xFF - (chvIndex * 0xFF / controlHistorySize);
-            unsigned char blue = chvIndex * 0xFF / controlHistorySize;
+            unsigned char red = (unsigned char)(0xFF - (chvIndex * 0xFF / controlHistorySize));
+            unsigned char blue = (unsigned char)(chvIndex * 0xFF / controlHistorySize);
             controlHistoryVertices[chvIndex].color = D3DCOLOR_XRGB(red, 0x00, blue);
+         }
+
+         for each (std::size_t fvi in favoriteVertexIndexes)
+         {
+            controlHistoryVertices[fvi].color = D3DCOLOR_XRGB(0x00, 0xFF, 0x00);
+            controlHistoryVertices[fvi].size = m_FavoritePointSize;
          }
 
          void *buf;
@@ -588,9 +652,10 @@ void BallHistory::Process(Player &player)
       }
       else
       {
-         if (m_WasControl)
+         if (m_WasControlled || m_WasRecalled)
          {
-            m_WasControl = false;
+            m_WasControlled = false;
+            m_WasRecalled = false;
 
             Update(player);
 

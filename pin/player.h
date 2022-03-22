@@ -282,16 +282,25 @@ public:
    BallHistory();
    void Init(std::size_t ballHistoriesMax, NextPreviousByType nextPreviousBy, std::size_t ballHistoryControlStepMs, float ballHistoryControlPixels, Player &player);
    void UnInit();
+   void Process(Player &player);
    void ControlNext();
    void ControlPrev();
-   void Process(Player &player);
-
-   bool m_Control;
+   void ToggleControl();
+   void ToggleFavorite();
+   void RecallFavorite();
 
 public: // TODO GB - put back to private
+   static const float m_BallHistoryMinPointSize;
+   static const float m_BallHistoryMaxPointSize;
+   static const float m_FavoritePointSize;
+
    bool m_Save;
-   bool m_WasControl;
+   bool m_Control;
+   bool m_WasControlled;
+   bool m_WasRecalled;
    std::size_t m_CurrentControlIndex;
+   bool m_FavoriteControlIndexSet;
+   std::size_t m_FavoriteControlIndex;
 
    NextPreviousByType m_NextPreviousBy;
    U32 m_BallHistoryControlStepMs;
@@ -314,6 +323,9 @@ public: // TODO GB - put back to private
    float VelocityPixels(Vertex3Ds &vel);
    bool ControlNextMove();
    bool ControlPrevMove();
+
+   bool BallCountChanged(std::vector<Ball *> &vball, BallHistoryRecord &headBhr);
+   bool BallFrozenChanged(std::vector<Ball *> &vball, BallHistoryRecord &headBhr);
 };
 
 class Player : public CWnd
