@@ -83,9 +83,16 @@ BallHistoryRecord::BallHistoryRecord(U32 time_msec):
 {
 }
 
+
+const std::size_t BallHistory::m_BallHistorySizeDefault = 8 * 1024;
+const BallHistory::NextPreviousByType BallHistory::m_NextPreviousByDefault = BallHistory::NextPreviousByType::eDistancePixels;
+const std::size_t BallHistory::m_BallHistoryControlStepMsDefault = 250;
+const float BallHistory::m_BallHistoryControlStepPixelsDefault = 200.0f;
+
 const float BallHistory::m_BallHistoryMinPointSize = 5.0f;
 const float BallHistory::m_BallHistoryMaxPointSize = 20.0f;
 const float BallHistory::m_FavoritePointSize = BallHistory::m_BallHistoryMaxPointSize * 1.25f;
+const float BallHistory::m_ControlVerticesDistanceMax = 2000.0f;
 
 BallHistory::BallHistory() :
    m_Save(false),
@@ -93,7 +100,6 @@ BallHistory::BallHistory() :
    m_WasControlled(false),
    m_WasRecalled(false),
    m_CurrentControlIndex(0),
-   m_FavoriteControlIndexSet(false),
    m_FavoriteControlIndex(0),
    m_BallHistoryControlStepMs(0),
    m_BallHistoryControlStepPixels(0.0f),
@@ -104,10 +110,7 @@ BallHistory::BallHistory() :
 {
 }
 
-// TODO GB
-// Crash on Diner, after hit into right eject, hit control, then move ball around
-
-void BallHistory::Init(std::size_t ballHistoriesMax, NextPreviousByType nextPreviousBy, std::size_t ballHistoryControlStepMs, float ballHistoryControlStepPixels, Player &player)
+void BallHistory::Init(Player &player)
 {
    m_Save = true;
    m_Control = false;
@@ -116,14 +119,13 @@ void BallHistory::Init(std::size_t ballHistoriesMax, NextPreviousByType nextPrev
 
    m_CurrentControlIndex = 0;
 
-   m_FavoriteControlIndexSet = false;
    m_FavoriteControlIndex = 0;
 
-   m_NextPreviousBy = nextPreviousBy;
-   m_BallHistoryControlStepMs = ballHistoryControlStepMs;
-   m_BallHistoryControlStepPixels = ballHistoryControlStepPixels;
+   m_NextPreviousBy = m_NextPreviousByDefault;
+   m_BallHistoryControlStepMs = m_BallHistoryControlStepMsDefault;
+   m_BallHistoryControlStepPixels = m_BallHistoryControlStepPixelsDefault;
 
-   m_BallHistoryRecords.resize(ballHistoriesMax);
+   m_BallHistoryRecords.resize(m_BallHistorySizeDefault);
    m_BallHistoryRecordsSize = 0;
    m_BallHistoryRecordsHeadIndex = 0;
    m_MaxBallVelocityPixels = 0.0f;
@@ -131,7 +133,7 @@ void BallHistory::Init(std::size_t ballHistoriesMax, NextPreviousByType nextPrev
    if (m_ControlHistoryVertexBuffer == nullptr)
    {
       m_ControlHistoryVertexBuffer = nullptr;
-      unsigned int size = ballHistoriesMax;
+      std::size_t size = m_BallHistorySizeDefault;
       player.m_pin3d.m_pd3dPrimaryDevice->CreateVertexBuffer(size, 0, MY_D3DFVF_TEX, &m_ControlHistoryVertexBuffer);
    }
 }
@@ -148,6 +150,9 @@ void BallHistory::Add(std::vector<Ball*> &vball, U32 time_msec)
       std::size_t prevBallHistoryRecordsSize = m_BallHistoryRecordsSize;
       std::size_t prevBallHistoryRecordsHeadIndex = m_BallHistoryRecordsHeadIndex;
       std::size_t prevCurrentControlIndex = m_CurrentControlIndex;
+      std::size_t prevFavoriteControlIndex = m_FavoriteControlIndex;
+      bool favoriteIndexIsLast = m_FavoriteControlIndex == GetTailIndex() && m_BallHistoryRecordsSize == m_BallHistoryRecords.size();
+
       if (m_BallHistoryRecordsSize)
       {
          m_BallHistoryRecordsHeadIndex++;
@@ -161,13 +166,17 @@ void BallHistory::Add(std::vector<Ball*> &vball, U32 time_msec)
          m_BallHistoryRecordsSize++;
       }
       m_CurrentControlIndex = m_BallHistoryRecordsHeadIndex;
+      if (favoriteIndexIsLast)
+      {
+         m_FavoriteControlIndex = GetTailIndex();
+      }
 
       BallHistoryRecord &ballHistoryRecordHead = m_BallHistoryRecords[m_BallHistoryRecordsHeadIndex];
       ballHistoryRecordHead.m_BallHistoryStates.clear();
       ballHistoryRecordHead.m_Time_msec = time_msec;
       for (std::vector<Ball*>::iterator it = vball.begin(); it != vball.end(); ++it)
       {
-         ballHistoryRecordHead.m_BallHistoryStates.emplace_back(BallHistoryState());         
+         ballHistoryRecordHead.m_BallHistoryStates.emplace_back(BallHistoryState());
          BallHistoryState &newBhr = ballHistoryRecordHead.m_BallHistoryStates.back();
          newBhr.m_Pos = (*it)->m_d.m_pos;
          newBhr.m_Vel = (*it)->m_d.m_vel;
@@ -198,6 +207,7 @@ void BallHistory::Add(std::vector<Ball*> &vball, U32 time_msec)
             m_BallHistoryRecordsSize = prevBallHistoryRecordsSize;
             m_BallHistoryRecordsHeadIndex = prevBallHistoryRecordsHeadIndex;
             m_CurrentControlIndex = prevCurrentControlIndex;
+            m_FavoriteControlIndex = prevFavoriteControlIndex;
          }
       }
    }
@@ -366,17 +376,13 @@ void BallHistory::ToggleControl()
 
 void BallHistory::ToggleFavorite()
 {
-   m_FavoriteControlIndexSet = true;
    m_FavoriteControlIndex = m_CurrentControlIndex;
 }
 
 void BallHistory::RecallFavorite()
 {
-   if (m_FavoriteControlIndexSet)
-   {
-      m_CurrentControlIndex = m_FavoriteControlIndex;
-      m_WasRecalled = true;
-   }
+   m_CurrentControlIndex = m_FavoriteControlIndex;
+   m_WasRecalled = true;
 }
 
 void BallHistory::OutputStats(Player &player)
@@ -397,9 +403,6 @@ void BallHistory::OutputStats(Player &player)
 
    sprintf_s(szFoo, "CurrentControlIndex = %zu", m_CurrentControlIndex);
    player.DebugPrint(textX, textY+=textYStep, szFoo);
-
-   sprintf_s(szFoo, "Favorite Control Index Set = %s", m_FavoriteControlIndexSet ? "true" : "false");
-   player.DebugPrint(textX, textY += textYStep, szFoo);
 
    sprintf_s(szFoo, "Favorite Control Index = %zu", m_FavoriteControlIndex);
    player.DebugPrint(textX, textY += textYStep, szFoo);
@@ -560,7 +563,7 @@ void BallHistory::Process(Player &player)
       BallHistoryRecord& headBhr = Get(m_BallHistoryRecordsHeadIndex);
       if (!m_BallHistoryRecordsSize || BallCountChanged(player.m_vball, headBhr) || BallFrozenChanged(player.m_vball, headBhr))
       {
-         Init(m_BallHistoryRecords.size(), m_NextPreviousBy, m_BallHistoryControlStepMs, m_BallHistoryControlStepPixels, player);
+         Init(player);
       }
 
       if (m_Control)
@@ -576,7 +579,6 @@ void BallHistory::Process(Player &player)
          std::size_t ballCount = m_BallHistoryRecords[m_CurrentControlIndex].m_BallHistoryStates.size();
          std::vector<float> distancePixelsTraveled(ballCount, 0.0f);
          bool maxDistanceTraveled = false;
-         const float totalDistanceTraversedMax = 2000.0f;
          BallHistoryRecord * lastBhr = nullptr;
          std::vector<std::size_t> favoriteVertexIndexes;
 
@@ -592,7 +594,7 @@ void BallHistory::Process(Player &player)
                   distancePixelsTraveled[ballHistoryStateIndex] += DistancePixels(lastBhr->m_BallHistoryStates[ballHistoryStateIndex].m_Pos, ballHistoryState.m_Pos);
                }
 
-               if (m_FavoriteControlIndexSet && tempCurrentIndex == m_FavoriteControlIndex)
+               if (tempCurrentIndex == m_FavoriteControlIndex)
                {
                   favoriteVertexIndexes.push_back(controlHistoryVertices.size());
                }
@@ -620,7 +622,7 @@ void BallHistory::Process(Player &player)
             lastBhr = &tempCurrentBhr;
             for each (const float &dpt in distancePixelsTraveled)
             {
-               if (dpt > totalDistanceTraversedMax)
+               if (dpt > m_ControlVerticesDistanceMax)
                {
                   maxDistanceTraveled = true;
                }
@@ -2128,7 +2130,7 @@ HRESULT Player::Init()
    assert(m_ballTrailVertexBuffer == nullptr);
    m_pin3d.m_pd3dPrimaryDevice->CreateVertexBuffer((MAX_BALL_TRAIL_POS-2)*2+4, USAGE_DYNAMIC, MY_D3DFVF_NOTEX2_VERTEX, &m_ballTrailVertexBuffer);
 
-   m_BallHistory.Init(8 * 1024, BallHistory::NextPreviousByType::eDistancePixels, 250, 200.0f, *this);
+   m_BallHistory.Init(*this);
 
    m_ptable->m_pcv->Start(); // Hook up to events and start cranking script
 

@@ -280,7 +280,7 @@ public:
    };
 
    BallHistory();
-   void Init(std::size_t ballHistoriesMax, NextPreviousByType nextPreviousBy, std::size_t ballHistoryControlStepMs, float ballHistoryControlPixels, Player &player);
+   void Init(Player &player);
    void UnInit();
    void Process(Player &player);
    void ControlNext();
@@ -290,16 +290,21 @@ public:
    void RecallFavorite();
 
 public: // TODO GB - put back to private
+   static const std::size_t m_BallHistorySizeDefault;
+   static const NextPreviousByType m_NextPreviousByDefault;
+   static const std::size_t m_BallHistoryControlStepMsDefault;
+   static const float m_BallHistoryControlStepPixelsDefault;
+
    static const float m_BallHistoryMinPointSize;
    static const float m_BallHistoryMaxPointSize;
    static const float m_FavoritePointSize;
+   static const float m_ControlVerticesDistanceMax;
 
    bool m_Save;
    bool m_Control;
    bool m_WasControlled;
    bool m_WasRecalled;
    std::size_t m_CurrentControlIndex;
-   bool m_FavoriteControlIndexSet;
    std::size_t m_FavoriteControlIndex;
 
    NextPreviousByType m_NextPreviousBy;
