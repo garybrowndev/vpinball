@@ -522,7 +522,7 @@ void PropertyDialog::UpdateTabs(VectorProtected<ISelect> &pvsel)
         return;
 
     ShowWindow(SW_HIDE);
-    if (m_previousType != psel->GetItemType() || m_backglassView!=g_pvp->m_backglassView)
+    if (m_previousType != psel->GetItemType() || m_backglassView!=g_pvp->m_backglassView || m_multipleElementsStatic.IsWindowVisible())
     {
         BasePropertyDialog::m_disableEvents = true;
         m_curTabIndex = m_tab.GetCurSel();
@@ -547,17 +547,19 @@ void PropertyDialog::UpdateTabs(VectorProtected<ISelect> &pvsel)
                 return;
             }
         }
+
+        if (m_multipleElementsStatic.IsWindowVisible())
+        {
+           m_multipleElementsStatic.ShowWindow(SW_HIDE);
+           m_nameEdit.ShowWindow(SW_SHOW);
+           m_elementTypeName.ShowWindow(SW_SHOW);
+           m_tab.ShowWindow(SW_SHOW);
+        }
+
         CreateTabs(pvsel);
     }
 
 
-    if (m_multipleElementsStatic.IsWindowVisible())
-    {
-        m_multipleElementsStatic.ShowWindow(SW_HIDE);
-        m_nameEdit.ShowWindow(SW_SHOW);
-        m_elementTypeName.ShowWindow(SW_SHOW);
-        m_tab.ShowWindow(SW_SHOW);
-    }
 
     if (pvsel.size() > 1)
     {
@@ -575,7 +577,7 @@ void PropertyDialog::UpdateTabs(VectorProtected<ISelect> &pvsel)
         WideCharToMultiByteNull(CP_ACP, 0, bstr, -1, name, 64, nullptr, nullptr);
         sprintf_s(header, "%s(%d)", name, pvsel.size());
 
-        if (collection[0] != 0)
+        if (collection[0] != '\0')
             sprintf_s(header, "%s [%s](%d)", collection, name, pvsel.size());
         else
             sprintf_s(header, "%s(%d)", name, pvsel.size());

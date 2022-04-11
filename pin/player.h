@@ -107,6 +107,7 @@ static constexpr int regkey_idc[eCKeys] = {
    -1
 };
 
+#ifndef ENABLE_SDL
 // Note: Nowadays the original code seems to be counter-productive, so we use the official
 // pre-rendered frame mechanism instead where possible
 // (e.g. all windows versions except for XP and no "EnableLegacyMaximumPreRenderedFrames" set in the registry)
@@ -153,10 +154,7 @@ public:
    void Shutdown()
    {
       for (size_t i = 0; i < m_buffers.size(); ++i)
-      {
-         if (m_buffers[i])
-            m_buffers[i]->release();
-      }
+         SAFE_BUFFER_RELEASE(m_buffers[i]);
    }
 
    void Execute(RenderDevice * const pd3dDevice)
@@ -165,17 +163,17 @@ public:
          return;
 
       if (m_buffers[m_curIdx])
-         pd3dDevice->DrawPrimitiveVB(RenderDevice::TRIANGLEFAN, MY_D3DFVF_NOTEX2_VERTEX, m_buffers[m_curIdx], 0, 3);
+         pd3dDevice->DrawPrimitiveVB(RenderDevice::TRIANGLEFAN, MY_D3DFVF_NOTEX2_VERTEX, m_buffers[m_curIdx], 0, 3, true);
 
       m_curIdx = (m_curIdx + 1) % m_buffers.size();
 
       if (!m_buffers[m_curIdx])
-         pd3dDevice->CreateVertexBuffer(1024, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_buffers[m_curIdx]);
+         VertexBuffer::CreateVertexBuffer(1024, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_buffers[m_curIdx], PRIMARY_DEVICE);
 
       // idea: locking a static vertex buffer stalls the pipeline if that VB is still
       // in the GPU render queue. In effect, this lets the GPU catch up.
       Vertex3D_NoTex2* buf;
-      m_buffers[m_curIdx]->lock(0, 0, (void**)&buf, 0);
+      m_buffers[m_curIdx]->lock(0, 0, (void**)&buf, VertexBuffer::WRITEONLY);
       memset(buf, 0, 3 * sizeof(buf[0]));
       buf[0].z = buf[1].z = buf[2].z = 1e5f;      // single triangle, degenerates to point far off screen
       m_buffers[m_curIdx]->unlock();
@@ -190,6 +188,16 @@ private:
    std::vector<VertexBuffer*> m_buffers;
    size_t m_curIdx;
 };
+#else
+class FrameQueueLimiter
+{
+public:
+   static void Init(RenderDevice * const pd3dDevice, const int numFrames)
+   {
+      pd3dDevice->SetMaximumPreRenderedFrames(numFrames);
+   }
+};
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -411,11 +419,19 @@ public:
    float ParseLog(LARGE_INTEGER *pli1, LARGE_INTEGER *pli2);
 #endif
 
+#ifndef ENABLE_SDL
    void DMDdraw(const float DMDposx, const float DMDposy, const float DMDwidth, const float DMDheight, const COLORREF DMDcolor, const float intensity);
+#endif
    void Spritedraw(const float posx, const float posy, const float width, const float height, const COLORREF color, Texture* const tex, const float intensity, const bool backdrop=false);
    void Spritedraw(const float posx, const float posy, const float width, const float height, const COLORREF color, D3DTexture* const tex, const float intensity, const bool backdrop=false);
 
+#ifdef ENABLE_SDL
+   SDL_Window  *m_sdl_playfieldHwnd;
+   SDL_Window  *m_sdl_backdropHwnd;
+#else
    Shader      *m_ballShader;
+#endif
+
    IndexBuffer *m_ballIndexBuffer;
    VertexBuffer *m_ballVertexBuffer;
    VertexBuffer *m_ballTrailVertexBuffer;
@@ -525,6 +541,7 @@ public:
 
    bool m_reflectionForBalls;
    bool m_trailForBalls;
+   bool m_disableLightingForBalls;
 
    bool m_throwBalls;
    bool m_ballControl;
@@ -738,7 +755,11 @@ public:
    DebuggerDialog m_debuggerDialog;
 
 private:
+#ifdef ENABLE_SDL
+   TTF_Font *m_pFont;
+#else
    ID3DXFont *m_pFont;
    LPD3DXSPRITE m_fontSprite;
    RECT     m_fontRect;
+#endif
 };

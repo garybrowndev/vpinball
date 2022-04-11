@@ -265,6 +265,17 @@ KeysConfigDialog::KeysConfigDialog() : CDialog(IDD_KEYS)
 {
 }
 
+void KeysConfigDialog::AddToolTip(char *text, HWND parentHwnd, HWND toolTipHwnd, HWND controlHwnd)
+{
+   TOOLINFO toolInfo = { 0 };
+   toolInfo.cbSize = sizeof(toolInfo);
+   toolInfo.hwnd = parentHwnd;
+   toolInfo.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+   toolInfo.uId = (UINT_PTR)controlHwnd;
+   toolInfo.lpszText = text;
+   SendMessage(toolTipHwnd, TTM_ADDTOOL, 0, (LPARAM)&toolInfo);
+}
+
 BOOL KeysConfigDialog::OnInitDialog()
 {
     bool on = LoadValueBoolWithDefault("Player", "PBWDefaultLayout", false);
@@ -376,6 +387,7 @@ BOOL KeysConfigDialog::OnInitDialog()
             selected = 0; // assume no assignment as standard
 
         const HWND hwnd = GetDlgItem(item).GetHwnd();
+        ::SendMessage(hwnd, WM_SETREDRAW, FALSE, 0); // to speed up adding the entries :/
         ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"(none)");
         ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"Button 1");
         ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"Button 2");
@@ -408,6 +420,7 @@ BOOL KeysConfigDialog::OnInitDialog()
             ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"Middle Mouse");
         }
         ::SendMessage(hwnd, CB_SETCURSEL, selected, 0);
+        ::SendMessage(hwnd, WM_SETREDRAW, TRUE, 0);
     }
 
     //

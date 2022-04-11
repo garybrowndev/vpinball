@@ -549,7 +549,7 @@ void Surface::RenderDynamic()
 
    RenderSlingshots();
 
-   if (m_d.m_droppable || m_isDynamic)
+   if (!StaticRendering())
    {
       if (!m_isDropped)
       {
@@ -844,10 +844,8 @@ void Surface::ExportMesh(ObjLoader& loader)
 
 void Surface::PrepareWallsAtHeight()
 {
-   if (m_IBuffer)
-      m_IBuffer->release();
-   if (m_VBuffer)
-      m_VBuffer->release();
+   SAFE_BUFFER_RELEASE(m_IBuffer);
+   SAFE_BUFFER_RELEASE(m_VBuffer);
 
    std::vector<Vertex3D_NoTex2> topBottomBuf;
    std::vector<Vertex3D_NoTex2> sideBuf;
@@ -855,9 +853,7 @@ void Surface::PrepareWallsAtHeight()
    std::vector<WORD> sideIndices;
    GenerateMesh(topBottomBuf, sideBuf, topBottomIndices, sideIndices);
 
-   RenderDevice * const pd3dDevice = g_pplayer->m_pin3d.m_pd3dPrimaryDevice;
-
-   pd3dDevice->CreateVertexBuffer(m_numVertices * 4 + (!topBottomBuf.empty() ? m_numVertices * 3 : 0), 0, MY_D3DFVF_NOTEX2_VERTEX, &m_VBuffer);
+   VertexBuffer::CreateVertexBuffer(m_numVertices * 4 + (!topBottomBuf.empty() ? m_numVertices * 3 : 0), 0, MY_D3DFVF_NOTEX2_VERTEX, &m_VBuffer, PRIMARY_DEVICE);
 
    Vertex3D_NoTex2 *verts;
    m_VBuffer->lock(0, 0, (void**)&verts, VertexBuffer::WRITEONLY);
@@ -865,18 +861,15 @@ void Surface::PrepareWallsAtHeight()
 
    if (!topBottomBuf.empty())
       //if (m_d.m_visible) // Visible could still be set later if rendered dynamically
-      {
          memcpy(verts+m_numVertices * 4, topBottomBuf.data(), sizeof(Vertex3D_NoTex2)*m_numVertices * 3);
-      }
-
    m_VBuffer->unlock();
 
    //
 
-   pd3dDevice->CreateIndexBuffer((unsigned int)topBottomIndices.size() + (unsigned int)sideIndices.size(), 0, IndexBuffer::FMT_INDEX16, &m_IBuffer);
+   IndexBuffer::CreateIndexBuffer((unsigned int)topBottomIndices.size() + (unsigned int)sideIndices.size(), 0, IndexBuffer::FMT_INDEX16, &m_IBuffer, PRIMARY_DEVICE);
 
    WORD* buf;
-   m_IBuffer->lock(0, 0, (void**)&buf, 0);
+   m_IBuffer->lock(0, 0, (void**)&buf, IndexBuffer::WRITEONLY);
    memcpy(buf, sideIndices.data(), sideIndices.size() * sizeof(WORD));
    if (!topBottomIndices.empty())
       memcpy(buf + sideIndices.size(), topBottomIndices.data(), topBottomIndices.size() * sizeof(WORD));
@@ -929,12 +922,8 @@ void Surface::PrepareSlingshots()
       ComputeNormals(rgv3D + offset, 9, rgiSlingshot, 24);
    }
 
-   if (m_slingshotVBuffer)
-      m_slingshotVBuffer->release();
-
-   RenderDevice * const pd3dDevice = g_pplayer->m_pin3d.m_pd3dPrimaryDevice;
-
-   pd3dDevice->CreateVertexBuffer((unsigned int)m_vlinesling.size() * 9, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_slingshotVBuffer);
+   SAFE_BUFFER_RELEASE(m_slingshotVBuffer);
+   VertexBuffer::CreateVertexBuffer((unsigned int)m_vlinesling.size() * 9, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_slingshotVBuffer, PRIMARY_DEVICE);
 
    Vertex3D_NoTex2 *buf;
    m_slingshotVBuffer->lock(0, 0, (void**)&buf, VertexBuffer::WRITEONLY);
@@ -944,7 +933,7 @@ void Surface::PrepareSlingshots()
    delete[] rgv3D;
 
    if (!slingIBuffer)
-      slingIBuffer = pd3dDevice->CreateAndFillIndexBuffer(24, rgiSlingshot);
+      slingIBuffer = IndexBuffer::CreateAndFillIndexBuffer(24, rgiSlingshot, PRIMARY_DEVICE);
 }
 
 void Surface::RenderSetup()
@@ -977,26 +966,10 @@ void Surface::RenderSetup()
 
 void Surface::FreeBuffers()
 {
-   if (m_slingshotVBuffer)
-   {
-      m_slingshotVBuffer->release();
-      m_slingshotVBuffer = 0;
-   }
-   if (m_VBuffer)
-   {
-      m_VBuffer->release();
-      m_VBuffer = 0;
-   }
-   if (m_IBuffer)
-   {
-      m_IBuffer->release();
-      m_IBuffer = 0;
-   }
-   if (slingIBuffer)    // NB: global instance
-   {
-      slingIBuffer->release();
-      slingIBuffer = 0;
-   }
+   SAFE_BUFFER_RELEASE(m_slingshotVBuffer);
+   SAFE_BUFFER_RELEASE(m_VBuffer);
+   SAFE_BUFFER_RELEASE(m_IBuffer);
+   SAFE_BUFFER_RELEASE(slingIBuffer); // NB: global instance
 }
 
 void Surface::RenderStatic()
@@ -1005,7 +978,7 @@ void Surface::RenderStatic()
       return;
 
    RenderSlingshots();
-   if (!m_d.m_droppable && !m_isDynamic)
+   if (StaticRendering())
       RenderWallsAtHeight(false);
 }
 
@@ -1129,7 +1102,7 @@ void Surface::RenderWallsAtHeight(const bool drop)
          pd3dDevice->basicShader->SetTexture(SHADER_Texture0, pin, false);
          pd3dDevice->basicShader->SetAlphaTestValue(pin->m_alphaTestValue * (float)(1.0 / 255.0));
 
-         //g_pplayer->m_pin3d.SetTextureFilter( 0, TEXTURE_MODE_TRILINEAR );
+         //g_pplayer->m_pin3d.SetPrimaryTextureFilter( 0, TEXTURE_MODE_TRILINEAR );
       }
       else
          pd3dDevice->basicShader->SetTechniqueMetal(SHADER_TECHNIQUE_basic_without_texture, mat->m_bIsMetal);

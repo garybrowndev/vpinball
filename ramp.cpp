@@ -8,9 +8,9 @@ Ramp::Ramp()
    m_menuid = IDR_SURFACEMENU;
    m_d.m_collidable = true;
    m_d.m_visible = true;
-   m_dynamicVertexBuffer = 0;
-   m_dynamicIndexBuffer = 0;
-   m_dynamicVertexBuffer2 = 0;
+   m_dynamicVertexBuffer = nullptr;
+   m_dynamicIndexBuffer = nullptr;
+   m_dynamicVertexBuffer2 = nullptr;
    m_dynamicVertexBufferRegenerate = true;
    m_d.m_depthBias = 0.0f;
    m_d.m_wireDiameter = 6.0f;
@@ -25,14 +25,9 @@ Ramp::Ramp()
 
 Ramp::~Ramp()
 {
-   if (m_dynamicVertexBuffer)
-      m_dynamicVertexBuffer->release();
-
-   if (m_dynamicVertexBuffer2)
-      m_dynamicVertexBuffer2->release();
-
-   if (m_dynamicIndexBuffer)
-      m_dynamicIndexBuffer->release();
+   SAFE_BUFFER_RELEASE(m_dynamicVertexBuffer);
+   SAFE_BUFFER_RELEASE(m_dynamicVertexBuffer2);
+   SAFE_BUFFER_RELEASE(m_dynamicIndexBuffer);
 
    if (m_rgheightInit)
       delete[] m_rgheightInit;
@@ -876,19 +871,11 @@ void Ramp::EndPlay()
    m_vhoCollidable.clear();
 
    if (m_dynamicVertexBuffer) {
-      m_dynamicVertexBuffer->release();
-      m_dynamicVertexBuffer = 0;
+      SAFE_BUFFER_RELEASE(m_dynamicVertexBuffer);
       m_dynamicVertexBufferRegenerate = true;
    }
-
-   if (m_dynamicIndexBuffer) {
-      m_dynamicIndexBuffer->release();
-      m_dynamicIndexBuffer = 0;
-   }
-   if (m_dynamicVertexBuffer2) {
-      m_dynamicVertexBuffer2->release();
-      m_dynamicVertexBuffer2 = 0;
-   }
+   SAFE_BUFFER_RELEASE(m_dynamicIndexBuffer);
+   SAFE_BUFFER_RELEASE(m_dynamicVertexBuffer2);
 }
 
 float Ramp::GetDepth(const Vertex3Ds& viewDir) const
@@ -935,7 +922,7 @@ void Ramp::RenderStaticHabitrail(const Material * const mat)
       pd3dDevice->basicShader->SetTexture(SHADER_Texture0, pin, false);
       pd3dDevice->basicShader->SetTechniqueMetal(SHADER_TECHNIQUE_basic_with_texture, mat->m_bIsMetal);
 
-      //g_pplayer->m_pin3d.SetTextureFilter(0, TEXTURE_MODE_TRILINEAR);
+      //g_pplayer->m_pin3d.SetPrimaryTextureFilter(0, TEXTURE_MODE_TRILINEAR);
    }
 
    if (m_d.m_type == RampType2Wire)
@@ -1207,16 +1194,12 @@ void Ramp::PrepareHabitrail()
    Vertex3D_NoTex2 *tmpBuf2 = nullptr;
    GenerateWireMesh(&tmpBuf1, &tmpBuf2);
 
-   if (m_dynamicVertexBuffer)
-      m_dynamicVertexBuffer->release();
-   if (m_dynamicVertexBuffer2)
-      m_dynamicVertexBuffer2->release();
+   SAFE_BUFFER_RELEASE(m_dynamicVertexBuffer);
+   SAFE_BUFFER_RELEASE(m_dynamicVertexBuffer2);
 
-   RenderDevice * const pd3dDevice = g_pplayer->m_pin3d.m_pd3dPrimaryDevice;
-
-   pd3dDevice->CreateVertexBuffer(m_numVertices, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_dynamicVertexBuffer); //!! use USAGE_DYNAMIC if it would actually be "really" dynamic
+   VertexBuffer::CreateVertexBuffer(m_numVertices, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_dynamicVertexBuffer, PRIMARY_DEVICE); //!! use USAGE_DYNAMIC if it would actually be "really" dynamic
    if (m_d.m_type != RampType1Wire)
-      pd3dDevice->CreateVertexBuffer(m_numVertices, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_dynamicVertexBuffer2); //!! use USAGE_DYNAMIC if it would actually be "really" dynamic
+      VertexBuffer::CreateVertexBuffer(m_numVertices, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_dynamicVertexBuffer2, PRIMARY_DEVICE); //!! use USAGE_DYNAMIC if it would actually be "really" dynamic
 
    // Draw the floor of the ramp.
    Vertex3D_NoTex2 *buf;
@@ -1232,10 +1215,8 @@ void Ramp::PrepareHabitrail()
       m_dynamicVertexBuffer2->unlock();
    }
 
-   if (m_dynamicIndexBuffer)
-      m_dynamicIndexBuffer->release();
-
-   m_dynamicIndexBuffer = pd3dDevice->CreateAndFillIndexBuffer(m_meshIndices);
+   SAFE_BUFFER_RELEASE(m_dynamicIndexBuffer);
+   m_dynamicIndexBuffer = IndexBuffer::CreateAndFillIndexBuffer(m_meshIndices, PRIMARY_DEVICE);
 
    delete[] m_vertBuffer;
    delete[] tmpBuf1;
@@ -1270,7 +1251,7 @@ void Ramp::RenderStatic()
 
    const Material * const mat = m_ptable->GetMaterial(m_d.m_szMaterial);
 
-   // dont render transparent ramps into static buffer, these are done per frame later-on
+   // don't render transparent ramps into static buffer, these are done per frame later-on
    if (mat->m_bOpacityActive)
       return;
 
@@ -1536,7 +1517,6 @@ STDMETHODIMP Ramp::put_HeightBottom(float newVal)
    {
       m_d.m_heightbottom = newVal;
       m_dynamicVertexBufferRegenerate = true;
-
    }
 
    return S_OK;
@@ -1555,7 +1535,6 @@ STDMETHODIMP Ramp::put_HeightTop(float newVal)
    {
       m_d.m_heighttop = newVal;
       m_dynamicVertexBufferRegenerate = true;
-
    }
 
    return S_OK;
@@ -1908,11 +1887,7 @@ STDMETHODIMP Ramp::get_DepthBias(float *pVal)
 
 STDMETHODIMP Ramp::put_DepthBias(float newVal)
 {
-   if (m_d.m_depthBias != newVal)
-   {
-      m_d.m_depthBias = newVal;
-      m_dynamicVertexBufferRegenerate = true;
-   }
+   m_d.m_depthBias = newVal;
 
    return S_OK;
 }
@@ -2200,7 +2175,7 @@ void Ramp::RenderRamp(const Material * const mat)
          pd3dDevice->basicShader->SetTexture(SHADER_Texture0, pin, false);
          pd3dDevice->basicShader->SetAlphaTestValue(pin->m_alphaTestValue * (float)(1.0 / 255.0));
 
-         //ppin3d->SetTextureFilter ( 0, TEXTURE_MODE_TRILINEAR );
+         //ppin3d->SetPrimaryTextureFilter( 0, TEXTURE_MODE_TRILINEAR );
       }
       else
          pd3dDevice->basicShader->SetTechniqueMetal(SHADER_TECHNIQUE_basic_without_texture, mat->m_bIsMetal);
@@ -2467,12 +2442,8 @@ void Ramp::GenerateVertexBuffer()
    Vertex3D_NoTex2 *tmpBuffer = nullptr;
    GenerateRampMesh(&tmpBuffer);
 
-   if (m_dynamicVertexBuffer)
-      m_dynamicVertexBuffer->release();
-
-   RenderDevice * const pd3dDevice = g_pplayer->m_pin3d.m_pd3dPrimaryDevice;
-
-   pd3dDevice->CreateVertexBuffer(m_numVertices * 3, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_dynamicVertexBuffer); //!! use USAGE_DYNAMIC if it would actually be "really" dynamic
+   SAFE_BUFFER_RELEASE(m_dynamicVertexBuffer);
+   VertexBuffer::CreateVertexBuffer(m_numVertices * 3, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_dynamicVertexBuffer, PRIMARY_DEVICE); //!! use USAGE_DYNAMIC if it would actually be "really" dynamic
 
    Vertex3D_NoTex2 *buf;
    m_dynamicVertexBuffer->lock(0, 0, (void**)&buf, VertexBuffer::WRITEONLY);
@@ -2487,10 +2458,8 @@ void Ramp::GenerateVertexBuffer()
    delete[] tmp;
    }*/
 
-   if (m_dynamicIndexBuffer)
-      m_dynamicIndexBuffer->release();
-
-   m_dynamicIndexBuffer = pd3dDevice->CreateAndFillIndexBuffer(m_meshIndices);
+   SAFE_BUFFER_RELEASE(m_dynamicIndexBuffer);
+   m_dynamicIndexBuffer = IndexBuffer::CreateAndFillIndexBuffer(m_meshIndices, PRIMARY_DEVICE);
    delete[] tmpBuffer;
 }
 

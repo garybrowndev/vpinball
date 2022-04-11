@@ -22,25 +22,25 @@ static unsigned int fvfToSize(const DWORD fvf)
    }
 }
 
-VertexBuffer* VertexBuffer::m_curVertexBuffer = nullptr;
+VertexBuffer* VertexBuffer::m_curVertexBuffer = nullptr; // is reset before each Player start
 
 #ifndef ENABLE_SDL
-IDirect3DDevice9* VertexBuffer::m_pD3DDevice = nullptr;
+IDirect3DDevice9* VertexBuffer::m_pd3dPrimaryDevice = nullptr; // is set before each Player start
+IDirect3DDevice9* VertexBuffer::m_pd3dSecondaryDevice = nullptr; // is set before each Player start
 #endif
 
 #ifdef ENABLE_SDL
 std::vector<VertexBuffer*> VertexBuffer::notUploadedBuffers;
 #endif
 
-void VertexBuffer::CreateVertexBuffer(const unsigned int vertexCount, const DWORD usage, const DWORD fvf, VertexBuffer **vBuffer)
+void VertexBuffer::CreateVertexBuffer(const unsigned int vertexCount, const DWORD usage, const DWORD fvf, VertexBuffer **vBuffer, const deviceNumber dN)
 {
-#ifdef ENABLE_SDL
    VertexBuffer* const vb = new VertexBuffer();
+#ifdef ENABLE_SDL
    vb->count = vertexCount;
    vb->sizePerVertex = fvfToSize(fvf);
    vb->usage = usage ? usage : USAGE_STATIC;
    vb->fvf = fvf;
-   *vBuffer = vb;
    vb->isUploaded = false;
    vb->size = vb->sizePerVertex * vb->count;
    vb->Array = 0;
@@ -49,12 +49,14 @@ void VertexBuffer::CreateVertexBuffer(const unsigned int vertexCount, const DWOR
    // NB: We always specify WRITEONLY since MSDN states,
    // "Buffers created with D3DPOOL_DEFAULT that do not specify D3DUSAGE_WRITEONLY may suffer a severe performance penalty."
    // This means we cannot read from vertex buffers, but I don't think we need to.
-   const HRESULT hr = m_pD3DDevice->CreateVertexBuffer(vertexCount * fvfToSize(fvf), D3DUSAGE_WRITEONLY | usage, 0,
-      (D3DPOOL)memoryPool::DEFAULT, (IDirect3DVertexBuffer9**)vBuffer, nullptr);
+   const HRESULT hr = (dN == PRIMARY_DEVICE ? m_pd3dPrimaryDevice : m_pd3dSecondaryDevice)->CreateVertexBuffer(vertexCount * fvfToSize(fvf), USAGE_STATIC | usage, 0,
+      (D3DPOOL)memoryPool::DEFAULT, &vb->m_vb, nullptr);
    if (FAILED(hr))
       ReportError("Fatal Error: unable to create vertex buffer!", hr, __FILE__, __LINE__);
-   (*vBuffer)->m_fvf = fvf;
+   vb->m_fvf = fvf;
+   vb->m_dN = dN;
 #endif
+   *vBuffer = vb;
 }
 
 void VertexBuffer::lock(const unsigned int offsetToLock, const unsigned int sizeToLock, void **dataBuffer, const DWORD flags)
@@ -65,8 +67,9 @@ void VertexBuffer::lock(const unsigned int offsetToLock, const unsigned int size
       this->sizeToLock = size;
    else
       this->sizeToLock = sizeToLock;
+
    if (offsetToLock < size) {
-      *dataBuffer = malloc(this->sizeToLock);
+      *dataBuffer = malloc(this->sizeToLock); //!! does not init the buffer from the VBuffer data if flags is set accordingly (i.e. WRITEONLY, or better: create a new flag like 'PARTIALUPDATE'?)
       this->dataBuffer = *dataBuffer;
       this->offsetToLock = offsetToLock;
    }
@@ -76,7 +79,7 @@ void VertexBuffer::lock(const unsigned int offsetToLock, const unsigned int size
       this->sizeToLock = 0;
    }
 #else
-   CHECKD3D(this->Lock(offsetToLock, sizeToLock, dataBuffer, flags));
+   CHECKD3D(m_vb->Lock(offsetToLock, sizeToLock, dataBuffer, flags));
 #endif
 }
 
@@ -87,23 +90,25 @@ void VertexBuffer::unlock()
       return;
    addToNotUploadedBuffers();
 #else
-   CHECKD3D(this->Unlock());
+   CHECKD3D(m_vb->Unlock());
 #endif
 }
 
 void VertexBuffer::release()
 {
 #ifdef ENABLE_SDL
-   if (!sharedBuffer && Buffer != 0) {
-      CHECKD3D(glDeleteBuffers(1, &Buffer));
+   if (!sharedBuffer && (Buffer != 0)) {
+      glDeleteBuffers(1, &Buffer);
+      glDeleteVertexArrays(1, &Array);
       Buffer = 0;
+      Array = 0;
       sizePerVertex = 0;
       offset = 0;
       count = 0;
       size = 0;
    }
 #else
-   SAFE_RELEASE_NO_CHECK_NO_SET(this);
+   SAFE_RELEASE(m_vb);
 #endif
 }
 
@@ -116,18 +121,18 @@ void VertexBuffer::bind()
       else
          UploadData();
    }
-   if (m_curVertexBuffer == nullptr || this->Array != m_curVertexBuffer->Array || this->Buffer != m_curVertexBuffer->Buffer)
+   if (m_curVertexBuffer == nullptr || Array != m_curVertexBuffer->Array || Buffer != m_curVertexBuffer->Buffer)
    {
-      CHECKD3D(glBindVertexArray(this->Array));
-      CHECKD3D(glBindBuffer(GL_ARRAY_BUFFER, this->Buffer));
+      glBindVertexArray(Array);
+      glBindBuffer(GL_ARRAY_BUFFER, Buffer);
       m_curVertexBuffer = this;
    }
    Shader::getCurrentShader()->setAttributeFormat(fvf);
 #else
-   if (m_curVertexBuffer == nullptr || m_curVertexBuffer != this)
+   if (/*m_curVertexBuffer == nullptr ||*/ m_curVertexBuffer != this)
    {
       const unsigned int vsize = fvfToSize(m_fvf);
-      CHECKD3D(m_pD3DDevice->SetStreamSource(0, this, 0, vsize));
+      CHECKD3D((m_dN == PRIMARY_DEVICE ? m_pd3dPrimaryDevice : m_pd3dSecondaryDevice)->SetStreamSource(0, m_vb, 0, vsize));
       m_curVertexBuffer = this;
    }
 #endif
@@ -138,18 +143,18 @@ void VertexBuffer::UploadData()
 {
    if (Array == 0)
       glGenVertexArrays(1, &Array);
-   CHECKD3D(glBindVertexArray(this->Array));
+   glBindVertexArray(Array);
    if (Buffer == 0) {
       glGenBuffers(1, &Buffer);
-      CHECKD3D(glBindBuffer(GL_ARRAY_BUFFER, this->Buffer));
+      glBindBuffer(GL_ARRAY_BUFFER, Buffer);
       glBufferData(GL_ARRAY_BUFFER, size, nullptr, usage);
    }
    else
-      CHECKD3D(glBindBuffer(GL_ARRAY_BUFFER, this->Buffer));
+      glBindBuffer(GL_ARRAY_BUFFER, Buffer);
    if (size - offsetToLock > 0)
-      CHECKD3D(glBufferSubData(GL_ARRAY_BUFFER, offset * fvfToSize(fvf) + offsetToLock, min(sizeToLock, size - offsetToLock), dataBuffer));
-   CHECKD3D(glBindBuffer(GL_ARRAY_BUFFER, 0));
-   CHECKD3D(glBindVertexArray(0));
+      glBufferSubData(GL_ARRAY_BUFFER, offset * fvfToSize(fvf) + offsetToLock, min(sizeToLock, size - offsetToLock), dataBuffer);
+   glBindBuffer(GL_ARRAY_BUFFER, 0);
+   glBindVertexArray(0);
    isUploaded = true;
    free(dataBuffer);
    dataBuffer = nullptr;
@@ -196,19 +201,19 @@ void VertexBuffer::UploadBuffers()
    }
    //Allocate BufferData on GPU
    if (countNT > 0) {
-      CHECKD3D(glBindBuffer(GL_ARRAY_BUFFER, BufferNT));
-      CHECKD3D(glBindVertexArray(ArrayNT));
-      CHECKD3D(glBufferData(GL_ARRAY_BUFFER, countNT * fvfToSize(MY_D3DFVF_NOTEX2_VERTEX), nullptr, GL_STATIC_DRAW));
+      glBindBuffer(GL_ARRAY_BUFFER, BufferNT);
+      glBindVertexArray(ArrayNT);
+      glBufferData(GL_ARRAY_BUFFER, countNT * fvfToSize(MY_D3DFVF_NOTEX2_VERTEX), nullptr, GL_STATIC_DRAW);
    }
    if (countT > 0) {
-      CHECKD3D(glBindBuffer(GL_ARRAY_BUFFER, BufferT));
-      CHECKD3D(glBindVertexArray(ArrayT));
-      CHECKD3D(glBufferData(GL_ARRAY_BUFFER, countT * fvfToSize(MY_D3DFVF_TEX), nullptr, GL_STATIC_DRAW));
+      glBindBuffer(GL_ARRAY_BUFFER, BufferT);
+      glBindVertexArray(ArrayT);
+      glBufferData(GL_ARRAY_BUFFER, countT * fvfToSize(MY_D3DFVF_TEX), nullptr, GL_STATIC_DRAW);
    }
    for (auto it = notUploadedBuffers.begin(); it != notUploadedBuffers.end(); it++)
       (*it)->UploadData();
-   CHECKD3D(glBindBuffer(GL_ARRAY_BUFFER, 0));
-   CHECKD3D(glBindVertexArray(0));
+   glBindBuffer(GL_ARRAY_BUFFER, 0);
+   glBindVertexArray(0);
    notUploadedBuffers.clear();
 }
 #endif

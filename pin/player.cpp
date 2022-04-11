@@ -3,7 +3,11 @@
 //#define USE_IMGUI
 #ifdef USE_IMGUI
  #include "imgui/imgui.h"
- #include "imgui/imgui_impl_dx9.h"
+ #ifdef ENABLE_SDL
+  #include "imgui/imgui_impl_opengl3.h"
+ #else
+  #include "imgui/imgui_impl_dx9.h"
+ #endif
  #include "imgui/imgui_impl_win32.h"
  #include "imgui/implot/implot.h"
 
@@ -657,7 +661,9 @@ void BallHistory::Process(Player &player)
 #include "../meshes/ballMesh.h"
 #include "Shader.h"
 #include "typedefs3D.h"
-#include "BallShader.h"
+#ifndef ENABLE_SDL
+ #include "BallShader.h"
+#endif
 #include "../math/bluenoise.h"
 #include "../inc/winsdk/legacy_touch.h"
 
@@ -765,6 +771,7 @@ Player::Player(const bool cameraMode, PinTable * const ptable) : m_cameraMode(ca
    m_FXAA = LoadValueIntWithDefault("Player", "FXAA", Standard_FXAA);
    m_sharpen = LoadValueIntWithDefault("Player", "Sharpen", 0);
    m_trailForBalls = LoadValueBoolWithDefault("Player", "BallTrail", true);
+   m_disableLightingForBalls = LoadValueBoolWithDefault("Player", "DisableLightingForBalls", false);
    m_reflectionForBalls = LoadValueBoolWithDefault("Player", "BallReflection", true);
    m_AA = LoadValueBoolWithDefault("Player", "USEAA", false);
    m_dynamicAO = LoadValueBoolWithDefault("Player", "DynamicAO", false);
@@ -1112,13 +1119,13 @@ void Player::OnInitialUpdate()
         SetWindowFeedbackSetting(GetHwnd(), FEEDBACK_TOUCH_DOUBLETAP, 0, sizeof(enabled), &enabled);
         SetWindowFeedbackSetting(GetHwnd(), FEEDBACK_TOUCH_PRESSANDHOLD, 0, sizeof(enabled), &enabled);
         SetWindowFeedbackSetting(GetHwnd(), FEEDBACK_TOUCH_RIGHTTAP, 0, sizeof(enabled), &enabled);
-                                 
+
         SetWindowFeedbackSetting(GetHwnd(), FEEDBACK_PEN_BARRELVISUALIZATION, 0, sizeof(enabled), &enabled);
         SetWindowFeedbackSetting(GetHwnd(), FEEDBACK_PEN_TAP, 0, sizeof(enabled), &enabled);
         SetWindowFeedbackSetting(GetHwnd(), FEEDBACK_PEN_DOUBLETAP, 0, sizeof(enabled), &enabled);
         SetWindowFeedbackSetting(GetHwnd(), FEEDBACK_PEN_PRESSANDHOLD, 0, sizeof(enabled), &enabled);
         SetWindowFeedbackSetting(GetHwnd(), FEEDBACK_PEN_RIGHTTAP, 0, sizeof(enabled), &enabled);
-                                 
+
         SetWindowFeedbackSetting(GetHwnd(), FEEDBACK_GESTURE_PRESSANDTAP, 0, sizeof(enabled), &enabled);
     }
 
@@ -1128,13 +1135,19 @@ void Player::OnInitialUpdate()
     if (!m_fullScreen) // see above
         SetCursorPos(400, 999999);
 
-    Init();
+    const HRESULT result = Init();
+    if (result != S_OK)
+        throw 0; //!! have a more specific code (that is catched in the VPinball PeekMessageA loop)?!
 }
 
 void Player::Shutdown()
 {
 #ifdef USE_IMGUI
+ #ifdef ENABLE_SDL
+   ImGui_ImplOpenGL3_Shutdown();
+ #else
    ImGui_ImplDX9_Shutdown();
+ #endif
    ImGui_ImplWin32_Shutdown();
    ImPlot::DestroyContext();
    ImGui::DestroyContext();
@@ -1145,8 +1158,9 @@ void Player::Shutdown()
 
    m_pininput.UnInit();
 
-   SAFE_RELEASE(m_ballVertexBuffer);
-   SAFE_RELEASE(m_ballIndexBuffer);
+   SAFE_BUFFER_RELEASE(m_ballVertexBuffer);
+   SAFE_BUFFER_RELEASE(m_ballIndexBuffer);
+#ifndef ENABLE_SDL
    if (m_ballShader)
    {
       CHECKD3D(m_ballShader->Core()->SetTexture(SHADER_Texture0, nullptr));
@@ -1154,12 +1168,13 @@ void Player::Shutdown()
       CHECKD3D(m_ballShader->Core()->SetTexture(SHADER_Texture2, nullptr));
       CHECKD3D(m_ballShader->Core()->SetTexture(SHADER_Texture3, nullptr));
       delete m_ballShader;
-      m_ballShader = 0;
+      m_ballShader = nullptr;
    }
-#ifdef DEBUG_BALL_SPIN
-   SAFE_RELEASE(m_ballDebugPoints);
 #endif
-   SAFE_RELEASE(m_ballTrailVertexBuffer);
+#ifdef DEBUG_BALL_SPIN
+   SAFE_BUFFER_RELEASE(m_ballDebugPoints);
+#endif
+   SAFE_BUFFER_RELEASE(m_ballTrailVertexBuffer);
    m_BallHistory.UnInit();
    if (m_ballImage)
    {
@@ -1172,7 +1187,9 @@ void Player::Shutdown()
        m_decalImage = nullptr;
    }
 
+#ifndef ENABLE_SDL
    m_limiter.Shutdown();
+#endif
 
    for (size_t i = 0; i < m_vhitables.size(); ++i)
       m_vhitables[i]->EndPlay();
@@ -1211,7 +1228,7 @@ void Player::Shutdown()
    m_dmd = int2(0,0);
    if (m_texdmd)
    {
-      m_pin3d.m_pd3dPrimaryDevice->DMDShader->SetTexture(SHADER_Texture0, (D3DTexture*)nullptr);
+      m_pin3d.m_pd3dPrimaryDevice->DMDShader->SetTextureNull(SHADER_Texture0);
       m_pin3d.m_pd3dPrimaryDevice->m_texMan.UnloadTexture(m_texdmd);
       delete m_texdmd;
       m_texdmd = nullptr;
@@ -1469,7 +1486,7 @@ void Player::UpdateBasicShaderMatrix(const Matrix3D& objectTrafo)
    {
       // *2.0f because every element is calculated that the lowest edge is around z=0 + table height so to get a correct
       // reflection the translation must be 1x table height + 1x table height to center around table height or 0
-      matObject._43 -= m_ptable->m_tableheight*2.0f; 
+      matObject._43 -= m_ptable->m_tableheight*2.0f;
    }
 
    D3DXMATRIX matWorldView = matObject * matWorld * matView;
@@ -1489,6 +1506,18 @@ void Player::UpdateBasicShaderMatrix(const Matrix3D& objectTrafo)
    D3DXMATRIX matWorldViewInvTrans;
    memcpy(matWorldViewInvTrans.m, temp.m, 4 * 4 * sizeof(float));
 
+#ifdef ENABLE_SDL
+   m_pin3d.m_pd3dPrimaryDevice->flasherShader->SetUniformBlock(SHADER_matrixBlock, &matrices.matWorldViewProj[0].m[0][0], eyes * 16);
+   m_pin3d.m_pd3dPrimaryDevice->lightShader->SetUniformBlock(SHADER_matrixBlock, &matrices.matWorldViewProj[0].m[0][0], eyes * 16);
+   m_pin3d.m_pd3dPrimaryDevice->DMDShader->SetUniformBlock(SHADER_matrixBlock, &matrices.matWorldViewProj[0].m[0][0], eyes * 16);
+
+   m_pin3d.m_pd3dPrimaryDevice->basicShader->SetUniformBlock(SHADER_matrixBlock, &matrices.matView.m[0][0], (eyes + 3) * 16);
+#ifdef SEPARATE_CLASSICLIGHTSHADER
+   m_pin3d.m_pd3dPrimaryDevice->lightShader->SetUniformBlock(SHADER_matrixBlock, &matrices.matWorldViewProj[0].m[0][0], (eyes + 3) * 16);
+#endif
+
+#else
+
    m_pin3d.m_pd3dPrimaryDevice->basicShader->SetMatrix("matWorldViewProj", &matWorldViewProj);
    m_pin3d.m_pd3dPrimaryDevice->flasherShader->SetMatrix("matWorldViewProj", &matWorldViewProj);
    m_pin3d.m_pd3dPrimaryDevice->lightShader->SetMatrix("matWorldViewProj", &matWorldViewProj);
@@ -1500,12 +1529,12 @@ void Player::UpdateBasicShaderMatrix(const Matrix3D& objectTrafo)
 
    m_pin3d.m_pd3dPrimaryDevice->basicShader->SetMatrix("matWorldView", &matWorldView);
    m_pin3d.m_pd3dPrimaryDevice->basicShader->SetMatrix("matWorldViewInverseTranspose", &matWorldViewInvTrans);
-   //m_pin3d.m_pd3dDevice->basicShader->SetMatrix("matWorld", &matWorld);
+   //m_pin3d.m_pd3dPrimaryDevice->basicShader->SetMatrix("matWorld", &matWorld);
    m_pin3d.m_pd3dPrimaryDevice->basicShader->SetMatrix("matView", &matView);
 #ifdef SEPARATE_CLASSICLIGHTSHADER
    m_pin3d.m_pd3dPrimaryDevice->classicLightShader->SetMatrix("matWorldView", &matWorldView);
    m_pin3d.m_pd3dPrimaryDevice->classicLightShader->SetMatrix("matWorldViewInverseTranspose", &matWorldViewInvTrans);
-   //m_pin3d.m_pd3dDevice->classicLightShader->SetMatrix("matWorld", &matWorld);
+   //m_pin3d.m_pd3dPrimaryDevice->classicLightShader->SetMatrix("matWorld", &matWorld);
    m_pin3d.m_pd3dPrimaryDevice->classicLightShader->SetMatrix("matView", &matView);
 #endif
 
@@ -1514,18 +1543,19 @@ void Player::UpdateBasicShaderMatrix(const Matrix3D& objectTrafo)
    //D3DXMATRIX matViewInvInvTrans;
    //memcpy(matViewInvInvTrans.m, temp.m, 4 * 4 * sizeof(float));
 
-   //m_pin3d.m_pd3dDevice->basicShader->SetMatrix("matViewInverseInverseTranspose", &matViewInvInvTrans);
+   //m_pin3d.m_pd3dPrimaryDevice->basicShader->SetMatrix("matViewInverseInverseTranspose", &matViewInvInvTrans);
 #ifdef SEPARATE_CLASSICLIGHTSHADER
-   //m_pin3d.m_pd3dDevice->classicLightShader->SetMatrix("matViewInverseInverseTranspose", &matViewInvInvTrans);
+   //m_pin3d.m_pd3dPrimaryDevice->classicLightShader->SetMatrix("matViewInverseInverseTranspose", &matViewInvInvTrans);
+#endif
 #endif
 }
 
 void Player::InitShader()
 {
    /*D3DMATRIX worldMat,viewMat,projMat;
-   m_pin3d.m_pd3dDevice->GetTransform(TRANSFORMSTATE_WORLD, &worldMat );
-   m_pin3d.m_pd3dDevice->GetTransform(TRANSFORMSTATE_VIEW, &viewMat);
-   m_pin3d.m_pd3dDevice->GetTransform(TRANSFORMSTATE_PROJECTION, &projMat);
+   m_pin3d.m_pd3dPrimaryDevice->GetTransform(TRANSFORMSTATE_WORLD, &worldMat );
+   m_pin3d.m_pd3dPrimaryDevice->GetTransform(TRANSFORMSTATE_VIEW, &viewMat);
+   m_pin3d.m_pd3dPrimaryDevice->GetTransform(TRANSFORMSTATE_PROJECTION, &projMat);
 
    D3DXMATRIX matProj(projMat);
    D3DXMATRIX matView(viewMat);
@@ -1534,18 +1564,18 @@ void Player::InitShader()
 
    UpdateBasicShaderMatrix();
    //vec4 cam( worldViewProj._41, worldViewProj._42, worldViewProj._43, 1 );
-   //m_pin3d.m_pd3dDevice->basicShader->SetVector("camera", &cam);
+   //m_pin3d.m_pd3dPrimaryDevice->basicShader->SetVector("camera", &cam);
 #ifdef SEPARATE_CLASSICLIGHTSHADER
-   //m_pin3d.m_pd3dDevice->classicLightShader->SetVector("camera", &cam);
+   //m_pin3d.m_pd3dPrimaryDevice->classicLightShader->SetVector("camera", &cam);
 #endif
 
    m_pin3d.m_pd3dPrimaryDevice->basicShader->SetBool(SHADER_hdrEnvTextures, (m_pin3d.m_envTexture ? m_pin3d.m_envTexture : &m_pin3d.m_builtinEnvTexture)->IsHDR());
    m_pin3d.m_pd3dPrimaryDevice->basicShader->SetTexture(SHADER_Texture1, m_pin3d.m_envTexture ? m_pin3d.m_envTexture : &m_pin3d.m_builtinEnvTexture, false);
-   m_pin3d.m_pd3dPrimaryDevice->basicShader->SetTexture(SHADER_Texture2, m_pin3d.m_pd3dPrimaryDevice->m_texMan.LoadTexture(m_pin3d.m_envRadianceTexture, false));
+   m_pin3d.m_pd3dPrimaryDevice->basicShader->SetTexture(SHADER_Texture2, m_pin3d.m_pd3dPrimaryDevice->m_texMan.LoadTexture(m_pin3d.m_envRadianceTexture, false, false), false);
 #ifdef SEPARATE_CLASSICLIGHTSHADER
    m_pin3d.m_pd3dPrimaryDevice->classicLightShader->SetBool(SHADER_hdrEnvTextures, (m_pin3d.m_envTexture ? m_pin3d.m_envTexture : &m_pin3d.m_builtinEnvTexture)->IsHDR());
-   m_pin3d.m_pd3dPrimaryDevice->classicLightShader->SetTexture(SHADER_Texture1, m_pin3d.m_envTexture ? m_pin3d.m_envTexture : &m_pin3d.m_builtinEnvTexture);
-   m_pin3d.m_pd3dPrimaryDevice->classicLightShader->SetTexture(SHADER_Texture2, m_pd3dDevice->m_texMan.LoadTexture(m_envRadianceTexture));
+   m_pin3d.m_pd3dPrimaryDevice->classicLightShader->SetTexture(SHADER_Texture1, m_pin3d.m_envTexture ? m_pin3d.m_envTexture : &m_pin3d.m_builtinEnvTexture, false);
+   m_pin3d.m_pd3dPrimaryDevice->classicLightShader->SetTexture(SHADER_Texture2, m_pd3dPrimaryDevice->m_texMan.LoadTexture(m_envRadianceTexture, false), false);
 #endif
    const vec4 st(m_ptable->m_envEmissionScale*m_globalEmissionScale, m_pin3d.m_envTexture ? (float)m_pin3d.m_envTexture->m_height/*+m_pin3d.m_envTexture->m_width)*0.5f*/ : (float)m_pin3d.m_builtinEnvTexture.m_height/*+m_pin3d.m_builtinEnvTexture.m_width)*0.5f*/, 0.f, 0.f);
    m_pin3d.m_pd3dPrimaryDevice->basicShader->SetVector(SHADER_fenvEmissionScale_TexWidth, &st);
@@ -1587,6 +1617,9 @@ void Player::UpdateBallShaderMatrix()
    //D3DXMATRIX matWorldViewInvTrans;
    //memcpy(matWorldViewInvTrans.m, temp.m, 4 * 4 * sizeof(float));
 
+#ifdef ENABLE_SDL
+   m_pin3d.m_pd3dPrimaryDevice->ballShader->SetUniformBlock(SHADER_matrixBlock, &matrices.matView.m[0][0], (eyes + 3) * 16);
+#else
    m_ballShader->SetMatrix("matWorldViewProj", &matWorldViewProj);
    m_ballShader->SetMatrix("matWorldView", &matWorldView);
    m_ballShader->SetMatrix("matWorldViewInverse", &matWorldViewInv);
@@ -1599,6 +1632,7 @@ void Player::UpdateBallShaderMatrix()
    //memcpy(matViewInvInvTrans.m, temp.m, 4 * 4 * sizeof(float));
 
    //m_ballShader->SetMatrix("matViewInverseInverseTranspose", &matViewInvInvTrans);
+#endif
 }
 
 void Player::InitBallShader()
@@ -1628,15 +1662,15 @@ void Player::InitBallShader()
    if (playfield)
       m_ballShader->SetTexture(SHADER_Texture1, playfield, false);
 
-   m_ballShader->SetTexture(SHADER_Texture2, m_pin3d.m_pd3dPrimaryDevice->m_texMan.LoadTexture(m_pin3d.m_envRadianceTexture, false));
+   m_ballShader->SetTexture(SHADER_Texture2, m_pin3d.m_pd3dPrimaryDevice->m_texMan.LoadTexture(m_pin3d.m_envRadianceTexture, false, false), false);
 
    assert(m_ballIndexBuffer == nullptr);
    const bool lowDetailBall = (m_ptable->GetDetailLevel() < 10);
-   m_ballIndexBuffer = m_pin3d.m_pd3dPrimaryDevice->CreateAndFillIndexBuffer(lowDetailBall ? basicBallLoNumFaces : basicBallMidNumFaces, lowDetailBall ? basicBallLoIndices : basicBallMidIndices);
+   m_ballIndexBuffer = IndexBuffer::CreateAndFillIndexBuffer(lowDetailBall ? basicBallLoNumFaces : basicBallMidNumFaces, lowDetailBall ? basicBallLoIndices : basicBallMidIndices, PRIMARY_DEVICE);
 
    // VB for normal ball
    assert(m_ballVertexBuffer == nullptr);
-   m_pin3d.m_pd3dPrimaryDevice->CreateVertexBuffer(lowDetailBall ? basicBallLoNumVertices : basicBallMidNumVertices, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_ballVertexBuffer);
+   VertexBuffer::CreateVertexBuffer(lowDetailBall ? basicBallLoNumVertices : basicBallMidNumVertices, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_ballVertexBuffer, PRIMARY_DEVICE);
 
    // load precomputed ball vertices into vertex buffer
    Vertex3D_NoTex2 *buf;
@@ -1805,8 +1839,61 @@ HRESULT Player::Init()
       return hr;
    }
 
+#ifdef ENABLE_SDL
+   // SDL Window appears after InitPin3D, set window default position and flags
+
+   int x = 0;
+   int y = 0;
+
+   int display = LoadValueIntWithDefault((m_stereo3D == STEREO_VR) ? "PlayerVR" : "Player", "Display", -1);
+   display = (display < getNumberOfDisplays()) ? display : -1;
+
+   getDisplaySetupByID(display, x, y, m_screenwidth, m_screenheight);
+   if (m_fullScreen)
+      SetWindowPos(nullptr, x, y, m_screenwidth, m_screenheight, SWP_NOOWNERZORDER | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOMOVE);
+   else
+   {
+      m_refreshrate = 0; // The default
+
+      // constrain window to screen
+      if (m_width > m_screenwidth)
+      {
+         m_width = m_screenwidth;
+         m_height = m_width * 9 / 16;
+      }
+
+      if (m_height > m_screenheight)
+      {
+         m_height = m_screenheight;
+         m_width = m_height * 16 / 9;
+      }
+      int xPos = x + (m_screenwidth - m_width) / 2;
+      int yPos = y + (m_screenheight - m_height) / 2;
+
+      // is this a non-fullscreen window? -> get previously saved window position
+      if ((m_height != m_screenheight) || (m_width != m_screenwidth))
+      {
+         const int xTemp = LoadValueIntWithDefault((m_stereo3D == STEREO_VR) ? "PlayerVR" : "Player", "WindowPosX", xPos); //!! does this handle multi-display correctly like this?
+         const int yTemp = LoadValueIntWithDefault((m_stereo3D == STEREO_VR) ? "PlayerVR" : "Player", "WindowPosY", yPos);
+         if (xTemp >= x && (xTemp + m_width < x + m_screenwidth) && yTemp >= y && (yTemp + m_height < y + m_screenheight)) {//Absolute Window position is on screen
+            xPos = xTemp;
+            yPos = yTemp;
+         }
+         else if (xTemp >= 0 && xTemp < (m_screenwidth- m_width) && yTemp >=0 && yTemp < (m_screenheight- m_height)) {//Relative window Position is on screen
+            xPos = x+xTemp;
+            yPos = y+yTemp;
+         }
+         m_showWindowedCaption = false;
+         const int windowflags = WS_POPUP;
+         SetWindowLong(GetHwnd(), GWL_STYLE, windowflags);
+         SetWindowPos(HWND_TOP, xPos, yPos, m_width, m_height, SWP_NOOWNERZORDER | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+         ShowWindow(SW_SHOWNORMAL);
+      }
+   }
+#else
    if (m_fullScreen)
       SetWindowPos(nullptr, 0, 0, m_width, m_height, SWP_NOOWNERZORDER | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOMOVE);
+#endif
 
    m_pininput.Init(GetHwnd());
 
@@ -1819,6 +1906,7 @@ HRESULT Player::Init()
       m_ptable->m_tblMirrorEnabled = true;
    else
       m_ptable->m_tblMirrorEnabled = LoadValueBoolWithDefault("Player", "mirror", false);
+
    m_pin3d.m_pd3dPrimaryDevice->SetRenderStateCulling(RenderDevice::CULL_NONE); // re-init/thrash cache entry due to the hacky nature of the table mirroring
    m_pin3d.m_pd3dPrimaryDevice->SetRenderStateCulling(RenderDevice::CULL_CCW);
 
@@ -1842,7 +1930,11 @@ HRESULT Player::Init()
    ImGuiIO& io = ImGui::GetIO();
    io.IniFilename = nullptr;  //don't use an ini file for configuration
    ImGui_ImplWin32_Init(GetHwnd());
+ #ifdef ENABLE_SDL
+   ImGui_ImplOpenGL3_Init();
+ #else
    ImGui_ImplDX9_Init(m_pin3d.m_pd3dPrimaryDevice->GetCoreDevice());
+ #endif
 #endif
 
    const float minSlope = (m_ptable->m_overridePhysics ? m_ptable->m_fOverrideMinSlope : m_ptable->m_angletiltMin);
@@ -1896,7 +1988,6 @@ HRESULT Player::Init()
    //   zeta = c / (2 sqrt(k)).
    // Solving for the damping coefficient c, we get
    m_nudgeDamping = dampingRatio * 2.0f * sqrtf(m_nudgeSpring);
-
 
    // Need to set timecur here, for init functions that set timers
    m_time_msec = 0;
@@ -2090,7 +2181,7 @@ HRESULT Player::Init()
       }
 
       assert(m_ballDebugPoints == nullptr);
-      m_pin3d.m_pd3dPrimaryDevice->CreateVertexBuffer((unsigned int)ballDbgVtx.size(), 0, MY_D3DFVF_TEX, &m_ballDebugPoints);
+      VertexBuffer::CreateVertexBuffer((unsigned int)ballDbgVtx.size(), 0, MY_D3DFVF_TEX, &m_ballDebugPoints, PRIMARY_DEVICE);
       void *buf;
       m_ballDebugPoints->lock(0, 0, &buf, VertexBuffer::WRITEONLY);
       memcpy(buf, ballDbgVtx.data(), ballDbgVtx.size() * sizeof(ballDbgVtx[0]));
@@ -2099,7 +2190,7 @@ HRESULT Player::Init()
 #endif
 
    assert(m_ballTrailVertexBuffer == nullptr);
-   m_pin3d.m_pd3dPrimaryDevice->CreateVertexBuffer((MAX_BALL_TRAIL_POS-2)*2+4, USAGE_DYNAMIC, MY_D3DFVF_NOTEX2_VERTEX, &m_ballTrailVertexBuffer);
+   VertexBuffer::CreateVertexBuffer((MAX_BALL_TRAIL_POS-2)*2+4, USAGE_DYNAMIC, MY_D3DFVF_NOTEX2_VERTEX, &m_ballTrailVertexBuffer, PRIMARY_DEVICE);
 
    m_BallHistory.Init(*this);
 
@@ -2174,7 +2265,8 @@ HRESULT Player::Init()
 
    // 0 means disable limiting of draw-ahead queue
    m_limiter.Init(m_pin3d.m_pd3dPrimaryDevice, m_maxPrerenderedFrames);
-
+   //VertexBuffer::UploadBuffers();
+   //IndexBuffer::UploadBuffers();
    Render(); //!! why here already? potentially not all initialized yet??
 
    // Broadcast a message to notify front-ends that it is 
@@ -2283,7 +2375,7 @@ void Player::RenderDynamicMirror(const bool onlyBalls)
    m_pin3d.m_pd3dPrimaryDevice->SetRenderStateCulling(RenderDevice::CULL_CCW);
 
    if (!onlyBalls)
-      UpdateBasicShaderMatrix();
+      UpdateBasicShaderMatrix(); //!! Camera seems skewed when rendering the flipped elements in VR, something with the matrix? Looks fine in 2D.
 
    UpdateBallShaderMatrix();
 
@@ -2336,7 +2428,7 @@ void Player::RenderDynamicMirror(const bool onlyBalls)
 void Player::RenderMirrorOverlay()
 {
    // render the mirrored texture over the playfield
-   m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, m_pin3d.m_pd3dPrimaryDevice->GetMirrorTmpBufferTexture());
+   m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, m_pin3d.m_pd3dPrimaryDevice->GetMirrorTmpBufferTexture(), false);
    m_pin3d.m_pd3dPrimaryDevice->FBShader->SetFloat(SHADER_mirrorFactor, m_ptable->m_playfieldReflectionStrength);
    m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTechnique(SHADER_TECHNIQUE_fb_mirror);
 
@@ -2397,7 +2489,7 @@ void Player::InitStatic()
    // NOTE: iter == 0 MUST ALWAYS PRODUCE an offset of 0,0!
    for (int iter = m_cameraMode ? 0 : (STATIC_PRERENDER_ITERATIONS-1); iter >= 0; --iter) // just do one iteration if in dynamic camera/light/material tweaking mode
    {
-   m_pin3d.m_pd3dPrimaryDevice->m_stats_drawn_triangles = 0;
+   RenderDevice::m_stats_drawn_triangles = 0;
 
    float u1 = xyLDBNbnot[iter*2  ];  //      (float)iter*(float)(1.0                                /STATIC_PRERENDER_ITERATIONS);
    float u2 = xyLDBNbnot[iter*2+1];  //fmodf((float)iter*(float)(STATIC_PRERENDER_ITERATIONS_KOROBOV/STATIC_PRERENDER_ITERATIONS), 1.f);
@@ -2534,7 +2626,7 @@ void Player::InitStatic()
 
    offscreenSurface->UnlockRect();
    }
-   stats_drawn_static_triangles = m_pin3d.m_pd3dPrimaryDevice->m_stats_drawn_triangles;
+   stats_drawn_static_triangles = RenderDevice::m_stats_drawn_triangles;
    }
 
    // if rendering static/with heavy oversampling, re-enable the aniso/trilinear filter now for the normal rendering
@@ -3766,6 +3858,7 @@ void Player::UpdatePhysics()
 
 void Player::DMDdraw(const float DMDposx, const float DMDposy, const float DMDwidth, const float DMDheight, const COLORREF DMDcolor, const float intensity)
 {
+#ifndef ENABLE_SDL
    if (m_texdmd)
    {
       float DMDVerts[4 * 5] =
@@ -3800,6 +3893,7 @@ void Player::DMDdraw(const float DMDposx, const float DMDposy, const float DMDwi
       m_pin3d.m_pd3dPrimaryDevice->DrawTexturedQuad((Vertex3D_TexelOnly*)DMDVerts);
       m_pin3d.m_pd3dPrimaryDevice->DMDShader->End();
    }
+#endif
 }
 
 void Player::Spritedraw(const float posx, const float posy, const float width, const float height, const COLORREF color, Texture * const tex, const float intensity, const bool backdrop)
@@ -3857,7 +3951,7 @@ void Player::Spritedraw(const float posx, const float posy, const float width, c
    pd3dDevice->DMDShader->SetVector(SHADER_vColor_Intensity, &c);
 
    if (tex)
-      pd3dDevice->DMDShader->SetTexture(SHADER_Texture0, tex);
+      pd3dDevice->DMDShader->SetTexture(SHADER_Texture0, tex, false);
 
    pd3dDevice->DMDShader->Begin(0);
    pd3dDevice->DrawTexturedQuad((Vertex3D_TexelOnly*)Verts);
@@ -3903,7 +3997,7 @@ void Player::DrawBulbLightBuffer()
       //for (unsigned int blur = 0; blur < 2; ++blur) // uses larger blur kernel instead now (see below)
       {
          {
-            m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, (D3DTexture*)nullptr);
+            m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTextureNull(SHADER_Texture0);
 
             // switch to 'bloom' temporary output buffer for horizontal phase of gaussian blur
             m_pin3d.m_pd3dPrimaryDevice->SetRenderTarget(m_pin3d.m_pd3dPrimaryDevice->GetBloomTmpBufferTexture());
@@ -3918,12 +4012,12 @@ void Player::DrawBulbLightBuffer()
             m_pin3d.m_pd3dPrimaryDevice->FBShader->End();
          }
          {
-            m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, (D3DTexture*)nullptr);
+            m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTextureNull(SHADER_Texture0);
 
             // switch to 'bloom' output buffer for vertical phase of gaussian blur
             m_pin3d.m_pd3dPrimaryDevice->SetRenderTarget(m_pin3d.m_pd3dPrimaryDevice->GetBloomBufferTexture());
 
-            m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, m_pin3d.m_pd3dPrimaryDevice->GetBloomTmpBufferTexture());
+            m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, m_pin3d.m_pd3dPrimaryDevice->GetBloomTmpBufferTexture(), false);
             const vec4 fb_inv_resolution_05((float)(4.0 / (double)m_width), (float)(4.0 / (double)m_height), 1.0f, 1.0f);
             m_pin3d.m_pd3dPrimaryDevice->FBShader->SetVector(SHADER_w_h_height, &fb_inv_resolution_05);
             m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTechnique(SHADER_TECHNIQUE_fb_bloom_vert19x19);
@@ -3944,7 +4038,7 @@ void Player::DrawBulbLightBuffer()
    // switch back to render buffer
    m_pin3d.m_pd3dPrimaryDevice->SetRenderTarget(m_pin3d.m_pddsBackBuffer);
 
-   m_pin3d.m_pd3dPrimaryDevice->basicShader->SetTexture(SHADER_Texture3, m_pin3d.m_pd3dPrimaryDevice->GetBloomBufferTexture());
+   m_pin3d.m_pd3dPrimaryDevice->basicShader->SetTexture(SHADER_Texture3, m_pin3d.m_pd3dPrimaryDevice->GetBloomBufferTexture(), false);
 }
 
 void Player::RenderDynamics()
@@ -3964,6 +4058,7 @@ void Player::RenderDynamics()
 
    if (reflection_path != 0)
    {
+      // Create the playfield reflection
       m_pin3d.m_pd3dPrimaryDevice->SetRenderStateClipPlane0(true);
       RenderDynamicMirror(reflection_path == 1);
       m_pin3d.m_pd3dPrimaryDevice->SetRenderStateClipPlane0(false); // disable playfield clipplane again
@@ -4030,7 +4125,10 @@ void Player::RenderDynamics()
 
       if (ProfilingMode() == 1)
          m_pin3d.m_gpu_profiler.Timestamp(GTS_NonTransparent);
+
+#ifndef ENABLE_SDL
       m_limiter.Execute(m_pin3d.m_pd3dPrimaryDevice); //!! move below other draw calls??
+#endif
 
       DrawBulbLightBuffer();
 
@@ -4054,7 +4152,9 @@ void Player::RenderDynamics()
    }
    else // special profiling path by doing separate items, will not be accurate, both perf and rendering wise, but better than nothing
    {
+#ifndef ENABLE_SDL
       m_limiter.Execute(m_pin3d.m_pd3dPrimaryDevice); //!! move below other draw calls??
+#endif
 
       DrawBulbLightBuffer();
 
@@ -4131,7 +4231,7 @@ void Player::RenderDynamics()
 
    //
 
-   m_pin3d.m_pd3dPrimaryDevice->basicShader->SetTexture(SHADER_Texture3, (D3DTexture*)nullptr); // need to reset the bulb light texture, as its used as render target for bloom again
+   m_pin3d.m_pd3dPrimaryDevice->basicShader->SetTextureNull(SHADER_Texture3); // need to reset the bulb light texture, as its used as render target for bloom again
 
    m_pin3d.m_pd3dPrimaryDevice->SetRenderStateDepthBias(0.0f); //!! paranoia set of old state, remove as soon as sure that no other code still relies on that legacy set
    m_pin3d.m_pd3dPrimaryDevice->SetRenderState(RenderDevice::ZWRITEENABLE, RenderDevice::RS_TRUE);
@@ -4147,21 +4247,21 @@ void Player::RenderDynamics()
 
 void Player::SetClipPlanePlayfield(const bool clip_orientation)
 {
-	Matrix3D mT = m_pin3d.m_proj.m_matrixTotal; // = world * view * proj
-	mT.Invert();
-	mT.Transpose();
-	const D3DXMATRIX m(mT);
-	D3DXPLANE clipSpacePlane;
-	const D3DXPLANE plane(0.0f, 0.0f, clip_orientation ? -1.0f : 1.0f, clip_orientation ? m_ptable->m_tableheight : -m_ptable->m_tableheight);
-	D3DXPlaneTransform(&clipSpacePlane, &plane, &m);
-	m_pin3d.m_pd3dPrimaryDevice->GetCoreDevice()->SetClipPlane(0, clipSpacePlane);
+   Matrix3D mT = m_pin3d.m_proj.m_matrixTotal; // = world * view * proj
+   mT.Invert();
+   mT.Transpose();
+   const D3DXMATRIX m(mT);
+   D3DXPLANE clipSpacePlane;
+   const D3DXPLANE plane(0.0f, 0.0f, clip_orientation ? -1.0f : 1.0f, clip_orientation ? m_ptable->m_tableheight : -m_ptable->m_tableheight);
+   D3DXPlaneTransform(&clipSpacePlane, &plane, &m);
+   m_pin3d.m_pd3dPrimaryDevice->GetCoreDevice()->SetClipPlane(0, clipSpacePlane);
 }
 
 void Player::SSRefl()
 {
    m_pin3d.m_pd3dPrimaryDevice->SetRenderTarget(m_pin3d.m_pd3dPrimaryDevice->GetReflectionBufferTexture());
 
-   m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, m_pin3d.m_pd3dPrimaryDevice->GetBackBufferTexture());
+   m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, m_pin3d.m_pd3dPrimaryDevice->GetBackBufferTexture(), true);
    m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture3, m_pin3d.m_pdds3DZBuffer);
    m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture4, &m_pin3d.m_aoDitherTexture, true); //!!!
 
@@ -4202,7 +4302,7 @@ void Player::Bloom()
       // switch to 'bloom' output buffer to collect clipped framebuffer values
       m_pin3d.m_pd3dPrimaryDevice->SetRenderTarget(m_pin3d.m_pd3dPrimaryDevice->GetBloomBufferTexture());
 
-      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, m_pin3d.m_pd3dPrimaryDevice->GetBackBufferTexture());
+      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, m_pin3d.m_pd3dPrimaryDevice->GetBackBufferTexture(), true);
 
       const vec4 fb_inv_resolution((float)(1.0 / (double)m_width), (float)(1.0 / (double)m_height), 1.0f, 1.0f);
       m_pin3d.m_pd3dPrimaryDevice->FBShader->SetVector(SHADER_w_h_height, &fb_inv_resolution);
@@ -4213,12 +4313,12 @@ void Player::Bloom()
       m_pin3d.m_pd3dPrimaryDevice->FBShader->End();
    }
    {
-      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, (D3DTexture*)nullptr);
+      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTextureNull(SHADER_Texture0);
 
       // switch to 'bloom' temporary output buffer for horizontal phase of gaussian blur
       m_pin3d.m_pd3dPrimaryDevice->SetRenderTarget(m_pin3d.m_pd3dPrimaryDevice->GetBloomTmpBufferTexture());
 
-      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, m_pin3d.m_pd3dPrimaryDevice->GetBloomBufferTexture());
+      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, m_pin3d.m_pd3dPrimaryDevice->GetBloomBufferTexture(), true);
       const vec4 fb_inv_resolution_05((float)(4.0 / (double)m_width), (float)(4.0 / (double)m_height), 1.0f, 1.0f);
       m_pin3d.m_pd3dPrimaryDevice->FBShader->SetVector(SHADER_w_h_height, &fb_inv_resolution_05);
       m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTechnique(/*m_low_quality_bloom ? SHADER_TECHNIQUE_fb_bloom_horiz9x9 :*/ "fb_bloom_horiz39x39");
@@ -4228,12 +4328,12 @@ void Player::Bloom()
       m_pin3d.m_pd3dPrimaryDevice->FBShader->End();
    }
    {
-      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, (D3DTexture*)nullptr);
+      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTextureNull(SHADER_Texture0);
 
       // switch to 'bloom' output buffer for vertical phase of gaussian blur
       m_pin3d.m_pd3dPrimaryDevice->SetRenderTarget(m_pin3d.m_pd3dPrimaryDevice->GetBloomBufferTexture());
 
-      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, m_pin3d.m_pd3dPrimaryDevice->GetBloomTmpBufferTexture());
+      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, m_pin3d.m_pd3dPrimaryDevice->GetBloomTmpBufferTexture(), true);
       const vec4 fb_inv_resolution_05((float)(4.0 / (double)m_width), (float)(4.0 / (double)m_height), m_ptable->m_bloom_strength, 1.0f);
       m_pin3d.m_pd3dPrimaryDevice->FBShader->SetVector(SHADER_w_h_height, &fb_inv_resolution_05);
       m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTechnique(/*m_low_quality_bloom ? SHADER_TECHNIQUE_fb_bloom_vert9x9 :*/ "fb_bloom_vert39x39");
@@ -4253,7 +4353,7 @@ void Player::StereoFXAA(const bool stereo, const bool SMAA, const bool DLAA, con
       else
          m_pin3d.m_pd3dPrimaryDevice->SetRenderTarget(m_pin3d.m_pd3dPrimaryDevice->GetOutputBackBuffer());
 
-      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, m_pin3d.m_pd3dPrimaryDevice->GetBackBufferTmpTexture());
+      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, m_pin3d.m_pd3dPrimaryDevice->GetBackBufferTmpTexture(), true);
       m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture3, m_pin3d.m_pdds3DZBuffer);
 
       const vec4 ms_zpd_ya_td(m_ptable->GetMaxSeparation(), m_ptable->GetZPD(), m_stereo3DY ? 1.0f : 0.0f,
@@ -4265,8 +4365,8 @@ void Player::StereoFXAA(const bool stereo, const bool SMAA, const bool DLAA, con
 
       if (m_stereo3D > 4)
       {
-         const vec4 a_ds__c(m_global3DDesaturation, m_global3DContrast, 0.f,0.f);
-         m_pin3d.m_pd3dPrimaryDevice->FBShader->SetVector("Anaglyph_DeSaturation__Contrast", &a_ds__c);
+         const vec4 a_ds_c(m_global3DDesaturation, m_global3DContrast, 0.f,0.f);
+         m_pin3d.m_pd3dPrimaryDevice->FBShader->SetVector("Anaglyph_DeSaturation_Contrast", &a_ds_c);
       }
 
       m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTechnique((m_stereo3D <= 4) ? "stereo" : "stereo_anaglyph");
@@ -4282,7 +4382,7 @@ void Player::StereoFXAA(const bool stereo, const bool SMAA, const bool DLAA, con
       else
          m_pin3d.m_pd3dPrimaryDevice->SetRenderTarget(m_pin3d.m_pd3dPrimaryDevice->GetOutputBackBuffer());
 
-      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, m_pin3d.m_pd3dPrimaryDevice->GetBackBufferTmpTexture());
+      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, m_pin3d.m_pd3dPrimaryDevice->GetBackBufferTmpTexture(), true);
       if (depth_available)
          m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture3, m_pin3d.m_pdds3DZBuffer);
 
@@ -4371,7 +4471,11 @@ void Player::UpdateHUD_IMGUI()
    if (!ShowStats() || m_cameraMode || m_closeDown)
       return;
 
+#ifdef ENABLE_SDL
+   ImGui_ImplOpenGL3_NewFrame();
+#else
    ImGui_ImplDX9_NewFrame();
+#endif
    ImGui_ImplWin32_NewFrame();
    ImGui::NewFrame();
    ImGui::SetNextWindowSize(ShowFPSonly() ? ImVec2(200, 50) : ImVec2(600, 350), ImGuiCond_FirstUseEver);
@@ -4390,7 +4494,7 @@ void Player::UpdateHUD_IMGUI()
    if (ImGui::Button("Toggle Profiling"))
       profiling = !profiling;
 
-   ImGui::Text("FPS: %.1f (%.1f avg)  Display %s Objects(%uk/%uk Triangles)", m_fps + 0.01f, fpsAvg + 0.01f, RenderStaticOnly() ? "only static" : "all", (m_pin3d.m_pd3dPrimaryDevice->m_stats_drawn_triangles + 999) / 1000, (stats_drawn_static_triangles + m_pin3d.m_pd3dPrimaryDevice->m_stats_drawn_triangles + 999) / 1000);
+   ImGui::Text("FPS: %.1f (%.1f avg)  Display %s Objects(%uk/%uk Triangles)", m_fps + 0.01f, fpsAvg + 0.01f, RenderStaticOnly() ? "only static" : "all", (RenderDevice::m_stats_drawn_triangles + 999) / 1000, (stats_drawn_static_triangles + m_pin3d.m_pd3dPrimaryDevice->m_stats_drawn_triangles + 999) / 1000);
    ImGui::Text("DayNight %u%%", quantizeUnsignedPercent(m_globalEmissionScale));
 
    const U32 period = m_lastFrameDuration;
@@ -4441,7 +4545,11 @@ void Player::UpdateHUD_IMGUI()
                float(1e-3 * (double)m_script_total / (double)m_count), float(1e-3 * m_script_max), float((double)m_script_total * 100.0 / (double)m_total), float(1e-3 * m_script_max_total));
 
    // performance counters
+#ifdef ENABLE_SDL
+   ImGui::Text("Draw calls: %u", m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumDrawCalls());
+#else
    ImGui::Text("Draw calls: %u (%u Locks)", m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumDrawCalls(), m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumLockCalls());
+#endif
    ImGui::Text("State changes: %u", m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumStateChanges());
    ImGui::Text("Texture changes: %u (%u Uploads)", m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumTextureChanges(), m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumTextureUploads());
    ImGui::Text("Shader/Parameter changes: %u / %u (%u Material ID changes)", m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumTechniqueChanges(), m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumParameterChanges(), material_flips);
@@ -4521,31 +4629,40 @@ void Player::UpdateHUD_IMGUI()
        ImGui::SliderFloat("History", &history, 1, 10, "%.1f s");
        //rdata1.Span = history;
        //rdata2.Span = history;
-       ImPlot::SetNextPlotLimitsX(t - history, t, ImGuiCond_Always);
-       const int rt_axis = ImPlotAxisFlags_NoTickLabels;
-       if (ImPlot::BeginPlot("##ScrollingFPS", nullptr, nullptr, ImVec2(-1, 150), ImPlotFlags_None, rt_axis, rt_axis | ImPlotAxisFlags_LockMin)) {
+       constexpr int rt_axis = ImPlotAxisFlags_NoTickLabels;
+       if (ImPlot::BeginPlot("##ScrollingFPS", ImVec2(-1, 150), ImPlotFlags_None)) {
+           ImPlot::SetupAxis(ImAxis_X1, nullptr, rt_axis);
+           ImPlot::SetupAxis(ImAxis_Y1, nullptr, rt_axis | ImPlotAxisFlags_LockMin);
+           ImPlot::SetupAxisLimits(ImAxis_X1, t - history, t, ImGuiCond_Always);
            ImPlot::PlotLine("FPS", &sdata2.Data[0].x, &sdata2.Data[0].y, sdata2.Data.size(), sdata2.Offset, 2 * sizeof(float));
            ImPlot::PushStyleColor(ImPlotCol_Fill, ImVec4(1, 0, 0, 0.25f));
            ImPlot::PlotLine("Smoothed FPS", &sdata1.Data[0].x, &sdata1.Data[0].y, sdata1.Data.size(), sdata1.Offset, 2 * sizeof(float));
            ImPlot::PopStyleColor();
            ImPlot::EndPlot();
        }
-       /*ImPlot::SetNextPlotLimitsX(0, history, ImGuiCond_Always);
-       if (ImPlot::BeginPlot("##RollingFPS", nullptr, nullptr, ImVec2(-1, 150), ImPlotFlags_Default, rt_axis, rt_axis)) {
+       /*
+       if (ImPlot::BeginPlot("##RollingFPS", ImVec2(-1, 150), ImPlotFlags_Default)) {
+           ImPlot::SetupAxis(ImAxis_X1, nullptr, rt_axis);
+           ImPlot::SetupAxis(ImAxis_Y1, nullptr, rt_axis);
+           ImPlot::SetupAxis(ImAxis_X1, 0, history, ImGuiCond_Always);
            ImPlot::PlotLine("Average FPS", &rdata1.Data[0].x, &rdata1.Data[0].y, rdata1.Data.size(), 0, 2 * sizeof(float));
            ImPlot::PlotLine("FPS", &rdata2.Data[0].x, &rdata2.Data[0].y, rdata2.Data.size(), 0, 2 * sizeof(float));
            ImPlot::EndPlot();
        }*/
-       ImPlot::SetNextPlotLimitsX(t - history, t, ImGuiCond_Always);
-       if (ImPlot::BeginPlot("##ScrollingPhysics", nullptr, nullptr, ImVec2(-1, 150), ImPlotFlags_None, rt_axis, rt_axis | ImPlotAxisFlags_LockMin)) {
+       if (ImPlot::BeginPlot("##ScrollingPhysics", ImVec2(-1, 150), ImPlotFlags_None)) {
+           ImPlot::SetupAxis(ImAxis_X1, nullptr, rt_axis);
+           ImPlot::SetupAxis(ImAxis_Y1, nullptr, rt_axis | ImPlotAxisFlags_LockMin);
+           ImPlot::SetupAxisLimits(ImAxis_X1, t - history, t, ImGuiCond_Always);
            ImPlot::PlotLine("ms Physics", &sdata4.Data[0].x, &sdata4.Data[0].y, sdata4.Data.size(), sdata4.Offset, 2 * sizeof(float));
            ImPlot::PushStyleColor(ImPlotCol_Fill, ImVec4(1, 0, 0, 0.25f));
            ImPlot::PlotLine("Smoothed ms Physics", &sdata3.Data[0].x, &sdata3.Data[0].y, sdata3.Data.size(), sdata3.Offset, 2 * sizeof(float));
            ImPlot::PopStyleColor();
            ImPlot::EndPlot();
        }
-       ImPlot::SetNextPlotLimitsX(t - history, t, ImGuiCond_Always);
-       if (ImPlot::BeginPlot("##ScrollingScript", nullptr, nullptr, ImVec2(-1, 150), ImPlotFlags_None, rt_axis, rt_axis | ImPlotAxisFlags_LockMin)) {
+       if (ImPlot::BeginPlot("##ScrollingScript",ImVec2(-1, 150), ImPlotFlags_None)) {
+           ImPlot::SetupAxis(ImAxis_X1, nullptr, rt_axis);
+           ImPlot::SetupAxis(ImAxis_Y1, nullptr, rt_axis | ImPlotAxisFlags_LockMin);
+           ImPlot::SetupAxisLimits(ImAxis_X1, t - history, t, ImGuiCond_Always);
            ImPlot::PlotLine("ms Script", &sdata6.Data[0].x, &sdata6.Data[0].y, sdata6.Data.size(), sdata6.Offset, 2 * sizeof(float));
            ImPlot::PushStyleColor(ImPlotCol_Fill, ImVec4(1, 0, 0, 0.25f));
            ImPlot::PlotLine("Smoothed ms Script", &sdata5.Data[0].x, &sdata5.Data[0].y, sdata5.Data.size(), sdata5.Offset, 2 * sizeof(float));
@@ -4563,7 +4680,11 @@ void Player::RenderHUD_IMGUI()
       return;
 
    ImGui::Render();
+#ifdef ENABLE_SDL
+   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+#else
    ImGui_ImplDX9_RenderDrawData(ImGui::GetDrawData());
+#endif
 }
 
 #else
@@ -4603,7 +4724,7 @@ void Player::UpdateHUD()
 		//DebugPrint(0, 230, szFoo); //!!?
 
 		// Draw the framerate.
-		sprintf_s(szFoo, "FPS: %.1f (%.1f avg)  Display %s Objects (%uk/%uk Triangles)  DayNight %u%%", m_fps+0.01f, fpsAvg+0.01f, RenderStaticOnly() ? "only static" : "all", (m_pin3d.m_pd3dPrimaryDevice->m_stats_drawn_triangles + 999) / 1000, (stats_drawn_static_triangles + m_pin3d.m_pd3dPrimaryDevice->m_stats_drawn_triangles + 999) / 1000, quantizeUnsignedPercent(m_globalEmissionScale));
+		sprintf_s(szFoo, "FPS: %.1f (%.1f avg)  Display %s Objects (%uk/%uk Triangles)  DayNight %u%%", m_fps+0.01f, fpsAvg+0.01f, RenderStaticOnly() ? "only static" : "all", (RenderDevice::m_stats_drawn_triangles + 999) / 1000, (stats_drawn_static_triangles + m_pin3d.m_pd3dPrimaryDevice->m_stats_drawn_triangles + 999) / 1000, quantizeUnsignedPercent(m_globalEmissionScale));
 		DebugPrint(0, 10, szFoo);
 
 		const U32 period = m_lastFrameDuration;
@@ -4766,7 +4887,7 @@ void Player::UpdateHUD()
 	if (m_closeDown) // print table name,author,version and blurb and description in pause mode
 	{
 		char szFoo[256];
-		szFoo[0] = 0;
+		szFoo[0] = '\0';
 
 		int line = 0;
 
@@ -4941,7 +5062,7 @@ void Player::FlipVideoBuffers(const bool vsync)
    m_pin3d.Flip(vsync);
 
    // switch to texture output buffer again
-   m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, (D3DTexture*)nullptr);
+   m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTextureNull(SHADER_Texture0);
    m_pin3d.m_pd3dPrimaryDevice->SetRenderTarget(m_pin3d.m_pddsBackBuffer);
 
    m_lastFlipTime = usec();
@@ -4983,8 +5104,8 @@ void Player::PrepareVideoBuffersAO()
    // separate normal generation pass, currently roughly same perf or even much worse
    /*m_pin3d.m_pd3dDevice->SetRenderTarget(m_pin3d.m_pd3dDevice->GetBackBufferTmpTexture()); //!! expects stereo or FXAA enabled
 
-   m_pin3d.m_pd3dDevice->FBShader->SetTexture(SHADER_Texture3, m_pin3d.m_pdds3DZBuffer);
-   
+   m_pin3d.m_pd3dDevice->FBShader->SetTexture(SHADER_Texture3, m_pin3d.m_pdds3DZBuffer, true);
+
    const vec4 w_h_height((float)(1.0 / (double)m_width), (float)(1.0 / (double)m_height),
       radical_inverse(m_overall_frames%2048)*(float)(1. / 8.0),
       sobol(m_overall_frames%2048)*(float)(5. / 8.0)); // jitter within lattice cell //!! ?
@@ -5039,12 +5160,12 @@ void Player::PrepareVideoBuffersAO()
    };
 
    if (ss_refl)
-      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, m_pin3d.m_pd3dPrimaryDevice->GetReflectionBufferTexture());
+      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, m_pin3d.m_pd3dPrimaryDevice->GetReflectionBufferTexture(), true);
    else
-      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, m_pin3d.m_pd3dPrimaryDevice->GetBackBufferTexture());
+      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture0, m_pin3d.m_pd3dPrimaryDevice->GetBackBufferTexture(), true);
    if (m_ptable->m_bloom_strength > 0.0f && !m_bloomOff)
-      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture1, m_pin3d.m_pd3dPrimaryDevice->GetBloomBufferTexture());
-   m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture3, m_pin3d.m_pddsAOBackBuffer);
+      m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture1, m_pin3d.m_pd3dPrimaryDevice->GetBloomBufferTexture(), true);
+   m_pin3d.m_pd3dPrimaryDevice->FBShader->SetTexture(SHADER_Texture3, m_pin3d.m_pddsAOBackBuffer, true);
 
    Texture * const pin = m_ptable->GetImage(m_ptable->m_imageColorGrade);
    if (pin)
@@ -5368,11 +5489,13 @@ void Player::Render()
 
    m_LastKnownGoodCounter++;
 
-   m_pin3d.m_pd3dPrimaryDevice->m_stats_drawn_triangles = 0;
+   RenderDevice::m_stats_drawn_triangles = 0;
 
+#ifndef ENABLE_SDL
    // copy static buffers to back buffer and z buffer
    m_pin3d.m_pd3dPrimaryDevice->CopySurface(m_pin3d.m_pddsBackBuffer, m_pin3d.m_pddsStatic);
    m_pin3d.m_pd3dPrimaryDevice->CopySurface(m_pin3d.m_pddsZBuffer, m_pin3d.m_pddsStaticZ); // cannot be called inside BeginScene -> EndScene cycle
+#endif
 
    m_BallHistory.Process(*this);
 
@@ -5759,8 +5882,8 @@ void Player::DrawBalls()
    //     if (reflectionOnly && !drawReflection)
    //        return;
 
-   //m_pin3d.m_pd3dDevice->SetTextureAddressMode(0, RenderDevice::TEX_CLAMP);
-   //m_pin3d.m_pd3dDevice->SetTextureFilter(0, TEXTURE_MODE_TRILINEAR);
+   //m_pin3d.m_pd3dPrimaryDevice->SetTextureAddressMode(0, RenderDevice::TEX_CLAMP);
+   //m_pin3d.m_pd3dPrimaryDevice->SetTextureFilter(0, TEXTURE_MODE_TRILINEAR);
 
    const Material * const playfield_mat = m_ptable->GetMaterial(m_ptable->m_playfieldMaterial);
    const vec4 playfield_cBaseF = convertColor(playfield_mat->m_cBase);
@@ -5770,7 +5893,7 @@ void Player::DrawBalls()
    {
       Ball * const pball = m_vball[i];
 
-      if(!pball->m_visible)
+      if (!pball->m_visible)
          continue;
 
       if (orgDrawReflection && !pball->m_reflectionEnabled)
@@ -5801,7 +5924,7 @@ void Player::DrawBalls()
                      *playfield_avg_diffuse //!! hack: multiply average diffuse from playfield onto strength, as only diffuse lighting is used for reflection
                      *0.5f                  //!! additional magic correction factor due to everything being wrong in the earlier reflection/lighting implementation
                      );
-      m_ballShader->SetVector("invTableRes__playfield_height_reflection", &phr);
+      m_ballShader->SetVector(SHADER_invTableRes_playfield_height_reflection, &phr);
 
       if ((zheight > maxz) || (pball->m_d.m_pos.z < minz))
       {
@@ -5892,16 +6015,12 @@ void Player::DrawBalls()
       memcpy(m.m, m3D_full.m, 4 * 4 * sizeof(float));
       m_ballShader->SetMatrix(SHADER_orientation, &m);
 
+      m_ballShader->SetBool(SHADER_disableLighting, m_disableLightingForBalls);
+
       if (!pball->m_pinballEnv)
-      {
-         m_ballShader->SetBool(SHADER_hdrTexture0, m_pin3d.m_pinballEnvTexture.IsHDR()); // should always be false, as read from (LDR-Bitmap-)Resources
          m_ballShader->SetTexture(SHADER_Texture0, &m_pin3d.m_pinballEnvTexture, false);
-      }
       else
-      {
-         m_ballShader->SetBool(SHADER_hdrTexture0, pball->m_pinballEnv->IsHDR());
          m_ballShader->SetTexture(SHADER_Texture0, pball->m_pinballEnv, false);
-      }
 
       if (pball->m_pinballDecal)
          m_ballShader->SetTexture(SHADER_Texture3, pball->m_pinballDecal, false);
@@ -6023,7 +6142,7 @@ void Player::DrawBalls()
 
             m_ballShader->SetTechnique(SHADER_TECHNIQUE_RenderBallTrail);
             m_ballShader->Begin(0);
-            m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::TRIANGLESTRIP, MY_D3DFVF_NOTEX2_VERTEX, m_ballTrailVertexBuffer, 0, num_rgv3D);
+            m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::TRIANGLESTRIP, MY_D3DFVF_NOTEX2_VERTEX, m_ballTrailVertexBuffer, 0, num_rgv3D, true);
             m_ballShader->End();
          }
       }
@@ -6047,7 +6166,7 @@ void Player::DrawBalls()
          // draw points
          constexpr float ptsize = 5.0f;
          m_pin3d.m_pd3dPrimaryDevice->SetRenderState((RenderDevice::RenderStates)D3DRS_POINTSIZE, *((DWORD*)&ptsize));
-         m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::POINTLIST, MY_D3DFVF_TEX, m_ballDebugPoints, 0, 12);
+         m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::POINTLIST, MY_D3DFVF_TEX, m_ballDebugPoints, 0, 12, true);
 
          // reset transform
          m_pin3d.m_pd3dPrimaryDevice->SetTransform(TRANSFORMSTATE_WORLD, &matOrig);

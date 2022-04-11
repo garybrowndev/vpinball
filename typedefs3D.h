@@ -1,8 +1,7 @@
 #pragma once
 
 #ifdef ENABLE_SDL
- #include <GL/glew.h>
- //#include <glad/glad.h>
+ #include <glad/glad.h>
  #include <sdl2/SDL_opengl.h>
  #include <sdl2/SDL.h>
  #include <sdl2/SDL_ttf.h>
@@ -15,30 +14,44 @@
  #include "openvr.h"
 #endif
 
+enum deviceNumber {
+   PRIMARY_DEVICE,
+   SECONDARY_DEVICE
+};
+
 #ifdef ENABLE_SDL
+
+#define MAX_DEVICE_IDENTIFIER_STRING 512
+#define D3DADAPTER_DEFAULT 0
 
 enum colorFormat {
    GREY = GL_RED,
    GREY_ALPHA = GL_RG8,
+   RED16F = GL_R16F,
+   RG16F = GL_RG16F,
    RGB = GL_RGB8,
    RGB5 = GL_RGB5,
    RGB8 = GL_RGB8,
    RGB10 = GL_RGB10_A2,
-   RGB32 = GL_RGB32F,
-   RGBA16 = GL_RGBA16F,
-   RGBA32 = GL_RGBA32F,
+   RGB16F = GL_RGB16F,
+   RGB32F = GL_RGB32F,
+   RGBA16F = GL_RGBA16F,
+   RGBA32F = GL_RGBA32F,
    RGBA = GL_RGBA8,
    RGBA8 = GL_RGBA8,
    RGBA10 = GL_RGB10_A2,
-   DXT5 = GL_COMPRESSED_RGBA_S3TC_DXT5_EXT
+   DXT5 = GL_COMPRESSED_RGBA_S3TC_DXT5_EXT,
+   BC7 = GL_COMPRESSED_RGBA_BPTC_UNORM
+   //!! BC6H for floats?
 };
 
 enum textureUsage {
-   RENDERTARGET_VR = 16,
    RENDERTARGET = 8,
    RENDERTARGET_DEPTH = 12,
+   RENDERTARGET_MSAA = 14,
+   RENDERTARGET_MSAA_DEPTH = 16,
    DEPTH = 4,
-   MIPMAP = 2,
+   AUTOMIPMAP = 2,
    STATIC = 0,
    DYNAMIC = 1
 };
@@ -48,7 +61,7 @@ struct RenderTarget {
    textureUsage usage;
    GLuint texture = 0, zTexture = 0, framebuffer = 0, zBuffer = 0;
    GLuint width = 0, height = 0;
-   GLint slot = -1;//Current slot for caching
+   //GLint slot = -1;//Current slot for caching
    int stereo = 0;
 };
 

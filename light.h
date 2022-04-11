@@ -98,6 +98,7 @@ public:
    virtual void ClearForOverwrite();
 
    void PrepareMoversCustom();
+   void UpdateCustomMoverVBuffer();
 
    virtual void EditMenu(CMenu &menu);
    virtual void DoCommand(int icmd, int x, int y);
@@ -130,6 +131,7 @@ public:
    void setInPlayState(const LightState newVal);
    STDMETHOD(GetInPlayState)(/*[out, retval]*/ LightState* pVal);
    STDMETHOD(GetInPlayStateBool)(/*[out, retval]*/ VARIANT_BOOL* pVal);
+   STDMETHOD(GetInPlayIntensity)(/*[out, retval]*/ float *pVal);
    void setLightState(const LightState newVal);
    LightState getLightState() const;
    void RenderBulbMesh();
@@ -200,6 +202,7 @@ private:
    std::vector<RenderVertex> m_vvertex;
 
    float m_initSurfaceHeight;
+   float m_maxDist;
    bool  m_updateBulbLightHeight;
 
    bool  m_roundLight; // pre-VPX compatibility

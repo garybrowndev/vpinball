@@ -47,10 +47,8 @@ HitTarget::HitTarget()
 
 HitTarget::~HitTarget()
 {
-   if (m_vertexBuffer)
-      m_vertexBuffer->release();
-   if (m_indexBuffer)
-      m_indexBuffer->release();
+   SAFE_BUFFER_RELEASE(m_vertexBuffer);
+   SAFE_BUFFER_RELEASE(m_indexBuffer);
 }
 
 void HitTarget::SetMeshType(const TargetType type)
@@ -429,16 +427,8 @@ void HitTarget::EndPlay()
 {
    m_vhoCollidable.clear();
 
-   if (m_vertexBuffer)
-   {
-      m_vertexBuffer->release();
-      m_vertexBuffer = 0;
-   }
-   if (m_indexBuffer)
-   {
-      m_indexBuffer->release();
-      m_indexBuffer = 0;
-   }
+   SAFE_BUFFER_RELEASE(m_vertexBuffer);
+   SAFE_BUFFER_RELEASE(m_indexBuffer);
 
    IEditable::EndPlay();
 }
@@ -819,17 +809,12 @@ void HitTarget::RenderDynamic()
 
 void HitTarget::RenderSetup()
 {
-   RenderDevice * const pd3dDevice = g_pplayer->m_pin3d.m_pd3dPrimaryDevice;
-
-   if (m_vertexBuffer)
-      m_vertexBuffer->release();
-
+   SAFE_BUFFER_RELEASE(m_vertexBuffer);
    SetMeshType(m_d.m_targetType);
-   pd3dDevice->CreateVertexBuffer((unsigned int)m_numVertices, USAGE_DYNAMIC, MY_D3DFVF_NOTEX2_VERTEX, &m_vertexBuffer);
+   VertexBuffer::CreateVertexBuffer((unsigned int)m_numVertices, USAGE_DYNAMIC, MY_D3DFVF_NOTEX2_VERTEX, &m_vertexBuffer, PRIMARY_DEVICE);
 
-   if (m_indexBuffer)
-      m_indexBuffer->release();
-   m_indexBuffer = pd3dDevice->CreateAndFillIndexBuffer(m_numIndices, m_indices);
+   SAFE_BUFFER_RELEASE(m_indexBuffer);
+   m_indexBuffer = IndexBuffer::CreateAndFillIndexBuffer(m_numIndices, m_indices, PRIMARY_DEVICE);
 
    m_transformedVertices.resize(m_numVertices);
 
@@ -1074,7 +1059,7 @@ STDMETHODIMP HitTarget::put_Visible(VARIANT_BOOL newVal)
 STDMETHODIMP HitTarget::get_X(float *pVal)
 {
    *pVal = m_d.m_vPosition.x;
-   m_vpinball->SetStatusBarUnitInfo("", true);
+   m_vpinball->SetStatusBarUnitInfo(string(), true);
 
    return S_OK;
 }

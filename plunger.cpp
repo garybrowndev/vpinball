@@ -10,16 +10,8 @@ Plunger::Plunger()
 
 Plunger::~Plunger()
 {
-   if (m_vertexBuffer)
-   {
-      m_vertexBuffer->release();
-      m_vertexBuffer = nullptr;
-   }
-   if (m_indexBuffer)
-   {
-      m_indexBuffer->release();
-      m_indexBuffer = nullptr;
-   }
+   SAFE_BUFFER_RELEASE(m_vertexBuffer);
+   SAFE_BUFFER_RELEASE(m_indexBuffer);
 }
 
 HRESULT Plunger::Init(PinTable *ptable, float x, float y, bool fromMouseClick)
@@ -172,16 +164,8 @@ void Plunger::EndPlay()
    m_phitplunger = nullptr;       // possible memory leak here?
 
    IEditable::EndPlay();
-   if (m_vertexBuffer)
-   {
-      m_vertexBuffer->release();
-      m_vertexBuffer = nullptr;
-   }
-   if (m_indexBuffer)
-   {
-      m_indexBuffer->release();
-      m_indexBuffer = nullptr;
-   }
+   SAFE_BUFFER_RELEASE(m_vertexBuffer);
+   SAFE_BUFFER_RELEASE(m_indexBuffer);
 }
 
 void Plunger::SetObjectPos()
@@ -324,8 +308,6 @@ static const char *nextTipToken(const char* &p)
 
 void Plunger::RenderSetup()
 {
-   RenderDevice * const pd3dDevice = g_pplayer->m_pin3d.m_pd3dPrimaryDevice;
-
    const float zheight = m_ptable->GetSurfaceHeight(m_d.m_szSurface, m_d.m_v.x, m_d.m_v.y) + m_d.m_zAdjust;
    const float stroke = m_d.m_stroke;
    const float beginy = m_d.m_v.y;
@@ -542,9 +524,8 @@ void Plunger::RenderSetup()
    // figure the relative spring gauge, in terms of the overall width
    const float springGaugeRel = springGauge / m_d.m_width;
 
-   if (m_vertexBuffer)
-      m_vertexBuffer->release();
-   pd3dDevice->CreateVertexBuffer(m_cframes*m_vtsPerFrame, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_vertexBuffer);
+   SAFE_BUFFER_RELEASE(m_vertexBuffer);
+   VertexBuffer::CreateVertexBuffer(m_cframes*m_vtsPerFrame, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_vertexBuffer, PRIMARY_DEVICE);
 
    Vertex3D_NoTex2 *buf;
    m_vertexBuffer->lock(0, 0, (void**)&buf, VertexBuffer::WRITEONLY);
@@ -847,9 +828,8 @@ void Plunger::RenderSetup()
    }
 
    // create the new index buffer
-   if (m_indexBuffer)
-      m_indexBuffer->release();
-   m_indexBuffer = pd3dDevice->CreateAndFillIndexBuffer(k, indices);
+   SAFE_BUFFER_RELEASE(m_indexBuffer);
+   m_indexBuffer = IndexBuffer::CreateAndFillIndexBuffer(k, indices, PRIMARY_DEVICE);
 
    // done with the index scratch pad
    delete[] indices;
@@ -1373,7 +1353,7 @@ STDMETHODIMP Plunger::CreateBall(IBall **pBallEx)
 STDMETHODIMP Plunger::get_X(float *pVal)
 {
    *pVal = m_d.m_v.x;
-   m_vpinball->SetStatusBarUnitInfo("", true);
+   m_vpinball->SetStatusBarUnitInfo(string(), true);
 
    return S_OK;
 }

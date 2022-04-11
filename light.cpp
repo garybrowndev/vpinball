@@ -20,40 +20,17 @@ Light::Light() : m_lightcenter(this)
    m_roundLight = false;
    m_propVisual = nullptr;
    m_updateBulbLightHeight = false;
+   m_maxDist = 0.0f;
 }
 
 Light::~Light()
 {
-   if (m_customMoverVBuffer)
-   {
-      m_customMoverVBuffer->release();
-      m_customMoverVBuffer = 0;
-   }
-   if (m_customMoverIBuffer)
-   {
-      m_customMoverIBuffer->release();
-      m_customMoverIBuffer = 0;
-   }
-   if (m_bulbLightIndexBuffer)
-   {
-      m_bulbLightIndexBuffer->release();
-      m_bulbLightIndexBuffer = 0;
-   }
-   if (m_bulbLightVBuffer)
-   {
-      m_bulbLightVBuffer->release();
-      m_bulbLightVBuffer = 0;
-   }
-   if (m_bulbSocketIndexBuffer)
-   {
-      m_bulbSocketIndexBuffer->release();
-      m_bulbSocketIndexBuffer = 0;
-   }
-   if (m_bulbSocketVBuffer)
-   {
-      m_bulbSocketVBuffer->release();
-      m_bulbSocketVBuffer = 0;
-   }
+   SAFE_BUFFER_RELEASE(m_customMoverVBuffer);
+   SAFE_BUFFER_RELEASE(m_customMoverIBuffer);
+   SAFE_BUFFER_RELEASE(m_bulbLightIndexBuffer);
+   SAFE_BUFFER_RELEASE(m_bulbLightVBuffer);
+   SAFE_BUFFER_RELEASE(m_bulbSocketIndexBuffer);
+   SAFE_BUFFER_RELEASE(m_bulbSocketVBuffer);
 }
 
 HRESULT Light::Init(PinTable *ptable, float x, float y, bool fromMouseClick)
@@ -314,36 +291,12 @@ void Light::GetHitShapesDebug(vector<HitObject*> &pvho)
 
 void Light::FreeBuffers()
 {
-   if (m_customMoverVBuffer)
-   {
-      m_customMoverVBuffer->release();
-      m_customMoverVBuffer = 0;
-   }
-   if (m_customMoverIBuffer)
-   {
-      m_customMoverIBuffer->release();
-      m_customMoverIBuffer = 0;
-   }
-   if (m_bulbLightIndexBuffer)
-   {
-      m_bulbLightIndexBuffer->release();
-      m_bulbLightIndexBuffer = 0;
-   }
-   if (m_bulbLightVBuffer)
-   {
-      m_bulbLightVBuffer->release();
-      m_bulbLightVBuffer = 0;
-   }
-   if (m_bulbSocketIndexBuffer)
-   {
-      m_bulbSocketIndexBuffer->release();
-      m_bulbSocketIndexBuffer = 0;
-   }
-   if (m_bulbSocketVBuffer)
-   {
-      m_bulbSocketVBuffer->release();
-      m_bulbSocketVBuffer = 0;
-   }
+   SAFE_BUFFER_RELEASE(m_customMoverVBuffer);
+   SAFE_BUFFER_RELEASE(m_customMoverIBuffer);
+   SAFE_BUFFER_RELEASE(m_bulbLightIndexBuffer);
+   SAFE_BUFFER_RELEASE(m_bulbLightVBuffer);
+   SAFE_BUFFER_RELEASE(m_bulbSocketIndexBuffer);
+   SAFE_BUFFER_RELEASE(m_bulbSocketVBuffer);
 }
 
 void Light::EndPlay()
@@ -359,7 +312,7 @@ void Light::EndPlay()
 
 float Light::GetDepth(const Vertex3Ds& viewDir) const
 {
-   return (!m_backglass) ? (m_d.m_depthBias + viewDir.x * m_d.m_vCenter.x + viewDir.y * m_d.m_vCenter.y + viewDir.z * m_surfaceHeight) : 0.f;
+   return !m_backglass ? (m_d.m_depthBias + viewDir.x * m_d.m_vCenter.x + viewDir.y * m_d.m_vCenter.y + viewDir.z * m_surfaceHeight) : 0.f;
 }
 
 void Light::ClearForOverwrite()
@@ -436,10 +389,10 @@ void Light::RenderDynamic()
 
    if ((m_duration > 0) && (m_timerDurationEndTime < m_d.m_time_msec))
    {
-       m_inPlayState = (LightState)m_finalState;
-       m_duration = 0;
-       if (m_inPlayState == LightStateBlinking)
-           RestartBlinker(g_pplayer->m_time_msec);
+      m_inPlayState = (LightState)m_finalState;
+      m_duration = 0;
+      if (m_inPlayState == LightStateBlinking)
+         RestartBlinker(g_pplayer->m_time_msec);
    }
    if (m_inPlayState == LightStateBlinking)
       UpdateBlinker(g_pplayer->m_time_msec);
@@ -520,7 +473,6 @@ void Light::RenderDynamic()
 
       if (offTexel != nullptr)
       {
-         pd3dDevice->classicLightShader->SetBool(SHADER_hdrTexture0, offTexel->IsHDR());
          pd3dDevice->classicLightShader->SetTechniqueMetal(SHADER_TECHNIQUE_light_with_texture, m_surfaceMaterial->m_bIsMetal);
          pd3dDevice->classicLightShader->SetTexture(SHADER_Texture0, offTexel, false);
          // Was: if (m_ptable->m_reflectElementsOnPlayfield && g_pplayer->m_pf_refl && !m_backglass)*/
@@ -566,16 +518,10 @@ void Light::RenderDynamic()
    }
 
    // (maybe) update, then render light shape
-   if (m_updateBulbLightHeight && m_d.m_BulbLight && !m_backglass)
+   if (m_updateBulbLightHeight)
    {
-      const float height = m_initSurfaceHeight + m_d.m_bulbHaloHeight*m_ptable->m_BG_scalez[m_ptable->m_BG_current_set];
-      m_surfaceHeight = height;
-
-      Vertex3D_NoTex2 *buf;
-      m_customMoverVBuffer->lock(0, 0, (void**)&buf, VertexBuffer::WRITEONLY);
-      for (unsigned int t = 0; t < m_customMoverVertexNum; t++)
-         buf[t].z = height + 0.1f;
-      m_customMoverVBuffer->unlock();
+      if (m_d.m_BulbLight && !m_backglass)
+         UpdateCustomMoverVBuffer();
 
       m_updateBulbLightHeight = false;
    }
@@ -625,7 +571,7 @@ void Light::PrepareMoversCustom()
    if (m_vvertex.empty())
       return;
 
-   float maxdist = 0.f;
+   m_maxDist = 0.f;
    std::vector<WORD> vtri;
 
    {
@@ -638,25 +584,16 @@ void Light::PrepareMoversCustom()
          const float dx = m_vvertex[i].x - m_d.m_vCenter.x;
          const float dy = m_vvertex[i].y - m_d.m_vCenter.y;
          const float dist = dx*dx + dy*dy;
-         if (dist > maxdist)
-            maxdist = dist;
+         if (dist > m_maxDist)
+            m_maxDist = dist;
       }
 
       PolygonToTriangles(m_vvertex, vpoly, vtri, true);
    }
 
 
-   float height = m_surfaceHeight;
-   if (m_d.m_BulbLight)
-   {
-      height += m_d.m_bulbHaloHeight*m_ptable->m_BG_scalez[m_ptable->m_BG_current_set];
-      m_surfaceHeight = height;
-   }
-
-   if (m_customMoverIBuffer)
-      m_customMoverIBuffer->release();
-   if (m_customMoverVBuffer)
-      m_customMoverVBuffer->release();
+   SAFE_BUFFER_RELEASE(m_customMoverIBuffer);
+   SAFE_BUFFER_RELEASE(m_customMoverVBuffer);
 
    if (vtri.empty())
    {
@@ -669,20 +606,32 @@ void Light::PrepareMoversCustom()
    }
 
    m_customMoverIndexNum = (unsigned int)vtri.size();
-   g_pplayer->m_pin3d.m_pd3dPrimaryDevice->CreateIndexBuffer(m_customMoverIndexNum, 0, IndexBuffer::FMT_INDEX16, &m_customMoverIBuffer);
+   IndexBuffer::CreateIndexBuffer(m_customMoverIndexNum, 0, IndexBuffer::FMT_INDEX16, &m_customMoverIBuffer, m_backglass ? SECONDARY_DEVICE : PRIMARY_DEVICE);
 
    WORD* bufi;
-   m_customMoverIBuffer->lock(0, 0, (void**)&bufi, 0);
+   m_customMoverIBuffer->lock(0, 0, (void**)&bufi, IndexBuffer::WRITEONLY);
    memcpy(bufi, vtri.data(), vtri.size()*sizeof(WORD));
    m_customMoverIBuffer->unlock();
 
    m_customMoverVertexNum = (unsigned int)m_vvertex.size();
    const DWORD vertexType = (!m_backglass) ? MY_D3DFVF_NOTEX2_VERTEX : MY_D3DTRANSFORMED_NOTEX2_VERTEX;
-   g_pplayer->m_pin3d.m_pd3dPrimaryDevice->CreateVertexBuffer(m_customMoverVertexNum, 0, vertexType, &m_customMoverVBuffer);
+   VertexBuffer::CreateVertexBuffer(m_customMoverVertexNum, 0, vertexType, &m_customMoverVBuffer, m_backglass ? SECONDARY_DEVICE : PRIMARY_DEVICE);
+
+   UpdateCustomMoverVBuffer();
+}
+
+void Light::UpdateCustomMoverVBuffer()
+{
+   float height = m_initSurfaceHeight;
+   if (m_d.m_BulbLight)
+   {
+      height += m_d.m_bulbHaloHeight*m_ptable->m_BG_scalez[m_ptable->m_BG_current_set];
+      m_surfaceHeight = height;
+   }
 
    Texture* const pin = m_ptable->GetImage(m_d.m_szImage);
 
-   const float inv_maxdist = (maxdist > 0.0f) ? 0.5f / sqrtf(maxdist) : 0.0f;
+   const float inv_maxdist = (m_maxDist > 0.0f) ? 0.5f / sqrtf(m_maxDist) : 0.0f;
    const float inv_tablewidth = 1.0f / (m_ptable->m_right - m_ptable->m_left);
    const float inv_tableheight = 1.0f / (m_ptable->m_bottom - m_ptable->m_top);
 
@@ -739,8 +688,6 @@ void Light::PrepareMoversCustom()
 
 void Light::RenderSetup()
 {
-   RenderDevice * const pd3dDevice = m_backglass ? g_pplayer->m_pin3d.m_pd3dSecondaryDevice : g_pplayer->m_pin3d.m_pd3dPrimaryDevice;
-
    m_iblinkframe = 0;
    m_d.m_time_msec = g_pplayer->m_time_msec;
    m_updateBulbLightHeight = false;
@@ -764,13 +711,11 @@ void Light::RenderSetup()
 
    if (m_d.m_BulbLight && m_d.m_showBulbMesh)
    {
-      if (m_bulbLightIndexBuffer)
-         m_bulbLightIndexBuffer->release();
-      m_bulbLightIndexBuffer = pd3dDevice->CreateAndFillIndexBuffer(bulbLightNumFaces, bulbLightIndices);
+      SAFE_BUFFER_RELEASE(m_bulbLightIndexBuffer);
+      m_bulbLightIndexBuffer = IndexBuffer::CreateAndFillIndexBuffer(bulbLightNumFaces, bulbLightIndices, m_backglass ? SECONDARY_DEVICE : PRIMARY_DEVICE);
 
-      if (m_bulbLightVBuffer)
-         m_bulbLightVBuffer->release();
-      pd3dDevice->CreateVertexBuffer(bulbLightNumVertices, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_bulbLightVBuffer);
+      SAFE_BUFFER_RELEASE(m_bulbLightVBuffer);
+      VertexBuffer::CreateVertexBuffer(bulbLightNumVertices, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_bulbLightVBuffer, m_backglass ? SECONDARY_DEVICE : PRIMARY_DEVICE);
 
       Vertex3D_NoTex2 *buf;
       m_bulbLightVBuffer->lock(0, 0, (void**)&buf, VertexBuffer::WRITEONLY);
@@ -787,13 +732,11 @@ void Light::RenderSetup()
       }
       m_bulbLightVBuffer->unlock();
 
-      if (m_bulbSocketIndexBuffer)
-         m_bulbSocketIndexBuffer->release();
-      m_bulbSocketIndexBuffer = pd3dDevice->CreateAndFillIndexBuffer(bulbSocketNumFaces, bulbSocketIndices);
+      SAFE_BUFFER_RELEASE(m_bulbSocketIndexBuffer);
+      m_bulbSocketIndexBuffer = IndexBuffer::CreateAndFillIndexBuffer(bulbSocketNumFaces, bulbSocketIndices, m_backglass ? SECONDARY_DEVICE : PRIMARY_DEVICE);
 
-      if (m_bulbSocketVBuffer)
-         m_bulbSocketVBuffer->release();
-      pd3dDevice->CreateVertexBuffer(bulbSocketNumVertices, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_bulbSocketVBuffer);
+      SAFE_BUFFER_RELEASE(m_bulbSocketVBuffer);
+      VertexBuffer::CreateVertexBuffer(bulbSocketNumVertices, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_bulbSocketVBuffer, m_backglass ? SECONDARY_DEVICE : PRIMARY_DEVICE);
 
       m_bulbSocketVBuffer->lock(0, 0, (void**)&buf, VertexBuffer::WRITEONLY);
       for (unsigned int i = 0; i < bulbSocketNumVertices; i++)
@@ -1172,7 +1115,7 @@ STDMETHODIMP Light::put_ColorFull(OLE_COLOR newVal)
 STDMETHODIMP Light::get_X(float *pVal)
 {
    *pVal = m_d.m_vCenter.x;
-   m_vpinball->SetStatusBarUnitInfo("", true);
+   m_vpinball->SetStatusBarUnitInfo(string(), true);
 
    return S_OK;
 }
@@ -1557,6 +1500,13 @@ STDMETHODIMP Light::GetInPlayStateBool(VARIANT_BOOL* pVal)
 
     *pVal = FTOVB(isOn);
     return S_OK;
+}
+
+STDMETHODIMP Light::GetInPlayIntensity(float *pVal)
+{
+   *pVal = m_d.m_currentIntensity;
+
+   return S_OK;
 }
 
 void Light::setLightState(const LightState newVal)

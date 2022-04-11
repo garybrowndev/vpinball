@@ -151,6 +151,7 @@ inline void ref_count_trigger(const ULONG r, const char *file, const int line) /
 #define SAFE_RELEASE_NO_RCC(p)	{ if(p) { (p)->Release(); (p)=nullptr; } } // use for releasing things like surfaces gotten from GetSurfaceLevel (that seem to "share" the refcount with the underlying texture)
 #endif
 #define FORCE_RELEASE(p)		{ if(p) { ULONG rcc = 1; while(rcc!=0) {rcc = (p)->Release();} (p)=nullptr; } } // release all references until it is 0
+#define SAFE_BUFFER_RELEASE(p)	{ if(p) { (p)->release(); delete (p); (p)=nullptr; } }
 
 #define hrNotImplemented ResultFromScode(E_NOTIMPL)
 
@@ -268,7 +269,12 @@ __forceinline __m128 sseHorizontalAdd(const __m128 &a) // could use dp instructi
 
 //
 
-__forceinline int float_as_int(const float x) //!! use bit_cast
+#if __cplusplus >= 202002L
+#include <bit>
+#define float_as_int(x) std::bit_cast<int>(x)
+#define int_as_float(x) std::bit_cast<float>(x)
+#else
+__forceinline int float_as_int(const float x)
 {
    union {
       float f;
@@ -278,7 +284,7 @@ __forceinline int float_as_int(const float x) //!! use bit_cast
    return uc.i;
 }
 
-__forceinline float int_as_float(const int i) //!! use bit_cast
+__forceinline float int_as_float(const int i)
 {
    union {
       int i;
@@ -287,6 +293,7 @@ __forceinline float int_as_float(const int i) //!! use bit_cast
    iaf.i = i;
    return iaf.f;
 }
+#endif
 
 __forceinline bool infNaN(const float a)
 {
@@ -305,7 +312,7 @@ __forceinline bool NaN(const float a)
 
 __forceinline bool deNorm(const float a)
 {
-   return (((float_as_int(a) & 0x7FFFFFFF) < 0x00800000) && (a != 0.0));
+   return (((float_as_int(a) & 0x7FFFFFFF) < 0x00800000) && (a != 0.0f));
 }
 
 __forceinline bool sign(const float a)
@@ -350,8 +357,8 @@ inline unsigned long long tinymtu(unsigned long long state[2]) {
 
 extern unsigned long long tinymt64state[2];
 
-__forceinline float rand_mt_01()  { return int_as_float(0x3F800000u | (unsigned int)(tinymtu(tinymt64state) >> 41)) - 1.0f; }
-__forceinline float rand_mt_m11() { return int_as_float(0x3F800000u | (unsigned int)(tinymtu(tinymt64state) >> 41))*2.0f - 3.0f; }
+__forceinline float rand_mt_01()  { return (float)(tinymtu(tinymt64state) >> (64-24)) * 0.000000059604644775390625f; } // [0..1)
+__forceinline float rand_mt_m11() { return (float)((int64_t)tinymtu(tinymt64state) >> (64-25)) * 0.000000059604644775390625f; } // [-1..1)
 
 //
 
@@ -363,7 +370,7 @@ __forceinline float radical_inverse(unsigned int v)
    v = ((v & 0x33333333u) << 2) | ((v & 0xCCCCCCCCu) >> 2);
    v = ((v & 0x0F0F0F0Fu) << 4) | ((v & 0xF0F0F0F0u) >> 4);
    v = ((v & 0x00FF00FFu) << 8) | ((v & 0xFF00FF00u) >> 8);
-   return (float)v * 0.00000000023283064365386962890625f; // /2^32
+   return (float)(v >> 8) * 0.000000059604644775390625f;
 }
 
 template <unsigned int base>
@@ -386,14 +393,14 @@ __forceinline float sobol(unsigned int i, unsigned int scramble = 0)
    for (unsigned int v = 1u << 31; (i != 0); i >>= 1, v ^= v >> 1) if (i & 1)
       scramble ^= v;
 
-   return (float)scramble * 0.00000000023283064365386962890625f; // /2^32
+   return (float)(scramble >> 8) * 0.000000059604644775390625f;
 }
 
 inline void RemoveSpaces(char* const source)
 {
    char* i = source;
    char* j = source;
-   while (*j != 0)
+   while (*j != '\0')
    {
       *i = *j++;
       if (!isspace(*i))

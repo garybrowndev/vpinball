@@ -1163,6 +1163,7 @@
 #define IDC_RESET_WINDOW_POS            878
 #define IDC_3D_STEREO_CONTRAST          879
 #define IDC_3D_STEREO_DESATURATION      880
+#define IDC_GLOBAL_DISABLE_LIGHTING_BALLS 881
 #define IDC_LAYBACK_EDIT                1040
 #define IDC_3D_STEREO_SEPARATION_EDIT   1041
 #define IDC_3D_STEREO_ZPD_EDIT          1042
@@ -1314,6 +1315,7 @@
 #define ID_ADD_COMMENT                  32883
 #define ID_EDIT_UNCOMMENT               32886
 #define ID_REMOVE_COMMENT               32888
+#define ID_GO_TO_DEFINITION             32889
 #define ID_INSERT_FLASHER               32890
 #define ID_TABLE_DIMENSIONMANAGER       32894
 #define ID_VIEW_SOLID                   32895
@@ -1345,7 +1347,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        669
 #define _APS_NEXT_COMMAND_VALUE         4027
-#define _APS_NEXT_CONTROL_VALUE         881
+#define _APS_NEXT_CONTROL_VALUE         882
 #define _APS_NEXT_SYMED_VALUE           188
 #endif
 #endif

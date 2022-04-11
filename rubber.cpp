@@ -9,8 +9,8 @@ Rubber::Rubber()
    m_d.m_collidable = true;
    m_d.m_visible = true;
    m_d.m_hitEvent = false;
-   m_dynamicVertexBuffer = 0;
-   m_dynamicIndexBuffer = 0;
+   m_dynamicVertexBuffer = nullptr;
+   m_dynamicIndexBuffer = nullptr;
    m_dynamicVertexBufferRegenerate = true;
    m_propPhysics = nullptr;
    m_propPosition = nullptr;
@@ -23,11 +23,8 @@ Rubber::Rubber()
 
 Rubber::~Rubber()
 {
-   if (m_dynamicVertexBuffer)
-      m_dynamicVertexBuffer->release();
-
-   if (m_dynamicIndexBuffer)
-      m_dynamicIndexBuffer->release();
+   SAFE_BUFFER_RELEASE(m_dynamicVertexBuffer);
+   SAFE_BUFFER_RELEASE(m_dynamicIndexBuffer);
 }
 
 void Rubber::UpdateStatusBarInfo()
@@ -467,6 +464,7 @@ void Rubber::GetCentralCurve(std::vector<RenderVertex> &vv, const float _accurac
       IHaveDragPoints::GetRgVertex(vv, true, accuracy);
 }
 
+#if 0
 float Rubber::GetSurfaceHeight(float x, float y) const
 {
    std::vector<RenderVertex> vvertex;
@@ -510,6 +508,7 @@ float Rubber::GetSurfaceHeight(float x, float y) const
 
     return zheight*m_ptable->m_BG_scalez[m_ptable->m_BG_current_set];
 }
+#endif
 
 //
 // end of license:GPLv3+, back to 'old MAME'-like
@@ -672,15 +671,10 @@ void Rubber::EndPlay()
    m_vhoCollidable.clear();
 
    if (m_dynamicVertexBuffer) {
-      m_dynamicVertexBuffer->release();
-      m_dynamicVertexBuffer = 0;
+      SAFE_BUFFER_RELEASE(m_dynamicVertexBuffer);
       m_dynamicVertexBufferRegenerate = true;
    }
-
-   if (m_dynamicIndexBuffer) {
-      m_dynamicIndexBuffer->release();
-      m_dynamicIndexBuffer = 0;
-   }
+   SAFE_BUFFER_RELEASE(m_dynamicIndexBuffer);
 }
 
 float Rubber::GetDepth(const Vertex3Ds& viewDir) const
@@ -1247,7 +1241,7 @@ void Rubber::RenderObject()
    }
 
    if (m_dynamicVertexBufferRegenerate)
-       UpdateRubber(true, m_d.m_height);
+      UpdateRubber(true, m_d.m_height);
 
    RenderDevice * const pd3dDevice = g_pplayer->m_pin3d.m_pd3dPrimaryDevice;
 
@@ -1461,21 +1455,16 @@ void Rubber::GenerateVertexBuffer()
 
    GenerateMesh();
 
-   RenderDevice * const pd3dDevice = g_pplayer->m_pin3d.m_pd3dPrimaryDevice;
-
-   if (m_dynamicVertexBuffer)
-      m_dynamicVertexBuffer->release();
-   pd3dDevice->CreateVertexBuffer(m_numVertices, m_d.m_staticRendering ? 0 : USAGE_DYNAMIC, MY_D3DFVF_NOTEX2_VERTEX, &m_dynamicVertexBuffer);
+   SAFE_BUFFER_RELEASE(m_dynamicVertexBuffer);
+   VertexBuffer::CreateVertexBuffer(m_numVertices, m_d.m_staticRendering ? 0 : USAGE_DYNAMIC, MY_D3DFVF_NOTEX2_VERTEX, &m_dynamicVertexBuffer, PRIMARY_DEVICE);
 
    Vertex3D_NoTex2 *buf;
    m_dynamicVertexBuffer->lock(0, 0, (void**)&buf, m_d.m_staticRendering ? VertexBuffer::WRITEONLY : VertexBuffer::DISCARDCONTENTS);
    memcpy(buf, m_vertices.data(), sizeof(Vertex3D_NoTex2)*m_numVertices);
    m_dynamicVertexBuffer->unlock();
 
-   if (m_dynamicIndexBuffer)
-      m_dynamicIndexBuffer->release();
-
-   m_dynamicIndexBuffer = pd3dDevice->CreateAndFillIndexBuffer(m_ringIndices);
+   SAFE_BUFFER_RELEASE(m_dynamicIndexBuffer);
+   m_dynamicIndexBuffer = IndexBuffer::CreateAndFillIndexBuffer(m_ringIndices, PRIMARY_DEVICE);
 }
 
 void Rubber::UpdateRubber(const bool updateVB, const float height)

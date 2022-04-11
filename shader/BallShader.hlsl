@@ -20,22 +20,23 @@ texture  Texture3; // decal
 
 sampler2D texSampler0 : TEXUNIT0 = sampler_state // base texture
 {
-	Texture	  = (Texture0);
+    Texture	  = (Texture0);
     //MIPFILTER = LINEAR; //!! HACK: not set here as user can choose to override trilinear by anisotropic
     //MAGFILTER = LINEAR;
     //MINFILTER = LINEAR;
-	//ADDRESSU  = Wrap; //!! ?
-	//ADDRESSV  = Wrap;
+    //ADDRESSU  = Wrap; //!! ?
+    //ADDRESSV  = Wrap;
+    SRGBTexture = true;
 };
 
 sampler2D texSampler1 : TEXUNIT1 = sampler_state // playfield (should actually be environment if specular and glossy needed/enabled in lightloop!)
 {
-	Texture	  = (Texture1);
+    Texture	  = (Texture1);
     MIPFILTER = LINEAR; //!! ?
     MAGFILTER = LINEAR;
     MINFILTER = LINEAR;
-	ADDRESSU  = Wrap;
-	ADDRESSV  = Wrap;
+    ADDRESSU  = Wrap;
+    ADDRESSV  = Wrap;
 };
 
 sampler2D texSampler2 : TEXUNIT2 = sampler_state // diffuse environment contribution/radiance
@@ -62,13 +63,13 @@ const bool     hdrEnvTextures;
 
 #include "Material.fxh"
 
-const float4   invTableRes__playfield_height_reflection;
+const float4   invTableRes_playfield_height_reflection;
 
 //const float    reflection_ball_playfield;
 
 const float4x3 orientation;
 
-const bool     hdrTexture0;
+const bool     disableLighting;
 
 //------------------------------------
 
@@ -252,34 +253,40 @@ float4 psBall( const in vout IN, uniform bool cabMode, uniform bool decalMode ) 
 
     const float2 uv0 = cabMode ? float2(r.y*-m + 0.5, r.x*-m + 0.5) : float2(r.x*-m + 0.5, r.y*m + 0.5);
     float3 ballImageColor = tex2Dlod(texSampler0, float4(uv0, 0., lod)).xyz;
-    if (!hdrTexture0)
-        ballImageColor = InvGamma(ballImageColor);
 
-	const float4 decalColorT = tex2D(texSampler7, float2(IN.normal_t0x.w,IN.worldPos_t0y.w));
-	float3 decalColor = InvGamma(decalColorT.xyz);
-	if ( !decalMode )
-	{
-	   // decal texture is an alpha scratch texture and must be added to the ball texture
-	   // the strength of the scratches totally rely on the alpha values.
-	   decalColor *= decalColorT.a;
-	   ballImageColor = (ballImageColor+decalColor) * fenvEmissionScale_TexWidth.x;
-	}
-	else
-	   ballImageColor = ScreenHDR( ballImageColor, decalColor ) * (0.5*fenvEmissionScale_TexWidth.x); //!! 0.5=magic
+    const float4 decalColorT = tex2D(texSampler7, float2(IN.normal_t0x.w,IN.worldPos_t0y.w));
+    float3 decalColor = InvGamma(decalColorT.xyz);
+    if (!decalMode)
+    {
+       // decal texture is an alpha scratch texture and must be added to the ball texture
+       // the strength of the scratches totally rely on the alpha values.
+       decalColor *= decalColorT.a;
+       ballImageColor += decalColor;
+    }
+    else
+       ballImageColor = ScreenHDR(ballImageColor, decalColor);
 
-	const float3 playfield_normal = normalize(mul(matWorldViewInverse, float3(0.,0.,1.)).xyz); //!! normalize necessary? // actually: mul(float4(0.,0.,1.,0.), matWorldViewInverseTranspose), but optimized to save one matrix
-	const float NdotR = dot(playfield_normal,r);
+    [branch] if (disableLighting)
+       return float4(ballImageColor,cBase_Alpha.a);
 
-	float3 playfieldColor;
-	[branch] if(/*(reflection_ball_playfield > 0.0) &&*/ (NdotR > 0.0))
-	{
-       const float3 playfield_p0 = mul_w1(float3(/*playfield_pos=*/0.,0.,invTableRes__playfield_height_reflection.z), matWorldView);
+    if (!decalMode)
+       ballImageColor *= fenvEmissionScale_TexWidth.x;
+    else
+       ballImageColor *= 0.5*fenvEmissionScale_TexWidth.x; //!! 0.5=magic
+
+    const float3 playfield_normal = normalize(mul(matWorldViewInverse, float3(0.,0.,1.)).xyz); //!! normalize necessary? // actually: mul(float4(0.,0.,1.,0.), matWorldViewInverseTranspose), but optimized to save one matrix
+    const float NdotR = dot(playfield_normal,r);
+
+    float3 playfieldColor;
+    [branch] if(/*(reflection_ball_playfield > 0.0) &&*/ (NdotR > 0.0))
+    {
+       const float3 playfield_p0 = mul_w1(float3(/*playfield_pos=*/0.,0.,invTableRes_playfield_height_reflection.z), matWorldView);
        const float t = dot(playfield_normal, IN.worldPos_t0y.xyz - playfield_p0) / NdotR;
        const float3 playfield_hit = IN.worldPos_t0y.xyz - t*r;
 
-       const float2 uv = mul_w1(playfield_hit, matWorldViewInverse).xy * invTableRes__playfield_height_reflection.xy;
+       const float2 uv = mul_w1(playfield_hit, matWorldViewInverse).xy * invTableRes_playfield_height_reflection.xy;
        playfieldColor = (t < 0.) ? float3(0.,0.,0.) // happens for example when inside kicker
-                                 : InvGamma(tex2Dlod(texSampler1, float4(uv, 0., 0.)).xyz)*invTableRes__playfield_height_reflection.w; //!! rather use screen space sample from previous frame??
+                                 : InvGamma(tex2Dlod(texSampler1, float4(uv, 0., 0.)).xyz)*invTableRes_playfield_height_reflection.w; //!! rather use screen space sample from previous frame??
 
        //!! hack to get some lighting on reflection sample, but only diffuse, the rest is not setup correctly anyhow
        playfieldColor = PFlightLoop(playfield_hit, playfield_normal, playfieldColor);
@@ -287,22 +294,22 @@ float4 psBall( const in vout IN, uniform bool cabMode, uniform bool decalMode ) 
        //!! magic falloff & weight the rest in from the ballImage
        const float weight = NdotR*NdotR;
        playfieldColor = lerp(ballImageColor,playfieldColor,weight);
-	}
-	else
-	   playfieldColor = ballImageColor;
+    }
+    else
+       playfieldColor = ballImageColor;
 
-	float3 diffuse = cBase_Alpha.xyz*0.075;
-	if(!decalMode)
-	    diffuse *= decalColor; // scratches make the material more rough
+    float3 diffuse = cBase_Alpha.xyz*0.075;
+    if(!decalMode)
+       diffuse *= decalColor; // scratches make the material more rough
     const float3 glossy = max(diffuse*2.0, float3(0.1,0.1,0.1)); //!! meh
     float3 specular = playfieldColor*cBase_Alpha.xyz; //!! meh, too, as only added in ballLightLoop anyhow
-	if(!decalMode)
-	    specular *= float3(1.,1.,1.)-decalColor; // see above
+    if(!decalMode)
+       specular *= float3(1.,1.,1.)-decalColor; // see above
 
     float4 result;
-	result.xyz = ballLightLoop(IN.worldPos_t0y.xyz, IN.normal_t0x.xyz, /*camera=0,0,0,1*/-IN.worldPos_t0y.xyz, diffuse, glossy, specular, 1.0, false);
-	result.a = cBase_Alpha.a;
-	return result;
+    result.xyz = ballLightLoop(IN.worldPos_t0y.xyz, IN.normal_t0x.xyz, /*camera=0,0,0,1*/-IN.worldPos_t0y.xyz, diffuse, glossy, specular, 1.0, false);
+    result.a = cBase_Alpha.a;
+    return result;
 }
 
 #if 0
@@ -310,8 +317,6 @@ float4 psBallReflection( const in voutReflection IN ) : COLOR
 {
    const float2 envTex = cabMode ? float2(IN.r.y*0.5f + 0.5f, -IN.r.x*0.5f + 0.5f) : float2(IN.r.x*0.5f + 0.5f, IN.r.y*0.5f + 0.5f);
    float3 ballImageColor = tex2D(texSampler0, envTex).xyz;
-   if(!hdrTexture0)
-      ballImageColor = InvGamma(ballImageColor);
    ballImageColor = (cBase_Alpha.xyz*(0.075*0.25) + ballImageColor)*fenvEmissionScale_TexWidth.x; //!! just add the ballcolor in, this is a whacky reflection anyhow
    float alpha = saturate((IN.tex0.y - position_radius.y) / position_radius.w);
    alpha = (alpha*alpha)*(alpha*alpha)*reflection_ball_playfield;
@@ -321,10 +326,11 @@ float4 psBallReflection( const in voutReflection IN ) : COLOR
 
 float4 psBallTrail( in voutTrail IN ) : COLOR
 {
-   float3 ballImageColor = tex2D(texSampler0, IN.tex0_alpha.xy).xyz;
-   if (!hdrTexture0)
-      ballImageColor = InvGamma(ballImageColor);
-   return float4((cBase_Alpha.xyz*(0.075*0.25) + ballImageColor)*fenvEmissionScale_TexWidth.x, IN.tex0_alpha.z); //!! just add the ballcolor in, this is a whacky trail anyhow
+   const float3 ballImageColor = tex2D(texSampler0, IN.tex0_alpha.xy).xyz;
+   if (disableLighting)
+      return float4(ballImageColor, IN.tex0_alpha.z);
+   else
+      return float4((cBase_Alpha.xyz*(0.075*0.25) + ballImageColor)*fenvEmissionScale_TexWidth.x, IN.tex0_alpha.z); //!! just add the ballcolor in, this is a whacky trail anyhow
 }
 
 //------------------------------------

@@ -162,9 +162,9 @@ void Mesh::UploadToVB(VertexBuffer * vb, const float frame)
 
 Primitive::Primitive()
 {
-   m_vertexBuffer = 0;
+   m_vertexBuffer = nullptr;
    m_vertexBufferRegenerate = true;
-   m_indexBuffer = 0;
+   m_indexBuffer = nullptr;
    m_d.m_use3DMesh = false;
    m_d.m_staticRendering = false;
    m_d.m_edgeFactorUI = 0.25f;
@@ -190,10 +190,8 @@ Primitive::Primitive()
 Primitive::~Primitive()
 {
    WaitForMeshDecompression(); //!! needed nowadays due to multithreaded mesh decompression
-   if (m_vertexBuffer)
-      m_vertexBuffer->release();
-   if (m_indexBuffer)
-      m_indexBuffer->release();
+   SAFE_BUFFER_RELEASE(m_vertexBuffer);
+   SAFE_BUFFER_RELEASE(m_indexBuffer);
 }
 
 void Primitive::CreateRenderGroup(const Collection * const collection)
@@ -273,15 +271,11 @@ void Primitive::CreateRenderGroup(const Collection * const collection)
          prims[i]->m_d.m_skipRendering = false;
    }
 
-   if (m_vertexBuffer)
-      m_vertexBuffer->release();
+   SAFE_BUFFER_RELEASE(m_vertexBuffer);
+   VertexBuffer::CreateVertexBuffer(m_numGroupVertices, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_vertexBuffer, PRIMARY_DEVICE);
 
-   RenderDevice * const pd3dDevice = g_pplayer->m_pin3d.m_pd3dPrimaryDevice;
-   pd3dDevice->CreateVertexBuffer(m_numGroupVertices, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_vertexBuffer);
-
-   if (m_indexBuffer)
-      m_indexBuffer->release();
-   m_indexBuffer = pd3dDevice->CreateAndFillIndexBuffer(indices);
+   SAFE_BUFFER_RELEASE(m_indexBuffer);
+   m_indexBuffer = IndexBuffer::CreateAndFillIndexBuffer(indices, PRIMARY_DEVICE);
 
    unsigned int ofs = 0;
    Vertex3D_NoTex2 *buf;
@@ -373,6 +367,10 @@ void Primitive::SetDefaults(bool fromMouseClick)
 
    SetDefaultPhysics(fromMouseClick);
 
+   m_d.m_alpha = fromMouseClick ? LoadValueFloatWithDefault(strKeyName, "Opacity", 100.0f) : 100.0f;
+   m_d.m_addBlend = fromMouseClick ? LoadValueBoolWithDefault(strKeyName, "AddBlend", false) : false;
+   m_d.m_color = fromMouseClick ? LoadValueIntWithDefault(strKeyName, "Color", RGB(255, 255, 255)) : RGB(255, 255, 255);
+
    m_d.m_edgeFactorUI = fromMouseClick ? LoadValueFloatWithDefault(strKeyName, "EdgeFactorUI", 0.25f) : 0.25f;
    m_d.m_collision_reductionFactor = fromMouseClick ? LoadValueFloatWithDefault(strKeyName, "CollisionReductionFactor", 0.f) : 0.f;
 
@@ -419,6 +417,10 @@ void Primitive::WriteRegDefaults()
    SaveValueFloat(strKeyName, "ElasticityFalloff", m_d.m_elasticityFalloff);
    SaveValueFloat(strKeyName, "Friction", m_d.m_friction);
    SaveValueFloat(strKeyName, "Scatter", m_d.m_scatter);
+
+   SaveValueBool(strKeyName, "AddBlend", m_d.m_addBlend);
+   SaveValueFloat(strKeyName, "Opacity", m_d.m_alpha);
+   SaveValueInt(strKeyName, "Color", m_d.m_color);
 
    SaveValueFloat(strKeyName, "EdgeFactorUI", m_d.m_edgeFactorUI);
    SaveValueFloat(strKeyName, "CollisionReductionFactor", m_d.m_collision_reductionFactor);
@@ -636,15 +638,10 @@ void Primitive::EndPlay()
 
    if (m_vertexBuffer)
    {
-      m_vertexBuffer->release();
-      m_vertexBuffer = 0;
+      SAFE_BUFFER_RELEASE(m_vertexBuffer);
       m_vertexBufferRegenerate = true;
    }
-   if (m_indexBuffer)
-   {
-      m_indexBuffer->release();
-      m_indexBuffer = 0;
-   }
+   SAFE_BUFFER_RELEASE(m_indexBuffer);
    m_d.m_skipRendering = false;
    m_d.m_groupdRendering = false;
 
@@ -1142,7 +1139,7 @@ void Primitive::UpdateStatusBarInfo()
        m_vpinball->SetStatusBarUnitInfo(tbuf, false);
    }
    else
-       m_vpinball->SetStatusBarUnitInfo("", false);
+       m_vpinball->SetStatusBarUnitInfo(string(), false);
 
 }
 
@@ -1260,6 +1257,21 @@ void Primitive::RenderObject()
       // set transform
       g_pplayer->UpdateBasicShaderMatrix(m_fullMatrix);
 
+      // setup for additive blending
+      vec4 previousFlasherColorAlpha = pd3dDevice->basicShader->GetCurrentFlasherColorAlpha();
+      if (m_d.m_addBlend)
+      {
+         g_pplayer->m_pin3d.EnableAlphaBlend(true);
+         pd3dDevice->SetRenderState(RenderDevice::ZWRITEENABLE, RenderDevice::RS_FALSE);
+         const vec4 color = convertColor(m_d.m_color, m_d.m_alpha * (float)(1.0 / 100.0));
+         pd3dDevice->basicShader->SetFlasherColorAlpha(vec4(color.x * color.w, color.y * color.w, color.z * color.w, color.w));
+      }
+      else
+      {
+         const vec4 color = convertColor(m_d.m_color, m_d.m_alpha * (float)(1.0 / 100.0));
+         pd3dDevice->basicShader->SetFlasherColorAlpha(color);
+      }
+
       // draw the mesh
       pd3dDevice->basicShader->Begin(0);
       if (m_d.m_groupdRendering)
@@ -1278,6 +1290,8 @@ void Primitive::RenderObject()
             pd3dDevice->DrawIndexedPrimitiveVB(RenderDevice::TRIANGLELIST, MY_D3DFVF_NOTEX2_VERTEX, m_vertexBuffer, 0, (DWORD)m_mesh.NumVertices(), m_indexBuffer, 0, (DWORD)m_mesh.NumIndices());
          pd3dDevice->basicShader->End();
       }
+
+      pd3dDevice->basicShader->SetFlasherColorAlpha(previousFlasherColorAlpha);
 
       // reset transform
       g_pplayer->UpdateBasicShaderMatrix();
@@ -1337,16 +1351,11 @@ void Primitive::RenderSetup()
 
    m_currentFrame = -1.f;
 
-   if (m_vertexBuffer)
-      m_vertexBuffer->release();
+   SAFE_BUFFER_RELEASE(m_vertexBuffer);
+   VertexBuffer::CreateVertexBuffer((unsigned int)m_mesh.NumVertices(), 0, MY_D3DFVF_NOTEX2_VERTEX, &m_vertexBuffer, PRIMARY_DEVICE);
 
-   RenderDevice * const pd3dDevice = g_pplayer->m_pin3d.m_pd3dPrimaryDevice;
-
-   pd3dDevice->CreateVertexBuffer((unsigned int)m_mesh.NumVertices(), 0, MY_D3DFVF_NOTEX2_VERTEX, &m_vertexBuffer);
-
-   if (m_indexBuffer)
-      m_indexBuffer->release();
-   m_indexBuffer = pd3dDevice->CreateAndFillIndexBuffer(m_mesh.m_indices);
+   SAFE_BUFFER_RELEASE(m_indexBuffer);
+   m_indexBuffer = IndexBuffer::CreateAndFillIndexBuffer(m_mesh.m_indices, PRIMARY_DEVICE);
 }
 
 void Primitive::RenderStatic()
@@ -1535,6 +1544,9 @@ HRESULT Primitive::SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool bac
       }
    }
    bw.WriteFloat(FID(PIDB), m_d.m_depthBias);
+   bw.WriteBool(FID(ADDB), m_d.m_addBlend);
+   bw.WriteFloat(FID(FALP), m_d.m_alpha);
+   bw.WriteInt(FID(COLR), m_d.m_color);
 
    ISelect::SaveData(pstm, hcrypthash);
 
@@ -1762,6 +1774,9 @@ bool Primitive::LoadToken(const int id, BiffReader * const pbr)
 #endif
    case FID(PIDB): pbr->GetFloat(m_d.m_depthBias); break;
    case FID(OSNM): pbr->GetBool(m_d.m_objectSpaceNormalMap); break;
+   case FID(ADDB): pbr->GetBool(m_d.m_addBlend); break;
+   case FID(FALP): pbr->GetFloat(m_d.m_alpha); break;
+   case FID(COLR): pbr->GetInt(m_d.m_color); break;
    default: ISelect::LoadToken(id, pbr); break;
    }
    return true;
@@ -1822,18 +1837,15 @@ INT_PTR CALLBACK Primitive::ObjImportProc(HWND hwndDlg, UINT uMsg, WPARAM wParam
             char szFileName[MAXSTRING] = { 0 };
 
             GetDlgItemText(hwndDlg, IDC_FILENAME_EDIT, szFileName, MAXSTRING);
-            if (szFileName[0] == 0)
+            if (szFileName[0] == '\0')
             {
                ShowError("No .obj file selected!");
                break;
             }
             prim->m_mesh.Clear();
             prim->m_d.m_use3DMesh = false;
-            if (prim->m_vertexBuffer)
-            {
-               prim->m_vertexBuffer->release();
-               prim->m_vertexBuffer = 0;
-            }
+            SAFE_BUFFER_RELEASE(prim->m_vertexBuffer);
+
             constexpr bool flipTV = false;
             const bool convertToLeftHanded = IsDlgButtonChecked(hwndDlg, IDC_CONVERT_COORD_CHECK) == BST_CHECKED;
             const bool importAbsolutePosition = IsDlgButtonChecked(hwndDlg, IDC_ABS_POSITION_RADIO) == BST_CHECKED;
@@ -2001,11 +2013,8 @@ bool Primitive::BrowseFor3DMeshFile()
 
    m_mesh.Clear();
    m_d.m_use3DMesh = false;
-   if (vertexBuffer)
-   {
-      vertexBuffer->release();
-      vertexBuffer = 0;
-   }
+   SAFE_BUFFER_RELEASE(vertexBuffer);
+
    bool flipTV = false;
    bool convertToLeftHanded = false;
    int ans = m_vpinball->MessageBox("Do you want to mirror the object?", "Convert coordinate system?", MB_YESNO | MB_DEFBUTTON2);
@@ -2054,11 +2063,6 @@ STDMETHODIMP Primitive::put_Image(BSTR newVal)
    char szImage[MAXTOKEN];
    WideCharToMultiByteNull(CP_ACP, 0, newVal, -1, szImage, MAXTOKEN, nullptr, nullptr);
    const Texture * const tex = m_ptable->GetImage(szImage);
-   if (tex && tex->IsHDR())
-   {
-       ShowError("Cannot use a HDR image (.exr/.hdr) here");
-       return E_FAIL;
-   }
 
    m_d.m_szImage = szImage;
 
@@ -2532,6 +2536,46 @@ STDMETHODIMP Primitive::put_ObjRotZ(float newVal)
 {
    m_d.m_aRotAndTra[8] = newVal;
 
+   return S_OK;
+}
+
+
+STDMETHODIMP Primitive::get_Opacity(float *pVal)
+{
+   *pVal = m_d.m_alpha;
+   return S_OK;
+}
+
+STDMETHODIMP Primitive::put_Opacity(float newVal)
+{
+   SetAlpha(newVal);
+   return S_OK;
+}
+
+STDMETHODIMP Primitive::get_Color(OLE_COLOR *pVal)
+{
+   *pVal = m_d.m_color;
+
+   return S_OK;
+}
+
+STDMETHODIMP Primitive::put_Color(OLE_COLOR newVal)
+{
+   m_d.m_color = newVal;
+
+   return S_OK;
+}
+
+STDMETHODIMP Primitive::get_AddBlend(VARIANT_BOOL *pVal)
+{
+   *pVal = FTOVB(m_d.m_addBlend);
+
+   return S_OK;
+}
+
+STDMETHODIMP Primitive::put_AddBlend(VARIANT_BOOL newVal)
+{
+   m_d.m_addBlend = VBTOb(newVal);
    return S_OK;
 }
 

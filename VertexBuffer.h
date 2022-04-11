@@ -8,7 +8,7 @@
 class VertexBuffer
 {
 public:
-   enum LockFlags
+   enum LockFlags //!! not handled
    {
       WRITEONLY,
       NOOVERWRITE,
@@ -16,12 +16,12 @@ public:
    };
 
    void lock(const unsigned int offsetToLock, const unsigned int sizeToLock, void **dataBuffer, const DWORD flags);
-   void unlock(void);
-   void release(void);
+   void unlock();
+   void release();
    void bind();
 
    static void bindNull() { m_curVertexBuffer = nullptr; }
-   static void CreateVertexBuffer(const unsigned int vertexCount, const DWORD usage, const DWORD fvf, VertexBuffer **vBuffer);
+   static void CreateVertexBuffer(const unsigned int vertexCount, const DWORD usage, const DWORD fvf, VertexBuffer **vBuffer, const deviceNumber dN);
    static void UploadBuffers();
 
    GLuint getOffset() const { return offset; }
@@ -38,12 +38,12 @@ private:
    // CPU memory management
    unsigned int offsetToLock;
    unsigned int sizeToLock;
-   void *dataBuffer;
+   void *dataBuffer = nullptr;
 
    //GPU memory management
-   GLuint Buffer;
-   GLuint Array;
-   GLuint offset;//unused ATM, but if we want to group multiple IndexBuffers later in one buffer we might need it
+   GLuint Buffer = 0;
+   GLuint Array = 0;
+   GLuint offset = 0;//unused ATM, but if we want to group multiple IndexBuffers later in one buffer we might need it
 
    static VertexBuffer* m_curVertexBuffer; // for caching
    static std::vector<VertexBuffer*> notUploadedBuffers;
@@ -54,7 +54,7 @@ private:
 
 #else
 
-class VertexBuffer : public IDirect3DVertexBuffer9
+class VertexBuffer
 {
 public:
    enum LockFlags
@@ -66,21 +66,27 @@ public:
    };
 
    void lock(const unsigned int offsetToLock, const unsigned int sizeToLock, void **dataBuffer, const DWORD flags);
-   void unlock(void);
-   void release(void);
+   void unlock();
+   void release();
    void bind();
 
    static void bindNull() { m_curVertexBuffer = nullptr; }
-   static void CreateVertexBuffer(const unsigned int vertexCount, const DWORD usage, const DWORD fvf, VertexBuffer **vBuffer);
-   static void setD3DDevice(IDirect3DDevice9* pD3DDevice) { m_pD3DDevice = pD3DDevice; }
+   static void setD3DDevice(IDirect3DDevice9* primary, IDirect3DDevice9* secondary) { m_pd3dPrimaryDevice = primary; m_pd3dSecondaryDevice = secondary; }
 
-private:
-   VertexBuffer();     // disable default constructor
-
-   DWORD m_fvf;
+   static void CreateVertexBuffer(const unsigned int vertexCount, const DWORD usage, const DWORD fvf, VertexBuffer **vBuffer, const deviceNumber dN);
 
    static VertexBuffer* m_curVertexBuffer; // for caching
-   static IDirect3DDevice9* m_pD3DDevice;
+
+   IDirect3DVertexBuffer9* m_vb = nullptr;
+
+private:
+   //VertexBuffer();     // disable default constructor
+
+   DWORD m_fvf;
+   deviceNumber m_dN;
+
+   static IDirect3DDevice9* m_pd3dPrimaryDevice;
+   static IDirect3DDevice9* m_pd3dSecondaryDevice;
 };
 
 #endif

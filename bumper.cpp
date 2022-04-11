@@ -31,50 +31,24 @@ Bumper::Bumper()
 
 Bumper::~Bumper()
 {
-   if (m_baseVertexBuffer)
-   {
-      m_baseVertexBuffer->release();
-      m_baseVertexBuffer = 0;
-   }
-   if (m_baseIndexBuffer)
-   {
-      m_baseIndexBuffer->release();
-      m_baseIndexBuffer = 0;
-   }
-   if (m_ringVertexBuffer)
-   {
-      m_ringVertexBuffer->release();
-      m_ringVertexBuffer = 0;
-   }
+   SAFE_BUFFER_RELEASE(m_baseVertexBuffer);
+   SAFE_BUFFER_RELEASE(m_baseIndexBuffer);
+   SAFE_BUFFER_RELEASE(m_ringVertexBuffer);
    if (m_ringIndexBuffer)
    {
-      m_ringIndexBuffer->release();
-      m_ringIndexBuffer = 0;
+      SAFE_BUFFER_RELEASE(m_ringIndexBuffer);
       m_ringTexture.FreeStuff();
       delete[] m_ringVertices;
-      m_ringVertices = 0;
+      m_ringVertices = nullptr;
    }
    if (m_capIndexBuffer)
    {
-      m_capIndexBuffer->release();
-      m_capIndexBuffer = 0;
+      SAFE_BUFFER_RELEASE(m_capIndexBuffer);
       m_capTexture.FreeStuff();
    }
-   if (m_capVertexBuffer)
-   {
-      m_capVertexBuffer->release();
-      m_capVertexBuffer = 0;
-   }
-   if (m_socketIndexBuffer)
-   {
-      m_socketIndexBuffer->release();
-      m_socketIndexBuffer = 0;
-   }
-   if (m_socketVertexBuffer)
-   {
-      m_socketVertexBuffer->release();
-      m_socketVertexBuffer = 0;
-   }
+   SAFE_BUFFER_RELEASE(m_capVertexBuffer);
+   SAFE_BUFFER_RELEASE(m_socketIndexBuffer);
+   SAFE_BUFFER_RELEASE(m_socketVertexBuffer);
 }
 
 HRESULT Bumper::Init(PinTable *ptable, float x, float y, bool fromMouseClick)
@@ -280,50 +254,24 @@ void Bumper::EndPlay()
 
    m_pbumperhitcircle = nullptr;
 
-   if (m_baseVertexBuffer)
-   {
-      m_baseVertexBuffer->release();
-      m_baseVertexBuffer = 0;
-   }
-   if (m_baseIndexBuffer)
-   {
-      m_baseIndexBuffer->release();
-      m_baseIndexBuffer = 0;
-   }
-   if (m_ringVertexBuffer)
-   {
-      m_ringVertexBuffer->release();
-      m_ringVertexBuffer = 0;
-   }
+   SAFE_BUFFER_RELEASE(m_baseVertexBuffer);
+   SAFE_BUFFER_RELEASE(m_baseIndexBuffer);
+   SAFE_BUFFER_RELEASE(m_ringVertexBuffer);
    if (m_ringIndexBuffer)
    {
-      m_ringIndexBuffer->release();
-      m_ringIndexBuffer = 0;
+      SAFE_BUFFER_RELEASE(m_ringIndexBuffer);
       m_ringTexture.FreeStuff();
       delete[] m_ringVertices;
-      m_ringVertices = 0;
+      m_ringVertices = nullptr;
    }
    if (m_capIndexBuffer)
    {
-      m_capIndexBuffer->release();
-      m_capIndexBuffer = 0;
+      SAFE_BUFFER_RELEASE(m_capIndexBuffer);
       m_capTexture.FreeStuff();
    }
-   if (m_capVertexBuffer)
-   {
-      m_capVertexBuffer->release();
-      m_capVertexBuffer = 0;
-   }
-   if (m_socketIndexBuffer)
-   {
-      m_socketIndexBuffer->release();
-      m_socketIndexBuffer = 0;
-   }
-   if (m_socketVertexBuffer)
-   {
-      m_socketVertexBuffer->release();
-      m_socketVertexBuffer = 0;
-   }
+   SAFE_BUFFER_RELEASE(m_capVertexBuffer);
+   SAFE_BUFFER_RELEASE(m_socketIndexBuffer);
+   SAFE_BUFFER_RELEASE(m_socketVertexBuffer);
 }
 
 void Bumper::UpdateRing()
@@ -518,6 +466,7 @@ void Bumper::RenderDynamic()
       pd3dDevice->basicShader->SetTexture(SHADER_Texture0, &m_ringTexture, false);
       pd3dDevice->basicShader->SetMaterial(&ringMaterial);
       pd3dDevice->basicShader->SetAlphaTestValue(-1.0f);
+
       // render ring
       pd3dDevice->basicShader->Begin(0);
       pd3dDevice->DrawIndexedPrimitiveVB(RenderDevice::TRIANGLELIST, MY_D3DFVF_NOTEX2_VERTEX, m_ringVertexBuffer, 0, bumperRingNumVertices, m_ringIndexBuffer, 0, bumperRingNumIndices);
@@ -745,8 +694,6 @@ void Bumper::GenerateCapMesh(Vertex3D_NoTex2 *buf)
 
 void Bumper::RenderSetup()
 {
-   RenderDevice * const pd3dDevice = g_pplayer->m_pin3d.m_pd3dPrimaryDevice;
-
    m_d.m_time_msec = g_pplayer->m_time_msec;
 
    m_baseHeight = m_ptable->GetSurfaceHeight(m_d.m_szSurface, m_d.m_vCenter.x, m_d.m_vCenter.y) * m_ptable->m_BG_scalez[m_ptable->m_BG_current_set];
@@ -755,13 +702,11 @@ void Bumper::RenderSetup()
    if (m_d.m_baseVisible)
    {
       m_baseTexture.CreateFromResource(IDB_BUMPER_BASE);
-      if (m_baseIndexBuffer)
-         m_baseIndexBuffer->release();
-      m_baseIndexBuffer = pd3dDevice->CreateAndFillIndexBuffer(bumperBaseNumIndices, bumperBaseIndices);
+      SAFE_BUFFER_RELEASE(m_baseIndexBuffer);
+      m_baseIndexBuffer = IndexBuffer::CreateAndFillIndexBuffer(bumperBaseNumIndices, bumperBaseIndices, PRIMARY_DEVICE);
 
-      if (m_baseVertexBuffer)
-         m_baseVertexBuffer->release();
-      pd3dDevice->CreateVertexBuffer(bumperBaseNumVertices, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_baseVertexBuffer);
+      SAFE_BUFFER_RELEASE(m_baseVertexBuffer);
+      VertexBuffer::CreateVertexBuffer(bumperBaseNumVertices, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_baseVertexBuffer, PRIMARY_DEVICE);
 
       Vertex3D_NoTex2 *buf;
       m_baseVertexBuffer->lock(0, 0, (void**)&buf, VertexBuffer::WRITEONLY);
@@ -773,13 +718,11 @@ void Bumper::RenderSetup()
    {
       m_skirtTexture.CreateFromResource(IDB_BUMPER_SKIRT);
 
-      if (m_socketIndexBuffer)
-         m_socketIndexBuffer->release();
-      m_socketIndexBuffer = pd3dDevice->CreateAndFillIndexBuffer(bumperSocketNumIndices, bumperSocketIndices);
+      SAFE_BUFFER_RELEASE(m_socketIndexBuffer);
+      m_socketIndexBuffer = IndexBuffer::CreateAndFillIndexBuffer(bumperSocketNumIndices, bumperSocketIndices, PRIMARY_DEVICE);
 
-      if (m_socketVertexBuffer)
-         m_socketVertexBuffer->release();
-      pd3dDevice->CreateVertexBuffer(bumperSocketNumVertices, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_socketVertexBuffer);
+      SAFE_BUFFER_RELEASE(m_socketVertexBuffer);
+      VertexBuffer::CreateVertexBuffer(bumperSocketNumVertices, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_socketVertexBuffer, PRIMARY_DEVICE);
 
       Vertex3D_NoTex2 *buf;
       m_socketVertexBuffer->lock(0, 0, (void**)&buf, VertexBuffer::WRITEONLY);
@@ -791,13 +734,11 @@ void Bumper::RenderSetup()
    {
       m_ringTexture.CreateFromResource(IDB_BUMPER_RING);
 
-      if (m_ringIndexBuffer)
-         m_ringIndexBuffer->release();
-      m_ringIndexBuffer = pd3dDevice->CreateAndFillIndexBuffer(bumperRingNumIndices, bumperRingIndices);
+      SAFE_BUFFER_RELEASE(m_ringIndexBuffer);
+      m_ringIndexBuffer = IndexBuffer::CreateAndFillIndexBuffer(bumperRingNumIndices, bumperRingIndices, PRIMARY_DEVICE);
 
-      if (m_ringVertexBuffer)
-         m_ringVertexBuffer->release();
-      pd3dDevice->CreateVertexBuffer(bumperRingNumVertices, USAGE_DYNAMIC, MY_D3DFVF_NOTEX2_VERTEX, &m_ringVertexBuffer);
+      SAFE_BUFFER_RELEASE(m_ringVertexBuffer);
+      VertexBuffer::CreateVertexBuffer(bumperRingNumVertices, USAGE_DYNAMIC, MY_D3DFVF_NOTEX2_VERTEX, &m_ringVertexBuffer, PRIMARY_DEVICE);
 
       m_ringVertices = new Vertex3D_NoTex2[bumperRingNumVertices];
       GenerateRingMesh(m_ringVertices);
@@ -812,13 +753,11 @@ void Bumper::RenderSetup()
    {
       m_capTexture.CreateFromResource(IDB_BUMPERCAP);
 
-      if (m_capIndexBuffer)
-         m_capIndexBuffer->release();
-      m_capIndexBuffer = pd3dDevice->CreateAndFillIndexBuffer(bumperCapNumIndices, bumperCapIndices);
+      SAFE_BUFFER_RELEASE(m_capIndexBuffer);
+      m_capIndexBuffer = IndexBuffer::CreateAndFillIndexBuffer(bumperCapNumIndices, bumperCapIndices, PRIMARY_DEVICE);
 
-      if (m_capVertexBuffer)
-         m_capVertexBuffer->release();
-      pd3dDevice->CreateVertexBuffer(bumperCapNumVertices, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_capVertexBuffer);
+      SAFE_BUFFER_RELEASE(m_capVertexBuffer);
+      VertexBuffer::CreateVertexBuffer(bumperCapNumVertices, 0, MY_D3DFVF_NOTEX2_VERTEX, &m_capVertexBuffer, PRIMARY_DEVICE);
 
       Vertex3D_NoTex2 *buf;
       m_capVertexBuffer->lock(0, 0, (void**)&buf, VertexBuffer::WRITEONLY);
@@ -1173,7 +1112,7 @@ STDMETHODIMP Bumper::put_SkirtMaterial(BSTR newVal)
 STDMETHODIMP Bumper::get_X(float *pVal)
 {
    *pVal = m_d.m_vCenter.x;
-   m_vpinball->SetStatusBarUnitInfo("", true);
+   m_vpinball->SetStatusBarUnitInfo(string(), true);
 
    return S_OK;
 }

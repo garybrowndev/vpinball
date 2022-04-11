@@ -9,23 +9,34 @@
 #endif
 
 #include "RenderDevice.h"
+#include "Shader.h"
+#ifndef ENABLE_SDL
 #include "Material.h"
 #include "BasicShader.h"
 #include "DMDShader.h"
 #include "FBShader.h"
 #include "FlasherShader.h"
 #include "LightShader.h"
-#include "Shader.h"
 #ifdef SEPARATE_CLASSICLIGHTSHADER
 #include "ClassicLightShader.h"
 #endif
+#endif
 
+// SMAA:
+#include "shader/AreaTex.h"
+#include "shader/SearchTex.h"
+
+#ifndef ENABLE_SDL
 #pragma comment(lib, "d3d9.lib")        // TODO: put into build system
 #pragma comment(lib, "d3dx9.lib")       // TODO: put into build system
 #if _MSC_VER >= 1900
  #pragma comment(lib, "legacy_stdio_definitions.lib") //dxerr.lib needs this
 #endif
 #pragma comment(lib, "dxerr.lib")       // TODO: put into build system
+
+static RenderTarget *srcr_cache = nullptr; //!! meh, for nvidia depth read only
+static D3DTexture *srct_cache = nullptr;
+static D3DTexture* dest_cache = nullptr;
 
 static bool IsWindowsVistaOr7()
 {
@@ -51,6 +62,7 @@ static bool IsWindowsVistaOr7()
 
    return vista || win7;
 }
+#endif
 
 typedef HRESULT(STDAPICALLTYPE *pRGV)(LPOSVERSIONINFOEXW osi);
 static pRGV mRtlGetVersion = nullptr;
@@ -77,6 +89,9 @@ bool IsWindows10_1803orAbove()
    return false;
 }
 
+#ifdef ENABLE_SDL
+//my definition for SDL    GLint size;    GLenum type;    GLboolean normalized;    GLsizei stride;
+//D3D definition   WORD Stream;    WORD Offset;    BYTE Type;    BYTE Method;    BYTE Usage;    BYTE UsageIndex;
 constexpr VertexElement VertexColorSizeElement[] =
 {
    { 0, 0 * sizeof(float), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 },  // pos
@@ -85,6 +100,56 @@ constexpr VertexElement VertexColorSizeElement[] =
    D3DDECL_END() };
 VertexDeclaration* RenderDevice::m_pVertexColorSizeDeclaration = nullptr;
 
+constexpr VertexElement VertexTexelElement[] =
+{
+   { 3, GL_FLOAT, GL_FALSE, 0, "POSITION0" },
+   { 2, GL_FLOAT, GL_FALSE, 0, "TEXCOORD0" },
+   { 0, 0, 0, 0, nullptr}
+   /*   { 0, 0 * sizeof(float), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 },  // pos
+      { 0, 3 * sizeof(float), D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0 },  // tex0
+      D3DDECL_END()*/
+};
+VertexDeclaration* RenderDevice::m_pVertexTexelDeclaration = (VertexDeclaration*)&VertexTexelElement;
+
+constexpr VertexElement VertexNormalTexelElement[] =
+{
+   { 3, GL_FLOAT, GL_FALSE, 0, "POSITION0" },
+   { 3, GL_FLOAT, GL_FALSE, 0, "NORMAL0" },
+   { 2, GL_FLOAT, GL_FALSE, 0, "TEXCOORD0" },
+   { 0, 0, 0, 0, nullptr}
+/*
+      { 0, 0 * sizeof(float), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 },  // pos
+      { 0, 3 * sizeof(float), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL, 0 },  // normal
+      { 0, 6 * sizeof(float), D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0 },  // tex0
+      D3DDECL_END()*/
+};
+VertexDeclaration* RenderDevice::m_pVertexNormalTexelDeclaration = (VertexDeclaration*)&VertexNormalTexelElement;
+
+/*constexpr VertexElement VertexNormalTexelTexelElement[] =
+{
+   { 0, 0  * sizeof(float),D3DDECLTYPE_FLOAT3,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 },  // pos
+   { 0, 3  * sizeof(float),D3DDECLTYPE_FLOAT3,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,   0 },  // normal
+   { 0, 6  * sizeof(float),D3DDECLTYPE_FLOAT2,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0 },  // tex0
+   { 0, 8  * sizeof(float),D3DDECLTYPE_FLOAT2,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 1 },  // tex1
+   D3DDECL_END()
+};
+
+VertexDeclaration* RenderDevice::m_pVertexNormalTexelTexelDeclaration = nullptr;*/
+
+constexpr VertexElement VertexTrafoTexelElement[] =
+{
+   { 4, GL_FLOAT, GL_FALSE, 0, "POSITION0" },
+   { 2, GL_FLOAT, GL_FALSE, 0, nullptr },//legacy?
+   { 2, GL_FLOAT, GL_FALSE, 0, "TEXCOORD0" },
+   { 0, 0, 0, 0, nullptr }
+
+   /*   { 0, 0 * sizeof(float), D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITIONT, 0 }, // transformed pos
+   { 0, 4 * sizeof(float), D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD,  1 }, // (mostly, except for classic lights) unused, there to be able to share same code as VertexNormalTexelElement
+   { 0, 6 * sizeof(float), D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0 }, // tex0
+   D3DDECL_END()*/
+};
+VertexDeclaration* RenderDevice::m_pVertexTrafoTexelDeclaration = (VertexDeclaration*)&VertexTrafoTexelElement;
+#else
 constexpr VertexElement VertexTexelElement[] =
 {
    { 0, 0 * sizeof(float), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 },  // pos
@@ -96,13 +161,13 @@ VertexDeclaration* RenderDevice::m_pVertexTexelDeclaration = nullptr;
 constexpr VertexElement VertexNormalTexelElement[] =
 {
    { 0, 0 * sizeof(float), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 },  // pos
-   { 0, 3 * sizeof(float), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL, 0 },  // normal
+   { 0, 3 * sizeof(float), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,   0 },  // normal
    { 0, 6 * sizeof(float), D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0 },  // tex0
    D3DDECL_END()
 };
 VertexDeclaration* RenderDevice::m_pVertexNormalTexelDeclaration = nullptr;
 
-/*const VertexElement VertexNormalTexelTexelElement[] =
+/*constexpr VertexElement VertexNormalTexelTexelElement[] =
 {
    { 0, 0  * sizeof(float),D3DDECLTYPE_FLOAT3,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 },  // pos
    { 0, 3  * sizeof(float),D3DDECLTYPE_FLOAT3,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_NORMAL,   0 },  // normal
@@ -135,7 +200,7 @@ static unsigned int fvfToSize(const DWORD fvf)
    case MY_D3DFVF_SIZE_COLOR_VERTEX:
       return sizeof(Vertex3D_Color_Size);
    default:
-      assert(0 && "Unknown FVF type in fvfToSize");
+      assert(!"Unknown FVF type in fvfToSize");
       return 0;
    }
 }
@@ -153,10 +218,11 @@ static VertexDeclaration* fvfToDecl(const DWORD fvf)
    case MY_D3DFVF_SIZE_COLOR_VERTEX:
       return RenderDevice::m_pVertexColorSizeDeclaration;
    default:
-      assert(0 && "Unknown FVF type in fvfToDecl");
+      assert(!"Unknown FVF type in fvfToDecl");
       return nullptr;
    }
 }
+#endif
 
 static UINT ComputePrimitiveCount(const RenderDevice::PrimitiveTypes type, const int vertexCount)
 {
@@ -178,74 +244,174 @@ static UINT ComputePrimitiveCount(const RenderDevice::PrimitiveTypes type, const
    }
 }
 
+#ifdef ENABLE_SDL
+static const char* glErrorToString(const int error) {
+   switch (error) {
+   case GL_INVALID_ENUM: return "GL_INVALID_ENUM";
+   case GL_INVALID_VALUE: return "GL_INVALID_VALUE";
+   case GL_INVALID_OPERATION: return "GL_INVALID_OPERATION";
+   case GL_STACK_OVERFLOW: return "GL_STACK_OVERFLOW";
+   case GL_STACK_UNDERFLOW: return "GL_STACK_UNDERFLOW";
+   case GL_OUT_OF_MEMORY: return "GL_OUT_OF_MEMORY";
+   case GL_INVALID_FRAMEBUFFER_OPERATION: return "GL_INVALID_FRAMEBUFFER_OPERATION";
+   default: return "unknown";
+   }
+}
+#endif
 
 void ReportFatalError(const HRESULT hr, const char *file, const int line)
 {
-   char msg[1024];
-   sprintf_s(msg, 1024, "Fatal error %s (0x%x: %s) at %s:%d", DXGetErrorString(hr), hr, DXGetErrorDescription(hr), file, line);
+   char msg[2048+128];
+#ifdef ENABLE_SDL
+   sprintf_s(msg, "GL Fatal Error 0x%0002X %s in %s:%d", hr, glErrorToString(hr), file, line);
+   ShowError(msg);
+#else
+   sprintf_s(msg, "Fatal error %s (0x%x: %s) at %s:%d", DXGetErrorString(hr), hr, DXGetErrorDescription(hr), file, line);
    ShowError(msg);
    exit(-1);
+#endif
 }
 
 void ReportError(const char *errorText, const HRESULT hr, const char *file, const int line)
 {
-   char msg[1024];
-   sprintf_s(msg, 1024, "%s %s (0x%x: %s) at %s:%d", errorText, DXGetErrorString(hr), hr, DXGetErrorDescription(hr), file, line);
+   char msg[2048+128];
+#ifdef ENABLE_SDL
+   sprintf_s(msg, "GL Error 0x%0002X %s in %s:%d\n%s", hr, glErrorToString(hr), file, line, errorText);
+   ShowError(msg);
+#else
+   sprintf_s(msg, "%s %s (0x%x: %s) at %s:%d", errorText, DXGetErrorString(hr), hr, DXGetErrorDescription(hr), file, line);
    ShowError(msg);
    exit(-1);
+#endif
 }
 
 unsigned m_curLockCalls, m_frameLockCalls;
 unsigned int RenderDevice::Perf_GetNumLockCalls() const { return m_frameLockCalls; }
 
-D3DTexture* TextureManager::LoadTexture(BaseTexture* memtex, const bool linearRGB)
-{
-   const Iter it = m_map.find(memtex);
-   if (it == m_map.end())
-   {
-      TexInfo texinfo;
-      texinfo.d3dtex = m_rd.UploadTexture(memtex, &texinfo.texWidth, &texinfo.texHeight, linearRGB);
-      if (!texinfo.d3dtex)
-         return 0;
-      texinfo.dirty = false;
-      m_map[memtex] = texinfo;
-      return texinfo.d3dtex;
+#if 0//def ENABLE_SDL //not used anymore
+void checkGLErrors(const char *file, const int line) {
+   GLenum err;
+   unsigned int count = 0;
+   while ((err = glGetError()) != GL_NO_ERROR) {
+      count++;
+      ReportFatalError(err, file, line);
    }
-   else
-   {
-      if (it->second.dirty)
-      {
-         m_rd.UpdateTexture(it->second.d3dtex, memtex, linearRGB);
-         it->second.dirty = false;
-      }
-      return it->second.d3dtex;
-   }
+   /*if (count>0) {
+      exit(-1);
+   }*/
 }
+#endif
 
-void TextureManager::SetDirty(BaseTexture* memtex)
+// Callback function for printing debug statements
+#if defined(ENABLE_SDL) && defined(_DEBUG)
+void APIENTRY GLDebugMessageCallback(GLenum source, GLenum type, GLuint id,
+                                     GLenum severity, GLsizei length,
+                                     const GLchar *msg, const void *data)
 {
-   const Iter it = m_map.find(memtex);
-   if (it != m_map.end())
-      it->second.dirty = true;
-}
+    char* _source;
+    switch (source) {
+        case GL_DEBUG_SOURCE_API:
+        _source = "API";
+        break;
 
-void TextureManager::UnloadTexture(BaseTexture* memtex)
-{
-   const Iter it = m_map.find(memtex);
-   if (it != m_map.end())
-   {
-      SAFE_RELEASE(it->second.d3dtex);
-      m_map.erase(it);
-   }
-}
+        case GL_DEBUG_SOURCE_WINDOW_SYSTEM:
+        _source = "WINDOW SYSTEM";
+        break;
 
-void TextureManager::UnloadAll()
-{
-   for (Iter it = m_map.begin(); it != m_map.end(); ++it)
-      SAFE_RELEASE(it->second.d3dtex);
+        case GL_DEBUG_SOURCE_SHADER_COMPILER:
+        _source = "SHADER COMPILER";
+        break;
 
-   m_map.clear();
+        case GL_DEBUG_SOURCE_THIRD_PARTY:
+        _source = "THIRD PARTY";
+        break;
+
+        case GL_DEBUG_SOURCE_APPLICATION:
+        _source = "APPLICATION";
+        break;
+
+        case GL_DEBUG_SOURCE_OTHER:
+        _source = "UNKNOWN";
+        break;
+
+        default:
+        _source = "UNHANDLED";
+        break;
+    }
+
+    char* _type;
+    switch (type) {
+        case GL_DEBUG_TYPE_ERROR:
+        _type = "ERROR";
+        break;
+
+        case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
+        _type = "DEPRECATED BEHAVIOR";
+        break;
+
+        case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
+        _type = "UNDEFINED BEHAVIOR";
+        break;
+
+        case GL_DEBUG_TYPE_PORTABILITY:
+        _type = "PORTABILITY";
+        break;
+
+        case GL_DEBUG_TYPE_PERFORMANCE:
+        _type = "PERFORMANCE";
+        break;
+
+        case GL_DEBUG_TYPE_OTHER:
+        _type = "OTHER";
+        break;
+
+        case GL_DEBUG_TYPE_MARKER:
+        _type = "MARKER";
+        break;
+
+        case GL_DEBUG_TYPE_PUSH_GROUP:
+        _type = "GL_DEBUG_TYPE_PUSH_GROUP";
+        break;
+
+        case GL_DEBUG_TYPE_POP_GROUP:
+        _type = "GL_DEBUG_TYPE_POP_GROUP";
+        break;
+
+    	default:
+        _type = "UNHANDLED";
+        break;
+    }
+
+    char* _severity;
+    switch (severity) {
+        case GL_DEBUG_SEVERITY_HIGH:
+        _severity = "HIGH";
+        break;
+
+        case GL_DEBUG_SEVERITY_MEDIUM:
+        _severity = "MEDIUM";
+        break;
+
+        case GL_DEBUG_SEVERITY_LOW:
+        _severity = "LOW";
+        break;
+
+        case GL_DEBUG_SEVERITY_NOTIFICATION:
+        _severity = "NOTIFICATION";
+        break;
+
+        default:
+        _severity = "UNHANDLED";
+        break;
+    }
+
+    //if(severity != GL_DEBUG_SEVERITY_NOTIFICATION)
+    fprintf(stderr,"%d: %s of %s severity, raised from %s: %s\n", id, _type, _severity, _source, msg);
+
+    if (type == GL_DEBUG_TYPE_ERROR || type == GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR || severity == GL_DEBUG_SEVERITY_HIGH)
+        ShowError(msg);
 }
+#endif
 
 ////////////////////////////////////////////////////////////////////
 
@@ -262,6 +428,45 @@ void EnumerateDisplayModes(const int display, std::vector<VideoMode>& modes)
 {
    modes.clear();
 
+#ifdef ENABLE_SDL
+   const int amount = SDL_GetNumDisplayModes(display);
+   for (int mode = 0; mode < amount; ++mode) {
+      SDL_DisplayMode myMode;
+      SDL_GetDisplayMode(display, mode, &myMode);
+      VideoMode vmode = {};
+      vmode.width = myMode.w;
+      vmode.height = myMode.h;
+      switch (myMode.format) {
+      case SDL_PIXELFORMAT_RGB24:
+      case SDL_PIXELFORMAT_BGR24:
+      case SDL_PIXELFORMAT_RGB888:
+      case SDL_PIXELFORMAT_RGBX8888:
+      case SDL_PIXELFORMAT_BGR888:
+      case SDL_PIXELFORMAT_BGRX8888:
+      case SDL_PIXELFORMAT_ARGB8888:
+      case SDL_PIXELFORMAT_RGBA8888:
+      case SDL_PIXELFORMAT_ABGR8888:
+      case SDL_PIXELFORMAT_BGRA8888:
+         vmode.depth = 32;
+         break;
+      case SDL_PIXELFORMAT_RGB565:
+      case SDL_PIXELFORMAT_BGR565:
+      case SDL_PIXELFORMAT_ABGR1555:
+      case SDL_PIXELFORMAT_BGRA5551:
+      case SDL_PIXELFORMAT_ARGB1555:
+      case SDL_PIXELFORMAT_RGBA5551:
+         vmode.depth = 16;
+         break;
+      case SDL_PIXELFORMAT_ARGB2101010:
+         vmode.depth = 30;
+         break;
+      default:
+         vmode.depth = 0;
+      }
+      vmode.refreshrate = myMode.refresh_rate;
+      modes.push_back(vmode);
+   }
+#else
    std::vector<DisplayConfig> displays;
    getDisplayList(displays);
    if (display >= (int)displays.size())
@@ -299,22 +504,27 @@ void EnumerateDisplayModes(const int display, std::vector<VideoMode>& modes)
    }
 
    SAFE_RELEASE(d3d);
+#endif
 }
 
 BOOL CALLBACK MonitorEnumList(__in  HMONITOR hMonitor, __in  HDC hdcMonitor, __in  LPRECT lprcMonitor, __in  LPARAM dwData)
 {
    std::map<std::string,DisplayConfig>* data = reinterpret_cast<std::map<std::string,DisplayConfig>*>(dwData);
-   DisplayConfig config;
    MONITORINFOEX info;
    info.cbSize = sizeof(MONITORINFOEX);
    GetMonitorInfo(hMonitor, &info);
+   DisplayConfig config = {};
    config.top = info.rcMonitor.top;
    config.left = info.rcMonitor.left;
    config.width = info.rcMonitor.right - info.rcMonitor.left;
    config.height = info.rcMonitor.bottom - info.rcMonitor.top;
    config.isPrimary = (config.top == 0) && (config.left == 0);
    config.display = (int)data->size(); // This number does neither map to the number form display settings nor something else.
+#ifdef ENABLE_SDL
+   config.adapter = config.display;
+#else
    config.adapter = -1;
+#endif
    memcpy(config.DeviceName, info.szDevice, CCHDEVICENAME); // Internal display name e.g. "\\\\.\\DISPLAY1"
    data->insert(std::pair<std::string, DisplayConfig>(config.DeviceName, config));
    return TRUE;
@@ -326,8 +536,8 @@ int getDisplayList(std::vector<DisplayConfig>& displays)
    std::map<std::string, DisplayConfig> displayMap;
    // Get the resolution of all enabled displays.
    EnumDisplayMonitors(nullptr, nullptr, MonitorEnumList, reinterpret_cast<LPARAM>(&displayMap));
-   DISPLAY_DEVICE DispDev = {};
-   DispDev.cb = sizeof(DispDev);
+
+#ifndef ENABLE_SDL
    IDirect3D9* pD3D = Direct3DCreate9(D3D_SDK_VERSION);
    if (pD3D == nullptr)
    {
@@ -346,12 +556,21 @@ int getDisplayList(std::vector<DisplayConfig>& displays)
       }
    }
    SAFE_RELEASE(pD3D);
+#endif
+
    // Apply the same numbering as windows
    int i = 0;
    for (std::map<std::string, DisplayConfig>::iterator display = displayMap.begin(); display != displayMap.end(); ++display)
    {
       if (display->second.adapter >= 0) {
          display->second.display = i;
+#ifdef ENABLE_SDL
+         const char* name = SDL_GetDisplayName(display->second.adapter);
+         if(name != nullptr)
+            strncpy_s(display->second.GPU_Name, name, sizeof(display->second.GPU_Name) - 1);
+         else
+            display->second.GPU_Name[0] = '\0'; //!!
+#endif
          displays.push_back(display->second);
       }
       i++;
@@ -383,20 +602,23 @@ int getPrimaryDisplay()
 {
    std::vector<DisplayConfig> displays;
    getDisplayList(displays);
-   for (std::vector<DisplayConfig>::iterator displayConf = displays.begin(); displayConf != displays.end(); ++displayConf) {
-      if (displayConf->isPrimary) {
+   for (std::vector<DisplayConfig>::iterator displayConf = displays.begin(); displayConf != displays.end(); ++displayConf)
+      if (displayConf->isPrimary)
          return displayConf->adapter;
-      }
-   }
    return 0;
 }
 
 ////////////////////////////////////////////////////////////////////
 
+VertexBuffer* RenderDevice::m_quadVertexBuffer = nullptr;
+unsigned int RenderDevice::m_stats_drawn_triangles = 0;
+
+#ifndef ENABLE_SDL
 #define CHECKNVAPI(s) { NvAPI_Status hr = (s); if (hr != NVAPI_OK) { NvAPI_ShortString ss; NvAPI_GetErrorMessage(hr,ss); g_pvp->MessageBox(ss, "NVAPI", MB_OK | MB_ICONEXCLAMATION); } }
 static bool NVAPIinit = false; //!! meh
 
 bool RenderDevice::m_INTZ_support = false;
+bool RenderDevice::m_useNvidiaApi = false;
 
 #ifdef USE_D3D9EX
  typedef HRESULT(WINAPI *pD3DC9Ex)(UINT SDKVersion, IDirect3D9Ex**);
@@ -411,12 +633,15 @@ typedef HRESULT(STDAPICALLTYPE *pDF)();
 static pDF mDwmFlush = nullptr;
 typedef HRESULT(STDAPICALLTYPE *pDEC)(UINT uCompositionAction);
 static pDEC mDwmEnableComposition = nullptr;
+#endif
 
 RenderDevice::RenderDevice(const HWND hwnd, const int width, const int height, const bool fullscreen, const int colordepth, int VSync, const bool useAA, const bool stereo3D, const unsigned int FXAA, const bool sharpen, const bool ss_refl, const bool useNvidiaApi, const bool disable_dwm, const int BWrendering)
     : m_windowHwnd(hwnd), m_width(width), m_height(height), m_fullscreen(fullscreen), 
       m_colorDepth(colordepth), m_vsync(VSync), m_useAA(useAA), m_stereo3D(stereo3D),
-      m_ssRefl(ss_refl), m_disableDwm(disable_dwm), m_sharpen(sharpen), m_FXAA(FXAA), m_BWrendering(BWrendering), m_useNvidiaApi(useNvidiaApi), m_texMan(*this)
+      m_ssRefl(ss_refl), m_disableDwm(disable_dwm), m_sharpen(sharpen), m_FXAA(FXAA), m_BWrendering(BWrendering), m_texMan(*this)
 {
+    m_useNvidiaApi = useNvidiaApi;
+
     m_stats_drawn_triangles = 0;
 
     mDwmIsCompositionEnabled = (pDICE)GetProcAddress(GetModuleHandle(TEXT("dwmapi.dll")), "DwmIsCompositionEnabled"); //!! remove as soon as win xp support dropped and use static link
@@ -441,8 +666,6 @@ RenderDevice::RenderDevice(const HWND hwnd, const int width, const int height, c
         m_dwm_enabled = false;
     }
 
-    m_curIndexBuffer = 0;
-    m_curVertexBuffer = 0;
     currentDeclaration = nullptr;
     //m_curShader = nullptr;
 
@@ -596,7 +819,7 @@ void RenderDevice::CreateDevice(int &refreshrate, UINT adapterIndex)
    m_INTZ_support = false;
 #else
    m_INTZ_support = (m_pD3D->CheckDeviceFormat( m_adapter, devtype, params.BackBufferFormat,
-                    D3DUSAGE_DEPTHSTENCIL, D3DRTYPE_TEXTURE, ((D3DFORMAT)(MAKEFOURCC('I','N','T','Z'))))) == D3D_OK;
+                     D3DUSAGE_DEPTHSTENCIL, D3DRTYPE_TEXTURE, ((D3DFORMAT)(MAKEFOURCC('I','N','T','Z'))))) == D3D_OK;
 #endif
 
    // check if requested MSAA is possible
@@ -692,16 +915,14 @@ void RenderDevice::CreateDevice(int &refreshrate, UINT adapterIndex)
    const D3DFORMAT render_format = (D3DFORMAT)((m_BWrendering == 1) ? colorFormat::RG16F : ((m_BWrendering == 2) ? colorFormat::RED16F : colorFormat::RGBA16F));
 
    // alloc float buffer for rendering (optionally 2x2 res for manual super sampling)
-   hr = m_pD3DDevice->CreateTexture(m_useAA ? 2 * m_width : m_width, m_useAA ? 2 * m_height : m_height, 1,
-      D3DUSAGE_RENDERTARGET, render_format, (D3DPOOL)memoryPool::DEFAULT, &m_pOffscreenBackBufferTexture, nullptr); //!! D3DFMT_A32B32G32R32F?
+   hr = m_pD3DDevice->CreateTexture(m_useAA ? 2 * m_width : m_width, m_useAA ? 2 * m_height : m_height, 1, D3DUSAGE_RENDERTARGET, render_format, (D3DPOOL)memoryPool::DEFAULT, &m_pOffscreenBackBufferTexture, nullptr); //!! D3DFMT_A32B32G32R32F?
    if (FAILED(hr))
       ReportError("Fatal Error: unable to create render buffer!", hr, __FILE__, __LINE__);
 
    // alloc buffer for screen space fake reflection rendering (optionally 2x2 res for manual super sampling)
    if (m_ssRefl)
    {
-      hr = m_pD3DDevice->CreateTexture(m_useAA ? 2 * m_width : m_width, m_useAA ? 2 * m_height : m_height, 1,
-         D3DUSAGE_RENDERTARGET, render_format, (D3DPOOL)memoryPool::DEFAULT, &m_pReflectionBufferTexture, nullptr); //!! D3DFMT_A32B32G32R32F?
+      hr = m_pD3DDevice->CreateTexture(m_useAA ? 2 * m_width : m_width, m_useAA ? 2 * m_height : m_height, 1, D3DUSAGE_RENDERTARGET, render_format, (D3DPOOL)memoryPool::DEFAULT, &m_pReflectionBufferTexture, nullptr); //!! D3DFMT_A32B32G32R32F?
       if (FAILED(hr))
          ReportError("Fatal Error: unable to create reflection buffer!", hr, __FILE__, __LINE__);
    }
@@ -713,29 +934,25 @@ void RenderDevice::CreateDevice(int &refreshrate, UINT adapterIndex)
       const bool drawBallReflection = ((g_pplayer->m_reflectionForBalls && (g_pplayer->m_ptable->m_useReflectionForBalls == -1)) || (g_pplayer->m_ptable->m_useReflectionForBalls == 1));
       if ((g_pplayer->m_ptable->m_reflectElementsOnPlayfield /*&& g_pplayer->m_pf_refl*/) || drawBallReflection)
       {
-         hr = m_pD3DDevice->CreateTexture(m_useAA ? 2 * m_width : m_width, m_useAA ? 2 * m_height : m_height, 1,
-                                          D3DUSAGE_RENDERTARGET, render_format, (D3DPOOL)memoryPool::DEFAULT, &m_pMirrorTmpBufferTexture, nullptr); //!! D3DFMT_A32B32G32R32F?
-         if(FAILED(hr))
+         hr = m_pD3DDevice->CreateTexture(m_useAA ? 2 * m_width : m_width, m_useAA ? 2 * m_height : m_height, 1, D3DUSAGE_RENDERTARGET, render_format, (D3DPOOL)memoryPool::DEFAULT, &m_pMirrorTmpBufferTexture, nullptr); //!! D3DFMT_A32B32G32R32F?
+         if (FAILED(hr))
             ReportError("Fatal Error: unable to create reflection map!", hr, __FILE__, __LINE__);
       }
    }
    // alloc bloom tex at 1/4 x 1/4 res (allows for simple HQ downscale of clipped input while saving memory)
-   hr = m_pD3DDevice->CreateTexture(m_width / 4, m_height / 4, 1,
-      D3DUSAGE_RENDERTARGET, render_format, (D3DPOOL)memoryPool::DEFAULT, &m_pBloomBufferTexture, nullptr); //!! 8bit enough?
+   hr = m_pD3DDevice->CreateTexture(m_width / 4, m_height / 4, 1, D3DUSAGE_RENDERTARGET, render_format, (D3DPOOL)memoryPool::DEFAULT, &m_pBloomBufferTexture, nullptr); //!! 8bit enough?
    if (FAILED(hr))
       ReportError("Fatal Error: unable to create bloom buffer!", hr, __FILE__, __LINE__);
 
    // temporary buffer for gaussian blur
-   hr = m_pD3DDevice->CreateTexture(m_width / 4, m_height / 4, 1,
-      D3DUSAGE_RENDERTARGET, render_format, (D3DPOOL)memoryPool::DEFAULT, &m_pBloomTmpBufferTexture, nullptr); //!! 8bit are enough! //!! but used also for bulb light transmission hack now!
+   hr = m_pD3DDevice->CreateTexture(m_width / 4, m_height / 4, 1, D3DUSAGE_RENDERTARGET, render_format, (D3DPOOL)memoryPool::DEFAULT, &m_pBloomTmpBufferTexture, nullptr); //!! 8bit are enough! //!! but used also for bulb light transmission hack now!
    if (FAILED(hr))
       ReportError("Fatal Error: unable to create blur buffer!", hr, __FILE__, __LINE__);
 
    // alloc temporary buffer for stereo3D/post-processing AA/sharpen
    if (m_stereo3D || (m_FXAA > 0) || m_sharpen)
    {
-      hr = m_pD3DDevice->CreateTexture(m_width, m_height, 1,
-         D3DUSAGE_RENDERTARGET, (D3DFORMAT)(video10bit ? colorFormat::RGBA10 : colorFormat::RGBA8), (D3DPOOL)memoryPool::DEFAULT, &m_pOffscreenBackBufferTmpTexture, nullptr);
+      hr = m_pD3DDevice->CreateTexture(m_width, m_height, 1, D3DUSAGE_RENDERTARGET, (D3DFORMAT)(video10bit ? colorFormat::RGBA10 : colorFormat::RGBA8), (D3DPOOL)memoryPool::DEFAULT, &m_pOffscreenBackBufferTmpTexture, nullptr);
       if (FAILED(hr))
          ReportError("Fatal Error: unable to create stereo3D/post-processing AA/sharpen buffer!", hr, __FILE__, __LINE__);
    }
@@ -745,8 +962,7 @@ void RenderDevice::CreateDevice(int &refreshrate, UINT adapterIndex)
    // alloc one more temporary buffer for SMAA
    if (m_FXAA == Quality_SMAA)
    {
-      hr = m_pD3DDevice->CreateTexture(m_width, m_height, 1,
-         D3DUSAGE_RENDERTARGET, (D3DFORMAT)(video10bit ? colorFormat::RGBA10 : colorFormat::RGBA8), (D3DPOOL)memoryPool::DEFAULT, &m_pOffscreenBackBufferTmpTexture2, nullptr);
+      hr = m_pD3DDevice->CreateTexture(m_width, m_height, 1, D3DUSAGE_RENDERTARGET, (D3DFORMAT)(video10bit ? colorFormat::RGBA10 : colorFormat::RGBA8), (D3DPOOL)memoryPool::DEFAULT, &m_pOffscreenBackBufferTmpTexture2, nullptr);
       if (FAILED(hr))
          ReportError("Fatal Error: unable to create SMAA buffer!", hr, __FILE__, __LINE__);
    }
@@ -756,29 +972,14 @@ void RenderDevice::CreateDevice(int &refreshrate, UINT adapterIndex)
    if (video10bit && (m_FXAA == Quality_SMAA || m_FXAA == Standard_DLAA))
       ShowError("SMAA or DLAA post-processing AA should not be combined with 10Bit-output rendering (will result in visible artifacts)!");
 
+   //
+
    // create default vertex declarations for shaders
    CreateVertexDeclaration(VertexColorSizeElement, &m_pVertexColorSizeDeclaration);
    CreateVertexDeclaration(VertexTexelElement, &m_pVertexTexelDeclaration);
    CreateVertexDeclaration(VertexNormalTexelElement, &m_pVertexNormalTexelDeclaration);
    //CreateVertexDeclaration( VertexNormalTexelTexelElement, &m_pVertexNormalTexelTexelDeclaration );
    CreateVertexDeclaration(VertexTrafoTexelElement, &m_pVertexTrafoTexelDeclaration);
-
-   m_quadVertexBuffer = nullptr;
-   CreateVertexBuffer(4, 0, MY_D3DFVF_TEX, &m_quadVertexBuffer);
-   Vertex3D_TexelOnly* bufvb;
-   m_quadVertexBuffer->lock(0, 0, (void**)&bufvb, VertexBuffer::WRITEONLY);
-   static constexpr float verts[4 * 5] =
-   {
-      1.0f, 1.0f, 0.0f, 1.0f, 0.0f,
-      -1.0f, 1.0f, 0.0f, 0.0f, 0.0f,
-      1.0f, -1.0f, 0.0f, 1.0f, 1.0f,
-      -1.0f, -1.0f, 0.0f, 0.0f, 1.0f
-   };
-   memcpy(bufvb,verts,4*sizeof(Vertex3D_TexelOnly));
-   m_quadVertexBuffer->unlock();
-
-   //m_quadDynVertexBuffer = nullptr;
-   //CreateVertexBuffer(4, USAGE_DYNAMIC, MY_D3DFVF_TEX, &m_quadDynVertexBuffer);
 
    if(m_FXAA == Quality_SMAA)
        UploadAndSetSMAATextures();
@@ -826,6 +1027,9 @@ bool RenderDevice::LoadShaders()
       CHECKD3D(FBShader->Core()->SetTexture(SHADER_searchTex2D, m_SMAAsearchTexture));
    }
 
+   // Initialize uniform to default value
+   basicShader->SetFlasherColorAlpha(vec4(1.0f, 1.0f, 1.0f, 1.0f));
+
    return true;
 }
 
@@ -856,10 +1060,6 @@ static void CheckForD3DLeak(IDirect3DDevice9* d3d)
 }
 #endif
 
-
-static RenderTarget *srcr_cache = nullptr; //!! meh, for nvidia depth read only
-static D3DTexture *srct_cache = nullptr;
-static D3DTexture* dest_cache = nullptr;
 
 void RenderDevice::FreeShader()
 {
@@ -918,12 +1118,6 @@ void RenderDevice::FreeShader()
 
 RenderDevice::~RenderDevice()
 {
-   if (m_quadVertexBuffer)
-      m_quadVertexBuffer->release();
-   m_quadVertexBuffer = nullptr;
-
-   //m_quadDynVertexBuffer->release();
-
 #ifndef DISABLE_FORCE_NVIDIA_OPTIMUS
    if (srcr_cache != nullptr)
       CHECKNVAPI(NvAPI_D3D9_UnregisterResource(srcr_cache)); //!! meh
@@ -1046,7 +1240,7 @@ bool RenderDevice::SetMaximumPreRenderedFrames(const DWORD frames)
    }
    else
 #endif
-   return false;
+      return false;
 }
 
 void RenderDevice::Flip(const bool vsync)
@@ -1143,6 +1337,32 @@ D3DTexture* RenderDevice::DuplicateDepthTexture(RenderTarget* src)
       D3DUSAGE_DEPTHSTENCIL, (D3DFORMAT)MAKEFOURCC('I', 'N', 'T', 'Z'), (D3DPOOL)memoryPool::DEFAULT, &dup, nullptr)); // D3DUSAGE_AUTOGENMIPMAP?
    return dup;
 }
+
+#ifdef ENABLE_SDL
+
+void RenderDevice::CopyDepth(RenderTarget* dest, RenderTarget* src) {
+   //!! Not required for GL.
+}
+
+D3DTexture* RenderDevice::UploadTexture(BaseTexture* surf, int *pTexWidth, int *pTexHeight, const bool linearRGB, const bool clamptoedge)
+{
+   D3DTexture *tex = CreateTexture(surf->width(), surf->height(), 0, STATIC, surf->m_format == BaseTexture::RGB_FP ? RGB32F : RGBA, surf->m_data.data(), 0, clamptoedge);
+
+   if (pTexWidth) *pTexWidth = surf->width();
+   if (pTexHeight) *pTexHeight = surf->height();
+   return tex;
+}
+
+void RenderDevice::UploadAndSetSMAATextures()
+{
+   m_SMAAsearchTexture = CreateTexture(SEARCHTEX_WIDTH, SEARCHTEX_HEIGHT, 0, STATIC, GREY, (void*)&searchTexBytes[0], 0);
+   m_SMAAareaTexture = CreateTexture(AREATEX_WIDTH, AREATEX_HEIGHT, 0, STATIC, GREY_ALPHA, (void*)&areaTexBytes[0], 0);
+
+   FBShader->SetTexture(SHADER_areaTex2D, m_SMAAareaTexture, true);
+   FBShader->SetTexture(SHADER_searchTex2D, m_SMAAsearchTexture, true);
+}
+
+#else
 
 void RenderDevice::CopySurface(D3DTexture* dest, RenderTarget* src)
 {
@@ -1377,7 +1597,7 @@ D3DTexture* RenderDevice::CreateSystemTexture(BaseTexture* const surf, const boo
    return sysTex;
 }
 
-D3DTexture* RenderDevice::UploadTexture(BaseTexture* const surf, int * const pTexWidth, int * const pTexHeight, const bool linearRGB)
+D3DTexture* RenderDevice::UploadTexture(BaseTexture* const surf, int* const pTexWidth, int* const pTexHeight, const bool linearRGB, const bool clamptoedge)
 {
    const int texwidth = surf->width();
    const int texheight = surf->height();
@@ -1409,8 +1629,6 @@ D3DTexture* RenderDevice::UploadTexture(BaseTexture* const surf, int * const pTe
    return tex;
 }
 
-#include "shader/AreaTex.h"
-#include "shader/SearchTex.h"
 void RenderDevice::UploadAndSetSMAATextures()
 {
    {
@@ -1455,17 +1673,34 @@ void RenderDevice::UploadAndSetSMAATextures()
    SAFE_RELEASE(sysTex);
    }
 }
+#endif
 
 void RenderDevice::UpdateTexture(D3DTexture* const tex, BaseTexture* const surf, const bool linearRGB)
 {
+#ifdef ENABLE_SDL
+   tex->format = (surf->m_format == BaseTexture::RGB_FP) ? RGB32F : RGBA;
+   const GLuint col_type = ((tex->format == RGBA32F) || (tex->format == RGBA16F) || (tex->format == RGB32F) || (tex->format == RGB16F)) ? GL_FLOAT : GL_UNSIGNED_BYTE;
+   const GLuint col_format = (tex->format == GREY) ? GL_RED : (tex->format == GREY_ALPHA) ? GL_RG : ((tex->format == RGB) || (tex->format == RGB5) || (tex->format == RGB10) || (tex->format == RGB16F) || (tex->format == RGB32F)) ? GL_BGR : GL_BGRA;
+   glBindTexture(GL_TEXTURE_2D, tex->texture);
+   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, surf->width(), surf->height(), col_format, col_type, surf->data());
+   //glTexImage2D(GL_TEXTURE_2D, 0, tex->format, surf->width(), surf->height(), 0, col_format, col_type, surf->data()); // Use TexStorage instead
+   glGenerateMipmap(GL_TEXTURE_2D); // Generate mip-maps
+   glBindTexture(GL_TEXTURE_2D, 0);
+#else
    IDirect3DTexture9* sysTex = CreateSystemTexture(surf, linearRGB);
    m_curTextureUpdates++;
    CHECKD3D(m_pD3DDevice->UpdateTexture(sysTex, tex));
    SAFE_RELEASE(sysTex);
+#endif
 }
 
 void RenderDevice::SetSamplerState(const DWORD Sampler, const D3DSAMPLERSTATETYPE Type, const DWORD Value)
 {
+#ifdef ENABLE_SDL //!! ??
+/*   glSamplerParameteri(Sampler, GL_TEXTURE_MIN_FILTER, minFilter ? (mipFilter ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR) : GL_NEAREST);
+   glSamplerParameteri(Sampler, GL_TEXTURE_MAG_FILTER, magFilter ? (mipFilter ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR) : GL_NEAREST);
+   m_curStateChanges += 2;*/
+#else
    const bool invalid_set = ((unsigned int)Type >= TEXTURE_SAMPLER_CACHE_SIZE || Sampler >= TEXTURE_SAMPLERS);
    if (invalid_set || textureSamplerCache[Sampler][Type] != Value)
    {
@@ -1475,6 +1710,7 @@ void RenderDevice::SetSamplerState(const DWORD Sampler, const D3DSAMPLERSTATETYP
 
       m_curStateChanges++;
    }
+#endif
 }
 
 void RenderDevice::SetTextureFilter(const DWORD texUnit, DWORD mode)
@@ -1572,7 +1808,7 @@ void RenderDevice::UnSetZBuffer()
 #endif
 }
 
-bool RenderDevice::SetRenderStateCache(const RenderStates p1, DWORD p2)
+inline bool RenderDevice::SetRenderStateCache(const RenderStates p1, DWORD p2)
 {
 #ifdef DEBUG
    if (p1 >= RENDERSTATE_COUNT)
@@ -1606,28 +1842,28 @@ void RenderDevice::SetRenderState(const RenderStates p1, DWORD p2)
    switch (p1) {
       //glEnable and glDisable functions
    case ALPHABLENDENABLE:
-      CHECKD3D({ if (p2) glEnable(GL_BLEND); else glDisable(GL_BLEND); });
+      if (p2) glEnable(GL_BLEND); else glDisable(GL_BLEND);
       break;
    case ZENABLE:
-      CHECKD3D({ if (p2) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST); });
+      if (p2) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
       break;
    case BLENDOP:
-      CHECKD3D(glBlendEquation(p2));
+      glBlendEquation(p2);
       break;
    case SRCBLEND:
-      CHECKD3D(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
+      glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
       break;
    case DESTBLEND:
-      CHECKD3D(glBlendFunc(renderStateCache[SRCBLEND], renderStateCache[DESTBLEND]));
+      glBlendFunc(renderStateCache[SRCBLEND], renderStateCache[DESTBLEND]);
       break;
    case ZFUNC:
-      CHECKD3D(glDepthFunc(p2));
+      glDepthFunc(p2);
       break;
    case ZWRITEENABLE:
-      CHECKD3D(glDepthMask(p2 ? GL_TRUE : GL_FALSE));
+      glDepthMask(p2 ? GL_TRUE : GL_FALSE);
       break;
    case COLORWRITEENABLE:
-      CHECKD3D(glColorMask((p2 & 1) ? GL_TRUE : GL_FALSE, (p2 & 2) ? GL_TRUE : GL_FALSE, (p2 & 4) ? GL_TRUE : GL_FALSE, (p2 & 8) ? GL_TRUE : GL_FALSE));
+      glColorMask((p2 & 1) ? GL_TRUE : GL_FALSE, (p2 & 2) ? GL_TRUE : GL_FALSE, (p2 & 4) ? GL_TRUE : GL_FALSE, (p2 & 8) ? GL_TRUE : GL_FALSE);
       break;
       //Replaced by specific function
    case DEPTHBIAS:
@@ -1635,10 +1871,11 @@ void RenderDevice::SetRenderState(const RenderStates p1, DWORD p2)
    case CLIPPLANEENABLE:
    case ALPHAFUNC:
    case ALPHATESTENABLE:
-      //No effect or not implented in OpenGL 
+      //No effect or not implemented in OpenGL 
    case LIGHTING:
    case CLIPPING:
    case ALPHAREF:
+   case SRGBWRITEENABLE:
    default:
       break;
    }
@@ -1662,15 +1899,15 @@ void RenderDevice::SetRenderStateCulling(RenderStateValue cull)
 
 #ifdef ENABLE_SDL
    if (renderStateCache[RenderStates::CULLMODE] == CULL_NONE && (cull != CULL_NONE)) //!! this differs a bit from VPVR now, recheck!
-      CHECKD3D(glEnable(GL_CULL_FACE));
+      glEnable(GL_CULL_FACE);
    if (cull == CULL_NONE)
-      CHECKD3D(glDisable(GL_CULL_FACE));
+      glDisable(GL_CULL_FACE);
    else {
-      CHECKD3D(glFrontFace(cull));
-      CHECKD3D(glCullFace(GL_FRONT));
+      glFrontFace(cull);
+      glCullFace(GL_FRONT);
    }
 #else
-   CHECKD3D(m_pD3DDevice->SetRenderState((D3DRENDERSTATETYPE)CULLMODE, cull));
+   m_pD3DDevice->SetRenderState((D3DRENDERSTATETYPE)CULLMODE, cull);
 #endif
    m_curStateChanges++;
 }
@@ -1681,10 +1918,10 @@ void RenderDevice::SetRenderStateDepthBias(float bias)
 
 #ifdef ENABLE_SDL
    if (bias == 0.0f)
-      CHECKD3D(glDisable(GL_POLYGON_OFFSET_FILL));
+      glDisable(GL_POLYGON_OFFSET_FILL);
    else {
-      CHECKD3D(glEnable(GL_POLYGON_OFFSET_FILL));
-      CHECKD3D(glPolygonOffset(0.0f, bias));
+      glEnable(GL_POLYGON_OFFSET_FILL);
+      glPolygonOffset(0.0f, bias);
    }
 #else
    bias *= BASEDEPTHBIAS;
@@ -1700,9 +1937,9 @@ void RenderDevice::SetRenderStateClipPlane0(const bool enabled)
 #ifdef ENABLE_SDL
    // Basicshader already prepared with proper clipplane so just need to enable/disable it
    if (enabled)
-      CHECKD3D(glEnable(GL_CLIP_DISTANCE0));
+      glEnable(GL_CLIP_DISTANCE0);
    else
-      CHECKD3D(glDisable(GL_CLIP_DISTANCE0));
+      glDisable(GL_CLIP_DISTANCE0);
 #else
    CHECKD3D(m_pD3DDevice->SetRenderState((D3DRENDERSTATETYPE)CLIPPLANEENABLE, enabled ? PLANE0 : 0));
 #endif 
@@ -1729,7 +1966,8 @@ void RenderDevice::SetTextureAddressMode(const DWORD texUnit, const TextureAddre
    SetSamplerState(texUnit, D3DSAMP_ADDRESSV, mode);
 }
 
-void RenderDevice::CreateVertexBuffer(const unsigned int vertexCount, const DWORD usage, const DWORD fvf, VertexBuffer **vBuffer)
+//!! Remove this:
+/*void RenderDevice::CreateVertexBuffer(const unsigned int vertexCount, const DWORD usage, const DWORD fvf, VertexBuffer** vBuffer)
 {
    // NB: We always specify WRITEONLY since MSDN states,
    // "Buffers created with D3DPOOL_DEFAULT that do not specify D3DUSAGE_WRITEONLY may suffer a severe performance penalty."
@@ -1759,7 +1997,7 @@ IndexBuffer* RenderDevice::CreateAndFillIndexBuffer(const unsigned int numIndice
    CreateIndexBuffer(numIndices, 0, IndexBuffer::FMT_INDEX16, &ib);
 
    void* buf;
-   ib->lock(0, 0, &buf, 0);
+   ib->lock(0, 0, &buf, IndexBuffer::WRITEONLY);
    memcpy(buf, indices, numIndices * sizeof(indices[0]));
    ib->unlock();
 
@@ -1772,7 +2010,7 @@ IndexBuffer* RenderDevice::CreateAndFillIndexBuffer(const unsigned int numIndice
    CreateIndexBuffer(numIndices, 0, IndexBuffer::FMT_INDEX32, &ib);
 
    void* buf;
-   ib->lock(0, 0, &buf, 0);
+   ib->lock(0, 0, &buf, IndexBuffer::WRITEONLY);
    memcpy(buf, indices, numIndices * sizeof(indices[0]));
    ib->unlock();
 
@@ -1787,11 +2025,12 @@ IndexBuffer* RenderDevice::CreateAndFillIndexBuffer(const std::vector<WORD>& ind
 IndexBuffer* RenderDevice::CreateAndFillIndexBuffer(const std::vector<unsigned int>& indices)
 {
    return CreateAndFillIndexBuffer((unsigned int)indices.size(), indices.data());
-}
+}*/
 
 
 void* RenderDevice::AttachZBufferTo(RenderTarget* surf)
 {
+#ifndef ENABLE_SDL
    D3DSURFACE_DESC desc;
    surf->GetDesc(&desc);
 
@@ -1813,24 +2052,29 @@ void* RenderDevice::AttachZBufferTo(RenderTarget* surf)
 
       return pZBuf;
    }
+#else
+   return nullptr;
+#endif
 }
 
-void RenderDevice::DrawPrimitive(const RenderDevice::PrimitiveTypes type, const DWORD fvf, const void* vertices, const DWORD vertexCount)
+void RenderDevice::DrawPrimitive(const PrimitiveTypes type, const DWORD fvf, const void* vertices, const DWORD vertexCount)
 {
-   HRESULT hr;
+#ifndef ENABLE_SDL
+   const unsigned int np = ComputePrimitiveCount(type, vertexCount);
+   m_stats_drawn_triangles += np;
+
    VertexDeclaration * declaration = fvfToDecl(fvf);
    SetVertexDeclaration(declaration);
 
-   const unsigned int np = ComputePrimitiveCount(type, vertexCount);
-   m_stats_drawn_triangles += np;
-   hr = m_pD3DDevice->DrawPrimitiveUP((D3DPRIMITIVETYPE)type, np, vertices, fvfToSize(fvf));
+   HRESULT hr = m_pD3DDevice->DrawPrimitiveUP((D3DPRIMITIVETYPE)type, np, vertices, fvfToSize(fvf));
 
    if (FAILED(hr))
       ReportError("Fatal Error: DrawPrimitiveUP failed!", hr, __FILE__, __LINE__);
 
-   m_curVertexBuffer = 0;      // DrawPrimitiveUP sets the VB to nullptr
+   VertexBuffer::bindNull();    // DrawPrimitiveUP sets the VB to nullptr
 
    m_curDrawCalls++;
+#endif
 }
 
 void RenderDevice::DrawTexturedQuad(const Vertex3D_TexelOnly* vertices)
@@ -1839,7 +2083,7 @@ void RenderDevice::DrawTexturedQuad(const Vertex3D_TexelOnly* vertices)
    m_quadDynVertexBuffer->lock(0, 0, (void**)&bufvb, VertexBuffer::DISCARDCONTENTS);
    memcpy(bufvb,vertices,4*sizeof(Vertex3D_TexelOnly));
    m_quadDynVertexBuffer->unlock();
-   DrawPrimitiveVB(RenderDevice::TRIANGLESTRIP,MY_D3DFVF_TEX,m_quadDynVertexBuffer,0,4);*/
+   DrawPrimitiveVB(RenderDevice::TRIANGLESTRIP,MY_D3DFVF_TEX,m_quadDynVertexBuffer,0,4,true);*/
 
    DrawPrimitive(RenderDevice::TRIANGLESTRIP,MY_D3DFVF_TEX,vertices,4); // having a VB and lock/copying stuff each time is slower :/
 }
@@ -1855,55 +2099,62 @@ void RenderDevice::DrawFullscreenTexturedQuad()
    };   
    DrawTexturedQuad((Vertex3D_TexelOnly*)verts);*/
 
-   DrawPrimitiveVB(RenderDevice::TRIANGLESTRIP,MY_D3DFVF_TEX,m_quadVertexBuffer,0,4);
+   DrawPrimitiveVB(RenderDevice::TRIANGLESTRIP,MY_D3DFVF_TEX,m_quadVertexBuffer,0,4,false);
 }
 
-void RenderDevice::DrawPrimitiveVB(const RenderDevice::PrimitiveTypes type, const DWORD fvf, VertexBuffer* vb, const DWORD startVertex, const DWORD vertexCount)
+void RenderDevice::DrawPrimitiveVB(const PrimitiveTypes type, const DWORD fvf, VertexBuffer* vb, const DWORD startVertex, const DWORD vertexCount, const bool stereo)
 {
-   HRESULT hr;
+   const unsigned int np = ComputePrimitiveCount(type, vertexCount);
+   m_stats_drawn_triangles += np;
+
+   vb->bind();
+#ifdef ENABLE_SDL
+   //glDrawArraysInstanced(type, vb->getOffset() + startVertex, vertexCount, m_stereo3D != STEREO_OFF ? 2 : 1); // Do instancing in geometry shader instead
+   glDrawArrays(type, vb->getOffset() + startVertex, vertexCount);
+#else
    VertexDeclaration * declaration = fvfToDecl(fvf);
    SetVertexDeclaration(declaration);
 
-   if (m_curVertexBuffer != vb)
-   {
-      const unsigned int vsize = fvfToSize(fvf);
-      CHECKD3D(m_pD3DDevice->SetStreamSource(0, vb, 0, vsize));
-      m_curVertexBuffer = vb;
-   }
-
-   const unsigned int np = ComputePrimitiveCount(type, vertexCount);
-   m_stats_drawn_triangles += np;
-   hr = m_pD3DDevice->DrawPrimitive((D3DPRIMITIVETYPE)type, startVertex, np);
+   const HRESULT hr = m_pD3DDevice->DrawPrimitive((D3DPRIMITIVETYPE)type, startVertex, np);
    if (FAILED(hr))
       ReportError("Fatal Error: DrawPrimitive failed!", hr, __FILE__, __LINE__);
-
+#endif
    m_curDrawCalls++;
 }
 
-void RenderDevice::DrawIndexedPrimitiveVB(const RenderDevice::PrimitiveTypes type, const DWORD fvf, VertexBuffer* vb, const DWORD startVertex, const DWORD vertexCount, IndexBuffer* ib, const DWORD startIndex, const DWORD indexCount)
+void RenderDevice::DrawIndexedPrimitiveVB(const PrimitiveTypes type, const DWORD fvf, VertexBuffer* vb, const DWORD startVertex, const DWORD vertexCount, IndexBuffer* ib, const DWORD startIndex, const DWORD indexCount)
 {
+   if (vb == nullptr || ib == nullptr) //!! happens for primitives that are grouped on player init render call?!?
+      return;
+
+   const unsigned int np = ComputePrimitiveCount(type, indexCount);
+   m_stats_drawn_triangles += np;
+
+#ifdef ENABLE_SDL
+   const int offset = ib->getOffset() + (ib->getIndexFormat() == IndexBuffer::FMT_INDEX16 ? 2 : 4) * startIndex;
+   //glDrawElementsInstancedBaseVertex(type, indexCount, ib->getIndexFormat() == IndexBuffer::FMT_INDEX16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT, (void*)offset, m_stereo3D != STEREO_OFF ? 2 : 1, vb->getOffset() + startVertex); // Do instancing in geometry shader instead
+   glDrawElementsBaseVertex(type, indexCount, ib->getIndexFormat() == IndexBuffer::FMT_INDEX16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT, (void*)offset, vb->getOffset() + startVertex);
+#else
    VertexDeclaration * declaration = fvfToDecl(fvf);
    SetVertexDeclaration(declaration);
 
    // bind the vertex and index buffers
-   if (m_curVertexBuffer != vb)
+   if (VertexBuffer::m_curVertexBuffer != vb)
    {
       const unsigned int vsize = fvfToSize(fvf);
-      CHECKD3D(m_pD3DDevice->SetStreamSource(0, vb, 0, vsize));
-      m_curVertexBuffer = vb;
+      CHECKD3D(m_pD3DDevice->SetStreamSource(0, vb->m_vb, 0, vsize));
+      VertexBuffer::m_curVertexBuffer = vb;
    }
 
-   if (m_curIndexBuffer != ib)
+   if (IndexBuffer::m_curIndexBuffer != ib)
    {
-      CHECKD3D(m_pD3DDevice->SetIndices(ib));
-      m_curIndexBuffer = ib;
+      CHECKD3D(m_pD3DDevice->SetIndices(ib->m_ib));
+      IndexBuffer::m_curIndexBuffer = ib;
    }
 
    // render
-   const unsigned int np = ComputePrimitiveCount(type, indexCount);
-   m_stats_drawn_triangles += np;
    CHECKD3D(m_pD3DDevice->DrawIndexedPrimitive((D3DPRIMITIVETYPE)type, startVertex, 0, vertexCount, startIndex, np));
-
+#endif
    m_curDrawCalls++;
 }
 
@@ -1940,20 +2191,20 @@ Shader::Shader(RenderDevice *renderDevice) : currentMaterial(-FLT_MAX, -FLT_MAX,
                                                              0xCCCCCCCC, 0xCCCCCCCC, 0xCCCCCCCC, false, false, -FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX)
 {
    m_renderDevice = renderDevice;
-   m_shader = 0;
+   m_shader = nullptr;
    for (unsigned int i = 0; i < TEXTURESET_STATE_CACHE_SIZE; ++i)
-      currentTexture[i] = 0;
-   currentFlasherMode = -FLT_MAX;
+      currentTexture[i] = nullptr;
    currentAlphaTestValue = -FLT_MAX;
    currentDisableLighting =
    currentFlasherData =
+   currentFlasherData2 =
    currentFlasherColor =
    currentLightColor =
    currentLightColor2 =
    currentLightData = vec4(-FLT_MAX, -FLT_MAX, -FLT_MAX, -FLT_MAX);
    currentLightImageMode = ~0u;
    currentLightBackglassMode = ~0u;
-   currentTechnique[0] = 0;
+   currentTechnique[0] = '\0';
 }
 
 Shader::~Shader()
@@ -2020,7 +2271,7 @@ void Shader::Unload()
    SAFE_RELEASE(m_shader);
 }
 
-void Shader::SetTexture(const D3DXHANDLE texelName, Texture *texel, const bool linearRGB)
+void Shader::SetTexture(const SHADER_UNIFORM_HANDLE texelName, Texture *texel, const bool linearRGB, const bool clamptoedge)
 {
    const unsigned int idx = texelName[strlen(texelName) - 1] - '0'; // current convention: SetTexture gets "TextureX", where X 0..4
    assert(idx < TEXTURESET_STATE_CACHE_SIZE);
@@ -2044,7 +2295,7 @@ void Shader::SetTexture(const D3DXHANDLE texelName, Texture *texel, const bool l
    }
 }
 
-void Shader::SetTexture(const D3DXHANDLE texelName, D3DTexture *texel)
+void Shader::SetTexture(const SHADER_UNIFORM_HANDLE texelName, D3DTexture *texel, const bool linearRGB)
 {
    const unsigned int idx = texelName[strlen(texelName) - 1] - '0'; // current convention: SetTexture gets "TextureX", where X 0..4
    assert(idx < TEXTURESET_STATE_CACHE_SIZE);
@@ -2052,6 +2303,19 @@ void Shader::SetTexture(const D3DXHANDLE texelName, D3DTexture *texel)
    currentTexture[idx] = nullptr; // direct set of device tex invalidates the cache
 
    CHECKD3D(m_shader->SetTexture(texelName, texel));
+
+   m_renderDevice->m_curTextureChanges++;
+}
+
+void Shader::SetTextureNull(const SHADER_UNIFORM_HANDLE texelName)
+{
+   const unsigned int idx = texelName[strlen(texelName) - 1] - '0'; // current convention: SetTexture gets "TextureX", where X 0..4
+   const bool cache = (idx < TEXTURESET_STATE_CACHE_SIZE);
+
+   if (cache)
+      currentTexture[idx] = nullptr; // direct set of device tex invalidates the cache
+
+   CHECKD3D(m_shader->SetTexture(texelName, nullptr));
 
    m_renderDevice->m_curTextureChanges++;
 }

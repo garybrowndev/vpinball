@@ -8,10 +8,10 @@ Flasher::Flasher()
    m_menuid = IDR_SURFACEMENU;
    m_d.m_isVisible = true;
    m_d.m_depthBias = 0.0f;
-   m_dynamicVertexBuffer = 0;
-   m_dynamicIndexBuffer = 0;
+   m_dynamicVertexBuffer = nullptr;
+   m_dynamicIndexBuffer = nullptr;
    m_dynamicVertexBufferRegenerate = true;
-   m_vertices = 0;
+   m_vertices = nullptr;
    m_propVisual = nullptr;
    m_ptable = nullptr;
    m_numVertices = 0;
@@ -25,18 +25,12 @@ Flasher::Flasher()
 
 Flasher::~Flasher()
 {
-   if (m_dynamicVertexBuffer) {
-      m_dynamicVertexBuffer->release();
-      m_dynamicVertexBuffer = 0;
-   }
-   if (m_dynamicIndexBuffer) {
-      m_dynamicIndexBuffer->release();
-      m_dynamicIndexBuffer = 0;
-   }
+   SAFE_BUFFER_RELEASE(m_dynamicVertexBuffer);
+   SAFE_BUFFER_RELEASE(m_dynamicIndexBuffer);
    if (m_vertices)
    {
       delete[] m_vertices;
-      m_vertices = 0;
+      m_vertices = nullptr;
    }
 }
 
@@ -285,19 +279,14 @@ void Flasher::EndPlay()
 
    if (m_dynamicVertexBuffer)
    {
-      m_dynamicVertexBuffer->release();
-      m_dynamicVertexBuffer = 0;
+      SAFE_BUFFER_RELEASE(m_dynamicVertexBuffer);
       m_dynamicVertexBufferRegenerate = true;
    }
-   if (m_dynamicIndexBuffer)
-   {
-      m_dynamicIndexBuffer->release();
-      m_dynamicIndexBuffer = 0;
-   }
+   SAFE_BUFFER_RELEASE(m_dynamicIndexBuffer);
    if (m_vertices)
    {
       delete[] m_vertices;
-      m_vertices = 0;
+      m_vertices = nullptr;
    }
 }
 
@@ -366,21 +355,17 @@ void Flasher::RenderSetup()
       return;
    }
 
-   RenderDevice * const pd3dDevice = g_pplayer->m_pin3d.m_pd3dPrimaryDevice;
-
-   if (m_dynamicIndexBuffer)
-      m_dynamicIndexBuffer->release();
-   pd3dDevice->CreateIndexBuffer(m_numPolys * 3, 0, IndexBuffer::FMT_INDEX16, &m_dynamicIndexBuffer);
+   SAFE_BUFFER_RELEASE(m_dynamicIndexBuffer);
+   IndexBuffer::CreateIndexBuffer(m_numPolys * 3, 0, IndexBuffer::FMT_INDEX16, &m_dynamicIndexBuffer, PRIMARY_DEVICE);
    NumVideoBytes += (int)(m_numPolys * 3 * sizeof(WORD));
 
    WORD* bufi;
-   m_dynamicIndexBuffer->lock(0, 0, (void**)&bufi, 0);
+   m_dynamicIndexBuffer->lock(0, 0, (void**)&bufi, IndexBuffer::WRITEONLY);
    memcpy(bufi, vtri.data(), vtri.size()*sizeof(WORD));
    m_dynamicIndexBuffer->unlock();
 
-   if (m_dynamicVertexBuffer)
-      m_dynamicVertexBuffer->release();
-   pd3dDevice->CreateVertexBuffer(m_numVertices, USAGE_DYNAMIC, MY_D3DFVF_TEX, &m_dynamicVertexBuffer);
+   SAFE_BUFFER_RELEASE(m_dynamicVertexBuffer);
+   VertexBuffer::CreateVertexBuffer(m_numVertices, USAGE_DYNAMIC, MY_D3DFVF_TEX, &m_dynamicVertexBuffer, PRIMARY_DEVICE);
    NumVideoBytes += (int)(m_numVertices*sizeof(Vertex3D_TexelOnly));
 
    if (m_vertices)
@@ -663,7 +648,7 @@ STDMETHODIMP Flasher::InterfaceSupportsErrorInfo(REFIID riid)
 STDMETHODIMP Flasher::get_X(float *pVal)
 {
    *pVal = m_d.m_vCenter.x;
-   m_vpinball->SetStatusBarUnitInfo("", true);
+   m_vpinball->SetStatusBarUnitInfo(string(), true);
 
    return S_OK;
 }
@@ -778,11 +763,7 @@ STDMETHODIMP Flasher::get_Color(OLE_COLOR *pVal)
 
 STDMETHODIMP Flasher::put_Color(OLE_COLOR newVal)
 {
-   if (m_d.m_color != newVal)
-   {
-      m_d.m_color = newVal;
-      m_dynamicVertexBufferRegenerate = true;
-   }
+   m_d.m_color = newVal;
 
    return S_OK;
 }
@@ -868,30 +849,15 @@ STDMETHODIMP Flasher::put_Filter(BSTR newVal)
    WideCharToMultiByteNull(CP_ACP, 0, newVal, -1, m_szFilter, MAXNAMEBUFFER, nullptr, nullptr);
 
    if (strcmp(m_szFilter, "Additive") == 0 && m_d.m_filter != Filter_Additive)
-   {
       m_d.m_filter = Filter_Additive;
-      m_dynamicVertexBufferRegenerate = true;
-   }
    else if (strcmp(m_szFilter, "Multiply") == 0 && m_d.m_filter != Filter_Multiply)
-   {
       m_d.m_filter = Filter_Multiply;
-      m_dynamicVertexBufferRegenerate = true;
-   }
    else if (strcmp(m_szFilter, "Overlay") == 0 && m_d.m_filter != Filter_Overlay)
-   {
       m_d.m_filter = Filter_Overlay;
-      m_dynamicVertexBufferRegenerate = true;
-   }
    else if (strcmp(m_szFilter, "Screen") == 0 && m_d.m_filter != Filter_Screen)
-   {
       m_d.m_filter = Filter_Screen;
-      m_dynamicVertexBufferRegenerate = true;
-   }
    else if (strcmp(m_szFilter, "None") == 0 && m_d.m_filter != Filter_None)
-   {
       m_d.m_filter = Filter_None;
-      m_dynamicVertexBufferRegenerate = true;
-   }
 
    return S_OK;
 }
@@ -1017,7 +983,7 @@ void Flasher::ResetVideoCap()
     m_isVideoCap = false;
     if (m_videoCapTex)
     {
-      //  g_pplayer->m_pin3d.m_pd3dPrimaryDevice->flasherShader->SetTexture(SHADER_Texture0, (D3DTexture*)nullptr); //!! ??
+      //  g_pplayer->m_pin3d.m_pd3dPrimaryDevice->flasherShader->SetTextureNull(SHADER_Texture0); //!! ??
         g_pplayer->m_pin3d.m_pd3dPrimaryDevice->m_texMan.UnloadTexture(m_videoCapTex);
         delete m_videoCapTex;
         m_videoCapTex = nullptr;
@@ -1127,11 +1093,7 @@ STDMETHODIMP Flasher::get_DepthBias(float *pVal)
 
 STDMETHODIMP Flasher::put_DepthBias(float newVal)
 {
-   if (m_d.m_depthBias != newVal)
-   {
-      m_d.m_depthBias = newVal;
-      m_dynamicVertexBufferRegenerate = true;
-   }
+   m_d.m_depthBias = newVal;
 
    return S_OK;
 }
@@ -1145,11 +1107,7 @@ STDMETHODIMP Flasher::get_ImageAlignment(RampImageAlignment *pVal)
 
 STDMETHODIMP Flasher::put_ImageAlignment(RampImageAlignment newVal)
 {
-   if (m_d.m_imagealignment != newVal)
-   {
-      m_d.m_imagealignment = newVal;
-      m_dynamicVertexBufferRegenerate = true;
-   }
+   m_d.m_imagealignment = newVal;
 
    return S_OK;
 }
@@ -1165,15 +1123,15 @@ void Flasher::RenderDynamic()
    RenderDevice * const pd3dDevice = g_pplayer->m_pin3d.m_pd3dPrimaryDevice;
 
    TRACE_FUNCTION();
-   
+
    //Don't render if LightSequence in play and state is off
    if (m_lockedByLS) 
    {
-       if (!m_inPlayState) return;
+      if (!m_inPlayState) return;
    }
    //Don't render if invisible (or DMD connection not set)
    else if (!m_d.m_isVisible || m_dynamicVertexBuffer == nullptr || m_ptable->m_reflectionEnabled || (m_d.m_isDMD && !g_pplayer->m_texdmd))
-       return;
+      return;
 
    const vec4 color = convertColor(m_d.m_color, (float)m_d.m_alpha*m_d.m_intensity_scale / 100.0f);
    if (color.w == 0.f)
@@ -1193,8 +1151,8 @@ void Flasher::RenderDynamic()
    {
        if (m_dynamicVertexBufferRegenerate)
        {
-         UpdateMesh();
-         m_dynamicVertexBufferRegenerate = false;
+          UpdateMesh();
+          m_dynamicVertexBufferRegenerate = false;
        }
 
        pd3dDevice->SetRenderStateDepthBias(0.0f);
@@ -1246,7 +1204,7 @@ void Flasher::RenderDynamic()
 #endif
        pd3dDevice->DMDShader->SetVector(SHADER_vRes_Alpha_time, &r);
 
-       pd3dDevice->DMDShader->SetTexture(SHADER_Texture0, g_pplayer->m_pin3d.m_pd3dPrimaryDevice->m_texMan.LoadTexture(g_pplayer->m_texdmd, false));
+       pd3dDevice->DMDShader->SetTexture(SHADER_Texture0, g_pplayer->m_pin3d.m_pd3dPrimaryDevice->m_texMan.LoadTexture(g_pplayer->m_texdmd, false, true), false);
 
        pd3dDevice->DMDShader->Begin(0);
        pd3dDevice->DrawIndexedPrimitiveVB(RenderDevice::TRIANGLELIST, MY_D3DFVF_TEX, m_dynamicVertexBuffer, 0, m_numVertices, m_dynamicIndexBuffer, 0, m_numPolys * 3);
@@ -1266,36 +1224,19 @@ void Flasher::RenderDynamic()
        Texture * const pinA = m_ptable->GetImage(m_d.m_szImageA);
        Texture * const pinB = m_ptable->GetImage(m_d.m_szImageB);
 
-       bool hdrTex0;
-       if (pinA && !pinB)
-           hdrTex0 = pinA->IsHDR();
-       else if (!pinA && pinB)
-           hdrTex0 = pinB->IsHDR();
-       else if (pinA && pinB)
-           hdrTex0 = pinA->IsHDR();
-       else
-           hdrTex0 = false;
-
-       if (m_isVideoCap)
-           hdrTex0 = false;
-
-       const vec4 ab((float)m_d.m_filterAmount / 100.0f, min(max(m_d.m_modulate_vs_add, 0.00001f), 0.9999f), // avoid 0, as it disables the blend and avoid 1 as it looks not good with day->night changes
-           hdrTex0 ? 1.f : 0.f, ((pinA || m_isVideoCap) && pinB && pinB->IsHDR()) ? 1.f : 0.f);
-       pd3dDevice->flasherShader->SetVector(SHADER_amount_blend_modulate_vs_add_hdrTexture01, &ab);
-
        pd3dDevice->flasherShader->SetFlasherColorAlpha(color);
 
        vec4 flasherData(-1.f, -1.f, (float)m_d.m_filter, m_d.m_addBlend ? 1.f : 0.f);
-       float flasherMode;
        pd3dDevice->flasherShader->SetTechnique(SHADER_TECHNIQUE_basic_noLight);
 
+       float flasherMode;
        if ((pinA || m_isVideoCap) && !pinB)
        {
           flasherMode = 0.f;
           if (m_isVideoCap)
              pd3dDevice->flasherShader->SetTexture(SHADER_Texture0, g_pplayer->m_pin3d.m_pd3dPrimaryDevice->m_texMan.LoadTexture(m_videoCapTex, false));
           else
-             pd3dDevice->flasherShader->SetTexture(SHADER_Texture0, pinA, false);
+             pd3dDevice->flasherShader->SetTexture(SHADER_Texture0, pinA, false, true);
 
           if (!m_d.m_addBlend)
              flasherData.x = !m_isVideoCap ? pinA->m_alphaTestValue * (float)(1.0/255.0) : 0.f;
@@ -1305,7 +1246,7 @@ void Flasher::RenderDynamic()
        else if (!(pinA || m_isVideoCap) && pinB)
        {
           flasherMode = 0.f;
-          pd3dDevice->flasherShader->SetTexture(SHADER_Texture0, pinB, false);
+          pd3dDevice->flasherShader->SetTexture(SHADER_Texture0, pinB, false, true);
 
           if (!m_d.m_addBlend)
              flasherData.x = pinB->m_alphaTestValue * (float)(1.0/255.0);
@@ -1318,8 +1259,8 @@ void Flasher::RenderDynamic()
           if (m_isVideoCap)
              pd3dDevice->flasherShader->SetTexture(SHADER_Texture0, g_pplayer->m_pin3d.m_pd3dPrimaryDevice->m_texMan.LoadTexture(m_videoCapTex, false));
           else
-             pd3dDevice->flasherShader->SetTexture(SHADER_Texture0, pinA, false);
-          pd3dDevice->flasherShader->SetTexture(SHADER_Texture1, pinB, false);
+             pd3dDevice->flasherShader->SetTexture(SHADER_Texture0, pinA, false, true);
+          pd3dDevice->flasherShader->SetTexture(SHADER_Texture1, pinB, false, true);
 
           if (!m_d.m_addBlend)
           {
@@ -1332,7 +1273,9 @@ void Flasher::RenderDynamic()
        else
           flasherMode = 2.f;
 
-       pd3dDevice->flasherShader->SetFlasherData(flasherData, flasherMode);
+       const vec4 flasherData2((float)m_d.m_filterAmount / 100.0f, min(max(m_d.m_modulate_vs_add, 0.00001f), 0.9999f), // avoid 0, as it disables the blend and avoid 1 as it looks not good with day->night changes
+          flasherMode, 0.f);
+       pd3dDevice->flasherShader->SetFlasherData(flasherData, flasherData2);
 
        pd3dDevice->SetRenderState(RenderDevice::ZWRITEENABLE, RenderDevice::RS_FALSE);
        g_pplayer->m_pin3d.EnableAlphaBlend(m_d.m_addBlend, false, false);
