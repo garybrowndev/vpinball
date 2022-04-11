@@ -331,6 +331,7 @@ public: // TODO GB - put back to private
 
    bool BallCountChanged(std::vector<Ball *> &vball, BallHistoryRecord &headBhr);
    bool BallFrozenChanged(std::vector<Ball *> &vball, BallHistoryRecord &headBhr);
+   bool BallAllFrozen(std::vector<Ball *> &vball);
 };
 
 class Player : public CWnd

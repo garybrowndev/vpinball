@@ -145,7 +145,7 @@ void BallHistory::UnInit()
 
 void BallHistory::Add(std::vector<Ball*> &vball, U32 time_msec)
 {
-   if (!vball.empty())
+   if (!vball.empty() && !BallAllFrozen(vball))
    {
       std::size_t prevBallHistoryRecordsSize = m_BallHistoryRecordsSize;
       std::size_t prevBallHistoryRecordsHeadIndex = m_BallHistoryRecordsHeadIndex;
@@ -404,6 +404,28 @@ void BallHistory::OutputStats(Player &player)
    sprintf_s(szFoo, "CurrentControlIndex = %zu", m_CurrentControlIndex);
    player.DebugPrint(textX, textY+=textYStep, szFoo);
 
+   if (m_BallHistoryRecordsSize)
+   {
+      BallHistoryRecord &ballHistoryRecord = m_BallHistoryRecords[m_CurrentControlIndex];
+
+      for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < ballHistoryRecord.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
+      {
+         BallHistoryState &ballHistoryState = ballHistoryRecord.m_BallHistoryStates[ballHistoryStateIndex];
+
+         sprintf_s(szFoo, "  Ball %zu Pos = %.2f,%.2f,%.2f (x,y,z)", ballHistoryStateIndex, ballHistoryState.m_Pos.x, ballHistoryState.m_Pos.y, ballHistoryState.m_Pos.z);
+         player.DebugPrint(textX, textY += textYStep, szFoo);
+
+         sprintf_s(szFoo, "  Ball %zu Vel = %.2f,%.2f,%.2f (x,y,z)", ballHistoryStateIndex, ballHistoryState.m_Vel.x, ballHistoryState.m_Vel.y, ballHistoryState.m_Vel.z);
+         player.DebugPrint(textX, textY += textYStep, szFoo);
+
+         sprintf_s(szFoo, "  Ball %zu AngMom = %.2f,%.2f,%.2f (x,y,z)", ballHistoryStateIndex, ballHistoryState.m_AngMom.x, ballHistoryState.m_AngMom.y, ballHistoryState.m_AngMom.z);
+         player.DebugPrint(textX, textY += textYStep, szFoo);
+
+         sprintf_s(szFoo, "  Ball %zu Frozen = %s", ballHistoryStateIndex, ballHistoryState.m_Frozen ? "true" : "false");
+         player.DebugPrint(textX, textY += textYStep, szFoo);
+      }
+   }
+
    sprintf_s(szFoo, "Favorite Control Index = %zu", m_FavoriteControlIndex);
    player.DebugPrint(textX, textY += textYStep, szFoo);
 
@@ -443,74 +465,6 @@ void BallHistory::OutputStats(Player &player)
 
    sprintf_s(szFoo, "BallHistoryRecordsHeadIndex = %zu", m_BallHistoryRecordsHeadIndex);
    player.DebugPrint(textX, textY+=textYStep, szFoo);
-
-   /*
-   const U32 recordsOutputStatsCount = std::min(m_BallHistoryRecordsSize, 5u);
-
-   sprintf_s(szFoo, "BallHistoryRecords (%u most recent / 'head')", recordsOutputStatsCount);
-   player.DebugPrint(textX, textY+=textYStep, szFoo);
-
-   std::size_t recordsOutputIndex = m_BallHistoryRecordsHeadIndex;
-   for (U32 ballHistoryRecordOutputCount = 0; ballHistoryRecordOutputCount < recordsOutputStatsCount; ++ballHistoryRecordOutputCount)
-   {
-      BallHistoryRecord &ballHistoryRecord = m_BallHistoryRecords[recordsOutputIndex];
-
-      sprintf_s(szFoo, "Record %zu (%ums) (head - %u)", ballHistoryRecordOutputCount, ballHistoryRecord.m_Time_msec, ballHistoryRecordOutputCount);
-      player.DebugPrint(textX, textY+=textYStep, szFoo);
-
-      for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < ballHistoryRecord.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
-      {
-         BallHistoryState &ballHistoryState = ballHistoryRecord.m_BallHistoryStates[ballHistoryStateIndex];
-
-         sprintf_s(szFoo, "   Ball %zu | Pos = %.2f,%.2f,%.2f | Vel = %.2f,%.2f,%.2f | AngMom = %.2f,%.2f,%.2f | (x,y,z)",
-            ballHistoryStateIndex,
-            ballHistoryState.m_Pos.x, ballHistoryState.m_Pos.y, ballHistoryState.m_Pos.z,
-            ballHistoryState.m_Vel.x, ballHistoryState.m_Vel.y, ballHistoryState.m_Vel.z,
-            ballHistoryState.m_AngMom.x, ballHistoryState.m_AngMom.y, ballHistoryState.m_AngMom.z);
-         player.DebugPrint(textX, textY+=textYStep, szFoo);
-      }
-
-      if (recordsOutputIndex == 0)
-      {
-         recordsOutputIndex = m_BallHistoryRecords.size() - 1;
-      }
-      else
-      {
-         recordsOutputIndex--;
-      }
-   }
-
-   sprintf_s(szFoo, "BallHistoryRecords (%u least recent / 'tail')", recordsOutputStatsCount);
-   player.DebugPrint(textX, textY+=textYStep, szFoo);
-
-   recordsOutputIndex = GetTailIndex();
-
-   for (U32 ballHistoryRecordOutputCount = 0; ballHistoryRecordOutputCount < recordsOutputStatsCount; ++ballHistoryRecordOutputCount)
-   {
-      BallHistoryRecord &ballHistoryRecord = m_BallHistoryRecords[recordsOutputIndex];
-
-      sprintf_s(szFoo, "Record %zu (%ums) (tail - %u)", ballHistoryRecordOutputCount, ballHistoryRecord.m_Time_msec, ballHistoryRecordOutputCount);
-      player.DebugPrint(textX, textY+=textYStep, szFoo);
-
-      for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < ballHistoryRecord.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
-      {
-         BallHistoryState &ballHistoryState = ballHistoryRecord.m_BallHistoryStates[ballHistoryStateIndex];
-
-         sprintf_s(szFoo, "   Ball %zu | Pos = %.2f,%.2f,%.2f | Vel = %.2f,%.2f,%.2f | AngMom = %.2f,%.2f,%.2f | (x,y,z)",
-            ballHistoryStateIndex,
-            ballHistoryState.m_Pos.x, ballHistoryState.m_Pos.y, ballHistoryState.m_Pos.z,
-            ballHistoryState.m_Vel.x, ballHistoryState.m_Vel.y, ballHistoryState.m_Vel.z,
-            ballHistoryState.m_AngMom.x, ballHistoryState.m_AngMom.y, ballHistoryState.m_AngMom.z);
-         player.DebugPrint(textX, textY+=textYStep, szFoo);
-      }
-
-      recordsOutputIndex++;
-      if (recordsOutputIndex >= m_BallHistoryRecords.size())
-      {
-         recordsOutputIndex = 0;
-      }
-   }
-   */
 }
 
 void BallHistory::Update(Player &player)
@@ -555,13 +509,24 @@ bool BallHistory::BallFrozenChanged(std::vector<Ball*> &vball, BallHistoryRecord
    return false;
 }
 
+bool BallHistory::BallAllFrozen(std::vector<Ball *> &vball)
+{
+   for (std::size_t vballIndex = 0; vballIndex < vball.size(); ++vballIndex)
+   {
+      if (vball[vballIndex]->m_d.m_frozen == false)
+      {
+         return false;
+      }
+   }
+   return true;
+}
+
 void BallHistory::Process(Player &player)
 {
    U32 time_msec = msec();
    if (m_Save)
    {
-      BallHistoryRecord& headBhr = Get(m_BallHistoryRecordsHeadIndex);
-      if (!m_BallHistoryRecordsSize || BallCountChanged(player.m_vball, headBhr) || BallFrozenChanged(player.m_vball, headBhr))
+      if (!m_BallHistoryRecordsSize)
       {
          Init(player);
       }
@@ -654,6 +619,12 @@ void BallHistory::Process(Player &player)
       }
       else
       {
+         BallHistoryRecord &headBhr = Get(m_BallHistoryRecordsHeadIndex);
+         if (!m_BallHistoryRecordsSize || BallCountChanged(player.m_vball, headBhr) || BallFrozenChanged(player.m_vball, headBhr))
+         {
+            Init(player);
+         }
+
          if (m_WasControlled || m_WasRecalled)
          {
             m_WasControlled = false;
