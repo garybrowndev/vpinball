@@ -142,13 +142,13 @@ void BallHistory::Init(Player &player)
    {
       m_ControlHistoryVertexBuffer = nullptr;
       std::size_t size = m_BallHistorySizeDefault;
-      player.m_pin3d.m_pd3dPrimaryDevice->CreateVertexBuffer(size, 0, MY_D3DFVF_TEX, &m_ControlHistoryVertexBuffer);
+      VertexBuffer::CreateVertexBuffer(size, 0, MY_D3DFVF_TEX, &m_ControlHistoryVertexBuffer, PRIMARY_DEVICE);
    }
 }
 
 void BallHistory::UnInit()
 {
-   SAFE_RELEASE(m_ControlHistoryVertexBuffer);
+   SAFE_BUFFER_RELEASE(m_ControlHistoryVertexBuffer);
 }
 
 void BallHistory::Add(std::vector<Ball*> &vball, U32 time_msec)
@@ -534,7 +534,7 @@ void BallHistory::Process(Player &player)
    U32 time_msec = msec();
    if (m_Save)
    {
-      if (!m_BallHistoryRecordsSize)
+      if (!player.m_vball.size() || !m_BallHistoryRecordsSize)
       {
          Init(player);
       }
@@ -623,7 +623,7 @@ void BallHistory::Process(Player &player)
          m_ControlHistoryVertexBuffer->unlock();
 
          DWORD color = D3DCOLOR_XRGB(0x00, 0xFF, 0x00);
-         player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::POINTLIST, MY_D3DFVF_SIZE_COLOR_VERTEX, m_ControlHistoryVertexBuffer, 0, controlHistoryVertices.size());
+         player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::POINTLIST, MY_D3DFVF_SIZE_COLOR_VERTEX, m_ControlHistoryVertexBuffer, 0, controlHistoryVertices.size(), true);
       }
       else
       {
@@ -5540,12 +5540,12 @@ void Player::Render()
    // copy static buffers to back buffer and z buffer
    m_pin3d.m_pddsStatic->CopyTo(m_pin3d.m_pddsBackBuffer); // cannot be called inside BeginScene -> EndScene cycle
 
-   m_BallHistory.Process(*this);
-
    // Physics/Timer updates, done at the last moment, especially to handle key input (VP<->VPM rountrip) and animation triggers
    //if ( !cameraMode )
    if (m_minphyslooptime == 0) // (vsync) latency reduction code not active? -> Do Physics Updates here
       UpdatePhysics();
+
+   m_BallHistory.Process(*this);
 
    m_overall_frames++;
 
