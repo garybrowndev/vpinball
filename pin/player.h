@@ -299,6 +299,7 @@ public:
    void Init(Player &player);
    void UnInit();
    void Process(Player &player);
+   void UpdateAutoControl(Vertex3Ds &autoPointVertex3D, Player &player);
    void ControlNext();
    void ControlPrev();
    void ToggleControl();
@@ -315,6 +316,7 @@ public: // TODO GB - put back to private
    static const float m_BallHistoryMaxPointSize;
    static const float m_FavoritePointSize;
    static const float m_ControlVerticesDistanceMax;
+   static const std::size_t m_AutoControlVerticesMax;
 
    bool m_Save;
    bool m_Control;
@@ -332,11 +334,16 @@ public: // TODO GB - put back to private
    std::size_t m_BallHistoryRecordsSize;
    float m_MaxBallVelocityPixels;
 
-   VertexBuffer *m_ControlHistoryVertexBuffer;
+   std::vector<Vertex3Ds> m_AutoControlVertices;
 
-   void OutputStats(Player &pPlayer);
+   VertexBuffer *m_ControlHistoryVertexBuffer;
+   VertexBuffer *m_AutoControlVertexBuffer;
+
+   void DrawBallHistory(Player &player);
+   void DrawAutoControlVertices(Player &player);
    void Update(Player &player);
-   void Add(std::vector<Ball*> &vballs, U32 time_msec);
+   void OutputStats(Player &pPlayer);
+   void Add(std::vector<Ball *> &vballs, U32 time_msec);
    BallHistoryRecord& Get(std::size_t index);
    std::size_t GetTailIndex();
 
@@ -348,6 +355,7 @@ public: // TODO GB - put back to private
    bool BallCountChanged(std::vector<Ball *> &vball, BallHistoryRecord &headBhr);
    bool BallFrozenChanged(std::vector<Ball *> &vball, BallHistoryRecord &headBhr);
    bool BallAllFrozen(std::vector<Ball *> &vball);
+   bool BallInsideAutoControlVertex(std::vector<Ball *> &vball);
 };
 
 class Player : public CWnd

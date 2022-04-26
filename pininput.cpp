@@ -415,7 +415,7 @@ void PinInput::GetInputDeviceData(/*const U32 curr_time_msec*/)
 
          if ((hr == S_OK || hr == DI_BUFFEROVERFLOW) && (m_hwnd == GetForegroundWindow()))
          {
-            if (g_pplayer->m_throwBalls || g_pplayer->m_ballControl) // debug ball throw functionality
+            if (g_pplayer->m_throwBalls || g_pplayer->m_ballControl || g_pplayer->m_BallHistory.m_Control) // debug ball throw functionality
             {
                if ((mouseState.rgbButtons[0] & 0x80) && !leftMouseButtonDown && !rightMouseButtonDown && !middleMouseButtonDown)
                {
@@ -1893,6 +1893,13 @@ void PinInput::ProcessKeys(/*const U32 curr_sim_msec,*/ int curr_time_msec) // l
             ProcessThrowBalls(input);
          else if (g_pplayer->m_ballControl)
             ProcessBallControl(input);
+         else if (g_pplayer->m_BallHistory.m_Control)
+         {
+            POINT point = { mouseX, mouseY };
+            ScreenToClient(m_hwnd, &point);
+            Vertex3Ds autoPointVertex3D(g_pplayer->m_pin3d.Get3DPointFrom2D(point));
+            g_pplayer->m_BallHistory.UpdateAutoControl(autoPointVertex3D, *g_pplayer);
+         }
          else
          {
             if (input->dwOfs == 1 && m_joylflipkey==25)

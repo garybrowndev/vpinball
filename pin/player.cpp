@@ -91,7 +91,6 @@ BallHistoryRecord::BallHistoryRecord(U32 time_msec):
 {
 }
 
-
 const std::size_t BallHistory::m_BallHistorySizeDefault = 8 * 1024;
 const BallHistory::NextPreviousByType BallHistory::m_NextPreviousByDefault = BallHistory::NextPreviousByType::eDistancePixels;
 const std::size_t BallHistory::m_BallHistoryControlStepMsDefault = 250;
@@ -101,6 +100,7 @@ const float BallHistory::m_BallHistoryMinPointSize = 5.0f;
 const float BallHistory::m_BallHistoryMaxPointSize = 20.0f;
 const float BallHistory::m_FavoritePointSize = BallHistory::m_BallHistoryMaxPointSize * 1.25f;
 const float BallHistory::m_ControlVerticesDistanceMax = 2000.0f;
+const std::size_t BallHistory::m_AutoControlVerticesMax = 256;
 
 BallHistory::BallHistory() :
    m_Save(false),
@@ -114,7 +114,8 @@ BallHistory::BallHistory() :
    m_BallHistoryRecordsHeadIndex(0),
    m_BallHistoryRecordsSize(0),
    m_MaxBallVelocityPixels(0.0f),
-   m_ControlHistoryVertexBuffer(nullptr)
+   m_ControlHistoryVertexBuffer(nullptr),
+   m_AutoControlVertexBuffer(nullptr)
 {
 }
 
@@ -133,6 +134,13 @@ void BallHistory::Init(Player &player)
    m_BallHistoryControlStepMs = m_BallHistoryControlStepMsDefault;
    m_BallHistoryControlStepPixels = m_BallHistoryControlStepPixelsDefault;
 
+   // TODO GARY should be smarter here, only clear the ball history dimensions
+   // for the balls that disappeared. there can be a case where the are two balls
+   // in play, one drains, and than the other is in a drain trajectory
+   // you may want to, and it is possible with a little logic and coding
+   // to figure out which ball is new or which balls are pre-existing
+   // match up with current balls in play, clear the balls which are not there
+   // and keep the ball histories for the balls still in plays
    m_BallHistoryRecords.resize(m_BallHistorySizeDefault);
    m_BallHistoryRecordsSize = 0;
    m_BallHistoryRecordsHeadIndex = 0;
@@ -141,14 +149,20 @@ void BallHistory::Init(Player &player)
    if (m_ControlHistoryVertexBuffer == nullptr)
    {
       m_ControlHistoryVertexBuffer = nullptr;
-      std::size_t size = m_BallHistorySizeDefault;
-      VertexBuffer::CreateVertexBuffer(size, 0, MY_D3DFVF_TEX, &m_ControlHistoryVertexBuffer, PRIMARY_DEVICE);
+      VertexBuffer::CreateVertexBuffer(m_BallHistorySizeDefault, 0, MY_D3DFVF_TEX, &m_ControlHistoryVertexBuffer, PRIMARY_DEVICE);
+   }
+
+   if (m_AutoControlVertexBuffer == nullptr)
+   {
+      m_AutoControlVertexBuffer = nullptr;
+      VertexBuffer::CreateVertexBuffer(m_AutoControlVerticesMax, 0, MY_D3DFVF_TEX, &m_AutoControlVertexBuffer, PRIMARY_DEVICE);
    }
 }
 
 void BallHistory::UnInit()
 {
    SAFE_BUFFER_RELEASE(m_ControlHistoryVertexBuffer);
+   SAFE_BUFFER_RELEASE(m_AutoControlVertexBuffer);
 }
 
 void BallHistory::Add(std::vector<Ball*> &vball, U32 time_msec)
@@ -308,13 +322,6 @@ void BallHistory::ControlNext()
 
 bool BallHistory::ControlPrevMove()
 {
-   // TODO GB - "Frozen" fix - if any of the m_CurrentControlIndex BallHistory States (any of the current balls, which could be more than one)
-   // that you are about to return as the correct next value and subsequently exit the function
-   // has m_frozen == true AND there is a non-zero velocity state more forward in time, then instead set the m_CurrentControlIndex to the first
-   // ball state with the non-zero velocity that is forward in time from the "Frozen" ball state. ALSO, if the logic described before triggers,
-   // then double check to see if the m_CurrentControlIndex you are about to return is not the same as it was when you first came in, in that case
-   // go back farther before the frozen and return the m_CurrentControlIndex that is the first ball state that is NOT frozen before the last ball
-   // state that was frozen
    if (m_CurrentControlIndex == 0)
    {
       m_CurrentControlIndex = m_BallHistoryRecords.size() - 1;
@@ -434,6 +441,16 @@ void BallHistory::OutputStats(Player &player)
       }
    }
 
+   sprintf_s(szFoo, "AutoControlPoints Count = %zu", m_AutoControlVertices.size());
+   player.DebugPrint(textX, textY += textYStep, szFoo);
+
+   for (std::size_t autoControlVerticesIndex = 0; autoControlVerticesIndex < m_AutoControlVertices.size(); ++autoControlVerticesIndex)
+   {
+      Vertex3Ds &autoControlVertex = m_AutoControlVertices[autoControlVerticesIndex];
+      sprintf_s(szFoo, "  Auto Control Point #%zu %.2f,%.2f,%.2f (x,y,z)", autoControlVerticesIndex, autoControlVertex.x, autoControlVertex.y, autoControlVertex.z);
+      player.DebugPrint(textX, textY += textYStep, szFoo);
+   }
+
    sprintf_s(szFoo, "Favorite Control Index = %zu", m_FavoriteControlIndex);
    player.DebugPrint(textX, textY += textYStep, szFoo);
 
@@ -529,6 +546,142 @@ bool BallHistory::BallAllFrozen(std::vector<Ball *> &vball)
    return true;
 }
 
+bool BallHistory::BallInsideAutoControlVertex(std::vector<Ball *> &vball)
+{
+   if (vball.size())
+   {
+      for each (const Ball * ball in vball)
+      {
+         for each (const Vertex3Ds autoControlVertex in m_AutoControlVertices)
+         {
+            if (((autoControlVertex.x - vball[0]->m_d.m_radius) <= ball->m_d.m_pos.x) && (ball->m_d.m_pos.x <= (autoControlVertex.x + vball[0]->m_d.m_radius)) &&
+               ((autoControlVertex.y - vball[0]->m_d.m_radius) <= ball->m_d.m_pos.y) && (ball->m_d.m_pos.y <= (autoControlVertex.y + vball[0]->m_d.m_radius)))
+               return true;
+         }
+      }
+   }
+   return false;
+}
+
+void BallHistory::DrawBallHistory(Player &player)
+{
+   std::vector<Vertex3D_Color_Size> controlHistoryVertices;
+   std::size_t tempCurrentIndex = m_CurrentControlIndex;
+   std::size_t tailIndex = GetTailIndex();
+
+   std::size_t ballCount = m_BallHistoryRecords[m_CurrentControlIndex].m_BallHistoryStates.size();
+   std::vector<float> distancePixelsTraveled(ballCount, 0.0f);
+   bool maxDistanceTraveled = false;
+   BallHistoryRecord *lastBhr = nullptr;
+   std::vector<std::size_t> favoriteVertexIndexes;
+
+   while (tempCurrentIndex != tailIndex && !maxDistanceTraveled)
+   {
+      BallHistoryRecord &tempCurrentBhr = m_BallHistoryRecords[tempCurrentIndex];
+      for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < tempCurrentBhr.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
+      {
+         BallHistoryState &ballHistoryState = tempCurrentBhr.m_BallHistoryStates[ballHistoryStateIndex];
+
+         if (lastBhr)
+         {
+            distancePixelsTraveled[ballHistoryStateIndex] += DistancePixels(lastBhr->m_BallHistoryStates[ballHistoryStateIndex].m_Pos, ballHistoryState.m_Pos);
+         }
+
+         if (tempCurrentIndex == m_FavoriteControlIndex)
+         {
+            favoriteVertexIndexes.push_back(controlHistoryVertices.size());
+         }
+
+         Vertex3D_Color_Size vtx = {
+            ballHistoryState.m_Pos.x,
+            ballHistoryState.m_Pos.y,
+            ballHistoryState.m_Pos.z,
+            D3DCOLOR_XRGB(0x00, 0x00, 0x00),
+            ((((min(VelocityPixels(ballHistoryState.m_Vel), (m_MaxBallVelocityPixels / 4.0f))) * (m_BallHistoryMaxPointSize - m_BallHistoryMinPointSize)) / (m_MaxBallVelocityPixels / 4.0f))
+               + m_BallHistoryMinPointSize)
+               * (player.m_width / 1080.0f)
+         };
+         controlHistoryVertices.push_back(vtx);
+      }
+
+      if (tempCurrentIndex == 0)
+      {
+         tempCurrentIndex = m_BallHistoryRecords.size() - 1;
+      }
+      else
+      {
+         tempCurrentIndex--;
+      }
+
+      lastBhr = &tempCurrentBhr;
+      for each (const float &dpt in distancePixelsTraveled)
+      {
+         if (dpt > m_ControlVerticesDistanceMax)
+         {
+            maxDistanceTraveled = true;
+         }
+      }
+      std::vector<float> distancePixelsTraveled(ballCount, 0.0f);
+   }
+
+   std::size_t controlHistorySize = controlHistoryVertices.size();
+   for (std::size_t chvIndex = 0; chvIndex < controlHistoryVertices.size(); chvIndex++)
+   {
+      unsigned char red = (unsigned char)(0xFF - (chvIndex * 0xFF / controlHistorySize));
+      unsigned char blue = (unsigned char)(chvIndex * 0xFF / controlHistorySize);
+      controlHistoryVertices[chvIndex].color = D3DCOLOR_XRGB(red, 0x00, blue);
+   }
+
+   for each (std::size_t fvi in favoriteVertexIndexes)
+   {
+      controlHistoryVertices[fvi].color = D3DCOLOR_XRGB(0x00, 0xFF, 0x00);
+      controlHistoryVertices[fvi].size = m_FavoritePointSize;
+   }
+
+   void *buf;
+   m_ControlHistoryVertexBuffer->lock(0, 0, &buf, VertexBuffer::WRITEONLY);
+   memcpy(buf, controlHistoryVertices.data(), controlHistoryVertices.size() * sizeof(controlHistoryVertices[0]));
+   m_ControlHistoryVertexBuffer->unlock();
+
+   DWORD color = D3DCOLOR_XRGB(0x00, 0xFF, 0x00);
+   player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::POINTLIST, MY_D3DFVF_SIZE_COLOR_VERTEX, m_ControlHistoryVertexBuffer, 0, controlHistoryVertices.size(), true);
+}
+
+void BallHistory::DrawAutoControlVertices(Player &player)
+{
+   std::vector<Vertex3D_Color_Size> autoControlVertices;
+   for each (const Vertex3Ds &autoControlVertex in m_AutoControlVertices)
+   {
+      Vertex3D_Color_Size vtx = {
+         autoControlVertex.x,
+         autoControlVertex.y,
+         0,
+         D3DCOLOR_XRGB(0xFF, 0xFF, 0xFF),
+         player.m_vball[0]->m_d.m_radius * 2.0f
+      };
+      autoControlVertices.push_back(vtx);
+   }
+
+   void *buf;
+   m_AutoControlVertexBuffer->lock(0, 0, &buf, VertexBuffer::WRITEONLY);
+   memcpy(buf, autoControlVertices.data(), autoControlVertices.size() * sizeof(autoControlVertices[0]));
+   m_AutoControlVertexBuffer->unlock();
+
+   DWORD color = D3DCOLOR_XRGB(0x00, 0xFF, 0x00);
+   player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::POINTLIST, MY_D3DFVF_SIZE_COLOR_VERTEX, m_AutoControlVertexBuffer, 0, autoControlVertices.size(), true);
+}
+
+
+// TODO GARY
+// need a way to delay the auto control triggering
+// there can be a case where you want to let the ball go through the auto control point
+// after the trigger. Best example is multiball. With auto control triggers in the right
+// place, you will never be able to get out of multiball because the drain lanes will
+// always trigger ball control. I think it should work like this:
+// If player does not change the position and simply hits "c" again to get out of ball
+// control (after a trigger), let the ball which triggered go through the point
+// essentially, disabling auto control triggering for the specific ball that entered
+// auto control trigger
 void BallHistory::Process(Player &player)
 {
    U32 time_msec = msec();
@@ -539,91 +692,20 @@ void BallHistory::Process(Player &player)
          Init(player);
       }
 
+      if (BallInsideAutoControlVertex(player.m_vball))
+      {
+         m_Control = true;
+      }
+
       if (m_Control)
       {
          m_WasControlled = true;
 
          Update(player);
 
-         std::vector<Vertex3D_Color_Size> controlHistoryVertices;
-         std::size_t tempCurrentIndex = m_CurrentControlIndex;
-         std::size_t tailIndex = GetTailIndex();
+         DrawBallHistory(player);
 
-         std::size_t ballCount = m_BallHistoryRecords[m_CurrentControlIndex].m_BallHistoryStates.size();
-         std::vector<float> distancePixelsTraveled(ballCount, 0.0f);
-         bool maxDistanceTraveled = false;
-         BallHistoryRecord * lastBhr = nullptr;
-         std::vector<std::size_t> favoriteVertexIndexes;
-
-         while (tempCurrentIndex != tailIndex && !maxDistanceTraveled)
-         {
-            BallHistoryRecord &tempCurrentBhr = m_BallHistoryRecords[tempCurrentIndex];
-            for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < tempCurrentBhr.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
-            {
-               BallHistoryState &ballHistoryState = tempCurrentBhr.m_BallHistoryStates[ballHistoryStateIndex];
-
-               if (lastBhr)
-               {
-                  distancePixelsTraveled[ballHistoryStateIndex] += DistancePixels(lastBhr->m_BallHistoryStates[ballHistoryStateIndex].m_Pos, ballHistoryState.m_Pos);
-               }
-
-               if (tempCurrentIndex == m_FavoriteControlIndex)
-               {
-                  favoriteVertexIndexes.push_back(controlHistoryVertices.size());
-               }
-
-               Vertex3D_Color_Size vtx =
-               {
-                  ballHistoryState.m_Pos.x,
-                  ballHistoryState.m_Pos.y,
-                  ballHistoryState.m_Pos.z,
-                  D3DCOLOR_XRGB(0x00, 0x00, 0x00),
-                  ((((min(VelocityPixels(ballHistoryState.m_Vel), (m_MaxBallVelocityPixels / 4.0f))) * (m_BallHistoryMaxPointSize - m_BallHistoryMinPointSize)) / (m_MaxBallVelocityPixels / 4.0f)) + m_BallHistoryMinPointSize) * (player.m_width / 1080.f)
-               };
-               controlHistoryVertices.push_back(vtx);
-            }
-
-            if (tempCurrentIndex == 0)
-            {
-               tempCurrentIndex = m_BallHistoryRecords.size() - 1;
-            }
-            else
-            {
-               tempCurrentIndex--;
-            }
-
-            lastBhr = &tempCurrentBhr;
-            for each (const float &dpt in distancePixelsTraveled)
-            {
-               if (dpt > m_ControlVerticesDistanceMax)
-               {
-                  maxDistanceTraveled = true;
-               }
-            }
-            std::vector<float> distancePixelsTraveled(ballCount, 0.0f);
-         }
-
-         std::size_t controlHistorySize = controlHistoryVertices.size();
-         for (std::size_t chvIndex = 0; chvIndex < controlHistoryVertices.size(); chvIndex++)
-         {
-            unsigned char red = (unsigned char)(0xFF - (chvIndex * 0xFF / controlHistorySize));
-            unsigned char blue = (unsigned char)(chvIndex * 0xFF / controlHistorySize);
-            controlHistoryVertices[chvIndex].color = D3DCOLOR_XRGB(red, 0x00, blue);
-         }
-
-         for each (std::size_t fvi in favoriteVertexIndexes)
-         {
-            controlHistoryVertices[fvi].color = D3DCOLOR_XRGB(0x00, 0xFF, 0x00);
-            controlHistoryVertices[fvi].size = m_FavoritePointSize;
-         }
-
-         void *buf;
-         m_ControlHistoryVertexBuffer->lock(0, 0, &buf, VertexBuffer::WRITEONLY);
-         memcpy(buf, controlHistoryVertices.data(), controlHistoryVertices.size() * sizeof(controlHistoryVertices[0]));
-         m_ControlHistoryVertexBuffer->unlock();
-
-         DWORD color = D3DCOLOR_XRGB(0x00, 0xFF, 0x00);
-         player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::POINTLIST, MY_D3DFVF_SIZE_COLOR_VERTEX, m_ControlHistoryVertexBuffer, 0, controlHistoryVertices.size(), true);
+         DrawAutoControlVertices(player);
       }
       else
       {
@@ -658,6 +740,23 @@ void BallHistory::Process(Player &player)
 
       OutputStats(player);
    }   
+}
+
+void BallHistory::UpdateAutoControl(Vertex3Ds &autoPointVertex3D, Player &player)
+{
+   for (std::vector<Vertex3Ds>::iterator autoControlVerticesIt = m_AutoControlVertices.begin(); autoControlVerticesIt < m_AutoControlVertices.end(); autoControlVerticesIt++)
+   {
+      if (((autoControlVerticesIt->x - player.m_vball[0]->m_d.m_radius) <= autoPointVertex3D.x) && (autoPointVertex3D.x <= (autoControlVerticesIt->x + player.m_vball[0]->m_d.m_radius)) &&
+          ((autoControlVerticesIt->y - player.m_vball[0]->m_d.m_radius) <= autoPointVertex3D.y) && (autoPointVertex3D.y <= (autoControlVerticesIt->y + player.m_vball[0]->m_d.m_radius)))
+      {
+         m_AutoControlVertices.erase(autoControlVerticesIt);
+         return;
+      }
+   }
+   if (m_AutoControlVertices.size() < m_AutoControlVerticesMax)
+   {
+      m_AutoControlVertices.push_back(autoPointVertex3D);
+   }
 }
 
 #include <algorithm>
