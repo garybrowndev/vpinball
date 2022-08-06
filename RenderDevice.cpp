@@ -91,6 +91,20 @@ bool IsWindows10_1803orAbove()
 #ifdef ENABLE_SDL
 //my definition for SDL    GLint size;    GLenum type;    GLboolean normalized;    GLsizei stride;
 //D3D definition   WORD Stream;    WORD Offset;    BYTE Type;    BYTE Method;    BYTE Usage;    BYTE UsageIndex;
+
+constexpr VertexElement VertexColorSizeElement[] =
+{
+   { 3, GL_FLOAT, GL_FALSE, 0, "POSITION0" },
+   { 1, GL_FLOAT, GL_FALSE, 0, "COLOR0" },
+   { 1, GL_FLOAT, GL_FALSE, 0, "PSIZE0" },
+   { 0, 0, 0, 0, nullptr }
+   /* { 0, 0 * sizeof(float), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 },  // pos
+   { 0, 3 * sizeof(DWORD), D3DDECLTYPE_D3DCOLOR, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR, 0 }, // color
+   { 0, 4 * sizeof(DWORD), D3DDECLTYPE_FLOAT1, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_PSIZE, 0 }, // size
+   D3DDECL_END()*/
+};
+VertexDeclaration* RenderDevice::m_pVertexColorSizeDeclaration = nullptr;
+
 constexpr VertexElement VertexTexelElement[] =
 {
    { 3, GL_FLOAT, GL_FALSE, 0, "POSITION0" },
