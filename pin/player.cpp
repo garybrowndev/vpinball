@@ -340,7 +340,6 @@ bool BallHistory::ControlNextMove()
 
 void BallHistory::ControlNext()
 {
-   ResetAutoControlActive();
    if (m_CurrentControlIndex == m_BallHistoryRecordsHeadIndex)
    {
       m_CurrentControlIndex = GetTailIndex();
@@ -405,8 +404,6 @@ bool BallHistory::ControlPrevMove()
 
 void BallHistory::ControlPrev()
 {
-   ResetAutoControlActive();
-
    if (m_CurrentControlIndex == GetTailIndex())
    {
       m_CurrentControlIndex = m_BallHistoryRecordsHeadIndex;
@@ -659,14 +656,6 @@ bool BallHistory::BallInsideAutoControlVertex(std::vector<Ball *> &vball)
    return false;
 }
 
-void BallHistory::ResetAutoControlActive()
-{
-   //for (std::size_t autoControlVertexIndex = 0; autoControlVertexIndex < m_AutoControlVertices.size(); autoControlVertexIndex++)
-   //{
-   //   m_AutoControlVertices[autoControlVertexIndex].Active = true;
-   //}
-}
-
 void BallHistory::ResetBallHistoryRenderSizes()
 {
    for (std::size_t ballHistoryRecordIndex = 0; ballHistoryRecordIndex < m_BallHistoryRecords.size(); ++ballHistoryRecordIndex)
@@ -682,12 +671,19 @@ void BallHistory::ResetBallHistoryRenderSizes()
 
 void BallHistory::DrawBallHistory(Player &player)
 {
+   struct DrawBallHistoryRecord
+   {
+      float TotalDistancePixelsTraveled;
+      float TotalToRender;
+      U32 StartTimeMs;
+      U32 EndTimeMs;
+   };
+
    std::size_t tempCurrentIndex = m_CurrentControlIndex;
    std::size_t tailIndex = GetTailIndex();
 
    std::size_t ballCount = m_BallHistoryRecords[m_CurrentControlIndex].m_BallHistoryStates.size();
-   std::vector<float> totalDistancePixelsTraveled(ballCount, 0.0f);
-   std::vector<float> totalBallHistoryRecordsToRender(ballCount, 0.0f);
+   std::vector<DrawBallHistoryRecord> drawBallHistoryRecords(ballCount, { 0.0f, 0.0f, 0, 0 });
    bool allMaxDistanceTraveled = false;
    BallHistoryRecord *previousBhr = nullptr;
    //std::vector<std::size_t> favoriteVertexIndexes;
@@ -703,18 +699,24 @@ void BallHistory::DrawBallHistory(Player &player)
          BallHistoryState &ballHistoryState = tempCurrentBhr.m_BallHistoryStates[ballHistoryStateIndex];
          Ball *vball = player.m_vball[ballHistoryStateIndex];
 
+         if (tempCurrentIndex == m_CurrentControlIndex)
+         {
+            drawBallHistoryRecords[ballHistoryStateIndex].EndTimeMs = tempCurrentBhr.m_Time_msec;
+         }
+
          if (previousBhr)
          {
-            totalDistancePixelsTraveled[ballHistoryStateIndex] += DistancePixels(previousBhr->m_BallHistoryStates[ballHistoryStateIndex].m_Pos, ballHistoryState.m_Pos);
+            drawBallHistoryRecords[ballHistoryStateIndex].TotalDistancePixelsTraveled
+               += DistancePixels(previousBhr->m_BallHistoryStates[ballHistoryStateIndex].m_Pos, ballHistoryState.m_Pos);
          }
 
          float distanceToBall = DistancePixels(ballHistoryState.m_Pos, vball->m_d.m_pos);
 
-         if (distanceToBall > (vball->m_d.m_radius * 2.0f) && totalDistancePixelsTraveled[ballHistoryStateIndex] < m_ControlVerticesDistanceMax)
+         if (distanceToBall > (vball->m_d.m_radius * 2.0f) && drawBallHistoryRecords[ballHistoryStateIndex].TotalDistancePixelsTraveled < m_ControlVerticesDistanceMax)
          {
             float vballRadius = vball->m_d.m_radius;
             ballHistoryState.m_Size = (((VelocityPixels(ballHistoryState.m_Vel) - 0) * (vballRadius * 1.75f - vballRadius * 0.25f)) / (m_MaxBallVelocityPixels - 0)) + vballRadius * 0.25f;
-            totalBallHistoryRecordsToRender[ballHistoryStateIndex]++;
+            drawBallHistoryRecords[ballHistoryStateIndex].TotalToRender++;
          }
       }
 
@@ -729,19 +731,24 @@ void BallHistory::DrawBallHistory(Player &player)
 
       previousBhr = &tempCurrentBhr;
       allMaxDistanceTraveled = true;
-      for each (const float &tdpt in totalDistancePixelsTraveled)
+      for each (const DrawBallHistoryRecord &dbhr in drawBallHistoryRecords)
       {
-         if (tdpt <= m_ControlVerticesDistanceMax)
+         if (dbhr.TotalDistancePixelsTraveled <= m_ControlVerticesDistanceMax)
          {
             allMaxDistanceTraveled = false;
          }
       }
    }
 
+   BallHistoryRecord &tempCurrentBhr = m_BallHistoryRecords[tempCurrentIndex];
+   for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < tempCurrentBhr.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
+   {
+      drawBallHistoryRecords[ballHistoryStateIndex].StartTimeMs = tempCurrentBhr.m_Time_msec;
+   }
+
    // fill in color and texture
    tempCurrentIndex = m_CurrentControlIndex;
 
-   std::vector<std::size_t> ballHistoryRecordCounters(ballCount, 0);
    while (tempCurrentIndex != tailIndex)
    {
       BallHistoryRecord &tempCurrentBhr = m_BallHistoryRecords[tempCurrentIndex];
@@ -756,12 +763,11 @@ void BallHistory::DrawBallHistory(Player &player)
             }
             else
             {
-               // TODO GARY instead of using the index of the ball to calculate the coloring,
-               // use the time in milliseconds, this should give a better representation of
-               // color to backwards in time and help with how the size of the ball (velocity)
-               // is represented
-               unsigned char red = (unsigned char)(0xFF - (ballHistoryRecordCounters[ballHistoryStateIndex] * 0xFF / totalBallHistoryRecordsToRender[ballHistoryStateIndex]));
-               unsigned char blue = (unsigned char)(ballHistoryRecordCounters[ballHistoryStateIndex] * 0xFF / totalBallHistoryRecordsToRender[ballHistoryStateIndex]);
+               unsigned char red = (unsigned char)(((tempCurrentBhr.m_Time_msec - drawBallHistoryRecords[ballHistoryStateIndex].StartTimeMs) * 0xFF)
+                  / (drawBallHistoryRecords[ballHistoryStateIndex].EndTimeMs - drawBallHistoryRecords[ballHistoryStateIndex].StartTimeMs));
+               unsigned char blue = (unsigned char)(0xFF
+                  - ((tempCurrentBhr.m_Time_msec - drawBallHistoryRecords[ballHistoryStateIndex].StartTimeMs) * 0xFF)
+                     / (drawBallHistoryRecords[ballHistoryStateIndex].EndTimeMs - drawBallHistoryRecords[ballHistoryStateIndex].StartTimeMs));
 
                RGBQUAD color = { blue, 0x00, red, 0 };
                U32 colorKey = *(U32 *)&color;
@@ -777,8 +783,6 @@ void BallHistory::DrawBallHistory(Player &player)
                {
                   ballHistoryState.m_Texture = existingTexture->second;
                }
-
-               ballHistoryRecordCounters[ballHistoryStateIndex]++;
             }
          }
       }

@@ -370,7 +370,6 @@ public: // TODO GB - put back to private
    bool BallFrozenChanged(std::vector<Ball *> &vball, BallHistoryRecord &headBhr);
    bool BallAllFrozen(std::vector<Ball *> &vball);
    bool BallInsideAutoControlVertex(std::vector<Ball *> &vball);
-   void ResetAutoControlActive();
 };
 
 class Player : public CWnd
