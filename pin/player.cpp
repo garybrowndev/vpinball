@@ -70,6 +70,8 @@ public:
 };*/
 #endif
 
+#include "freeimage.h"
+
 BallHistoryState::BallHistoryState()
 {
    m_Pos = { 0.0f, 0.0f, 0.0f };
@@ -79,6 +81,8 @@ BallHistoryState::BallHistoryState()
    ZeroMemory(&m_Orientation, sizeof(m_Orientation));
    ZeroMemory(&m_OldPos, sizeof(m_OldPos));
    m_RingCounter_OldPos = 0;
+   m_Size = 0.0f;
+   m_Texture = nullptr;
 }
 
 BallHistoryRecord::BallHistoryRecord():
@@ -114,8 +118,7 @@ BallHistory::BallHistory() :
    m_BallHistoryRecordsHeadIndex(0),
    m_BallHistoryRecordsSize(0),
    m_MaxBallVelocityPixels(0.0f),
-   m_ControlHistoryVertexBuffer(nullptr),
-   m_AutoControlVertexBuffer(nullptr)
+   m_AutoControlBallTexture(nullptr)
 {
 }
 
@@ -141,28 +144,84 @@ void BallHistory::Init(Player &player)
    // to figure out which ball is new or which balls are pre-existing
    // match up with current balls in play, clear the balls which are not there
    // and keep the ball histories for the balls still in plays
+   m_BallHistoryRecordIds.clear();
+   for (std::size_t vballIndex = 0; vballIndex < player.m_vball.size(); ++vballIndex)
+   {
+      m_BallHistoryRecordIds.push_back(player.m_vball[vballIndex]);
+   }
    m_BallHistoryRecords.resize(m_BallHistorySizeDefault);
    m_BallHistoryRecordsSize = 0;
    m_BallHistoryRecordsHeadIndex = 0;
    m_MaxBallVelocityPixels = 0.0f;
 
-   if (m_ControlHistoryVertexBuffer == nullptr)
+   if (!m_AutoControlBallTexture)
    {
-      m_ControlHistoryVertexBuffer = nullptr;
-      VertexBuffer::CreateVertexBuffer(m_BallHistorySizeDefault, 0, MY_D3DFVF_TEX, &m_ControlHistoryVertexBuffer, PRIMARY_DEVICE);
+      RGBQUAD color = { 0, 0, 0, 0 };
+      FIBITMAP *autoControlBallFib = FreeImage_AllocateEx(1, 1, 8, &color);
+      BaseTexture *autoControlBallTex = BaseTexture::CreateFromFreeImage(autoControlBallFib, false);
+      m_AutoControlBallTexture = new Texture(autoControlBallTex);
+   }
+}
+
+void BallHistory::InitBallLost(Player &player)
+{
+   for (std::size_t ballHistoryRecordIndex = 0; ballHistoryRecordIndex < m_BallHistoryRecordIds.size();)
+   {
+      const Ball *pball = m_BallHistoryRecordIds[ballHistoryRecordIndex];
+
+      std::size_t vballIndex = 0;
+      for (; vballIndex < player.m_vball.size(); ++vballIndex)
+      {
+         if (player.m_vball[vballIndex] == pball)
+         {
+            break;
+         }
+      }
+
+      if (vballIndex >= player.m_vball.size())
+      {
+         std::size_t tempCurrentIndex = m_CurrentControlIndex;
+         std::size_t tailIndex = GetTailIndex();
+         while (tempCurrentIndex != tailIndex)
+         {
+            BallHistoryRecord &currentBhr = m_BallHistoryRecords[tempCurrentIndex];
+            currentBhr.m_BallHistoryStates.erase(currentBhr.m_BallHistoryStates.begin() + ballHistoryRecordIndex);
+
+            if (tempCurrentIndex == 0)
+            {
+               tempCurrentIndex = m_BallHistoryRecords.size() - 1;
+            }
+            else
+            {
+               tempCurrentIndex--;
+            }
+         }
+
+         BallHistoryRecord &currentBhr = m_BallHistoryRecords[tempCurrentIndex];
+         currentBhr.m_BallHistoryStates.erase(currentBhr.m_BallHistoryStates.begin() + ballHistoryRecordIndex);
+
+         m_BallHistoryRecordIds.erase(m_BallHistoryRecordIds.begin() + ballHistoryRecordIndex);
+      }
+      else
+      {
+         ballHistoryRecordIndex++;
+      }
    }
 
-   if (m_AutoControlVertexBuffer == nullptr)
+   m_BallHistoryRecordIds.clear();
+   for (std::size_t vballIndex = 0; vballIndex < player.m_vball.size(); ++vballIndex)
    {
-      m_AutoControlVertexBuffer = nullptr;
-      VertexBuffer::CreateVertexBuffer(m_AutoControlVerticesMax, 0, MY_D3DFVF_TEX, &m_AutoControlVertexBuffer, PRIMARY_DEVICE);
+      m_BallHistoryRecordIds.push_back(player.m_vball[vballIndex]);
    }
 }
 
 void BallHistory::UnInit()
 {
-   SAFE_BUFFER_RELEASE(m_ControlHistoryVertexBuffer);
-   SAFE_BUFFER_RELEASE(m_AutoControlVertexBuffer);
+   delete m_AutoControlBallTexture;
+   for each (std::pair<U32, Texture *> const &controlHistoryBallTexture in m_ControlHistoryBallTextures)
+   {
+      delete controlHistoryBallTexture.second;
+   }
 }
 
 void BallHistory::Add(std::vector<Ball*> &vball, U32 time_msec)
@@ -253,9 +312,14 @@ std::size_t BallHistory::GetTailIndex()
    return tailIndex;
 }
 
-float BallHistory::DistancePixels(Vertex3Ds &pos1, Vertex3Ds &pos2)
+float BallHistory::DistancePixels(const Vertex3Ds &pos1, const Vertex3Ds &pos2)
 {
    return sqrtf(powf((pos1.x - pos2.x), 2) + powf((pos1.y - pos2.y), 2) + powf((pos1.z - pos2.z), 2));
+}
+
+float BallHistory::DistancePixelsXY(const Vertex3Ds &pos1, const Vertex3Ds &pos2)
+{
+   return sqrtf(powf((pos1.x - pos2.x), 2) + powf((pos1.y - pos2.y), 2));
 }
 
 float BallHistory::VelocityPixels(Vertex3Ds &vel)
@@ -276,6 +340,7 @@ bool BallHistory::ControlNextMove()
 
 void BallHistory::ControlNext()
 {
+   ResetAutoControlActive();
    if (m_CurrentControlIndex == m_BallHistoryRecordsHeadIndex)
    {
       m_CurrentControlIndex = GetTailIndex();
@@ -340,6 +405,8 @@ bool BallHistory::ControlPrevMove()
 
 void BallHistory::ControlPrev()
 {
+   ResetAutoControlActive();
+
    if (m_CurrentControlIndex == GetTailIndex())
    {
       m_CurrentControlIndex = m_BallHistoryRecordsHeadIndex;
@@ -384,6 +451,11 @@ void BallHistory::ControlPrev()
    }
 }
 
+bool BallHistory::IsControlled()
+{
+   return m_Control;
+}
+
 void BallHistory::ToggleControl()
 {
    m_Control = !m_Control;
@@ -396,6 +468,7 @@ void BallHistory::ToggleFavorite()
 
 void BallHistory::RecallFavorite()
 {
+   //ToggleControl() ??
    m_CurrentControlIndex = m_FavoriteControlIndex;
    m_WasRecalled = true;
 }
@@ -446,8 +519,8 @@ void BallHistory::OutputStats(Player &player)
 
    for (std::size_t autoControlVerticesIndex = 0; autoControlVerticesIndex < m_AutoControlVertices.size(); ++autoControlVerticesIndex)
    {
-      Vertex3Ds &autoControlVertex = m_AutoControlVertices[autoControlVerticesIndex];
-      sprintf_s(szFoo, "  Auto Control Point #%zu %.2f,%.2f,%.2f (x,y,z)", autoControlVerticesIndex, autoControlVertex.x, autoControlVertex.y, autoControlVertex.z);
+      AutoControlVertex &autoControlVertex = m_AutoControlVertices[autoControlVerticesIndex];
+      sprintf_s(szFoo, "  Auto Control Point #%zu %.2f,%.2f,%.2f,%s (x,y,z,active)", autoControlVerticesIndex, autoControlVertex.m_Pos.x, autoControlVertex.m_Pos.y, autoControlVertex.m_Pos.z, autoControlVertex.Active ? "true" : "false");
       player.DebugPrint(textX, textY += textYStep, szFoo);
    }
 
@@ -457,7 +530,7 @@ void BallHistory::OutputStats(Player &player)
    sprintf_s(szFoo, "BallHistoryRecords Size = %zu", m_BallHistoryRecords.size());
    player.DebugPrint(textX, textY+=textYStep, szFoo);
 
-   sprintf_s(szFoo, "Ball Count = %zu", m_BallHistoryRecordsSize ? m_BallHistoryRecords[0].m_BallHistoryStates.size() : 0u);
+   sprintf_s(szFoo, "Ball Count = %zu", m_BallHistoryRecordsSize ? m_BallHistoryRecords[m_CurrentControlIndex].m_BallHistoryStates.size() : 0u);
    player.DebugPrint(textX, textY += textYStep, szFoo);
 
    sprintf_s(szFoo, "MaxBallVelocityPixels = %.2f", m_MaxBallVelocityPixels);
@@ -515,9 +588,9 @@ void BallHistory::Update(Player &player)
    }
 }
 
-bool BallHistory::BallCountChanged(std::vector<Ball*> &vball, BallHistoryRecord &headBhr)
+int BallHistory::BallCountChange(std::vector<Ball*> &vball, BallHistoryRecord &headBhr)
 {
-   return vball.size() != headBhr.m_BallHistoryStates.size();
+   return vball.size() - headBhr.m_BallHistoryStates.size();
 }
 
 bool BallHistory::BallFrozenChanged(std::vector<Ball*> &vball, BallHistoryRecord &headBhr)
@@ -550,17 +623,61 @@ bool BallHistory::BallInsideAutoControlVertex(std::vector<Ball *> &vball)
 {
    if (vball.size())
    {
-      for each (const Ball * ball in vball)
+      for each (const Ball *ball in vball)
       {
-         for each (const Vertex3Ds autoControlVertex in m_AutoControlVertices)
+         for (std::size_t autoControlVertexIndex = 0; autoControlVertexIndex < m_AutoControlVertices.size(); autoControlVertexIndex++)
          {
-            if (((autoControlVertex.x - vball[0]->m_d.m_radius) <= ball->m_d.m_pos.x) && (ball->m_d.m_pos.x <= (autoControlVertex.x + vball[0]->m_d.m_radius)) &&
-               ((autoControlVertex.y - vball[0]->m_d.m_radius) <= ball->m_d.m_pos.y) && (ball->m_d.m_pos.y <= (autoControlVertex.y + vball[0]->m_d.m_radius)))
-               return true;
+            AutoControlVertex &autoControlVertex = m_AutoControlVertices[autoControlVertexIndex];
+            if (autoControlVertex.Active)
+            {
+               if (DistancePixelsXY(autoControlVertex.m_Pos, ball->m_d.m_pos) < (ball->m_d.m_radius * 1.5f))
+               {
+                  autoControlVertex.Active = false;
+                  return true;
+               }
+            }
+         }
+      }
+
+      for (std::size_t autoControlVertexIndex = 0; autoControlVertexIndex < m_AutoControlVertices.size(); autoControlVertexIndex++)
+      {
+         AutoControlVertex &autoControlVertex = m_AutoControlVertices[autoControlVertexIndex];
+         if (!autoControlVertex.Active)
+         {
+            autoControlVertex.Active = true;
+            for each (const Ball *ball in vball)
+            {
+               if (DistancePixelsXY(autoControlVertex.m_Pos, ball->m_d.m_pos) < (ball->m_d.m_radius * 3.0f))
+               {
+                  autoControlVertex.Active = false;
+                  break;
+               }
+            }
          }
       }
    }
    return false;
+}
+
+void BallHistory::ResetAutoControlActive()
+{
+   //for (std::size_t autoControlVertexIndex = 0; autoControlVertexIndex < m_AutoControlVertices.size(); autoControlVertexIndex++)
+   //{
+   //   m_AutoControlVertices[autoControlVertexIndex].Active = true;
+   //}
+}
+
+void BallHistory::ResetBallHistoryRenderSizes()
+{
+   for (std::size_t ballHistoryRecordIndex = 0; ballHistoryRecordIndex < m_BallHistoryRecords.size(); ++ballHistoryRecordIndex)
+   {
+      BallHistoryRecord &ballHistoryRecord = m_BallHistoryRecords[ballHistoryRecordIndex];
+      for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < ballHistoryRecord.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
+      {
+         BallHistoryState &ballHistoryState = ballHistoryRecord.m_BallHistoryStates[ballHistoryStateIndex];
+         ballHistoryState.m_Size = 0.0f;
+      }
+   }
 }
 
 void BallHistory::DrawBallHistory(Player &player)
@@ -570,38 +687,36 @@ void BallHistory::DrawBallHistory(Player &player)
    std::size_t tailIndex = GetTailIndex();
 
    std::size_t ballCount = m_BallHistoryRecords[m_CurrentControlIndex].m_BallHistoryStates.size();
-   std::vector<float> distancePixelsTraveled(ballCount, 0.0f);
-   bool maxDistanceTraveled = false;
-   BallHistoryRecord *lastBhr = nullptr;
-   std::vector<std::size_t> favoriteVertexIndexes;
+   std::vector<float> totalDistancePixelsTraveled(ballCount, 0.0f);
+   std::vector<float> totalBallHistoryRecordsToRender(ballCount, 0.0f);
+   bool allMaxDistanceTraveled = false;
+   BallHistoryRecord *previousBhr = nullptr;
+   //std::vector<std::size_t> favoriteVertexIndexes;
 
-   while (tempCurrentIndex != tailIndex && !maxDistanceTraveled)
+   ResetBallHistoryRenderSizes();
+
+   // get total of ball history records to draw and fill in size
+   while (tempCurrentIndex != tailIndex && !allMaxDistanceTraveled)
    {
       BallHistoryRecord &tempCurrentBhr = m_BallHistoryRecords[tempCurrentIndex];
       for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < tempCurrentBhr.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
       {
          BallHistoryState &ballHistoryState = tempCurrentBhr.m_BallHistoryStates[ballHistoryStateIndex];
+         Ball *vball = player.m_vball[ballHistoryStateIndex];
 
-         if (lastBhr)
+         if (previousBhr)
          {
-            distancePixelsTraveled[ballHistoryStateIndex] += DistancePixels(lastBhr->m_BallHistoryStates[ballHistoryStateIndex].m_Pos, ballHistoryState.m_Pos);
+            totalDistancePixelsTraveled[ballHistoryStateIndex] += DistancePixels(previousBhr->m_BallHistoryStates[ballHistoryStateIndex].m_Pos, ballHistoryState.m_Pos);
          }
 
-         if (tempCurrentIndex == m_FavoriteControlIndex)
-         {
-            favoriteVertexIndexes.push_back(controlHistoryVertices.size());
-         }
+         float distanceToBall = DistancePixels(ballHistoryState.m_Pos, vball->m_d.m_pos);
 
-         Vertex3D_Color_Size vtx = {
-            ballHistoryState.m_Pos.x,
-            ballHistoryState.m_Pos.y,
-            ballHistoryState.m_Pos.z,
-            D3DCOLOR_XRGB(0x00, 0x00, 0x00),
-            ((((min(VelocityPixels(ballHistoryState.m_Vel), (m_MaxBallVelocityPixels / 4.0f))) * (m_BallHistoryMaxPointSize - m_BallHistoryMinPointSize)) / (m_MaxBallVelocityPixels / 4.0f))
-               + m_BallHistoryMinPointSize)
-               * (player.m_width / 1080.0f)
-         };
-         controlHistoryVertices.push_back(vtx);
+         if (distanceToBall > (vball->m_d.m_radius * 2.0f) && totalDistancePixelsTraveled[ballHistoryStateIndex] < m_ControlVerticesDistanceMax)
+         {
+            float vballRadius = vball->m_d.m_radius;
+            ballHistoryState.m_Size = (((VelocityPixels(ballHistoryState.m_Vel) - 0) * (vballRadius * 1.75f - vballRadius * 0.25f)) / (m_MaxBallVelocityPixels - 0)) + vballRadius * 0.25f;
+            totalBallHistoryRecordsToRender[ballHistoryStateIndex]++;
+         }
       }
 
       if (tempCurrentIndex == 0)
@@ -613,75 +728,99 @@ void BallHistory::DrawBallHistory(Player &player)
          tempCurrentIndex--;
       }
 
-      lastBhr = &tempCurrentBhr;
-      for each (const float &dpt in distancePixelsTraveled)
+      previousBhr = &tempCurrentBhr;
+      allMaxDistanceTraveled = true;
+      for each (const float &tdpt in totalDistancePixelsTraveled)
       {
-         if (dpt > m_ControlVerticesDistanceMax)
+         if (tdpt <= m_ControlVerticesDistanceMax)
          {
-            maxDistanceTraveled = true;
+            allMaxDistanceTraveled = false;
          }
       }
-      std::vector<float> distancePixelsTraveled(ballCount, 0.0f);
    }
 
-   std::size_t controlHistorySize = controlHistoryVertices.size();
-   for (std::size_t chvIndex = 0; chvIndex < controlHistoryVertices.size(); chvIndex++)
+   // fill in color and texture
+   tempCurrentIndex = m_CurrentControlIndex;
+
+   std::vector<std::size_t> ballHistoryRecordCounters(ballCount, 0);
+   while (tempCurrentIndex != tailIndex)
    {
-      unsigned char red = (unsigned char)(0xFF - (chvIndex * 0xFF / controlHistorySize));
-      unsigned char blue = (unsigned char)(chvIndex * 0xFF / controlHistorySize);
-      controlHistoryVertices[chvIndex].color = D3DCOLOR_XRGB(red, 0x00, blue);
+      BallHistoryRecord &tempCurrentBhr = m_BallHistoryRecords[tempCurrentIndex];
+      for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < tempCurrentBhr.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
+      {
+         BallHistoryState &ballHistoryState = tempCurrentBhr.m_BallHistoryStates[ballHistoryStateIndex];
+         if (ballHistoryState.m_Size > 0.0f)
+         {
+            if (tempCurrentIndex == m_CurrentControlIndex)
+            {
+               ballHistoryState.m_Texture = player.m_ballImage;
+            }
+            else
+            {
+               // TODO GARY instead of using the index of the ball to calculate the coloring,
+               // use the time in milliseconds, this should give a better representation of
+               // color to backwards in time and help with how the size of the ball (velocity)
+               // is represented
+               unsigned char red = (unsigned char)(0xFF - (ballHistoryRecordCounters[ballHistoryStateIndex] * 0xFF / totalBallHistoryRecordsToRender[ballHistoryStateIndex]));
+               unsigned char blue = (unsigned char)(ballHistoryRecordCounters[ballHistoryStateIndex] * 0xFF / totalBallHistoryRecordsToRender[ballHistoryStateIndex]);
+
+               RGBQUAD color = { blue, 0x00, red, 0 };
+               U32 colorKey = *(U32 *)&color;
+               std::map<U32, Texture *>::iterator existingTexture = m_ControlHistoryBallTextures.find(colorKey);
+               if (existingTexture == m_ControlHistoryBallTextures.end())
+               {
+                  FIBITMAP *tempFib = FreeImage_AllocateEx(1, 1, 8, &color);
+                  BaseTexture *tempTex = BaseTexture::CreateFromFreeImage(tempFib, false);
+                  ballHistoryState.m_Texture = new Texture(tempTex);
+                  m_ControlHistoryBallTextures.emplace(colorKey, ballHistoryState.m_Texture);
+               }
+               else
+               {
+                  ballHistoryState.m_Texture = existingTexture->second;
+               }
+
+               ballHistoryRecordCounters[ballHistoryStateIndex]++;
+            }
+         }
+      }
+
+
+      if (tempCurrentIndex == 0)
+      {
+         tempCurrentIndex = m_BallHistoryRecords.size() - 1;
+      }
+      else
+      {
+         tempCurrentIndex--;
+      }
    }
 
-   for each (std::size_t fvi in favoriteVertexIndexes)
+   // draw the fake balls
+   for (std::size_t ballHistoryRecordIndex = 0; ballHistoryRecordIndex < m_BallHistoryRecords.size(); ++ballHistoryRecordIndex)
    {
-      controlHistoryVertices[fvi].color = D3DCOLOR_XRGB(0x00, 0xFF, 0x00);
-      controlHistoryVertices[fvi].size = m_FavoritePointSize;
+      BallHistoryRecord &ballHistoryRecord = m_BallHistoryRecords[ballHistoryRecordIndex];
+      for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < ballHistoryRecord.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
+      {
+         BallHistoryState &ballHistoryState = ballHistoryRecord.m_BallHistoryStates[ballHistoryStateIndex];
+         if (ballHistoryState.m_Size > 0.0f)
+         {
+            player.DrawFakeBall(ballHistoryState.m_Pos, ballHistoryState.m_Orientation, ballHistoryState.m_Size, ballHistoryState.m_Frozen, ballHistoryState.m_Texture, false);
+         }
+      }
    }
-
-   void *buf;
-   m_ControlHistoryVertexBuffer->lock(0, 0, &buf, VertexBuffer::WRITEONLY);
-   memcpy(buf, controlHistoryVertices.data(), controlHistoryVertices.size() * sizeof(controlHistoryVertices[0]));
-   m_ControlHistoryVertexBuffer->unlock();
-
-   DWORD color = D3DCOLOR_XRGB(0x00, 0xFF, 0x00);
-   player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::POINTLIST, MY_D3DFVF_SIZE_COLOR_VERTEX, m_ControlHistoryVertexBuffer, 0, controlHistoryVertices.size(), true);
 }
 
 void BallHistory::DrawAutoControlVertices(Player &player)
 {
-   std::vector<Vertex3D_Color_Size> autoControlVertices;
-   for each (const Vertex3Ds &autoControlVertex in m_AutoControlVertices)
+   if (Ball *pball = player.m_vball[0])
    {
-      Vertex3D_Color_Size vtx = {
-         autoControlVertex.x,
-         autoControlVertex.y,
-         0,
-         D3DCOLOR_XRGB(0xFF, 0xFF, 0xFF),
-         player.m_vball[0]->m_d.m_radius * 2.0f
-      };
-      autoControlVertices.push_back(vtx);
+      for each (const AutoControlVertex &autoControlVertex in m_AutoControlVertices)
+      {
+         player.DrawFakeBall(autoControlVertex.m_Pos, pball->m_orientation, pball->m_d.m_radius, false, m_AutoControlBallTexture, false);
+      }
    }
-
-   void *buf;
-   m_AutoControlVertexBuffer->lock(0, 0, &buf, VertexBuffer::WRITEONLY);
-   memcpy(buf, autoControlVertices.data(), autoControlVertices.size() * sizeof(autoControlVertices[0]));
-   m_AutoControlVertexBuffer->unlock();
-
-   DWORD color = D3DCOLOR_XRGB(0x00, 0xFF, 0x00);
-   player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::POINTLIST, MY_D3DFVF_SIZE_COLOR_VERTEX, m_AutoControlVertexBuffer, 0, autoControlVertices.size(), true);
 }
 
-
-// TODO GARY
-// need a way to delay the auto control triggering
-// there can be a case where you want to let the ball go through the auto control point
-// after the trigger. Best example is multiball. With auto control triggers in the right
-// place, you will never be able to get out of multiball because the drain lanes will
-// always trigger ball control. I think it should work like this:
-// If player does not change the position and simply hits "c" again to get out of ball
-// control (after a trigger), let the ball which triggered go through the point
-// essentially, disabling auto control triggering for the specific ball that entered
-// auto control trigger
 void BallHistory::Process(Player &player)
 {
    U32 time_msec = msec();
@@ -692,7 +831,7 @@ void BallHistory::Process(Player &player)
          Init(player);
       }
 
-      if (BallInsideAutoControlVertex(player.m_vball))
+      if (!m_Control && BallInsideAutoControlVertex(player.m_vball))
       {
          m_Control = true;
       }
@@ -710,10 +849,15 @@ void BallHistory::Process(Player &player)
       else
       {
          BallHistoryRecord &headBhr = Get(m_BallHistoryRecordsHeadIndex);
-         if (!m_BallHistoryRecordsSize || BallCountChanged(player.m_vball, headBhr) || BallFrozenChanged(player.m_vball, headBhr))
+         if (!m_BallHistoryRecordsSize || BallCountChange(player.m_vball, headBhr) > 0 || BallFrozenChanged(player.m_vball, headBhr))
          {
             Init(player);
          }
+         else if (BallCountChange(player.m_vball, headBhr) < 0)
+         {
+            InitBallLost(player);
+         }
+
 
          if (m_WasControlled || m_WasRecalled)
          {
@@ -744,10 +888,9 @@ void BallHistory::Process(Player &player)
 
 void BallHistory::UpdateAutoControl(Vertex3Ds &autoPointVertex3D, Player &player)
 {
-   for (std::vector<Vertex3Ds>::iterator autoControlVerticesIt = m_AutoControlVertices.begin(); autoControlVerticesIt < m_AutoControlVertices.end(); autoControlVerticesIt++)
+   for (std::vector<AutoControlVertex>::iterator autoControlVerticesIt = m_AutoControlVertices.begin(); autoControlVerticesIt < m_AutoControlVertices.end(); autoControlVerticesIt++)
    {
-      if (((autoControlVerticesIt->x - player.m_vball[0]->m_d.m_radius) <= autoPointVertex3D.x) && (autoPointVertex3D.x <= (autoControlVerticesIt->x + player.m_vball[0]->m_d.m_radius)) &&
-          ((autoControlVerticesIt->y - player.m_vball[0]->m_d.m_radius) <= autoPointVertex3D.y) && (autoPointVertex3D.y <= (autoControlVerticesIt->y + player.m_vball[0]->m_d.m_radius)))
+      if (DistancePixels(autoControlVerticesIt->m_Pos, autoPointVertex3D) < player.m_vball[0]->m_d.m_radius)
       {
          m_AutoControlVertices.erase(autoControlVerticesIt);
          return;
@@ -755,7 +898,7 @@ void BallHistory::UpdateAutoControl(Vertex3Ds &autoPointVertex3D, Player &player
    }
    if (m_AutoControlVertices.size() < m_AutoControlVerticesMax)
    {
-      m_AutoControlVertices.push_back(autoPointVertex3D);
+      m_AutoControlVertices.push_back({ autoPointVertex3D, true });
    }
 }
 
@@ -5966,11 +6109,11 @@ void search_for_nearest(const Ball * const pball, const vector<Light*> &lights, 
    }
 }
 
-void Player::GetBallAspectRatio(const Ball * const pball, Vertex2D &stretch, const float zHeight)
+void Player::GetBallAspectRatio(const Vertex3Ds &pos, float radius, Vertex2D &stretch, const float zHeight)
 {
    // always use lowest detail level for fastest update
-   Vertex3Ds rgvIn[(basicBallLoNumVertices+1) / 2];
-   Vertex2D rgvOut[(basicBallLoNumVertices+1) / 2];
+   Vertex3Ds rgvIn[(basicBallLoNumVertices + 1) / 2];
+   Vertex2D rgvOut[(basicBallLoNumVertices + 1) / 2];
 
    //     rgvIn[0].x = pball->m_pos.x;                    rgvIn[0].y = pball->m_pos.y+pball->m_radius;    rgvIn[0].z = zHeight;
    //     rgvIn[1].x = pball->m_pos.x + pball->m_radius;  rgvIn[1].y = pball->m_pos.y;                    rgvIn[1].z = zHeight;
@@ -5978,12 +6121,12 @@ void Player::GetBallAspectRatio(const Ball * const pball, Vertex2D &stretch, con
    //     rgvIn[3].x = pball->m_pos.x - pball->m_radius;  rgvIn[3].y = pball->m_pos.y;                    rgvIn[3].z = zHeight;
    //     rgvIn[4].x = pball->m_pos.x;                    rgvIn[4].y = pball->m_pos.y;                    rgvIn[4].z = zHeight + pball->m_radius;
    //     rgvIn[5].x = pball->m_pos.x;                    rgvIn[5].y = pball->m_pos.y;                    rgvIn[5].z = zHeight - pball->m_radius;
-   
+
    for (unsigned int i = 0, t = 0; i < basicBallLoNumVertices; i += 2, t++)
    {
-      rgvIn[t].x = basicBallLo[i].x*pball->m_d.m_radius + pball->m_d.m_pos.x;
-      rgvIn[t].y = basicBallLo[i].y*pball->m_d.m_radius + pball->m_d.m_pos.y;
-      rgvIn[t].z = basicBallLo[i].z*pball->m_d.m_radius + zHeight;
+      rgvIn[t].x = basicBallLo[i].x * radius + pos.x;
+      rgvIn[t].y = basicBallLo[i].y * radius + pos.y;
+      rgvIn[t].z = basicBallLo[i].z * radius + zHeight;
    }
    
    m_pin3d.m_proj.TransformVertices(rgvIn, nullptr, basicBallLoNumVertices / 2, rgvOut);
@@ -6059,7 +6202,9 @@ void Player::DrawBalls()
 
    for (size_t i = 0; i < m_vball.size(); i++)
    {
-      Ball * const pball = m_vball[i];
+      static bool doRadiusChange = true;
+
+      Ball *const pball = m_vball[i];
 
       if (!pball->m_visible)
          continue;
@@ -6162,7 +6307,7 @@ void Player::DrawBalls()
       Vertex2D stretch;
       if (m_antiStretchBall && m_ptable->m_BG_rotation[m_ptable->m_BG_current_set] != 0.0f)
          //const vec4 bs(m_BallStretchX/* +stretch.x*/, m_BallStretchY - stretch.y, inv_tablewidth, inv_tableheight);
-         GetBallAspectRatio(pball, stretch, zheight);
+         GetBallAspectRatio(pball->m_d.m_pos, pball->m_d.m_radius, stretch, zheight);
       else
          stretch = m_BallStretch;
 
@@ -6352,6 +6497,81 @@ void Player::DrawBalls()
       m_pin3d.m_pd3dPrimaryDevice->SetRenderState(RenderDevice::ZENABLE, RenderDevice::RS_TRUE);
    if (m_toggleDebugBalls)
       m_toggleDebugBalls = false;
+}
+
+void Player::DrawFakeBall(const Vertex3Ds &position, const Matrix3 &orientation, float radius, bool frozen, Texture *pballImageColor, bool showSpin)
+{
+   m_pin3d.m_pd3dPrimaryDevice->SetRenderStateDepthBias(0.0f);
+   m_pin3d.m_pd3dPrimaryDevice->SetRenderState(RenderDevice::BLENDOP, RenderDevice::BLENDOP_ADD);
+   m_pin3d.m_pd3dPrimaryDevice->SetRenderStateCulling(RenderDevice::CULL_CCW);
+
+   // calculate/adapt height of ball
+   float zheight = (!frozen) ? position.z : (position.z - radius);
+
+   const float maxz = (radius + m_ptable->m_tableheight) + 3.0f;
+   const float minz = (radius + m_ptable->m_tableheight) - 0.1f;
+
+   if ((zheight > maxz) || (position.z < minz))
+   {
+      // scaling the ball height by the z scale value results in a flying ball over the playfield/ramp
+      // by reducing it with 0.96f (a factor found by trial'n error) the ball is on the ramp again
+      if (m_ptable->m_BG_scalez[m_ptable->m_BG_current_set] != 1.0f)
+         zheight *= (m_ptable->m_BG_scalez[m_ptable->m_BG_current_set] * 0.96f);
+   }
+
+   // ************************* draw the ball itself ****************************
+   Vertex2D stretch;
+   if (m_antiStretchBall && m_ptable->m_BG_rotation[m_ptable->m_BG_current_set] != 0.0f)
+      GetBallAspectRatio(position, radius, stretch, zheight);
+   else
+      stretch = m_BallStretch;
+
+   D3DXMATRIX m(orientation.m_d[0][0], orientation.m_d[1][0], orientation.m_d[2][0], 0.0f, orientation.m_d[0][1], orientation.m_d[1][1], orientation.m_d[2][1], 0.0f, orientation.m_d[0][2],
+      orientation.m_d[1][2], orientation.m_d[2][2], 0.0f, 0.f, 0.f, 0.f, 1.f);
+   Matrix3D temp;
+   memcpy(temp.m, m.m, 4 * 4 * sizeof(float));
+   Matrix3D m3D_full;
+   m3D_full.SetScaling(radius * stretch.x, radius * stretch.y, radius);
+   m3D_full.Multiply(temp, m3D_full);
+   temp.SetTranslation(position.x, position.y, zheight);
+   temp.Multiply(m3D_full, m3D_full);
+   memcpy(m.m, m3D_full.m, 4 * 4 * sizeof(float));
+   m_ballShader->SetMatrix(SHADER_orientation, &m);
+   m_ballShader->SetBool(SHADER_disableLighting, true);
+   m_ballShader->SetTexture(SHADER_Texture0, pballImageColor, TextureFilter::TEXTURE_MODE_TRILINEAR, false, false, false);
+
+   m_pin3d.m_pd3dPrimaryDevice->SetRenderState(RenderDevice::ZWRITEENABLE, RenderDevice::RS_TRUE);
+
+   m_ballShader->SetTechnique("RenderBall_DecalMode");
+
+   m_ballShader->Begin(0);
+   m_pin3d.m_pd3dPrimaryDevice->DrawIndexedPrimitiveVB(
+      RenderDevice::TRIANGLELIST, MY_D3DFVF_NOTEX2_VERTEX, m_ballVertexBuffer, 0, basicBallMidNumVertices, m_ballIndexBuffer, 0, basicBallMidNumFaces);
+   m_ballShader->End();
+
+   if (showSpin)
+   {
+      // set transform
+      Matrix3D matOrig, matNew, matRot;
+      matOrig = m_pin3d.GetWorldTransform();
+      matNew.SetTranslation(position);
+      matOrig.Multiply(matNew, matNew);
+      matRot.SetIdentity();
+      for (int j = 0; j < 3; ++j)
+         for (int k = 0; k < 3; ++k)
+            matRot.m[j][k] = orientation.m_d[k][j];
+      matNew.Multiply(matRot, matNew);
+      m_pin3d.m_pd3dPrimaryDevice->SetTransform(TRANSFORMSTATE_WORLD, &matNew);
+      m_pin3d.m_pd3dPrimaryDevice->SetRenderState(RenderDevice::ALPHABLENDENABLE, RenderDevice::RS_FALSE);
+
+      // draw points
+      constexpr float ptsize = 5.0f;
+      m_pin3d.m_pd3dPrimaryDevice->SetRenderState((RenderDevice::RenderStates)D3DRS_POINTSIZE, *((DWORD *)&ptsize));
+      m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::POINTLIST, MY_D3DFVF_TEX, m_ballDebugPoints, 0, 12, true);
+
+      // reset transform
+      m_pin3d.m_pd3dPrimaryDevice->SetTransform(TRANSFORMSTATE_WORLD, &matOrig);
+   }
 }
 
 struct DebugMenuItem

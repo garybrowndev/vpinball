@@ -275,6 +275,9 @@ struct BallHistoryState
 
    Vertex3Ds m_OldPos[MAX_BALL_TRAIL_POS];
    unsigned int m_RingCounter_OldPos;
+
+   float m_Size;
+   Texture *m_Texture;
 };
 
 struct BallHistoryRecord
@@ -297,16 +300,24 @@ public:
 
    BallHistory();
    void Init(Player &player);
+   void InitBallLost(Player &player);
    void UnInit();
    void Process(Player &player);
    void UpdateAutoControl(Vertex3Ds &autoPointVertex3D, Player &player);
    void ControlNext();
    void ControlPrev();
+   bool IsControlled();
    void ToggleControl();
    void ToggleFavorite();
    void RecallFavorite();
 
 public: // TODO GB - put back to private
+   struct AutoControlVertex
+   {
+      Vertex3Ds m_Pos;
+      bool Active;
+   };
+
    static const std::size_t m_BallHistorySizeDefault;
    static const NextPreviousByType m_NextPreviousByDefault;
    static const std::size_t m_BallHistoryControlStepMsDefault;
@@ -329,33 +340,37 @@ public: // TODO GB - put back to private
    U32 m_BallHistoryControlStepMs;
    float m_BallHistoryControlStepPixels;
 
+   std::vector<const Ball *> m_BallHistoryRecordIds;
    std::vector<BallHistoryRecord> m_BallHistoryRecords;
    std::size_t m_BallHistoryRecordsHeadIndex;
    std::size_t m_BallHistoryRecordsSize;
    float m_MaxBallVelocityPixels;
 
-   std::vector<Vertex3Ds> m_AutoControlVertices;
+   std::vector<AutoControlVertex> m_AutoControlVertices;
 
-   VertexBuffer *m_ControlHistoryVertexBuffer;
-   VertexBuffer *m_AutoControlVertexBuffer;
+   Texture *m_AutoControlBallTexture;
+   std::map<U32, Texture *> m_ControlHistoryBallTextures;
 
+   void ResetBallHistoryRenderSizes();
    void DrawBallHistory(Player &player);
    void DrawAutoControlVertices(Player &player);
    void Update(Player &player);
    void OutputStats(Player &pPlayer);
    void Add(std::vector<Ball *> &vballs, U32 time_msec);
-   BallHistoryRecord& Get(std::size_t index);
+   BallHistoryRecord &Get(std::size_t index);
    std::size_t GetTailIndex();
 
-   float DistancePixels(Vertex3Ds &pos1, Vertex3Ds &pos2);
+   float DistancePixels(const Vertex3Ds &pos1, const Vertex3Ds &pos2);
+   float DistancePixelsXY(const Vertex3Ds &pos1, const Vertex3Ds &pos2);
    float VelocityPixels(Vertex3Ds &vel);
    bool ControlNextMove();
    bool ControlPrevMove();
 
-   bool BallCountChanged(std::vector<Ball *> &vball, BallHistoryRecord &headBhr);
+   int BallCountChange(std::vector<Ball *> &vball, BallHistoryRecord &headBhr);
    bool BallFrozenChanged(std::vector<Ball *> &vball, BallHistoryRecord &headBhr);
    bool BallAllFrozen(std::vector<Ball *> &vball);
    bool BallInsideAutoControlVertex(std::vector<Ball *> &vball);
+   void ResetAutoControlActive();
 };
 
 class Player : public CWnd
@@ -407,6 +422,8 @@ public:
 
    Ball *CreateBall(const float x, const float y, const float z, const float vx, const float vy, const float vz, const float radius = 25.0f, const float mass = 1.0f);
    void DestroyBall(Ball *pball);
+
+   void DrawFakeBall(const Vertex3Ds &position, const Matrix3 &orientation, float radius, bool frozen, Texture *pballImageColor, bool showSpin);
 
    void AddCabinetBoundingHitShapes();
 
@@ -729,7 +746,7 @@ private:
 
    void InitShader();
    void CalcBallAspectRatio();
-   void GetBallAspectRatio(const Ball * const pball, Vertex2D &stretch, const float zHeight);
+   void GetBallAspectRatio(const Vertex3Ds &pos, float radius, Vertex2D &stretch, const float zHeight);
    //void DrawBallReflection(Ball *pball, const float zheight, const bool lowDetailBall);
    unsigned int ProfilingMode() const;
 
