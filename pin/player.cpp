@@ -682,7 +682,6 @@ void BallHistory::ResetBallHistoryRenderSizes()
 
 void BallHistory::DrawBallHistory(Player &player)
 {
-   std::vector<Vertex3D_Color_Size> controlHistoryVertices;
    std::size_t tempCurrentIndex = m_CurrentControlIndex;
    std::size_t tailIndex = GetTailIndex();
 

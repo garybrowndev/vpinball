@@ -186,21 +186,6 @@ public:
    D3DVALUE tv;
 };
 
-class Vertex3D_Color_Size // for rendering, uses MY_D3DFVF_SIZE_COLOR_VERTEX
-{
-public:
-   // Position
-   D3DVALUE x;
-   D3DVALUE y;
-   D3DVALUE z;
-
-   // Color
-   D3DCOLOR color;
-
-   // Size
-   float size;
-};
-
 class LocalString final
 {
 public:

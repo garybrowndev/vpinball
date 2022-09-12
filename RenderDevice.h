@@ -483,7 +483,6 @@ public:
 
    static unsigned int m_stats_drawn_triangles;
 
-   static VertexDeclaration* m_pVertexColorSizeDeclaration;
    static VertexDeclaration* m_pVertexTexelDeclaration;
    static VertexDeclaration* m_pVertexNormalTexelDeclaration;
    //static VertexDeclaration* m_pVertexNormalTexelTexelDeclaration;
