@@ -1183,20 +1183,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          SHOW_MENU_CURRENT_END_BALL(m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex], m_TrainerBallPassTexture);
 
-         {
-            POINT mousePosition;
-            if (::GetCursorPos(&mousePosition) == TRUE)
-            {
-               if (::ScreenToClient(player.m_pininput.m_hwnd, &mousePosition) == TRUE)
-               {
-                  Vertex3Ds autoPointVertex3D(g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition));
-                  if (Ball *pball = player.m_vball[0])
-                  {
-                     player.DrawFakeBall(Vertex3Ds(autoPointVertex3D.x, autoPointVertex3D.y, 0), pball->m_orientation, pball->m_d.m_radius, false, m_TrainerBallPassTexture, false);
-                  }
-               }
-            }
-         }
+         DrawFakeBallAtMousePosition(player, *m_TrainerBallPassTexture);
 
          switch (menuAction)
          {
@@ -1514,20 +1501,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          SHOW_MENU_CURRENT_END_BALL(m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex], m_TrainerBallFailTexture);
 
-         {
-            POINT mousePosition;
-            if (::GetCursorPos(&mousePosition) == TRUE)
-            {
-               if (::ScreenToClient(player.m_pininput.m_hwnd, &mousePosition) == TRUE)
-               {
-                  Vertex3Ds autoPointVertex3D(g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition));
-                  if (Ball *pball = player.m_vball[0])
-                  {
-                     player.DrawFakeBall(Vertex3Ds(autoPointVertex3D.x, autoPointVertex3D.y, 0), pball->m_orientation, pball->m_d.m_radius, false, m_TrainerBallFailTexture, false);
-                  }
-               }
-            }
-         }
+         DrawFakeBallAtMousePosition(player, *m_TrainerBallFailTexture);
 
          switch (menuAction)
          {
@@ -1889,7 +1863,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
    }
 
    // TODO GARY Instead of blinking, rotate the color from light to dark and back of the Pass/Fail color
-   if ((msec() % 1000) >= 250)
+   if ((msec() % 1000) >= 200)
    {
       for (std::size_t index = 0; index < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); index++)
       {
@@ -2174,11 +2148,42 @@ void BallHistory::DrawBallHistory(Player &player)
 
 void BallHistory::DrawAutoControlVertices(Player &player)
 {
-   if (Ball *pball = player.m_vball[0])
+   switch (m_MenuOptions.m_ModeType)
    {
-      for each (const AutoControlVertex &autoControlVertex in m_AutoControlVertices)
+      case MenuOptionsRecord::ModeType::ModeType_Normal:
+         if ((msec() % 1000) >= 200)
+         {
+            if (Ball *pball = player.m_vball[0])
+            {
+               for each (const AutoControlVertex &autoControlVertex in m_AutoControlVertices)
+               {
+                  player.DrawFakeBall(autoControlVertex.m_Pos, pball->m_orientation, pball->m_d.m_radius, false, m_AutoControlBallTexture, false);
+               }
+            }
+         }
+         DrawFakeBallAtMousePosition(player, *m_AutoControlBallTexture);
+         break;
+      case MenuOptionsRecord::ModeType::ModeType_Trainer:
+         // do nothing
+         break;
+      default:
+         assert(0);
+         break;
+   }
+}
+
+void BallHistory::DrawFakeBallAtMousePosition(Player &player, Texture &texture)
+{
+   POINT mousePosition;
+   if (::GetCursorPos(&mousePosition) == TRUE)
+   {
+      if (::ScreenToClient(player.m_pininput.m_hwnd, &mousePosition) == TRUE)
       {
-         player.DrawFakeBall(autoControlVertex.m_Pos, pball->m_orientation, pball->m_d.m_radius, false, m_AutoControlBallTexture, false);
+         Vertex3Ds autoPointVertex3D(g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition));
+         if (Ball *pball = player.m_vball[0])
+         {
+            player.DrawFakeBall(Vertex3Ds(autoPointVertex3D.x, autoPointVertex3D.y, 0), pball->m_orientation, pball->m_d.m_radius, false, &texture, false);
+         }
       }
    }
 }
@@ -2316,15 +2321,12 @@ void BallHistory::ProcessKeys(Player &player, DWORD dwOfs)
 
 void BallHistory::ProcessMouse(Player &player, Vertex3Ds &mousePosition3D, POINT &mousePosition2D)
 {
-   //TODO GARY Show Pass/Fail ball as the mouse is moving around, keep old position if exists
-   //this is helpful cue to user where mouse is and exactly where the ball will be places when
-   //the mouse is clicked
    m_MenuOptions.m_MousePosition3D = mousePosition3D;
    m_MenuOptions.m_MousePosition2D = mousePosition2D;
    switch (m_MenuOptions.m_ModeType)
    {
       case MenuOptionsRecord::ModeType::ModeType_Normal:
-         g_pplayer->m_BallHistory.UpdateAutoControl(player, mousePosition3D);
+         player.m_BallHistory.UpdateAutoControl(player, mousePosition3D);
          break;
       case MenuOptionsRecord::ModeType::ModeType_Trainer:
          ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_Toggle);

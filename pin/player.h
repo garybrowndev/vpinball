@@ -541,6 +541,7 @@ public: // TODO Gary - put back to private
    void ResetBallHistoryRenderSizes();
    void DrawBallHistory(Player &player);
    void DrawAutoControlVertices(Player &player);
+   void DrawFakeBallAtMousePosition(Player &player, Texture &texture);
    void Update(Player &player);
    void ShowStatus(Player &player);
    void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction);
