@@ -1898,7 +1898,7 @@ void PinInput::ProcessKeys(/*const U32 curr_sim_msec,*/ int curr_time_msec) // l
             POINT point = { mouseX, mouseY };
             ScreenToClient(m_hwnd, &point);
             Vertex3Ds autoPointVertex3D(g_pplayer->m_pin3d.Get3DPointFrom2D(point));
-            g_pplayer->m_BallHistory.UpdateAutoControl(autoPointVertex3D, *g_pplayer);
+            g_pplayer->m_BallHistory.ProcessMouse(*g_pplayer, autoPointVertex3D, point);
          }
          else
          {
@@ -1916,6 +1916,10 @@ void PinInput::ProcessKeys(/*const U32 curr_sim_msec,*/ int curr_time_msec) // l
          // Camera mode fly around:
          if (g_pplayer && g_pplayer->m_cameraMode && m_enableCameraModeFlyAround)
             ProcessCameraKeys(input);
+
+         // Ball History keys:
+         if (input->dwData & 0x80)
+            g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, input->dwOfs);
 
          // Normal game keys:
          if (input->dwOfs == (DWORD)g_pplayer->m_rgKeys[eFrameCount])
@@ -1970,42 +1974,6 @@ void PinInput::ProcessKeys(/*const U32 curr_sim_msec,*/ int curr_time_msec) // l
                   m_exit_stamp = 0;
                   g_pplayer->m_closeDown = true;
                }
-            }
-         }
-         else if (input->dwOfs == (DWORD)DIK_C)
-         {
-            if (input->dwData & 0x80)
-            {
-               g_pplayer->m_BallHistory.ToggleControl();
-               g_pplayer->m_BallHistory.Process(*g_pplayer);
-            }
-         }
-         else if (input->dwOfs == (DWORD)DIK_F)
-         {
-            if (input->dwData & 0x80)
-            {
-               g_pplayer->m_BallHistory.ToggleFavorite();
-            }
-         }
-         else if (input->dwOfs == (DWORD)DIK_R)
-         {
-            if (input->dwData & 0x80)
-            {
-               g_pplayer->m_BallHistory.RecallFavorite();
-            }
-         }
-         else if (g_pplayer->m_BallHistory.IsControlled() && input->dwOfs == (DWORD)DIK_LEFT)
-         {
-            if (input->dwData & 0x80)
-            {
-               g_pplayer->m_BallHistory.ControlPrev();
-            }
-         }
-         else if (g_pplayer->m_BallHistory.IsControlled() && input->dwOfs == (DWORD)DIK_RIGHT)
-         {
-            if (input->dwData & 0x80)
-            {
-               g_pplayer->m_BallHistory.ControlNext();
             }
          }
          else

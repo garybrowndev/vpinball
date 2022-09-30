@@ -4,6 +4,8 @@
 #include "quadtree.h"
 #include "Debugger.h"
 
+#include <set>
+
 #define DEFAULT_PLAYER_WIDTH 1024
 #define DEFAULT_PLAYER_FS_WIDTH 1920
 #define DEFAULT_PLAYER_FS_REFRESHRATE 60
@@ -255,10 +257,127 @@ class NudgeFilterY : public NudgeFilter
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TimerOnOff
+class TrainerOptions
 {
-   HitTimer* m_timer;
-   bool m_enabled;
+public:
+   enum EngineStateType
+   {
+      EngineStateType_Ready,
+      EngineStateType_Running,
+      EngineStateType_Paused,
+      EngineStateType_Editing,
+      EngineStateType_COUNT
+   };
+
+   enum EngineCommandType
+   {
+      EngineCommandType_Run,
+      EngineCommandType_Resume,
+      EngineCommandType_Edit,
+      EngineCommandType_COUNT
+   };
+
+   enum BallStartModeType
+   {
+      BallStartModeType_Existing,
+      BallStartModeType_Drop,
+      BallStartModeType_Custom,
+      BallStartModeType_COUNT
+   };
+
+   enum BallEndLocationModeType
+   {
+      BallEndLocationModeType_Accept,
+      BallEndLocationModeType_Delete,
+      BallEndLocationModeType_COUNT
+   };
+
+   enum BallEndFinishModeType
+   {
+      BallEndFinishModeType_Stop,
+      BallEndFinishModeType_Distance,
+      BallEndStopModeType_COUNT
+   };
+
+   enum BallEndAssociationModeType
+   {
+      BallEndAssociationModeType_Accept,
+      BallEndAssociationModeType_Select,
+      BallEndAssociationModeType_COUNT
+   };
+
+   enum BallEndCompleteModeType
+   {
+      BallEndCompleteModeType_Accept,
+      BallEndCompleteModeType_Select,
+      BallEndCompleteModeType_COUNT
+   };
+
+   struct BallStartOptionsRecord
+   {
+      Vertex3Ds m_Pos;
+      Vertex3Ds m_Vel;
+      Vertex3Ds m_AngMom;
+      float m_AngleMinimum;
+      float m_AngleMaximum;
+      S32 m_TotalAngles;
+      float m_VelocityMinimum;
+      float m_VelocityMaximum;
+      S32 m_TotalVelocities;
+
+      BallStartOptionsRecord();
+      BallStartOptionsRecord(Vertex3Ds &pos, Vertex3Ds &vel, Vertex3Ds &angMom, float angleMin, float angleMax, S32 angleTotal, float velMin, float velMax, S32 velTotal);
+   };
+
+   struct BallEndOptionsRecord
+   {
+      static const S32 DistanceMinimum = 0;
+      static const S32 DistanceMaximum = 100;
+      static const S32 DistanceStep = 1;
+      static const float DistanceDisabled;
+
+      Vertex3Ds m_Pos3D;
+      POINT m_Pos2D;
+      float m_Distance;
+      std::set<std::size_t> m_AssociatedBallStartIndexes;
+
+      BallEndOptionsRecord();
+      BallEndOptionsRecord(Vertex3Ds &pos, POINT pos2D, float distance);
+   };
+
+   struct RunRecord
+   {
+      bool m_Passed;
+      U32 m_ElapsedTimeMs;
+
+      RunRecord();
+   };
+
+   EngineStateType m_EngineState;
+   EngineCommandType m_EngineCommand;
+   BallStartModeType m_BallStartMode;
+   BallEndLocationModeType m_BallEndLocationMode;
+   BallEndFinishModeType m_BallEndFinishMode;
+   BallEndAssociationModeType m_BallEndAssociationModeType;
+   BallEndCompleteModeType m_BallEndCompleteModeType;
+
+   static const S32 TotalRunsMinimum = 1;
+   static const S32 TotalRunsMaximum = 100;
+   static const S32 TotalRunsStep = 1;
+   S32 m_TotalRuns; // Applies to Existing and Drop modes
+
+   static const S32 MaxSecondsPerRunMinimum = 1;
+   static const S32 MaxSecondsPerRunMaximum = 30;
+   static const S32 MaxSecondsPerRunStep = 1;
+   S32 m_MaxSecondsPerRun;
+
+   bool m_RandomOrder; // Applies to Random mode
+
+   std::vector<BallStartOptionsRecord> m_BallStartOptionsRecords;
+   std::vector<BallEndOptionsRecord> m_BallPassOptionsRecords;
+   std::vector<BallEndOptionsRecord> m_BallFailOptionsRecords;
+
+   TrainerOptions();
 };
 
 struct BallHistoryState
@@ -302,16 +421,79 @@ public:
    void Init(Player &player);
    void InitBallLost(Player &player);
    void UnInit();
-   void Process(Player &player);
-   void UpdateAutoControl(Vertex3Ds &autoPointVertex3D, Player &player);
+   void Process(Player &player, bool toggleControl=false);
+   void ProcessKeys(Player &player, DWORD dwOfs);
+   void ProcessMouse(Player &player, Vertex3Ds &mousePosition3D, POINT &mousePosition2D);
+   void UpdateAutoControl(Player &player, Vertex3Ds &autoPointVertex3D);
    void ControlNext();
    void ControlPrev();
-   bool IsControlled();
-   void ToggleControl();
+   void ToggleMenu();
    void ToggleFavorite();
    void RecallFavorite();
 
-public: // TODO GB - put back to private
+public: // TODO Gary - put back to private
+   struct MenuOptionsRecord
+   {
+      enum MenuActionType
+      {
+         MenuActionType_None,
+         MenuActionType_Toggle,
+         MenuActionType_UpLeft,
+         MenuActionType_UpLeftSkip,
+         MenuActionType_DownRight,
+         MenuActionType_DownRightSkip,
+         MenuActionType_Enter,
+         MenuActionType_COUNT
+      };
+
+      enum MenuState
+      {
+         MenuState_None,
+         MenuState_Root_SelectMode,
+         MenuState_Trainer_SelectEngineCommand,
+         MenuState_Trainer_SelectBallStartMode,
+         MenuState_Trainer_Existing_SelectBallStart,
+         MenuState_Trainer_SelectBallPassLocation,
+         MenuState_Trainer_SelectBallPassFinishMode,
+         MenuState_Trainer_SelectBallPassDistance,
+         MenuState_Trainer_SelectBallPassAssociations,
+         MenuState_Trainer_BallPassComplete,
+         MenuState_Trainer_SelectBallFailLocation,
+         MenuState_Trainer_SelectBallFailFinishMode,
+         MenuState_Trainer_SelectBallFailDistance,
+         MenuState_Trainer_SelectBallFailAssociations,
+         MenuState_Trainer_BallFailComplete,
+         MenuState_Trainer_SelectTotalRuns,
+         MenuState_Trainer_SelectMaxSecondsPerRun,
+         MenuState_COUNT
+      };
+
+      enum ModeType
+      {
+         ModeType_Normal,
+         ModeType_Trainer,
+         ModeType_COUNT
+      };
+
+      static const U32 m_LastProcessedKeySkipIntervalMs;
+      static const S32 m_LastProcessedKeySkipFactor;
+
+      MenuState m_MenuState;
+      ModeType m_ModeType;
+
+      TrainerOptions m_TrainerOptions;
+
+      DWORD m_LastProcessedKey;
+      U32 m_LastProcessedKeyTimeMs;
+      std::size_t m_CurrentBallIndex;
+      std::size_t m_CurrentAssociationIndex;
+      std::size_t m_CurrentCompleteIndex;
+      Vertex3Ds m_MousePosition3D;
+      POINT m_MousePosition2D;
+
+      MenuOptionsRecord();
+   };
+
    struct AutoControlVertex
    {
       Vertex3Ds m_Pos;
@@ -331,6 +513,7 @@ public: // TODO GB - put back to private
 
    bool m_Save;
    bool m_Control;
+   bool m_Menu;
    bool m_WasControlled;
    bool m_WasRecalled;
    std::size_t m_CurrentControlIndex;
@@ -349,13 +532,19 @@ public: // TODO GB - put back to private
    std::vector<AutoControlVertex> m_AutoControlVertices;
 
    Texture *m_AutoControlBallTexture;
+   Texture *m_TrainerBallPassTexture;
+   Texture *m_TrainerBallFailTexture;
    std::map<U32, Texture *> m_ControlHistoryBallTextures;
+
+   MenuOptionsRecord m_MenuOptions;
 
    void ResetBallHistoryRenderSizes();
    void DrawBallHistory(Player &player);
    void DrawAutoControlVertices(Player &player);
    void Update(Player &player);
-   void OutputStats(Player &pPlayer);
+   void ShowStatus(Player &player);
+   void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction);
+   S32 ProcessMenuChangeValue(S32 value, S32 delta, S32 min, S32 max);
    void Add(std::vector<Ball *> &vballs, U32 time_msec);
    BallHistoryRecord &Get(std::size_t index);
    std::size_t GetTailIndex();
@@ -370,6 +559,12 @@ public: // TODO GB - put back to private
    bool BallFrozenChanged(std::vector<Ball *> &vball, BallHistoryRecord &headBhr);
    bool BallAllFrozen(std::vector<Ball *> &vball);
    bool BallInsideAutoControlVertex(std::vector<Ball *> &vball);
+};
+
+struct TimerOnOff
+{
+   HitTimer *m_timer;
+   bool m_enabled;
 };
 
 class Player : public CWnd
