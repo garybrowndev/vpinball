@@ -1917,10 +1917,6 @@ void PinInput::ProcessKeys(/*const U32 curr_sim_msec,*/ int curr_time_msec) // l
          if (g_pplayer && g_pplayer->m_cameraMode && m_enableCameraModeFlyAround)
             ProcessCameraKeys(input);
 
-         // Ball History keys:
-         if (input->dwData & 0x80)
-            g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, input->dwOfs);
-
          // Normal game keys:
          if (input->dwOfs == (DWORD)g_pplayer->m_rgKeys[eFrameCount])
          {
@@ -1975,6 +1971,10 @@ void PinInput::ProcessKeys(/*const U32 curr_sim_msec,*/ int curr_time_msec) // l
                   g_pplayer->m_closeDown = true;
                }
             }
+         }
+         else if (g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, input))
+         {
+            // key handled, do nothing
          }
          else
             FireKeyEvent((input->dwData & 0x80) ? DISPID_GameEvents_KeyDown : DISPID_GameEvents_KeyUp, input->dwOfs);

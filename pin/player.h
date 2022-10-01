@@ -422,7 +422,7 @@ public:
    void InitBallLost(Player &player);
    void UnInit();
    void Process(Player &player, bool toggleControl=false);
-   void ProcessKeys(Player &player, DWORD dwOfs);
+   bool ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input);
    void ProcessMouse(Player &player, Vertex3Ds &mousePosition3D, POINT &mousePosition2D);
    void UpdateAutoControl(Player &player, Vertex3Ds &autoPointVertex3D);
    void ControlNext();

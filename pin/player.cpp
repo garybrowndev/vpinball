@@ -147,7 +147,7 @@ BallHistoryRecord::BallHistoryRecord(U32 time_msec):
 {
 }
 
-const U32 BallHistory::MenuOptionsRecord::m_LastProcessedKeySkipIntervalMs = 125;
+const U32 BallHistory::MenuOptionsRecord::m_LastProcessedKeySkipIntervalMs = 175;
 const S32 BallHistory::MenuOptionsRecord::m_LastProcessedKeySkipFactor = 10;
 
 BallHistory::MenuOptionsRecord::MenuOptionsRecord():
@@ -2260,63 +2260,106 @@ void BallHistory::Process(Player &player, bool toggleControl)
    }   
 }
 
-void BallHistory::ProcessKeys(Player &player, DWORD dwOfs)
+bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input)
 {
    U32 currentMsec = msec();
-   if (dwOfs == (DWORD)DIK_C)
+   if (input->dwOfs == (DWORD)DIK_C)
    {
-      Process(player, true);
-   }
-   else if (dwOfs == (DWORD)DIK_LEFT)
-   {
-      ControlPrev();
-   }
-   else if (dwOfs == (DWORD)DIK_RIGHT)
-   {
-      ControlNext();
-   }
-   else if (dwOfs == (DWORD)DIK_M)
-   {
-      ToggleMenu();
-      ProcessMenu(player, MenuOptionsRecord::MenuActionType_Toggle);
-   }
-   else if (dwOfs == player.m_rgKeys[eLeftFlipperKey])
-   {
-      if (m_MenuOptions.m_LastProcessedKey == dwOfs && (currentMsec - m_MenuOptions.m_LastProcessedKeyTimeMs) < m_MenuOptions.m_LastProcessedKeySkipIntervalMs)
+      if (input->dwData & 0x80)
       {
-         ProcessMenu(player, MenuOptionsRecord::MenuActionType_UpLeftSkip);
-      }
-      else
-      {
-         ProcessMenu(player, MenuOptionsRecord::MenuActionType_UpLeft);
+         Process(player, true);
+         return true;
       }
    }
-   else if (dwOfs == player.m_rgKeys[eRightFlipperKey])
+   else if (input->dwOfs == (DWORD)DIK_LEFT)
    {
-      if (m_MenuOptions.m_LastProcessedKey == dwOfs && (currentMsec - m_MenuOptions.m_LastProcessedKeyTimeMs) < m_MenuOptions.m_LastProcessedKeySkipIntervalMs)
+      if (input->dwData & 0x80)
       {
-         ProcessMenu(player, MenuOptionsRecord::MenuActionType_DownRightSkip);
-      }
-      else
-      {
-         ProcessMenu(player, MenuOptionsRecord::MenuActionType_DownRight);
+         ControlPrev();
+         return true;
       }
    }
-   else if (dwOfs == (DWORD)DIK_RETURN)
+   else if (input->dwOfs == (DWORD)DIK_RIGHT)
    {
-      ProcessMenu(player, MenuOptionsRecord::MenuActionType_Enter);
+      if (input->dwData & 0x80)
+      {
+         ControlNext();
+         return true;
+      }
    }
-   else if (dwOfs == (DWORD)DIK_F)
+   else if (input->dwOfs == (DWORD)DIK_M)
    {
-      ToggleFavorite();
+      if (input->dwData & 0x80)
+      {
+         ToggleMenu();
+         ProcessMenu(player, MenuOptionsRecord::MenuActionType_Toggle);
+         return true;
+      }
    }
-   else if (dwOfs == (DWORD)DIK_R)
+   else if (m_Menu && input->dwOfs == player.m_rgKeys[eLeftFlipperKey])
    {
-      RecallFavorite();
+      if (input->dwData & 0x80)
+      {
+         if (m_MenuOptions.m_LastProcessedKey == input->dwOfs && (currentMsec - m_MenuOptions.m_LastProcessedKeyTimeMs) < m_MenuOptions.m_LastProcessedKeySkipIntervalMs)
+         {
+            ProcessMenu(player, MenuOptionsRecord::MenuActionType_UpLeftSkip);
+         }
+         else
+         {
+            ProcessMenu(player, MenuOptionsRecord::MenuActionType_UpLeft);
+         }
+
+         m_MenuOptions.m_LastProcessedKey = input->dwOfs;
+         m_MenuOptions.m_LastProcessedKeyTimeMs = currentMsec;
+
+         return true;
+      }
+   }
+   else if (m_Menu && input->dwOfs == player.m_rgKeys[eRightFlipperKey])
+   {
+      if (input->dwData & 0x80)
+      {
+         if (m_MenuOptions.m_LastProcessedKey == input->dwOfs && (currentMsec - m_MenuOptions.m_LastProcessedKeyTimeMs) < m_MenuOptions.m_LastProcessedKeySkipIntervalMs)
+         {
+            ProcessMenu(player, MenuOptionsRecord::MenuActionType_DownRightSkip);
+         }
+         else
+         {
+            ProcessMenu(player, MenuOptionsRecord::MenuActionType_DownRight);
+         }
+
+         m_MenuOptions.m_LastProcessedKey = input->dwOfs;
+         m_MenuOptions.m_LastProcessedKeyTimeMs = currentMsec;
+
+         return true;
+      }
+   }
+   else if (m_Menu && input->dwOfs == (DWORD)DIK_RETURN)
+   {
+      if (input->dwData & 0x80)
+      {
+         ProcessMenu(player, MenuOptionsRecord::MenuActionType_Enter);
+         return true;
+      }
+   }
+   else if (input->dwOfs == (DWORD)DIK_F)
+   {
+      if (input->dwData & 0x80)
+      {
+         ToggleFavorite();
+         return true;
+      }
+   }
+   else if (input->dwOfs == (DWORD)DIK_R)
+   {
+      if (input->dwData & 0x80)
+      {
+         RecallFavorite();
+         return true;
+      }
    }
 
-   m_MenuOptions.m_LastProcessedKey = dwOfs;
-   m_MenuOptions.m_LastProcessedKeyTimeMs = currentMsec;
+   return false;
 }
 
 void BallHistory::ProcessMouse(Player &player, Vertex3Ds &mousePosition3D, POINT &mousePosition2D)
