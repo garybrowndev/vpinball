@@ -719,6 +719,12 @@ void BallHistory::ShowStatus(Player &player)
          sprintf_s(szFoo, "Current Run Record = %zu", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord);
          player.DebugPrint(textX, textY += textYStep, szFoo);
 
+         sprintf_s(szFoo, "Run Start Time (ms) = %u", m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs);
+         player.DebugPrint(textX, textY += textYStep, szFoo);
+
+         sprintf_s(szFoo, "Current Time (ms) = %u", msec());
+         player.DebugPrint(textX, textY += textYStep, szFoo);
+
          switch (m_MenuOptions.m_TrainerOptions.m_BallStartMode)
          {
             case TrainerOptions::BallStartModeType::BallStartModeType_Existing:
@@ -2022,6 +2028,7 @@ void BallHistory::ProcessModeTrainer(Player &player)
       }
       m_MenuOptions.m_MenuError = strStream.str();
 
+      // TODO Gary figure out a way to put back into control with screwing up state of balls
       //ToggleControl();
       //ToggleMenu();
       m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Trainer_Results;
@@ -2035,6 +2042,7 @@ void BallHistory::ProcessModeTrainer(Player &player)
       ToggleControl();
       ToggleMenu();
       m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Trainer_Results;
+      m_MenuOptions.m_TrainerOptions.m_EngineCommand = TrainerOptions::EngineCommandType::EngineCommandType_Results;
       return;
    }
 
@@ -2495,6 +2503,7 @@ void BallHistory::Process(Player &player, bool toggleControl)
                   case TrainerOptions::EngineCommandType::EngineCommandType_Resume:
                      m_Menu = true;
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Trainer_Results;
+                     m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
                      break;
                   case TrainerOptions::EngineCommandType::EngineCommandType_Results:
                   case TrainerOptions::EngineCommandType::EngineCommandType_Config:
