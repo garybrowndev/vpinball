@@ -260,20 +260,13 @@ class NudgeFilterY : public NudgeFilter
 class TrainerOptions
 {
 public:
-   enum EngineStateType
-   {
-      EngineStateType_Ready,
-      EngineStateType_Running,
-      EngineStateType_Paused,
-      EngineStateType_Editing,
-      EngineStateType_COUNT
-   };
-
    enum EngineCommandType
    {
-      EngineCommandType_Run,
+      EngineCommandType_Start,
       EngineCommandType_Resume,
-      EngineCommandType_Edit,
+      EngineCommandType_Results,
+      EngineCommandType_Config,
+      EngineCommandType_Exit,
       EngineCommandType_COUNT
    };
 
@@ -348,12 +341,12 @@ public:
    struct RunRecord
    {
       bool m_Passed;
-      U32 m_ElapsedTimeMs;
-
-      RunRecord();
+      bool m_TimeElapsed;
+      U32 m_TotalTimeMs;
    };
 
-   EngineStateType m_EngineState;
+   static const DWORD RunCountdownMs = 3000;
+
    EngineCommandType m_EngineCommand;
    BallStartModeType m_BallStartMode;
    BallEndLocationModeType m_BallEndLocationMode;
@@ -376,6 +369,10 @@ public:
    std::vector<BallStartOptionsRecord> m_BallStartOptionsRecords;
    std::vector<BallEndOptionsRecord> m_BallPassOptionsRecords;
    std::vector<BallEndOptionsRecord> m_BallFailOptionsRecords;
+
+   std::vector<RunRecord> m_RunRecords;
+   std::size_t m_CurrentRunRecord;
+   U32 m_RunStartTimeMs;
 
    TrainerOptions();
 };
@@ -451,6 +448,7 @@ public: // TODO Gary - put back to private
          MenuState_None,
          MenuState_Root_SelectMode,
          MenuState_Trainer_SelectEngineCommand,
+         MenuState_Trainer_Results,
          MenuState_Trainer_SelectBallStartMode,
          MenuState_Trainer_Existing_SelectBallStart,
          MenuState_Trainer_SelectBallPassLocation,
@@ -475,11 +473,12 @@ public: // TODO Gary - put back to private
          ModeType_COUNT
       };
 
-      static const U32 m_LastProcessedKeySkipIntervalMs;
-      static const S32 m_LastProcessedKeySkipFactor;
+      static const U32 LastProcessedKeySkipIntervalMs;
+      static const S32 LastProcessedKeySkipFactor;
 
       MenuState m_MenuState;
       ModeType m_ModeType;
+      std::string m_MenuError;
 
       TrainerOptions m_TrainerOptions;
 
@@ -500,6 +499,8 @@ public: // TODO Gary - put back to private
       bool Active;
    };
 
+   // TODO GARY Refactor these names to not have prefix m_
+   // m_ is only for members, these are static and should not have prefix
    static const std::size_t m_BallHistorySizeDefault;
    static const NextPreviousByType m_NextPreviousByDefault;
    static const std::size_t m_BallHistoryControlStepMsDefault;
@@ -538,13 +539,20 @@ public: // TODO Gary - put back to private
 
    MenuOptionsRecord m_MenuOptions;
 
+   void ToggleControl();
    void ResetBallHistoryRenderSizes();
    void DrawBallHistory(Player &player);
    void DrawAutoControlVertices(Player &player);
    void DrawFakeBallAtMousePosition(Player &player, Texture &texture);
    void Update(Player &player);
    void ShowStatus(Player &player);
+   void ProcessModeDrawNormal(Player &player);
+   void ProcessModeDrawTrainer(Player &player);
+   void ProcessModeDraw(Player &player);
    void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction);
+   void ProcessMode(Player &player);
+   void ProcessModeNormal(Player &player);
+   void ProcessModeTrainer(Player &player);
    S32 ProcessMenuChangeValue(S32 value, S32 delta, S32 min, S32 max);
    void Add(std::vector<Ball *> &vballs, U32 time_msec);
    BallHistoryRecord &Get(std::size_t index);
@@ -556,7 +564,7 @@ public: // TODO Gary - put back to private
    bool ControlNextMove();
    bool ControlPrevMove();
 
-   int BallCountChange(std::vector<Ball *> &vball, BallHistoryRecord &headBhr);
+   std::size_t BallCountChange(std::vector<Ball *> &vball, BallHistoryRecord &headBhr);
    bool BallFrozenChanged(std::vector<Ball *> &vball, BallHistoryRecord &headBhr);
    bool BallAllFrozen(std::vector<Ball *> &vball);
    bool BallInsideAutoControlVertex(std::vector<Ball *> &vball);
