@@ -1152,7 +1152,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          break;
       case MenuOptionsRecord::MenuState::MenuState_Trainer_Results:
          {
-         SHOW_MENU_TEXT_TITLE("Run Results");
+         SHOW_MENU_TEXT_TITLE("%s", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord == m_MenuOptions.m_TrainerOptions.m_TotalRuns ? "Final Run Results" : "Current RunResults");
 
          std::size_t totalPasses = 0;
          std::size_t totalFailsLocation = 0;
@@ -2481,6 +2481,34 @@ void BallHistory::Process(Player &player, bool toggleControl)
       if (!m_Control)
       {
          m_Menu = false;
+      }
+      else
+      {
+         switch (m_MenuOptions.m_ModeType)
+         {
+            case MenuOptionsRecord::ModeType::ModeType_Normal:
+               break;
+            case MenuOptionsRecord::ModeType::ModeType_Trainer:
+               switch (m_MenuOptions.m_TrainerOptions.m_EngineCommand)
+               {
+                  case TrainerOptions::EngineCommandType::EngineCommandType_Start:
+                  case TrainerOptions::EngineCommandType::EngineCommandType_Resume:
+                     m_Menu = true;
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Trainer_Results;
+                     break;
+                  case TrainerOptions::EngineCommandType::EngineCommandType_Results:
+                  case TrainerOptions::EngineCommandType::EngineCommandType_Config:
+                  case TrainerOptions::EngineCommandType::EngineCommandType_Exit:
+                     break;
+                  default:
+                     assert(0);
+                     break;
+               }
+
+               break;
+            default:
+               break;
+         }
       }
    }
 
