@@ -351,8 +351,8 @@ public:
    BallStartModeType m_BallStartMode;
    BallEndLocationModeType m_BallEndLocationMode;
    BallEndFinishModeType m_BallEndFinishMode;
-   BallEndAssociationModeType m_BallEndAssociationModeType;
-   BallEndCompleteModeType m_BallEndCompleteModeType;
+   BallEndAssociationModeType m_BallEndAssociationMode;
+   BallEndCompleteModeType m_BallEndCompleteMode;
 
    static const S32 TotalRunsMinimum = 1;
    static const S32 TotalRunsMaximum = 100;
@@ -415,9 +415,12 @@ public:
    };
 
    BallHistory();
+   bool GetSettingsFileName(Player &player, std::string &fileName);
+   void LoadSettings(Player &player);
+   void SaveSettings(Player &player);
    void Init(Player &player);
    void InitBallLost(Player &player);
-   void UnInit();
+   void UnInit(Player &player);
    void Process(Player &player, bool toggleControl=false);
    bool ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input);
    void ProcessMouse(Player &player, Vertex3Ds &mousePosition3D, POINT &mousePosition2D);
@@ -539,6 +542,31 @@ public: // TODO Gary - put back to private
 
    MenuOptionsRecord m_MenuOptions;
 
+   static const char * SettingsFileExtension;
+   static const char * SettingsFolderName;
+   static const char SettingsValueDelimeter;
+   static const char * TableInfoSectionName;
+   static const char * FilePathKeyName;
+   static const char * TableNameKeyName;
+   static const char * AuthorKeyName;
+   static const char * VersionKeyName;
+   static const char * DateSavedKeyName;
+   static const char * NormalModeSettingsSectionName;
+   static const char * NormalModeAutoControlVerticesPositionKeyName;
+   static const char * TrainerModeSettingsSectionName;
+   static const char * TrainerModeTotalRunsKeyName;
+   static const char * TrainerModeMaxSecondsPerRunKeyName;
+   static const char * TrainerModeRandomOrderKeyName;
+   static const char * TrainerModeBallPassPosition3DKeyName;
+   static const char * TrainerModeBallPassPosition2DKeyName;
+   static const char * TrainerModeBallPassDistanceKeyName;
+   static const char * TrainerModeBallPassAssociationsKeyName;
+   static const char * TrainerModeBallFailPosition3DKeyName;
+   static const char * TrainerModeBallFailPosition2DKeyName;
+   static const char * TrainerModeBallFailDistanceKeyName;
+   static const char * TrainerModeBallFailAssociationsKeyName;
+   std::string m_SettingsFilePath;
+
    void ToggleControl();
    void ResetBallHistoryRenderSizes();
    void DrawBallHistory(Player &player);
@@ -568,6 +596,8 @@ public: // TODO Gary - put back to private
    bool BallFrozenChanged(std::vector<Ball *> &vball, BallHistoryRecord &headBhr);
    bool BallAllFrozen(std::vector<Ball *> &vball);
    bool BallInsideAutoControlVertex(std::vector<Ball *> &vball);
+
+   std::vector<std::string> Split(const char * str, char delimeter);
 };
 
 struct TimerOnOff
