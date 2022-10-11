@@ -424,7 +424,7 @@ public:
    void Process(Player &player, bool toggleControl=false);
    bool ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input);
    void ProcessMouse(Player &player, Vertex3Ds &mousePosition3D, POINT &mousePosition2D);
-   void UpdateAutoControl(Player &player, Vertex3Ds &autoPointVertex3D);
+   void UpdateAutoControl(Player &player, Vertex3Ds &autoControlVertexPosition3D, POINT &autoControlVertexPosition2D);
    void ControlNext();
    void ControlPrev();
    void ToggleMenu();
@@ -498,7 +498,8 @@ public: // TODO Gary - put back to private
 
    struct AutoControlVertex
    {
-      Vertex3Ds m_Pos;
+      Vertex3Ds m_Pos3D;
+      POINT m_Pos2D;
       bool Active;
    };
 
@@ -552,7 +553,8 @@ public: // TODO Gary - put back to private
    static const char * VersionKeyName;
    static const char * DateSavedKeyName;
    static const char * NormalModeSettingsSectionName;
-   static const char * NormalModeAutoControlVerticesPositionKeyName;
+   static const char * NormalModeAutoControlVerticesPosition3DKeyName;
+   static const char * NormalModeAutoControlVerticesPosition2DKeyName;
    static const char * TrainerModeSettingsSectionName;
    static const char * TrainerModeTotalRunsKeyName;
    static const char * TrainerModeMaxSecondsPerRunKeyName;
