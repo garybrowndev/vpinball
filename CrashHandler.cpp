@@ -7,7 +7,10 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#pragma warning( push )
+#pragma warning( disable : 4091 )
 #include <dbghelp.h>
+#pragma warning( pop )
 #include <cassert>
 #include "git_version.h"
 

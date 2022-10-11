@@ -3,7 +3,10 @@
 #ifdef DEBUG_XXX  // remove method in perference to DevPartner
 
 #pragma comment(lib, "dbghelp.lib")
-#include "dbghelp.h"
+#pragma warning( push )
+#pragma warning( disable : 4091 )
+#include <dbghelp.h>
+#pragma warning( pop )
 
 #define STACKLEVEL 5
 #define PREEXTRA (STACKLEVEL*sizeof(int))

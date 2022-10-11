@@ -192,14 +192,14 @@ char* replace(const char* const original, const char* const pattern, const char*
       {
         const size_t skplen = patloc - oriptr;
         // copy the section until the occurence of the pattern
-        strncpy(retptr, oriptr, skplen);
+        strncpy_s(retptr, retlen + 1, oriptr, skplen);
         retptr += skplen;
         // copy the replacement 
-        strncpy(retptr, replacement, replen);
+        strncpy_s(retptr, retlen + 1, replacement, replen);
         retptr += replen;
       }
       // copy the rest of the string.
-      strcpy(retptr, oriptr);
+      strcpy_s(retptr, retlen + 1, oriptr);
     }
     return returned;
   }
