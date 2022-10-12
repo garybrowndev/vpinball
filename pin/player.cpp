@@ -1312,6 +1312,14 @@ void BallHistory::ProcessModeDrawTrainer(Player &player)
    // TODO GARY Instead of blinking, rotate the color from light to dark and back of the Pass/Fail color
    if ((currentTimeMs % 1000) >= 200)
    {
+      for (std::size_t index = 0; index < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size(); index++)
+      {
+         TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[index];
+         // TODO GARY figure out a way to get 2D point from 3D location
+         //player.SetDebugOutputPosition(static_cast<float>(beor.m_Pos2D.x), static_cast<float>(beor.m_Pos2D.y));
+         //SHOW_MENU_TEXT_POS(0, 0, "#%u", index + 1);
+      }
+
       for (std::size_t index = 0; index < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); index++)
       {
          TrainerOptions::BallEndOptionsRecord &beor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[index];
@@ -1321,7 +1329,7 @@ void BallHistory::ProcessModeDrawTrainer(Player &player)
             {
                player.DrawFakeBall(beor.m_Pos3D, pball->m_orientation, pball->m_d.m_radius, false, m_TrainerBallPassTexture, false);
                player.SetDebugOutputPosition(static_cast<float>(beor.m_Pos2D.x), static_cast<float>(beor.m_Pos2D.y));
-               SHOW_MENU_TEXT_POS(0, 0, "Pass-%u", index + 1);
+               SHOW_MENU_TEXT_POS(0, 0, "#%u", index + 1);
             }
          }
       }
@@ -1335,7 +1343,7 @@ void BallHistory::ProcessModeDrawTrainer(Player &player)
             {
                player.DrawFakeBall(beor.m_Pos3D, pball->m_orientation, pball->m_d.m_radius, false, m_TrainerBallFailTexture, false);
                player.SetDebugOutputPosition(static_cast<float>(beor.m_Pos2D.x), static_cast<float>(beor.m_Pos2D.y));
-               SHOW_MENU_TEXT_POS(0, 0, "Fail-%u", index + 1);
+               SHOW_MENU_TEXT_POS(0, 0, "#%u", index + 1);
             }
          }
       }
@@ -2781,7 +2789,7 @@ void BallHistory::DrawAutoControlVertices(Player &player)
                   AutoControlVertex &acv = m_AutoControlVertices[index];
                   player.DrawFakeBall(acv.m_Pos3D, pball->m_orientation, pball->m_d.m_radius, false, m_AutoControlBallTexture, false);
                   player.SetDebugOutputPosition(static_cast<float>(acv.m_Pos2D.x), static_cast<float>(acv.m_Pos2D.y));
-                  SHOW_MENU_TEXT_POS(0, 0, "%u", index + 1);
+                  SHOW_MENU_TEXT_POS(0, 0, "#%u", index + 1);
                }
             }
          }
