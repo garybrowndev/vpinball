@@ -326,7 +326,6 @@ public:
    {
       static const S32 DistanceMinimum = 0;
       static const S32 DistanceMaximum = 100;
-      static const S32 DistanceStep = 1;
       static const float DistanceDisabled;
 
       Vertex3Ds m_Pos3D;
@@ -356,12 +355,10 @@ public:
 
    static const S32 TotalRunsMinimum = 1;
    static const S32 TotalRunsMaximum = 100;
-   static const S32 TotalRunsStep = 1;
    S32 m_TotalRuns; // Applies to Existing and Drop modes
 
    static const S32 MaxSecondsPerRunMinimum = 1;
    static const S32 MaxSecondsPerRunMaximum = 30;
-   static const S32 MaxSecondsPerRunStep = 1;
    S32 m_MaxSecondsPerRun;
 
    bool m_RandomOrder; // Applies to Random mode
@@ -439,9 +436,7 @@ public: // TODO Gary - put back to private
          MenuActionType_None,
          MenuActionType_Toggle,
          MenuActionType_UpLeft,
-         MenuActionType_UpLeftSkip,
          MenuActionType_DownRight,
-         MenuActionType_DownRightSkip,
          MenuActionType_Enter,
          MenuActionType_COUNT
       };
@@ -476,8 +471,9 @@ public: // TODO Gary - put back to private
          ModeType_COUNT
       };
 
-      static const U32 LastProcessedKeySkipIntervalMs;
-      static const S32 LastProcessedKeySkipFactor;
+      static const U32 SkipKeyPressHoldMs;
+      static const U32 SkipKeyIntervalMs;
+      static const S32 LastProcessedKeySkip;
 
       MenuState m_MenuState;
       ModeType m_ModeType;
@@ -485,8 +481,10 @@ public: // TODO Gary - put back to private
 
       TrainerOptions m_TrainerOptions;
 
-      DWORD m_LastProcessedKey;
-      U32 m_LastProcessedKeyTimeMs;
+      bool m_SkipKeyPressed;
+      U32 m_SkipKeyPressedMs;
+      bool m_SkipKeyLeft;
+      U32 m_SkipKeyUsedMs;
       std::size_t m_CurrentBallIndex;
       std::size_t m_CurrentAssociationIndex;
       std::size_t m_CurrentCompleteIndex;
@@ -583,7 +581,9 @@ public: // TODO Gary - put back to private
    void ProcessMode(Player &player);
    void ProcessModeNormal(Player &player);
    void ProcessModeTrainer(Player &player);
-   S32 ProcessMenuChangeValue(S32 value, S32 delta, S32 min, S32 max);
+   S32 ProcessMenuChangeValue(S32 value, S32 delta, S32 min, S32 max, bool skip);
+   template <class T> void ProcessMenuChangeValueStep(T &value, S32 step, S32 min, S32 max);
+   template <class T> void ProcessMenuChangeValueSkip(T &value, S32 min, S32 max, U32 currentTimeMs);
    void Add(std::vector<Ball *> &vballs, U32 time_msec);
    BallHistoryRecord &Get(std::size_t index);
    std::size_t GetTailIndex();
