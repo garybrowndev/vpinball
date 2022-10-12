@@ -333,6 +333,8 @@ public:
       float m_Distance;
       std::set<std::size_t> m_AssociatedBallStartIndexes;
 
+      std::vector<std::tuple<U32, Vertex3Ds>> m_StopBallsTracker;
+
       BallEndOptionsRecord();
       BallEndOptionsRecord(Vertex3Ds &pos, POINT pos2D, float distance);
    };
