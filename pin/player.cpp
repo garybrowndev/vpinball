@@ -1544,7 +1544,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          break;
       case MenuOptionsRecord::MenuState::MenuState_Trainer_Results:
          {
-         SHOW_MENU_TEXT_TITLE("%s", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord == m_MenuOptions.m_TrainerOptions.m_TotalRuns ? "Final Run Results" : "Current RunResults");
+         SHOW_MENU_TEXT_TITLE("%s", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord == m_MenuOptions.m_TrainerOptions.m_TotalRuns ? "Final Run Results" : "Current Run Results");
 
          std::size_t totalPasses = 0;
          std::size_t totalFailsLocation = 0;
@@ -2950,22 +2950,6 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input)
          return true;
       }
    }
-   else if (input->dwOfs == (DWORD)DIK_LEFT)
-   {
-      if (input->dwData & 0x80)
-      {
-         ControlPrev();
-         return true;
-      }
-   }
-   else if (input->dwOfs == (DWORD)DIK_RIGHT)
-   {
-      if (input->dwData & 0x80)
-      {
-         ControlNext();
-         return true;
-      }
-   }
    else if (input->dwOfs == (DWORD)DIK_M)
    {
       if (input->dwData & 0x80)
@@ -2975,18 +2959,23 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input)
          return true;
       }
    }
-   else if (m_Menu && input->dwOfs == player.m_rgKeys[eLeftFlipperKey])
+   else if (m_Control && input->dwOfs == player.m_rgKeys[eLeftFlipperKey])
    {
-      std::string dwData = std::to_string(input->dwData);
       if (input->dwData & 0x80)
       {
-         m_MenuOptions.m_SkipKeyPressed = true;
-         m_MenuOptions.m_SkipKeyPressedMs = currentMsec;
-         m_MenuOptions.m_SkipKeyLeft = true;
+         if (m_Menu == true)
+         {
+            m_MenuOptions.m_SkipKeyPressed = true;
+            m_MenuOptions.m_SkipKeyPressedMs = currentMsec;
+            m_MenuOptions.m_SkipKeyLeft = true;
 
-         ProcessMenu(player, MenuOptionsRecord::MenuActionType_UpLeft);
-
-         return true;
+            ProcessMenu(player, MenuOptionsRecord::MenuActionType_UpLeft);
+            return true;
+         }
+         else
+         {
+            ControlPrev();
+         }
       }
       else if (input->dwData == 0)
       {
@@ -2994,17 +2983,23 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input)
          m_MenuOptions.m_SkipKeyPressedMs = 0;
       }
    }
-   else if (m_Menu && input->dwOfs == player.m_rgKeys[eRightFlipperKey])
+   else if (m_Control && input->dwOfs == player.m_rgKeys[eRightFlipperKey])
    {
       if (input->dwData & 0x80)
       {
-         m_MenuOptions.m_SkipKeyPressed = true;
-         m_MenuOptions.m_SkipKeyPressedMs = currentMsec;
-         m_MenuOptions.m_SkipKeyLeft = false;
+         if (m_Menu == true)
+         {
+            m_MenuOptions.m_SkipKeyPressed = true;
+            m_MenuOptions.m_SkipKeyPressedMs = currentMsec;
+            m_MenuOptions.m_SkipKeyLeft = false;
 
-         ProcessMenu(player, MenuOptionsRecord::MenuActionType_DownRight);
-
-         return true;
+            ProcessMenu(player, MenuOptionsRecord::MenuActionType_DownRight);
+            return true;
+         }
+         else
+         {
+            ControlNext();
+         }
       }
       else if (input->dwData == 0)
       {
