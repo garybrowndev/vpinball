@@ -559,6 +559,15 @@ public: // TODO Gary - put back to private
    static const char * TrainerModeTotalRunsKeyName;
    static const char * TrainerModeMaxSecondsPerRunKeyName;
    static const char * TrainerModeRandomOrderKeyName;
+   static const char * TrainerModeBallStartPositionKeyName;
+   static const char * TrainerModeBallStartVelocityKeyName;
+   static const char * TrainerModeBallStartAngularMomentumKeyName;
+   static const char * TrainerModeBallStartAngleMinimumKeyName;
+   static const char * TrainerModeBallStartAngleMaximumKeyName;
+   static const char * TrainerModeBallStartTotalAnglesKeyName;
+   static const char * TrainerModeBallStartVelocityMinimumKeyName;
+   static const char * TrainerModeBallStartVelocityMaximumKeyName;
+   static const char * TrainerModeBallStartTotalVelocitiesKeyName;
    static const char * TrainerModeBallPassPosition3DKeyName;
    static const char * TrainerModeBallPassPosition2DKeyName;
    static const char * TrainerModeBallPassDistanceKeyName;

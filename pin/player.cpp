@@ -187,6 +187,15 @@ const char * BallHistory::TrainerModeSettingsSectionName = "TrainerModeSettings"
 const char * BallHistory::TrainerModeTotalRunsKeyName = "TotalRuns";
 const char * BallHistory::TrainerModeMaxSecondsPerRunKeyName = "MaxSecondsPerRun";
 const char * BallHistory::TrainerModeRandomOrderKeyName = "RandomOrder";
+const char * BallHistory::TrainerModeBallStartPositionKeyName = "StartPosition";
+const char * BallHistory::TrainerModeBallStartVelocityKeyName = "StartVelocity";
+const char * BallHistory::TrainerModeBallStartAngularMomentumKeyName = "StartAngularMomentum";
+const char * BallHistory::TrainerModeBallStartAngleMinimumKeyName = "StartAngleMinimum";
+const char * BallHistory::TrainerModeBallStartAngleMaximumKeyName = "StartAngleMaximum";
+const char * BallHistory::TrainerModeBallStartTotalAnglesKeyName = "StartTotalAngles";
+const char * BallHistory::TrainerModeBallStartVelocityMinimumKeyName = "StartVelocityMinimum";
+const char * BallHistory::TrainerModeBallStartVelocityMaximumKeyName = "StartVelocityMaximum";
+const char * BallHistory::TrainerModeBallStartTotalVelocitiesKeyName = "StartVelocities";
 const char * BallHistory::TrainerModeBallPassPosition3DKeyName = "PassPosition3D";
 const char * BallHistory::TrainerModeBallPassPosition2DKeyName = "PassPosition2D";
 const char * BallHistory::TrainerModeBallPassDistanceKeyName = "PassDistance";
@@ -348,11 +357,53 @@ void BallHistory::LoadSettings(Player &player)
          tempStream >> m_MenuOptions.m_TrainerOptions.m_RandomOrder;
       }
 
+      std::istringstream ballStartOptionsPos;
+      std::istringstream ballStartOptionsVel;
+      std::istringstream ballStartOptionsAngMom;
+      std::istringstream ballStartOptionsAngleMinimum;
+      std::istringstream ballStartOptionsAngleMaximum;
+      std::istringstream ballStartOptionsTotalAngles;
+      std::istringstream ballStartOptionsVelocityMinimum;
+      std::istringstream ballStartOptionsVelocityMaximum;
+      std::istringstream ballStartOptionsTotalVelocities;
+      if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallStartPositionKeyName, ballStartOptionsPos) == true && 
+         LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallStartVelocityKeyName, ballStartOptionsVel) == true && 
+         LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallStartAngularMomentumKeyName, ballStartOptionsAngMom) == true && 
+         LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallStartAngleMinimumKeyName, ballStartOptionsAngleMinimum) == true && 
+         LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallStartAngleMaximumKeyName, ballStartOptionsAngleMaximum) == true && 
+         LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallStartTotalAnglesKeyName, ballStartOptionsTotalAngles) == true && 
+         LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallStartVelocityMinimumKeyName, ballStartOptionsVelocityMinimum) == true && 
+         LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallStartVelocityMaximumKeyName, ballStartOptionsVelocityMaximum) == true && 
+         LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallStartTotalVelocitiesKeyName, ballStartOptionsTotalVelocities) == true)
+      {
+         while (ballStartOptionsPos.peek() != EOF &&
+            ballStartOptionsVel.peek() != EOF &&
+            ballStartOptionsAngMom.peek() != EOF &&
+            ballStartOptionsAngleMinimum.peek() != EOF &&
+            ballStartOptionsAngleMaximum.peek() != EOF &&
+            ballStartOptionsTotalAngles.peek() != EOF &&
+            ballStartOptionsVelocityMinimum.peek() != EOF &&
+            ballStartOptionsVelocityMaximum.peek() != EOF &&
+            ballStartOptionsTotalVelocities.peek() != EOF)
+         {
+            m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.push_back(TrainerOptions::BallStartOptionsRecord());
+            TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.back();
+            ballStartOptionsPos >> bsor.m_Pos.x >> delimeter >> bsor.m_Pos.y >> delimeter >> bsor.m_Pos.z >> delimeter;
+            ballStartOptionsVel >> bsor.m_Vel.x >> delimeter >> bsor.m_Vel.y >> delimeter >> bsor.m_Vel.z >> delimeter;
+            ballStartOptionsAngMom >> bsor.m_AngMom.x >> delimeter >> bsor.m_AngMom.y >> delimeter >> bsor.m_AngMom.z >> delimeter;
+            ballStartOptionsAngleMinimum >> bsor.m_AngleMinimum >> delimeter;
+            ballStartOptionsAngleMaximum >> bsor.m_AngleMinimum >> delimeter;
+            ballStartOptionsTotalAngles >> bsor.m_TotalAngles >> delimeter;
+            ballStartOptionsVelocityMinimum >> bsor.m_VelocityMinimum >> delimeter;
+            ballStartOptionsVelocityMaximum >> bsor.m_VelocityMaximum >> delimeter;
+            ballStartOptionsTotalVelocities >> bsor.m_TotalVelocities >> delimeter;
+         }
+      }
+
       std::istringstream ballPassOptionsPos3D;
       std::istringstream ballPassOptionsPos2D;
       std::istringstream ballPassOptionsDistance;
       std::istringstream ballPassOptionsAssociations;
-
       if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallPassPosition3DKeyName, ballPassOptionsPos3D) == true &&
          LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallPassPosition2DKeyName, ballPassOptionsPos2D) == true &&
          LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallPassDistanceKeyName, ballPassOptionsDistance) == true &&
@@ -383,7 +434,6 @@ void BallHistory::LoadSettings(Player &player)
       std::istringstream ballFailOptionsPos2D;
       std::istringstream ballFailOptionsDistance;
       std::istringstream ballFailOptionsAssociations;
-
       if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallFailPosition3DKeyName, ballFailOptionsPos3D) == true &&
          LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallFailPosition2DKeyName, ballFailOptionsPos2D) == true &&
          LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallFailDistanceKeyName, ballFailOptionsDistance) == true &&
@@ -452,6 +502,47 @@ void BallHistory::SaveSettings(Player &player)
 
       tempStr = std::to_string(m_MenuOptions.m_TrainerOptions.m_RandomOrder);
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeRandomOrderKeyName, tempStr.c_str());
+
+      std::ostringstream ballStartOptionsPos;
+      std::ostringstream ballStartOptionsVel;
+      std::ostringstream ballStartOptionsAngMom;
+      std::ostringstream ballStartOptionsAngleMinimum;
+      std::ostringstream ballStartOptionsAngleMaximum;
+      std::ostringstream ballStartOptionsTotalAngles;
+      std::ostringstream ballStartOptionsVelocityMinimum;
+      std::ostringstream ballStartOptionsVelocityMaximum;
+      std::ostringstream ballStartOptionsTotalVelocities;
+      for each (const TrainerOptions::BallStartOptionsRecord &bsor in m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords)
+      {
+         ballStartOptionsPos << bsor.m_Pos.x << SettingsValueDelimeter << bsor.m_Pos.y << SettingsValueDelimeter << bsor.m_Pos.z << SettingsValueDelimeter;
+         ballStartOptionsVel << bsor.m_Vel.x << SettingsValueDelimeter << bsor.m_Vel.y << SettingsValueDelimeter << bsor.m_Vel.z << SettingsValueDelimeter;
+         ballStartOptionsAngMom << bsor.m_AngMom.x << SettingsValueDelimeter << bsor.m_AngMom.y << SettingsValueDelimeter << bsor.m_AngMom.z << SettingsValueDelimeter;
+         ballStartOptionsAngleMinimum << bsor.m_AngleMinimum << SettingsValueDelimeter;
+         ballStartOptionsAngleMaximum << bsor.m_AngleMinimum << SettingsValueDelimeter;
+         ballStartOptionsTotalAngles << bsor.m_TotalAngles << SettingsValueDelimeter;
+         ballStartOptionsVelocityMinimum << bsor.m_VelocityMinimum << SettingsValueDelimeter;
+         ballStartOptionsVelocityMaximum << bsor.m_VelocityMaximum << SettingsValueDelimeter;
+         ballStartOptionsTotalVelocities << bsor.m_TotalVelocities << SettingsValueDelimeter;
+      }
+
+      tempStr = ballStartOptionsPos.str();
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallStartPositionKeyName, tempStr.c_str());
+      tempStr = ballStartOptionsVel.str();
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallStartVelocityKeyName, tempStr.c_str());
+      tempStr = ballStartOptionsAngMom.str();
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallStartAngularMomentumKeyName, tempStr.c_str());
+      tempStr = ballStartOptionsAngleMinimum.str();
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallStartAngleMinimumKeyName, tempStr.c_str());
+      tempStr = ballStartOptionsAngleMaximum.str();
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallStartAngleMaximumKeyName, tempStr.c_str());
+      tempStr = ballStartOptionsTotalAngles.str();
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallStartTotalAnglesKeyName, tempStr.c_str());
+      tempStr = ballStartOptionsVelocityMinimum.str();
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallStartVelocityMinimumKeyName, tempStr.c_str());
+      tempStr = ballStartOptionsVelocityMaximum.str();
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallStartVelocityMaximumKeyName, tempStr.c_str());
+      tempStr = ballStartOptionsTotalVelocities.str();
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallStartTotalVelocitiesKeyName, tempStr.c_str());
 
       std::ostringstream ballPassOptionsPos3D;
       std::ostringstream ballPassOptionsPos2D;
@@ -1542,6 +1633,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                         ToggleControl();
                         m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
                         m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord = 0;
+
+                        for (std::size_t bforIndex = 0; bforIndex < m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size(); bforIndex++)
+                        {
+                           TrainerOptions::BallEndOptionsRecord &beor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[bforIndex];
+                           beor.m_StopBallsTracker.resize(m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size(), std::make_tuple<U32, Vertex3Ds>(0, {0.0f, 0.0f, 0.0f}));
+                        }
+                        for (std::size_t bporIndex = 0; bporIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); bporIndex++)
+                        {
+                           TrainerOptions::BallEndOptionsRecord &beor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[bporIndex];
+                           beor.m_StopBallsTracker.resize(m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size(), std::make_tuple<U32, Vertex3Ds>(0, {0.0f, 0.0f, 0.0f}));
+                        }
                      }
                      else
                      {
@@ -1728,6 +1830,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             for (std::size_t index = 0; index < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size(); index++)
             {
                m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.back().m_AssociatedBallStartIndexes.insert(index);
+               m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.back().m_StopBallsTracker.resize(m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size(), std::make_tuple<U32, Vertex3Ds>(0, {0.0f, 0.0f, 0.0f}));
             }
          }
 
@@ -1944,7 +2047,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
             SHOW_MENU_TEXT_SELECT("Edit Ball #%zu", m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode == TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select && m_MenuOptions.m_CurrentCompleteIndex == index, index + 1);
          }
-         SHOW_MENU_TEXT_SELECT("Create Ball #%zu", m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode == TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select && m_MenuOptions.m_CurrentCompleteIndex == m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(), m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size());
+         SHOW_MENU_TEXT_SELECT("Create Ball #%zu", m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode == TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select && m_MenuOptions.m_CurrentCompleteIndex == m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(), m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size() + 1);
 
          switch (menuAction)
          {
@@ -2008,11 +2111,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                m_MenuOptions.m_TrainerOptions.m_BallEndFinishMode = TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop;
                m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode = TrainerOptions::BallEndAssociationModeType::BallEndAssociationModeType_Accept;
                m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode = TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept;
-               for (std::size_t bporIndex = 0; bporIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); bporIndex++)
-               {
-                  TrainerOptions::BallEndOptionsRecord &beor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[bporIndex];
-                  beor.m_StopBallsTracker.resize(m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size(), std::make_tuple<U32, Vertex3Ds>(0, {0.0f, 0.0f, 0.0f}));
-               }
                break;
             default:
                assert(0);
@@ -2031,7 +2129,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             for (std::size_t index = 0; index < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size(); index++)
             {
                m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.back().m_AssociatedBallStartIndexes.insert(index);
-               m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.back().m_StopBallsTracker.push_back(std::make_tuple<U32, Vertex3Ds>(0, {0.0f, 0.0f, 0.0f}));
+               m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.back().m_StopBallsTracker.resize(m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size(), std::make_tuple<U32, Vertex3Ds>(0, {0.0f, 0.0f, 0.0f}));
             }
          }
 
@@ -2249,7 +2347,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
             SHOW_MENU_TEXT_SELECT("Edit Ball #%zu", m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode == TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select && m_MenuOptions.m_CurrentCompleteIndex == index, index + 1);
          }
-         SHOW_MENU_TEXT_SELECT("Create Ball #%zu", m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode == TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select && m_MenuOptions.m_CurrentCompleteIndex == m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size(), m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size());
+         SHOW_MENU_TEXT_SELECT("Create Ball #%zu", m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode == TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select && m_MenuOptions.m_CurrentCompleteIndex == m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size(), m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size() + 1);
 
          switch (menuAction)
          {
@@ -2313,11 +2411,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                m_MenuOptions.m_TrainerOptions.m_BallEndFinishMode = TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop;
                m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode = TrainerOptions::BallEndAssociationModeType::BallEndAssociationModeType_Accept;
                m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode = TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept;
-               for (std::size_t bforIndex = 0; bforIndex < m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size(); bforIndex++)
-               {
-                  TrainerOptions::BallEndOptionsRecord &beor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[bforIndex];
-                  beor.m_StopBallsTracker.resize(m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size(), std::make_tuple<U32, Vertex3Ds>(0, {0.0f, 0.0f, 0.0f}));
-               }
                break;
             default:
                assert(0);
@@ -2488,11 +2581,8 @@ void BallHistory::ProcessModeTrainer(Player &player)
       for (std::size_t vballIndex = 0; vballIndex < player.m_vball.size(); ++vballIndex)
       {
          player.m_vball[vballIndex]->m_d.m_pos = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[vballIndex].m_Pos;
-         //player.m_vball[vballIndex]->m_d.m_frozen = currentControlBhr.m_BallHistoryStates[vballIndex].m_Frozen;
-
-         //player.m_vball[vballIndex]->m_d.m_vel = { 0.0f, 0.0f, 0.0f };
+         player.m_vball[vballIndex]->m_d.m_frozen = false;
          player.m_vball[vballIndex]->m_d.m_vel = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[vballIndex].m_Vel;
-
          player.m_vball[vballIndex]->m_angularmomentum = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[vballIndex].m_AngMom;
          //player.m_vball[vballIndex]->m_lastEventPos = currentControlBhr.m_BallHistoryStates[vballIndex].m_LastEventPos;
          //player.m_vball[vballIndex]->m_orientation = currentControlBhr.m_BallHistoryStates[vballIndex].m_Orientation;
@@ -2504,8 +2594,10 @@ void BallHistory::ProcessModeTrainer(Player &player)
    else if (runElapsedTimeMs < (TrainerOptions::RunCountdownMs + (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * 1000)))
    {
       SHOW_MENU_TEXT("Monitoring %.2f", (runElapsedTimeMs - TrainerOptions::RunCountdownMs) / 1000.0f);
+      bool allPass = true;
       for (std::size_t vballIndex = 0; vballIndex < player.m_vball.size(); vballIndex++)
       {
+         bool currentPass = false;
          Ball &vball = *player.m_vball[vballIndex];
          for (std::size_t passBeorIndex = 0; passBeorIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); passBeorIndex++)
          {
@@ -2517,7 +2609,6 @@ void BallHistory::ProcessModeTrainer(Player &player)
             player.DrawFakeBall(passBeor.m_Pos3D, ball->m_orientation, ball->m_d.m_radius, false, m_TrainerBallPassTexture, false);
             */
             TrainerOptions::BallEndOptionsRecord &passBeor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[passBeorIndex];
-            bool pass = false;
             float distance = DistancePixelsXY(passBeor.m_Pos3D, vball.m_d.m_pos);
             if (passBeor.m_Distance == TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
             {
@@ -2534,7 +2625,8 @@ void BallHistory::ProcessModeTrainer(Player &player)
                   {
                      if ((currentTimeMs - stopBallMs) > 200)
                      {
-                        pass = true;
+                        currentPass = true;
+                        break;
                      }
                   }
                   else
@@ -2551,20 +2643,31 @@ void BallHistory::ProcessModeTrainer(Player &player)
             }
             else if (distance < passBeor.m_Distance)
             {
-               pass = true;
-            }
-
-            if (pass == true)
-            {
-               currentRunRecord.m_Passed = true;
-               currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - TrainerOptions::RunCountdownMs;
-               m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
-               m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+               currentPass = true;
                break;
             }
          }
 
-         for each (const TrainerOptions::BallEndOptionsRecord &failBeor in m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords)
+         if (currentPass == false)
+         {
+            allPass = false;
+            break;
+         }
+      }
+      if (allPass == true)
+      {
+         currentRunRecord.m_Passed = true;
+         currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - TrainerOptions::RunCountdownMs;
+         m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+         m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+      }
+
+      bool oneFail = false;
+      for (std::size_t vballIndex = 0; vballIndex < player.m_vball.size(); vballIndex++)
+      {
+         bool currentFail = false;
+         Ball &vball = *player.m_vball[vballIndex];
+         for (std::size_t failBeorIndex = 0; failBeorIndex < m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size(); failBeorIndex++)
          {
             /*
             float distance = DistancePixelsXY(failBeor.m_Pos3D, ball->m_d.m_pos);
@@ -2573,20 +2676,56 @@ void BallHistory::ProcessModeTrainer(Player &player)
             SHOW_MENU_TEXT("Ball Fail Distance 2D %.2f", distance);
             player.DrawFakeBall(failBeor.m_Pos3D, ball->m_orientation, ball->m_d.m_radius, false, m_TrainerBallFailTexture, false);
             */
-
+            TrainerOptions::BallEndOptionsRecord &failBeor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[failBeorIndex];
+            float distance = DistancePixelsXY(failBeor.m_Pos3D, vball.m_d.m_pos);
             if (failBeor.m_Distance == TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
             {
-               // run stop logic
+               U32 &stopBallMs = std::get<0>(failBeor.m_StopBallsTracker[vballIndex]);
+               Vertex3Ds &stopBallPos = std::get<1>(failBeor.m_StopBallsTracker[vballIndex]);
+               if (distance < vball.m_d.m_radius)
+               {
+                  if (stopBallMs == 0)
+                  {
+                     stopBallMs = currentTimeMs;
+                  }
+
+                  if ((vball.m_d.m_pos - stopBallPos).Length() < 1.0f)
+                  {
+                     if ((currentTimeMs - stopBallMs) > 200)
+                     {
+                        currentFail = true;
+                        break;
+                     }
+                  }
+                  else
+                  {
+                     stopBallMs = currentTimeMs;
+                     stopBallPos = vball.m_d.m_pos;
+                  }
+               }
+               else
+               {
+                  stopBallMs = 0;
+                  stopBallPos.SetZero();
+               }
             }
-            else if (DistancePixelsXY(failBeor.m_Pos3D, vball.m_d.m_pos) < failBeor.m_Distance)
+            else if (distance < failBeor.m_Distance)
             {
-               currentRunRecord.m_Passed = false;
-               currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - TrainerOptions::RunCountdownMs;
-               m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
-               m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
-               break;
+               currentFail = true;
             }
          }
+         if (currentFail == true)
+         {
+            oneFail = true;
+            break;
+         }
+      }
+      if (oneFail == true)
+      {
+         currentRunRecord.m_Passed = false;
+         currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - TrainerOptions::RunCountdownMs;
+         m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+         m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
       }
    }
    else
