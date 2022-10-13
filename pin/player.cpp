@@ -1903,6 +1903,14 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      if (m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos3D.IsZero() == false)
                      {
                         m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Trainer_SelectBallPassFinishMode;
+                        if (m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Distance == TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
+                        {
+                           m_MenuOptions.m_TrainerOptions.m_BallEndFinishMode = TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop;
+                        }
+                        else
+                        {
+                           m_MenuOptions.m_TrainerOptions.m_BallEndFinishMode = TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Distance;
+                        }
                      }
                      break;
                   case TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_Delete:
@@ -2202,6 +2210,14 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      if (m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos3D.IsZero() == false)
                      {
                         m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Trainer_SelectBallFailFinishMode;
+                        if (m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Distance == TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
+                        {
+                           m_MenuOptions.m_TrainerOptions.m_BallEndFinishMode = TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop;
+                        }
+                        else
+                        {
+                           m_MenuOptions.m_TrainerOptions.m_BallEndFinishMode = TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Distance;
+                        }
                      }
                      break;
                   case TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_Delete:
