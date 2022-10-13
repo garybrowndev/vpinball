@@ -277,6 +277,13 @@ public:
       BallStartModeType_Custom,
       BallStartModeType_COUNT
    };
+   
+   enum BallStartCompleteModeType
+   {
+      BallStartCompleteModeType_Accept,
+      BallStartCompleteModeType_Select,
+      BallStartCompleteModeType_COUNT
+   };
 
    enum BallEndLocationModeType
    {
@@ -350,6 +357,7 @@ public:
 
    EngineCommandType m_EngineCommand;
    BallStartModeType m_BallStartMode;
+   BallStartCompleteModeType m_BallStartCompleteMode;
    BallEndLocationModeType m_BallEndLocationMode;
    BallEndFinishModeType m_BallEndFinishMode;
    BallEndAssociationModeType m_BallEndAssociationMode;
@@ -450,7 +458,8 @@ public: // TODO Gary - put back to private
          MenuState_Trainer_SelectEngineCommand,
          MenuState_Trainer_Results,
          MenuState_Trainer_SelectBallStartMode,
-         MenuState_Trainer_Existing_SelectBallStart,
+         MenuState_Trainer_ExistingSelectBallStartLocation,
+         MenuState_Trainer_ExistingBallStartComplete,
          MenuState_Trainer_SelectBallPassLocation,
          MenuState_Trainer_SelectBallPassFinishMode,
          MenuState_Trainer_SelectBallPassDistance,
@@ -537,6 +546,7 @@ public: // TODO Gary - put back to private
    std::vector<AutoControlVertex> m_AutoControlVertices;
 
    Texture *m_AutoControlBallTexture;
+   Texture *m_TrainerBallStartTexture;
    Texture *m_TrainerBallPassTexture;
    Texture *m_TrainerBallFailTexture;
    std::map<U32, Texture *> m_ControlHistoryBallTextures;
