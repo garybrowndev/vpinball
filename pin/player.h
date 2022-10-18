@@ -260,14 +260,14 @@ class NudgeFilterY : public NudgeFilter
 class TrainerOptions
 {
 public:
-   enum EngineCommandType
+   enum ModeStateType
    {
-      EngineCommandType_Start,
-      EngineCommandType_Resume,
-      EngineCommandType_Results,
-      EngineCommandType_Config,
-      EngineCommandType_Exit,
-      EngineCommandType_COUNT
+      ModeStateType_Start,
+      ModeStateType_Resume,
+      ModeStateType_Results,
+      ModeStateType_Config,
+      ModeStateType_Exit,
+      ModeStateType_COUNT
    };
 
    enum BallStartModeType
@@ -355,7 +355,7 @@ public:
 
    static const DWORD RunCountdownMs = 3000;
 
-   EngineCommandType m_EngineCommand;
+   ModeStateType m_ModeState;
    BallStartModeType m_BallStartMode;
    BallStartCompleteModeType m_BallStartCompleteMode;
    BallEndLocationModeType m_BallEndLocationMode;
@@ -382,6 +382,32 @@ public:
    U32 m_RunStartTimeMs;
 
    TrainerOptions();
+};
+
+class NormalOptions
+{
+public:
+   enum ModeStateType
+   {
+      ModeStateType_SelectBallHistory,
+      ModeStateType_CreateAutoControlLocations,
+      ModeStateType_Exit,
+      ModeStateType_COUNT
+   };
+
+   struct AutoControlVertex
+   {
+      Vertex3Ds m_Pos3D;
+      POINT m_Pos2D;
+      bool Active;
+   };
+
+   static const std::size_t AutoControlVerticesMax;
+
+   ModeStateType m_ModeState;
+   std::vector<AutoControlVertex> m_AutoControlVertices;
+
+   NormalOptions();
 };
 
 struct BallHistoryState
@@ -434,7 +460,6 @@ public:
    void UpdateAutoControl(Player &player, Vertex3Ds &autoControlVertexPosition3D, POINT &autoControlVertexPosition2D);
    void ControlNext();
    void ControlPrev();
-   void ToggleMenu();
    void ToggleFavorite();
    void RecallFavorite();
 
@@ -455,7 +480,10 @@ public: // TODO Gary - put back to private
       {
          MenuState_None,
          MenuState_Root_SelectMode,
-         MenuState_Trainer_SelectEngineCommand,
+         MenuState_Normal_SelectModeOptions,
+         MenuState_Normal_SelectBallHistory,
+         MenuState_Normal_CreateAutoControlLocations,
+         MenuState_Trainer_SelectModeOptions,
          MenuState_Trainer_Results,
          MenuState_Trainer_SelectBallStartMode,
          MenuState_Trainer_ExistingSelectBallStartLocation,
@@ -490,6 +518,7 @@ public: // TODO Gary - put back to private
       ModeType m_ModeType;
       std::string m_MenuError;
 
+      NormalOptions m_NormalOptions;
       TrainerOptions m_TrainerOptions;
 
       bool m_SkipKeyPressed;
@@ -505,13 +534,6 @@ public: // TODO Gary - put back to private
       MenuOptionsRecord();
    };
 
-   struct AutoControlVertex
-   {
-      Vertex3Ds m_Pos3D;
-      POINT m_Pos2D;
-      bool Active;
-   };
-
    // TODO GARY Refactor these names to not have prefix m_
    // m_ is only for members, these are static and should not have prefix
    static const std::size_t m_BallHistorySizeDefault;
@@ -523,11 +545,9 @@ public: // TODO Gary - put back to private
    static const float m_BallHistoryMaxPointSize;
    static const float m_FavoritePointSize;
    static const float m_ControlVerticesDistanceMax;
-   static const std::size_t m_AutoControlVerticesMax;
 
    bool m_Save;
    bool m_Control;
-   bool m_Menu;
    bool m_WasControlled;
    bool m_WasRecalled;
    std::size_t m_CurrentControlIndex;
@@ -542,8 +562,6 @@ public: // TODO Gary - put back to private
    std::size_t m_BallHistoryRecordsHeadIndex;
    std::size_t m_BallHistoryRecordsSize;
    float m_MaxBallVelocityPixels;
-
-   std::vector<AutoControlVertex> m_AutoControlVertices;
 
    Texture *m_AutoControlBallTexture;
    Texture *m_TrainerBallStartTexture;
@@ -593,11 +611,9 @@ public: // TODO Gary - put back to private
    void DrawBallHistory(Player &player);
    void DrawAutoControlVertices(Player &player);
    void DrawFakeBallAtMousePosition(Player &player, Texture &texture);
+   void DrawTrainerBallLocations(Player &player);
    void Update(Player &player);
    void ShowStatus(Player &player);
-   void ProcessModeDrawNormal(Player &player);
-   void ProcessModeDrawTrainer(Player &player);
-   void ProcessModeDraw(Player &player);
    void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction);
    void ProcessMode(Player &player);
    void ProcessModeNormal(Player &player);

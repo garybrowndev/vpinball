@@ -106,7 +106,7 @@ TrainerOptions::BallEndOptionsRecord::BallEndOptionsRecord(Vertex3Ds &pos3D, POI
 }
 
 TrainerOptions::TrainerOptions():
-   m_EngineCommand(EngineCommandType::EngineCommandType_Config),
+   m_ModeState(ModeStateType::ModeStateType_Config),
    m_CurrentRunRecord(0),
    m_RunStartTimeMs(0),
    m_BallStartMode(BallStartModeType::BallStartModeType_Existing),
@@ -120,6 +120,14 @@ TrainerOptions::TrainerOptions():
    m_RandomOrder(false)
 {
 }
+
+const std::size_t NormalOptions::AutoControlVerticesMax = 256;
+
+NormalOptions::NormalOptions():
+   m_ModeState(ModeStateType::ModeStateType_SelectBallHistory)
+{
+}
+
 
 BallHistoryState::BallHistoryState()
 {
@@ -171,7 +179,6 @@ const float BallHistory::m_BallHistoryMinPointSize = 5.0f;
 const float BallHistory::m_BallHistoryMaxPointSize = 20.0f;
 const float BallHistory::m_FavoritePointSize = BallHistory::m_BallHistoryMaxPointSize * 1.25f;
 const float BallHistory::m_ControlVerticesDistanceMax = 2000.0f;
-const std::size_t BallHistory::m_AutoControlVerticesMax = 256;
 const char * BallHistory::SettingsFileExtension = "ini";
 const char * BallHistory::SettingsFolderName = "BallHistory";
 const char BallHistory::SettingsValueDelimeter = ',';
@@ -209,7 +216,6 @@ const char * BallHistory::TrainerModeBallFailAssociationsKeyName = "FailAssociat
 BallHistory::BallHistory() :
    m_Save(false),
    m_Control(false),
-   m_Menu(false),
    m_WasControlled(false),
    m_WasRecalled(false),
    m_CurrentControlIndex(0),
@@ -334,8 +340,8 @@ void BallHistory::LoadSettings(Player &player)
          while (autoControlVerticesPosition3D.peek() != EOF ||
             autoControlVerticesPosition2D.peek() != EOF)
          {
-            m_AutoControlVertices.push_back({ {0.0f, 0.0f, 0.0f}, {0, 0}, true });
-            AutoControlVertex &acv = m_AutoControlVertices.back();
+            m_MenuOptions.m_NormalOptions.m_AutoControlVertices.push_back({ {0.0f, 0.0f, 0.0f}, {0, 0}, true });
+            NormalOptions::AutoControlVertex &acv = m_MenuOptions.m_NormalOptions.m_AutoControlVertices.back();
             autoControlVerticesPosition3D >> acv.m_Pos3D.x >> delimeter >> acv.m_Pos3D.y >> delimeter >> acv.m_Pos3D.z >> delimeter;
             autoControlVerticesPosition2D >> acv.m_Pos2D.x >> delimeter >> acv.m_Pos2D.y >> delimeter;
          }
@@ -481,7 +487,7 @@ void BallHistory::SaveSettings(Player &player)
       // Normal Mode Settings
       std::ostringstream autoControlVerticesPosition3D;
       std::ostringstream autoControlVerticesPosition2D;
-      for each (const AutoControlVertex &acv in m_AutoControlVertices)
+      for each (const NormalOptions::AutoControlVertex &acv in m_MenuOptions.m_NormalOptions.m_AutoControlVertices)
       {
          autoControlVerticesPosition3D << acv.m_Pos3D.x << SettingsValueDelimeter << acv.m_Pos3D.y << SettingsValueDelimeter << acv.m_Pos3D.z << SettingsValueDelimeter;
          autoControlVerticesPosition2D << acv.m_Pos2D.x << SettingsValueDelimeter << acv.m_Pos2D.y << SettingsValueDelimeter;
@@ -603,7 +609,6 @@ void BallHistory::Init(Player &player)
 {
    m_Save = true;
    m_Control = false;
-   m_Menu = false;
    m_WasControlled = false;
    m_WasRecalled = false;
 
@@ -979,14 +984,6 @@ void BallHistory::ControlPrev()
    }
 }
 
-void BallHistory::ToggleMenu()
-{
-   if (m_Control)
-   {
-      m_Menu = !m_Menu;
-   }
-}
-
 void BallHistory::ToggleControl()
 {
    m_Control = !m_Control;
@@ -1070,12 +1067,12 @@ void BallHistory::ShowStatus(Player &player)
             }
          }
 
-         sprintf_s(szFoo, "AutoControlPoints Count = %zu", m_AutoControlVertices.size());
+         sprintf_s(szFoo, "AutoControlPoints Count = %zu", m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size());
          player.DebugPrint(textX, textY += textYStep, szFoo);
 
-         for (std::size_t autoControlVerticesIndex = 0; autoControlVerticesIndex < m_AutoControlVertices.size(); ++autoControlVerticesIndex)
+         for (std::size_t autoControlVerticesIndex = 0; autoControlVerticesIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); ++autoControlVerticesIndex)
          {
-            AutoControlVertex &autoControlVertex = m_AutoControlVertices[autoControlVerticesIndex];
+            NormalOptions::AutoControlVertex &autoControlVertex = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[autoControlVerticesIndex];
             sprintf_s(szFoo, "  Auto Control Point #%zu %.2f,%.2f,%.2f,%s (x,y,z,active)", autoControlVerticesIndex + 1, autoControlVertex.m_Pos3D.x, autoControlVertex.m_Pos3D.y, autoControlVertex.m_Pos3D.z, autoControlVertex.Active ? "true" : "false");
             player.DebugPrint(textX, textY += textYStep, szFoo);
          }
@@ -1124,35 +1121,35 @@ void BallHistory::ShowStatus(Player &player)
          sprintf_s(szFoo, "Error = %s", m_MenuOptions.m_MenuError.empty() ? "<no error>" : m_MenuOptions.m_MenuError.c_str());
          player.DebugPrint(textX, textY += textYStep, szFoo);
 
-         switch (m_MenuOptions.m_TrainerOptions.m_EngineCommand)
+         switch (m_MenuOptions.m_TrainerOptions.m_ModeState)
          {
-            case TrainerOptions::EngineCommandType::EngineCommandType_Start:
-               sprintf_s(szFoo, "Engine Command = Start");
+            case TrainerOptions::ModeStateType::ModeStateType_Start:
+               sprintf_s(szFoo, "Mode State = Start");
                player.DebugPrint(textX, textY += textYStep, szFoo);
                break;
 
-            case TrainerOptions::EngineCommandType::EngineCommandType_Resume:
-               sprintf_s(szFoo, "Engine Command = Resume");
+            case TrainerOptions::ModeStateType::ModeStateType_Resume:
+               sprintf_s(szFoo, "Mode State = Resume");
                player.DebugPrint(textX, textY += textYStep, szFoo);
                break;
 
-            case TrainerOptions::EngineCommandType::EngineCommandType_Results:
-               sprintf_s(szFoo, "Engine Command = Results");
+            case TrainerOptions::ModeStateType::ModeStateType_Results:
+               sprintf_s(szFoo, "Mode State = Results");
                player.DebugPrint(textX, textY += textYStep, szFoo);
                break;
 
-            case TrainerOptions::EngineCommandType::EngineCommandType_Config:
-               sprintf_s(szFoo, "Engine Command = Config");
+            case TrainerOptions::ModeStateType::ModeStateType_Config:
+               sprintf_s(szFoo, "Mode State = Config");
                player.DebugPrint(textX, textY += textYStep, szFoo);
                break;
 
-            case TrainerOptions::EngineCommandType::EngineCommandType_Exit:
-               sprintf_s(szFoo, "Engine Command = Exit");
+            case TrainerOptions::ModeStateType::ModeStateType_Exit:
+               sprintf_s(szFoo, "Mode State = Exit");
                player.DebugPrint(textX, textY += textYStep, szFoo);
                break;
 
             default:
-               sprintf_s(szFoo, "Engine Command = Unknown");
+               sprintf_s(szFoo, "Mode State = Unknown");
                player.DebugPrint(textX, textY += textYStep, szFoo);
                break;
          }
@@ -1429,12 +1426,7 @@ void BallHistory::ShowStatus(Player &player)
       } \
    }
 
-void BallHistory::ProcessModeDrawNormal(Player &player)
-{
-   DrawAutoControlVertices(player);
-}
-
-void BallHistory::ProcessModeDrawTrainer(Player &player)
+void BallHistory::DrawTrainerBallLocations(Player &player)
 {
    int textX = 0;
    int textY = -10;
@@ -1482,24 +1474,6 @@ void BallHistory::ProcessModeDrawTrainer(Player &player)
             }
          }
       }
-   }
-}
-
-void BallHistory::ProcessModeDraw(Player &player)
-{
-   DrawBallHistory(player);
-
-   switch (m_MenuOptions.m_ModeType)
-   {
-      case MenuOptionsRecord::ModeType_Normal:
-         ProcessModeDrawNormal(player);
-         break;
-      case MenuOptionsRecord::ModeType_Trainer:
-         ProcessModeDrawTrainer(player);
-         break;
-      default:
-         assert(0);
-         break;
    }
 }
 
@@ -1558,11 +1532,6 @@ template <class T> void BallHistory::ProcessMenuChangeValueStep(T &value, S32 st
 
 void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction)
 {
-   if (!m_Menu)
-   {
-      return;
-   }
-
    U32 currentTimeMs = msec();
 
    int textX = 0;
@@ -1600,10 +1569,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                switch (m_MenuOptions.m_ModeType)
                {
                   case MenuOptionsRecord::ModeType::ModeType_Normal:
-                     ToggleMenu();
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Normal_SelectModeOptions;
                      break;
                   case MenuOptionsRecord::ModeType::ModeType_Trainer:
-                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Trainer_SelectEngineCommand;
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Trainer_SelectModeOptions;
                      break;
                   default:
                      assert(0);
@@ -1615,13 +1584,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                break;
          }
          break;
-      case MenuOptionsRecord::MenuState::MenuState_Trainer_SelectEngineCommand:
-         SHOW_MENU_TEXT_TITLE("Trainer Engine Command");
-         SHOW_MENU_TEXT_SELECT("Start", m_MenuOptions.m_TrainerOptions.m_EngineCommand == TrainerOptions::EngineCommandType::EngineCommandType_Start);
-         SHOW_MENU_TEXT_SELECT("Resume", m_MenuOptions.m_TrainerOptions.m_EngineCommand == TrainerOptions::EngineCommandType::EngineCommandType_Resume);
-         SHOW_MENU_TEXT_SELECT("Results", m_MenuOptions.m_TrainerOptions.m_EngineCommand == TrainerOptions::EngineCommandType::EngineCommandType_Results);
-         SHOW_MENU_TEXT_SELECT("Config", m_MenuOptions.m_TrainerOptions.m_EngineCommand == TrainerOptions::EngineCommandType::EngineCommandType_Config);
-         SHOW_MENU_TEXT_SELECT("Exit", m_MenuOptions.m_TrainerOptions.m_EngineCommand == TrainerOptions::EngineCommandType::EngineCommandType_Exit);
+      case MenuOptionsRecord::MenuState::MenuState_Normal_SelectModeOptions:
+         SHOW_MENU_TEXT_TITLE("Normal Mode Options");
+         SHOW_MENU_TEXT_SELECT("Select Ball History", m_MenuOptions.m_NormalOptions.m_ModeState == NormalOptions::ModeStateType::ModeStateType_SelectBallHistory);
+         SHOW_MENU_TEXT_SELECT("Create Auto Control Locations", m_MenuOptions.m_NormalOptions.m_ModeState == NormalOptions::ModeStateType::ModeStateType_CreateAutoControlLocations);
+         SHOW_MENU_TEXT_SELECT("Exit", m_MenuOptions.m_NormalOptions.m_ModeState == NormalOptions::ModeStateType::ModeStateType_Exit);
 
          switch (menuAction)
          {
@@ -1630,19 +1597,137 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<TrainerOptions::EngineCommandType>(m_MenuOptions.m_TrainerOptions.m_EngineCommand, -1, 0, TrainerOptions::EngineCommandType::EngineCommandType_COUNT - 1);
+               ProcessMenuChangeValueStep<NormalOptions::ModeStateType>(m_MenuOptions.m_NormalOptions.m_ModeState, -1, 0, NormalOptions::ModeStateType::ModeStateType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<TrainerOptions::EngineCommandType>(m_MenuOptions.m_TrainerOptions.m_EngineCommand, 1, 0, TrainerOptions::EngineCommandType::EngineCommandType_COUNT - 1);
+               ProcessMenuChangeValueStep<NormalOptions::ModeStateType>(m_MenuOptions.m_NormalOptions.m_ModeState, 1, 0, NormalOptions::ModeStateType::ModeStateType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
-               switch (m_MenuOptions.m_TrainerOptions.m_EngineCommand)
+               switch (m_MenuOptions.m_NormalOptions.m_ModeState)
                {
-                  case TrainerOptions::EngineCommandType::EngineCommandType_Start:
+                  case NormalOptions::ModeStateType::ModeStateType_SelectBallHistory:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Normal_SelectBallHistory;
+                     break;
+                  case NormalOptions::ModeStateType::ModeStateType_CreateAutoControlLocations:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Normal_CreateAutoControlLocations;
+                     break;
+                  case NormalOptions::ModeStateType::ModeStateType_Exit:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Root_SelectMode;
+                     break;
+                  default:
+                     assert(0);
+                     break;
+               }
+               break;
+            default:
+               assert(0);
+               break;
+         }
+         break;
+      case MenuOptionsRecord::MenuState::MenuState_Normal_SelectBallHistory:
+         SHOW_MENU_TEXT_TITLE("Select Ball History");
+         SHOW_MENU_TEXT("Use Flipper buttons to navigate");
+         SHOW_MENU_TEXT("backward/forward through ball history");
+         SHOW_MENU_TEXT("Hit Control button to continue simulation");
+         SHOW_MENU_TEXT("Hit Plunger button to exit");
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType_Toggle:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType_UpLeft:
+               ControlPrev();
+               break;
+            case MenuOptionsRecord::MenuActionType_DownRight:
+               ControlNext();
+               break;
+            case MenuOptionsRecord::MenuActionType_Enter:
+               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Normal_SelectModeOptions;
+               break;
+            default:
+               assert(0);
+               break;
+         }
+         break;
+      case MenuOptionsRecord::MenuState::MenuState_Normal_CreateAutoControlLocations:
+         SHOW_MENU_TEXT_TITLE("Create Auto Control Locations");
+         SHOW_MENU_TEXT("Use Mouse click to create new locations");
+         SHOW_MENU_TEXT("Click existing location to remove");
+         SHOW_MENU_TEXT("Hit plunger button to exit");
+
+         for (std::size_t autoControlVerticesIndex = 0; autoControlVerticesIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); ++autoControlVerticesIndex)
+         {
+            NormalOptions::AutoControlVertex &autoControlVertex = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[autoControlVerticesIndex];
+            SHOW_MENU_TEXT("Point #%zu %.2f,%.2f,%.2f,%s (x,y,z,active)", autoControlVerticesIndex + 1, autoControlVertex.m_Pos3D.x, autoControlVertex.m_Pos3D.y, autoControlVertex.m_Pos3D.z, autoControlVertex.Active ? "true" : "false");
+         }
+
+         DrawFakeBallAtMousePosition(player, *m_AutoControlBallTexture);
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType_None:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType_Toggle:
+               {
+               bool removedExisting = false;
+               for (std::vector<NormalOptions::AutoControlVertex>::iterator autoControlVerticesIt = m_MenuOptions.m_NormalOptions.m_AutoControlVertices.begin(); autoControlVerticesIt < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.end(); autoControlVerticesIt++)
+               {
+                  if (DistancePixels(autoControlVerticesIt->m_Pos3D, m_MenuOptions.m_MousePosition3D) < player.m_vball[0]->m_d.m_radius)
+                  {
+                     m_MenuOptions.m_NormalOptions.m_AutoControlVertices.erase(autoControlVerticesIt);
+                     removedExisting = true;
+                     break;
+                  }
+               }
+               if (!removedExisting && m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size() < NormalOptions::AutoControlVerticesMax)
+               {
+                  m_MenuOptions.m_NormalOptions.m_AutoControlVertices.push_back({ m_MenuOptions.m_MousePosition3D, m_MenuOptions.m_MousePosition2D, true });
+               }
+               }
+               break;
+            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType_DownRight:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType_Enter:
+               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Normal_SelectModeOptions;
+               break;
+            default:
+               assert(0);
+               break;
+         }
+         break;
+      case MenuOptionsRecord::MenuState::MenuState_Trainer_SelectModeOptions:
+         SHOW_MENU_TEXT_TITLE("Trainer Mode Options");
+         SHOW_MENU_TEXT_SELECT("Start", m_MenuOptions.m_TrainerOptions.m_ModeState == TrainerOptions::ModeStateType::ModeStateType_Start);
+         SHOW_MENU_TEXT_SELECT("Resume", m_MenuOptions.m_TrainerOptions.m_ModeState == TrainerOptions::ModeStateType::ModeStateType_Resume);
+         SHOW_MENU_TEXT_SELECT("Results", m_MenuOptions.m_TrainerOptions.m_ModeState == TrainerOptions::ModeStateType::ModeStateType_Results);
+         SHOW_MENU_TEXT_SELECT("Config", m_MenuOptions.m_TrainerOptions.m_ModeState == TrainerOptions::ModeStateType::ModeStateType_Config);
+         SHOW_MENU_TEXT_SELECT("Exit", m_MenuOptions.m_TrainerOptions.m_ModeState == TrainerOptions::ModeStateType::ModeStateType_Exit);
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType_Toggle:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType_UpLeft:
+               ProcessMenuChangeValueStep<TrainerOptions::ModeStateType>(m_MenuOptions.m_TrainerOptions.m_ModeState, -1, 0, TrainerOptions::ModeStateType::ModeStateType_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType_DownRight:
+               ProcessMenuChangeValueStep<TrainerOptions::ModeStateType>(m_MenuOptions.m_TrainerOptions.m_ModeState, 1, 0, TrainerOptions::ModeStateType::ModeStateType_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType_Enter:
+               switch (m_MenuOptions.m_TrainerOptions.m_ModeState)
+               {
+                  case TrainerOptions::ModeStateType::ModeStateType_Start:
                      if (player.m_vball.size() == m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size())
                      {
-                        ToggleMenu();
                         ToggleControl();
+                        m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Trainer_Results;
                         m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
                         m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord = 0;
 
@@ -1664,18 +1749,18 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                         m_MenuOptions.m_MenuError = strStream.str();
                      }
                      break;
-                  case TrainerOptions::EngineCommandType::EngineCommandType_Resume:
-                     ToggleMenu();
+                  case TrainerOptions::ModeStateType::ModeStateType_Resume:
                      ToggleControl();
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Trainer_Results;
                      m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
                      break;
-                  case TrainerOptions::EngineCommandType::EngineCommandType_Results:
+                  case TrainerOptions::ModeStateType::ModeStateType_Results:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Trainer_Results;
                      break;
-                  case TrainerOptions::EngineCommandType::EngineCommandType_Config:
+                  case TrainerOptions::ModeStateType::ModeStateType_Config:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Trainer_SelectBallStartMode;
                      break;
-                  case TrainerOptions::EngineCommandType::EngineCommandType_Exit:
+                  case TrainerOptions::ModeStateType::ModeStateType_Exit:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Root_SelectMode;
                      break;
                   default:
@@ -1734,7 +1819,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
-               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Trainer_SelectEngineCommand;
+               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Trainer_SelectModeOptions;
                break;
             default:
                assert(0);
@@ -1827,6 +1912,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          break;
       case MenuOptionsRecord::MenuState::MenuState_Trainer_ExistingSelectBallStartLocation:
          SHOW_MENU_TEXT_TITLE("Existing Ball Start Position");
+         SHOW_MENU_TEXT("Use Flipper buttons to navigate");
+         SHOW_MENU_TEXT("backward/forward through ball history");
+         SHOW_MENU_TEXT("Hit Plunger button to accept");
 
          if (m_BallHistoryRecordsSize)
          {
@@ -2524,12 +2612,41 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun, 1, TrainerOptions::MaxSecondsPerRunMinimum, TrainerOptions::MaxSecondsPerRunMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
-               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Trainer_SelectEngineCommand;
+               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Trainer_SelectModeOptions;
                break;
             default:
                assert(0);
                break;
          }
+         break;
+      default:
+         assert(0);
+         break;
+   }
+
+   DrawBallHistory(player);
+   switch (m_MenuOptions.m_ModeType)
+   {
+      case MenuOptionsRecord::ModeType::ModeType_Normal:
+         DrawAutoControlVertices(player);
+         break;
+      case MenuOptionsRecord::ModeType::ModeType_Trainer:
+         DrawTrainerBallLocations(player);
+         break;
+      default:
+         break;
+   }
+}
+
+void BallHistory::ProcessMode(Player &player)
+{
+   switch (m_MenuOptions.m_ModeType)
+   {
+      case MenuOptionsRecord::ModeType_Normal:
+         ProcessModeNormal(player);
+         break;
+      case MenuOptionsRecord::ModeType_Trainer:
+         ProcessModeTrainer(player);
          break;
       default:
          assert(0);
@@ -2547,14 +2664,14 @@ void BallHistory::ProcessModeNormal(Player &player)
 
 void BallHistory::ProcessModeTrainer(Player &player)
 {
-   switch (m_MenuOptions.m_TrainerOptions.m_EngineCommand)
+   switch (m_MenuOptions.m_TrainerOptions.m_ModeState)
    {
-      case TrainerOptions::EngineCommandType::EngineCommandType_Start:
-      case TrainerOptions::EngineCommandType::EngineCommandType_Resume:
+      case TrainerOptions::ModeStateType::ModeStateType_Start:
+      case TrainerOptions::ModeStateType::ModeStateType_Resume:
          break;
-      case TrainerOptions::EngineCommandType::EngineCommandType_Results:
-      case TrainerOptions::EngineCommandType::EngineCommandType_Config:
-      case TrainerOptions::EngineCommandType::EngineCommandType_Exit:
+      case TrainerOptions::ModeStateType::ModeStateType_Results:
+      case TrainerOptions::ModeStateType::ModeStateType_Config:
+      case TrainerOptions::ModeStateType::ModeStateType_Exit:
          return;
       default:
          assert(0);
@@ -2576,18 +2693,16 @@ void BallHistory::ProcessModeTrainer(Player &player)
 
       // TODO Gary figure out a way to put back into control with screwing up state of balls
       //ToggleControl();
-      //ToggleMenu();
       m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Trainer_Results;
-      m_MenuOptions.m_TrainerOptions.m_EngineCommand = TrainerOptions::EngineCommandType::EngineCommandType_Config;
+      m_MenuOptions.m_TrainerOptions.m_ModeState = TrainerOptions::ModeStateType::ModeStateType_Config;
       return;
    }
 
    if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord == m_MenuOptions.m_TrainerOptions.m_TotalRuns)
    {
       ToggleControl();
-      ToggleMenu();
       m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Trainer_Results;
-      m_MenuOptions.m_TrainerOptions.m_EngineCommand = TrainerOptions::EngineCommandType::EngineCommandType_Results;
+      m_MenuOptions.m_TrainerOptions.m_ModeState = TrainerOptions::ModeStateType::ModeStateType_Results;
       return;
    }
 
@@ -2858,9 +2973,9 @@ bool BallHistory::BallInsideAutoControlVertex(std::vector<Ball *> &vball)
    {
       for each (const Ball *ball in vball)
       {
-         for (std::size_t autoControlVertexIndex = 0; autoControlVertexIndex < m_AutoControlVertices.size(); autoControlVertexIndex++)
+         for (std::size_t autoControlVertexIndex = 0; autoControlVertexIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); autoControlVertexIndex++)
          {
-            AutoControlVertex &autoControlVertex = m_AutoControlVertices[autoControlVertexIndex];
+            NormalOptions::AutoControlVertex &autoControlVertex = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[autoControlVertexIndex];
             if (autoControlVertex.Active)
             {
                if (DistancePixelsXY(autoControlVertex.m_Pos3D, ball->m_d.m_pos) < (ball->m_d.m_radius * 1.5f))
@@ -2872,9 +2987,9 @@ bool BallHistory::BallInsideAutoControlVertex(std::vector<Ball *> &vball)
          }
       }
 
-      for (std::size_t autoControlVertexIndex = 0; autoControlVertexIndex < m_AutoControlVertices.size(); autoControlVertexIndex++)
+      for (std::size_t autoControlVertexIndex = 0; autoControlVertexIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); autoControlVertexIndex++)
       {
-         AutoControlVertex &autoControlVertex = m_AutoControlVertices[autoControlVertexIndex];
+         NormalOptions::AutoControlVertex &autoControlVertex = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[autoControlVertexIndex];
          if (!autoControlVertex.Active)
          {
             autoControlVertex.Active = true;
@@ -3063,16 +3178,15 @@ void BallHistory::DrawAutoControlVertices(Player &player)
          {
             if (Ball *pball = player.m_vball[0])
             {
-               for (std::size_t index = 0; index < m_AutoControlVertices.size(); index++)
+               for (std::size_t index = 0; index < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); index++)
                {
-                  AutoControlVertex &acv = m_AutoControlVertices[index];
+                  NormalOptions::AutoControlVertex &acv = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[index];
                   player.DrawFakeBall(acv.m_Pos3D, pball->m_orientation, pball->m_d.m_radius, false, m_AutoControlBallTexture, false);
                   player.SetDebugOutputPosition(static_cast<float>(acv.m_Pos2D.x), static_cast<float>(acv.m_Pos2D.y));
                   SHOW_MENU_TEXT_POS(0, 0, "#%zu", index + 1);
                }
             }
          }
-         DrawFakeBallAtMousePosition(player, *m_AutoControlBallTexture);
          break;
       case MenuOptionsRecord::ModeType::ModeType_Trainer:
          // do nothing
@@ -3099,60 +3213,11 @@ void BallHistory::DrawFakeBallAtMousePosition(Player &player, Texture &texture)
    }
 }
 
-void BallHistory::ProcessMode(Player &player)
-{
-   switch (m_MenuOptions.m_ModeType)
-   {
-      case MenuOptionsRecord::ModeType_Normal:
-         ProcessModeNormal(player);
-         break;
-      case MenuOptionsRecord::ModeType_Trainer:
-         ProcessModeTrainer(player);
-         break;
-      default:
-         assert(0);
-         break;
-   }
-}
-
 void BallHistory::Process(Player &player, bool toggleControl)
 {
    if (toggleControl)
    {
       ToggleControl();
-      if (!m_Control)
-      {
-         m_Menu = false;
-      }
-      else
-      {
-         switch (m_MenuOptions.m_ModeType)
-         {
-            case MenuOptionsRecord::ModeType::ModeType_Normal:
-               break;
-            case MenuOptionsRecord::ModeType::ModeType_Trainer:
-               switch (m_MenuOptions.m_TrainerOptions.m_EngineCommand)
-               {
-                  case TrainerOptions::EngineCommandType::EngineCommandType_Start:
-                  case TrainerOptions::EngineCommandType::EngineCommandType_Resume:
-                     m_Menu = true;
-                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Trainer_Results;
-                     m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
-                     break;
-                  case TrainerOptions::EngineCommandType::EngineCommandType_Results:
-                  case TrainerOptions::EngineCommandType::EngineCommandType_Config:
-                  case TrainerOptions::EngineCommandType::EngineCommandType_Exit:
-                     break;
-                  default:
-                     assert(0);
-                     break;
-               }
-
-               break;
-            default:
-               break;
-         }
-      }
    }
 
    U32 currentTimeMs = msec();
@@ -3176,8 +3241,6 @@ void BallHistory::Process(Player &player, bool toggleControl)
 
          Update(player);
 
-         ProcessModeDraw(player);
-
          ProcessMenu(player, MenuOptionsRecord::MenuActionType_None);
       }
       else
@@ -3191,7 +3254,6 @@ void BallHistory::Process(Player &player, bool toggleControl)
          {
             InitBallLost(player);
          }
-
 
          if (m_WasControlled || m_WasRecalled)
          {
@@ -3229,20 +3291,11 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input)
          return true;
       }
    }
-   else if (input->dwOfs == (DWORD)DIK_M)
-   {
-      if (input->dwData & 0x80)
-      {
-         ToggleMenu();
-         ProcessMenu(player, MenuOptionsRecord::MenuActionType_Toggle);
-         return true;
-      }
-   }
    else if (m_Control && input->dwOfs == player.m_rgKeys[eLeftFlipperKey])
    {
       if (input->dwData & 0x80)
       {
-         if (m_Menu == true)
+         if (m_Control == true)
          {
             m_MenuOptions.m_SkipKeyPressed = true;
             m_MenuOptions.m_SkipKeyPressedMs = currentMsec;
@@ -3251,22 +3304,21 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input)
             ProcessMenu(player, MenuOptionsRecord::MenuActionType_UpLeft);
             return true;
          }
-         else
-         {
-            ControlPrev();
-         }
       }
       else if (input->dwData == 0)
       {
-         m_MenuOptions.m_SkipKeyPressed = false;
-         m_MenuOptions.m_SkipKeyPressedMs = 0;
+         if (m_Control == true)
+         {
+            m_MenuOptions.m_SkipKeyPressed = false;
+            m_MenuOptions.m_SkipKeyPressedMs = 0;
+         }
       }
    }
    else if (m_Control && input->dwOfs == player.m_rgKeys[eRightFlipperKey])
    {
       if (input->dwData & 0x80)
       {
-         if (m_Menu == true)
+         if (m_Control == true)
          {
             m_MenuOptions.m_SkipKeyPressed = true;
             m_MenuOptions.m_SkipKeyPressedMs = currentMsec;
@@ -3275,24 +3327,26 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input)
             ProcessMenu(player, MenuOptionsRecord::MenuActionType_DownRight);
             return true;
          }
-         else
-         {
-            ControlNext();
-         }
       }
       else if (input->dwData == 0)
       {
-         m_MenuOptions.m_SkipKeyPressed = false;
-         m_MenuOptions.m_SkipKeyPressedMs = 0;
+         if (m_Control == true)
+         {
+            m_MenuOptions.m_SkipKeyPressed = false;
+            m_MenuOptions.m_SkipKeyPressedMs = 0;
+         }
       }
    }
-   else if (m_Menu && input->dwOfs == (DWORD)DIK_RETURN)
+   else if (input->dwOfs == (DWORD)DIK_RETURN)
    {
       if (input->dwData & 0x80)
       {
-         m_MenuOptions.m_MenuError.clear();
-         ProcessMenu(player, MenuOptionsRecord::MenuActionType_Enter);
-         return true;
+         if (m_Control)
+         {
+            m_MenuOptions.m_MenuError.clear();
+            ProcessMenu(player, MenuOptionsRecord::MenuActionType_Enter);
+            return true;
+         }
       }
    }
    else if (input->dwOfs == (DWORD)DIK_F)
@@ -3319,33 +3373,7 @@ void BallHistory::ProcessMouse(Player &player, Vertex3Ds &mousePosition3D, POINT
 {
    m_MenuOptions.m_MousePosition3D = mousePosition3D;
    m_MenuOptions.m_MousePosition2D = mousePosition2D;
-   switch (m_MenuOptions.m_ModeType)
-   {
-      case MenuOptionsRecord::ModeType::ModeType_Normal:
-         player.m_BallHistory.UpdateAutoControl(player, mousePosition3D, mousePosition2D);
-         break;
-      case MenuOptionsRecord::ModeType::ModeType_Trainer:
-         ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_Toggle);
-         break;
-      default:
-         break;
-   }
-}
-
-void BallHistory::UpdateAutoControl(Player &player, Vertex3Ds &autoControlVertexPosition3D, POINT &autoControlVertexPosition2D)
-{
-   for (std::vector<AutoControlVertex>::iterator autoControlVerticesIt = m_AutoControlVertices.begin(); autoControlVerticesIt < m_AutoControlVertices.end(); autoControlVerticesIt++)
-   {
-      if (DistancePixels(autoControlVerticesIt->m_Pos3D, autoControlVertexPosition3D) < player.m_vball[0]->m_d.m_radius)
-      {
-         m_AutoControlVertices.erase(autoControlVerticesIt);
-         return;
-      }
-   }
-   if (m_AutoControlVertices.size() < m_AutoControlVerticesMax)
-   {
-      m_AutoControlVertices.push_back({ autoControlVertexPosition3D, autoControlVertexPosition2D, true });
-   }
+   ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_Toggle);
 }
 
 #include <algorithm>
