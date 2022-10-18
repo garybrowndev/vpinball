@@ -457,7 +457,6 @@ public:
    void Process(Player &player, bool toggleControl=false);
    bool ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input);
    void ProcessMouse(Player &player, Vertex3Ds &mousePosition3D, POINT &mousePosition2D);
-   void UpdateAutoControl(Player &player, Vertex3Ds &autoControlVertexPosition3D, POINT &autoControlVertexPosition2D);
    void ControlNext();
    void ControlPrev();
    void ToggleFavorite();
@@ -507,6 +506,7 @@ public: // TODO Gary - put back to private
       {
          ModeType_Normal,
          ModeType_Trainer,
+         ModeType_Disabled,
          ModeType_COUNT
       };
 

@@ -1027,6 +1027,11 @@ void BallHistory::ShowStatus(Player &player)
          player.DebugPrint(textX, textY += textYStep, szFoo);
          break;
 
+      case MenuOptionsRecord::ModeType::ModeType_Disabled:
+         sprintf_s(szFoo, "Mode = Disabled");
+         player.DebugPrint(textX, textY += textYStep, szFoo);
+         break;
+
       default:
          sprintf_s(szFoo, "Mode = Unknown");
          player.DebugPrint(textX, textY += textYStep, szFoo);
@@ -1366,7 +1371,12 @@ void BallHistory::ShowStatus(Player &player)
             }
          }
          break;
-      case MenuOptionsRecord::ModeType::ModeType_COUNT:
+      case MenuOptionsRecord::ModeType::ModeType_Disabled:
+         // do nothing
+         break;
+
+      default:
+         assert(0);
          break;
    }
 }
@@ -1552,6 +1562,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          SHOW_MENU_TEXT_TITLE("Ball History Mode");
          SHOW_MENU_TEXT_SELECT("Normal", m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Normal);
          SHOW_MENU_TEXT_SELECT("Trainer", m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Trainer);
+         SHOW_MENU_TEXT_SELECT("Disabled", m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Disabled);
 
          switch (menuAction)
          {
@@ -1573,6 +1584,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      break;
                   case MenuOptionsRecord::ModeType::ModeType_Trainer:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuState::MenuState_Trainer_SelectModeOptions;
+                     break;
+                  case MenuOptionsRecord::ModeType::ModeType_Disabled:
+                     ToggleControl();
                      break;
                   default:
                      assert(0);
@@ -2633,7 +2647,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       case MenuOptionsRecord::ModeType::ModeType_Trainer:
          DrawTrainerBallLocations(player);
          break;
+      case MenuOptionsRecord::ModeType::ModeType_Disabled:
+         // do nothing
+         break;
       default:
+         assert(0);
          break;
    }
 }
@@ -2647,6 +2665,9 @@ void BallHistory::ProcessMode(Player &player)
          break;
       case MenuOptionsRecord::ModeType_Trainer:
          ProcessModeTrainer(player);
+         break;
+      case MenuOptionsRecord::ModeType_Disabled:
+         // do nothing
          break;
       default:
          assert(0);
@@ -3171,29 +3192,18 @@ void BallHistory::DrawAutoControlVertices(Player &player)
    int textYStep = 20;
    char szFoo[1024];
 
-   switch (m_MenuOptions.m_ModeType)
+   if ((msec() % 1000) >= 200)
    {
-      case MenuOptionsRecord::ModeType::ModeType_Normal:
-         if ((msec() % 1000) >= 200)
+      if (Ball *pball = player.m_vball[0])
+      {
+         for (std::size_t index = 0; index < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); index++)
          {
-            if (Ball *pball = player.m_vball[0])
-            {
-               for (std::size_t index = 0; index < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); index++)
-               {
-                  NormalOptions::AutoControlVertex &acv = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[index];
-                  player.DrawFakeBall(acv.m_Pos3D, pball->m_orientation, pball->m_d.m_radius, false, m_AutoControlBallTexture, false);
-                  player.SetDebugOutputPosition(static_cast<float>(acv.m_Pos2D.x), static_cast<float>(acv.m_Pos2D.y));
-                  SHOW_MENU_TEXT_POS(0, 0, "#%zu", index + 1);
-               }
-            }
+            NormalOptions::AutoControlVertex &acv = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[index];
+            player.DrawFakeBall(acv.m_Pos3D, pball->m_orientation, pball->m_d.m_radius, false, m_AutoControlBallTexture, false);
+            player.SetDebugOutputPosition(static_cast<float>(acv.m_Pos2D.x), static_cast<float>(acv.m_Pos2D.y));
+            SHOW_MENU_TEXT_POS(0, 0, "#%zu", index + 1);
          }
-         break;
-      case MenuOptionsRecord::ModeType::ModeType_Trainer:
-         // do nothing
-         break;
-      default:
-         assert(0);
-         break;
+      }
    }
 }
 
