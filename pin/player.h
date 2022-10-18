@@ -534,17 +534,15 @@ public: // TODO Gary - put back to private
       MenuOptionsRecord();
    };
 
-   // TODO GARY Refactor these names to not have prefix m_
-   // m_ is only for members, these are static and should not have prefix
-   static const std::size_t m_BallHistorySizeDefault;
-   static const NextPreviousByType m_NextPreviousByDefault;
-   static const std::size_t m_BallHistoryControlStepMsDefault;
-   static const float m_BallHistoryControlStepPixelsDefault;
+   static const std::size_t BallHistorySizeDefault;
+   static const NextPreviousByType NextPreviousByDefault;
+   static const std::size_t BallHistoryControlStepMsDefault;
+   static const float BallHistoryControlStepPixelsDefault;
 
-   static const float m_BallHistoryMinPointSize;
-   static const float m_BallHistoryMaxPointSize;
-   static const float m_FavoritePointSize;
-   static const float m_ControlVerticesDistanceMax;
+   static const float BallHistoryMinPointSize;
+   static const float BallHistoryMaxPointSize;
+   static const float FavoritePointSize;
+   static const float ControlVerticesDistanceMax;
 
    bool m_Save;
    bool m_Control;

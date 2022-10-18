@@ -170,15 +170,15 @@ BallHistory::MenuOptionsRecord::MenuOptionsRecord():
 {
 }
 
-const std::size_t BallHistory::m_BallHistorySizeDefault = 8 * 1024;
-const BallHistory::NextPreviousByType BallHistory::m_NextPreviousByDefault = BallHistory::NextPreviousByType::eDistancePixels;
-const std::size_t BallHistory::m_BallHistoryControlStepMsDefault = 250;
-const float BallHistory::m_BallHistoryControlStepPixelsDefault = 200.0f;
+const std::size_t BallHistory::BallHistorySizeDefault = 8 * 1024;
+const BallHistory::NextPreviousByType BallHistory::NextPreviousByDefault = BallHistory::NextPreviousByType::eDistancePixels;
+const std::size_t BallHistory::BallHistoryControlStepMsDefault = 250;
+const float BallHistory::BallHistoryControlStepPixelsDefault = 200.0f;
 
-const float BallHistory::m_BallHistoryMinPointSize = 5.0f;
-const float BallHistory::m_BallHistoryMaxPointSize = 20.0f;
-const float BallHistory::m_FavoritePointSize = BallHistory::m_BallHistoryMaxPointSize * 1.25f;
-const float BallHistory::m_ControlVerticesDistanceMax = 2000.0f;
+const float BallHistory::BallHistoryMinPointSize = 5.0f;
+const float BallHistory::BallHistoryMaxPointSize = 20.0f;
+const float BallHistory::FavoritePointSize = BallHistory::BallHistoryMaxPointSize * 1.25f;
+const float BallHistory::ControlVerticesDistanceMax = 2000.0f;
 const char * BallHistory::SettingsFileExtension = "ini";
 const char * BallHistory::SettingsFolderName = "BallHistory";
 const char BallHistory::SettingsValueDelimeter = ',';
@@ -616,9 +616,9 @@ void BallHistory::Init(Player &player)
 
    m_FavoriteControlIndex = 0;
 
-   m_NextPreviousBy = m_NextPreviousByDefault;
-   m_BallHistoryControlStepMs = m_BallHistoryControlStepMsDefault;
-   m_BallHistoryControlStepPixels = m_BallHistoryControlStepPixelsDefault;
+   m_NextPreviousBy = NextPreviousByDefault;
+   m_BallHistoryControlStepMs = BallHistoryControlStepMsDefault;
+   m_BallHistoryControlStepPixels = BallHistoryControlStepPixelsDefault;
 
    // TODO GARY should be smarter here, only clear the ball history dimensions
    // for the balls that disappeared. there can be a case where the are two balls
@@ -632,7 +632,7 @@ void BallHistory::Init(Player &player)
    {
       m_BallHistoryRecordIds.push_back(player.m_vball[vballIndex]);
    }
-   m_BallHistoryRecords.resize(m_BallHistorySizeDefault);
+   m_BallHistoryRecords.resize(BallHistorySizeDefault);
    m_BallHistoryRecordsSize = 0;
    m_BallHistoryRecordsHeadIndex = 0;
    m_MaxBallVelocityPixels = 0.0f;
@@ -3063,7 +3063,7 @@ void BallHistory::DrawBallHistory(Player &player)
 
          float distanceToBall = DistancePixels(ballHistoryState.m_Pos, vball->m_d.m_pos);
 
-         if (distanceToBall > (vball->m_d.m_radius * 2.0f) && drawBallHistoryRecords[ballHistoryStateIndex].TotalDistancePixelsTraveled < m_ControlVerticesDistanceMax)
+         if (distanceToBall > (vball->m_d.m_radius * 2.0f) && drawBallHistoryRecords[ballHistoryStateIndex].TotalDistancePixelsTraveled < ControlVerticesDistanceMax)
          {
             float vballRadius = vball->m_d.m_radius;
             ballHistoryState.m_Size = (((VelocityPixels(ballHistoryState.m_Vel) - 0) * (vballRadius * 1.75f - vballRadius * 0.25f)) / (m_MaxBallVelocityPixels - 0)) + vballRadius * 0.25f;
@@ -3084,7 +3084,7 @@ void BallHistory::DrawBallHistory(Player &player)
       allMaxDistanceTraveled = true;
       for each (const DrawBallHistoryRecord &dbhr in drawBallHistoryRecords)
       {
-         if (dbhr.TotalDistancePixelsTraveled <= m_ControlVerticesDistanceMax)
+         if (dbhr.TotalDistancePixelsTraveled <= ControlVerticesDistanceMax)
          {
             allMaxDistanceTraveled = false;
          }
