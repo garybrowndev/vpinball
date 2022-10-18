@@ -3337,7 +3337,7 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input)
          }
       }
    }
-   else if (input->dwOfs == (DWORD)DIK_RETURN)
+   else if (input->dwOfs == player.m_rgKeys[ePlungerKey])
    {
       if (input->dwData & 0x80)
       {
