@@ -257,6 +257,35 @@ class NudgeFilterY : public NudgeFilter
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct BallHistoryState
+{
+   BallHistoryState();
+   
+   Vertex3Ds m_Pos;
+   Vertex3Ds m_Vel;
+   Vertex3Ds m_AngMom;
+   Vertex3Ds m_LastEventPos;
+   bool m_Frozen;
+
+   Matrix3 m_Orientation;
+
+   Vertex3Ds m_OldPos[MAX_BALL_TRAIL_POS];
+   unsigned int m_RingCounter_OldPos;
+
+   float m_Size;
+   Texture *m_Texture;
+};
+
+struct BallHistoryRecord
+{
+   BallHistoryRecord();
+   BallHistoryRecord(int timeMs);
+   void Set(std::vector<Ball*> &vball, int timeMs);
+
+   int m_TimeMs;
+   std::vector<BallHistoryState> m_BallHistoryStates;
+};
+
 class TrainerOptions
 {
 public:
@@ -340,7 +369,7 @@ public:
       float m_Distance;
       std::set<std::size_t> m_AssociatedBallStartIndexes;
 
-      std::vector<std::tuple<U32, Vertex3Ds>> m_StopBallsTracker;
+      std::vector<std::tuple<int, Vertex3Ds>> m_StopBallsTracker;
 
       BallEndOptionsRecord();
       BallEndOptionsRecord(Vertex3Ds &pos, POINT pos2D, float distance);
@@ -350,7 +379,7 @@ public:
    {
       bool m_Passed;
       bool m_TimeElapsed;
-      U32 m_TotalTimeMs;
+      int m_TotalTimeMs;
    };
 
    static const DWORD RunCountdownMs = 3000;
@@ -379,7 +408,7 @@ public:
 
    std::vector<RunRecord> m_RunRecords;
    std::size_t m_CurrentRunRecord;
-   U32 m_RunStartTimeMs;
+   int m_RunStartTimeMs;
 
    TrainerOptions();
 };
@@ -410,34 +439,6 @@ public:
    NormalOptions();
 };
 
-struct BallHistoryState
-{
-   BallHistoryState();
-   
-   Vertex3Ds m_Pos;
-   Vertex3Ds m_Vel;
-   Vertex3Ds m_AngMom;
-   Vertex3Ds m_LastEventPos;
-   bool m_Frozen;
-
-   Matrix3 m_Orientation;
-
-   Vertex3Ds m_OldPos[MAX_BALL_TRAIL_POS];
-   unsigned int m_RingCounter_OldPos;
-
-   float m_Size;
-   Texture *m_Texture;
-};
-
-struct BallHistoryRecord
-{
-   BallHistoryRecord();
-   BallHistoryRecord(U32 time_msec);
-
-   U32 m_Time_msec;
-   std::vector<BallHistoryState> m_BallHistoryStates;
-};
-
 struct BallHistory
 {
 public:
@@ -451,12 +452,12 @@ public:
    bool GetSettingsFileName(Player &player, std::string &fileName);
    void LoadSettings(Player &player);
    void SaveSettings(Player &player);
-   void Init(Player &player);
+   void Init(Player &player, int currentTimeMs);
    void InitBallLost(Player &player);
    void UnInit(Player &player);
-   void Process(Player &player, bool toggleControl=false);
-   bool ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input);
-   void ProcessMouse(Player &player, Vertex3Ds &mousePosition3D, POINT &mousePosition2D);
+   void Process(Player &player, int currentTimeMsec);
+   bool ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, int currentTimeMs);
+   void ProcessMouse(Player &player, Vertex3Ds &mousePosition3D, POINT &mousePosition2D, int currentTimeMs);
    void ControlNext();
    void ControlPrev();
    void ToggleFavorite();
@@ -510,8 +511,8 @@ public: // TODO Gary - put back to private
          ModeType_COUNT
       };
 
-      static const U32 SkipKeyPressHoldMs;
-      static const U32 SkipKeyIntervalMs;
+      static const int SkipKeyPressHoldMs;
+      static const int SkipKeyIntervalMs;
       static const S32 LastProcessedKeySkip;
 
       MenuState m_MenuState;
@@ -522,9 +523,9 @@ public: // TODO Gary - put back to private
       TrainerOptions m_TrainerOptions;
 
       bool m_SkipKeyPressed;
-      U32 m_SkipKeyPressedMs;
+      int m_SkipKeyPressedMs;
       bool m_SkipKeyLeft;
-      U32 m_SkipKeyUsedMs;
+      int m_SkipKeyUsedMs;
       std::size_t m_CurrentBallIndex;
       std::size_t m_CurrentAssociationIndex;
       std::size_t m_CurrentCompleteIndex;
@@ -544,7 +545,6 @@ public: // TODO Gary - put back to private
    static const float FavoritePointSize;
    static const float ControlVerticesDistanceMax;
 
-   bool m_Save;
    bool m_Control;
    bool m_WasControlled;
    bool m_WasRecalled;
@@ -552,7 +552,7 @@ public: // TODO Gary - put back to private
    std::size_t m_FavoriteControlIndex;
 
    NextPreviousByType m_NextPreviousBy;
-   U32 m_BallHistoryControlStepMs;
+   int m_BallHistoryControlStepMs;
    float m_BallHistoryControlStepPixels;
 
    std::vector<const Ball *> m_BallHistoryRecordIds;
@@ -560,6 +560,7 @@ public: // TODO Gary - put back to private
    std::size_t m_BallHistoryRecordsHeadIndex;
    std::size_t m_BallHistoryRecordsSize;
    float m_MaxBallVelocityPixels;
+   BallHistoryRecord m_MostRecentBallHistoryRecord;
 
    Texture *m_AutoControlBallTexture;
    Texture *m_TrainerBallStartTexture;
@@ -607,19 +608,19 @@ public: // TODO Gary - put back to private
    void ToggleControl();
    void ResetBallHistoryRenderSizes();
    void DrawBallHistory(Player &player);
-   void DrawAutoControlVertices(Player &player);
+   void DrawAutoControlVertices(Player &player, int currentTimeMs);
    void DrawFakeBallAtMousePosition(Player &player, Texture &texture);
-   void DrawTrainerBallLocations(Player &player);
-   void Update(Player &player);
-   void ShowStatus(Player &player);
-   void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction);
-   void ProcessMode(Player &player);
+   void DrawTrainerBallLocations(Player &player, int currentTimeMs);
+   void UpdateBallState(Player &player, BallHistoryRecord &ballHistoryRecord);
+   void ShowStatus(Player &player, int currentTimeMs);
+   void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs);
+   void ProcessMode(Player &player, int currentTimeMs);
    void ProcessModeNormal(Player &player);
-   void ProcessModeTrainer(Player &player);
+   void ProcessModeTrainer(Player &player, int currentTimeMs);
    S32 ProcessMenuChangeValue(S32 value, S32 delta, S32 min, S32 max, bool skip);
    template <class T> void ProcessMenuChangeValueStep(T &value, S32 step, S32 min, S32 max);
-   template <class T> void ProcessMenuChangeValueSkip(T &value, S32 min, S32 max, U32 currentTimeMs);
-   void Add(std::vector<Ball *> &vballs, U32 time_msec);
+   template <class T> void ProcessMenuChangeValueSkip(T &value, S32 min, S32 max, int currentTimeMs);
+   void Add(std::vector<Ball *> &vballs, int currentTimeMsec);
    BallHistoryRecord &Get(std::size_t index);
    std::size_t GetTailIndex();
 
