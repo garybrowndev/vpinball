@@ -3339,7 +3339,16 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
             m_MenuOptions.m_SkipKeyLeft = true;
 
             ProcessMenu(player, MenuOptionsRecord::MenuActionType_UpLeft, currentTimeMs);
-            return true;
+
+            if (m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Normal &&
+               m_MenuOptions.m_MenuState == MenuOptionsRecord::MenuState::MenuState_Normal_SelectBallHistory)
+            {
+               return false;
+            }
+            else
+            {
+               return true;
+            }
          }
       }
       else if (input->dwData == 0)
@@ -3362,7 +3371,16 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
             m_MenuOptions.m_SkipKeyLeft = false;
 
             ProcessMenu(player, MenuOptionsRecord::MenuActionType_DownRight, currentTimeMs);
-            return true;
+
+            if (m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Normal &&
+               m_MenuOptions.m_MenuState == MenuOptionsRecord::MenuState::MenuState_Normal_SelectBallHistory)
+            {
+               return false;
+            }
+            else
+            {
+               return true;
+            }
          }
       }
       else if (input->dwData == 0)
