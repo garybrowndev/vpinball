@@ -476,31 +476,31 @@ public: // TODO Gary - put back to private
          MenuActionType_COUNT
       };
 
-      enum MenuState
+      enum MenuStateType
       {
-         MenuState_None,
-         MenuState_Root_SelectMode,
-         MenuState_Normal_SelectModeOptions,
-         MenuState_Normal_SelectBallHistory,
-         MenuState_Normal_CreateAutoControlLocations,
-         MenuState_Trainer_SelectModeOptions,
-         MenuState_Trainer_Results,
-         MenuState_Trainer_SelectBallStartMode,
-         MenuState_Trainer_ExistingSelectBallStartLocation,
-         MenuState_Trainer_ExistingBallStartComplete,
-         MenuState_Trainer_SelectBallPassLocation,
-         MenuState_Trainer_SelectBallPassFinishMode,
-         MenuState_Trainer_SelectBallPassDistance,
-         MenuState_Trainer_SelectBallPassAssociations,
-         MenuState_Trainer_BallPassComplete,
-         MenuState_Trainer_SelectBallFailLocation,
-         MenuState_Trainer_SelectBallFailFinishMode,
-         MenuState_Trainer_SelectBallFailDistance,
-         MenuState_Trainer_SelectBallFailAssociations,
-         MenuState_Trainer_BallFailComplete,
-         MenuState_Trainer_SelectTotalRuns,
-         MenuState_Trainer_SelectMaxSecondsPerRun,
-         MenuState_COUNT
+         MenuStateType_None,
+         MenuStateType_Root_SelectMode,
+         MenuStateType_Normal_SelectModeOptions,
+         MenuStateType_Normal_SelectBallHistory,
+         MenuStateType_Normal_CreateAutoControlLocations,
+         MenuStateType_Trainer_SelectModeOptions,
+         MenuStateType_Trainer_Results,
+         MenuStateType_Trainer_SelectBallStartMode,
+         MenuStateType_Trainer_ExistingSelectBallStartLocation,
+         MenuStateType_Trainer_ExistingBallStartComplete,
+         MenuStateType_Trainer_SelectBallPassLocation,
+         MenuStateType_Trainer_SelectBallPassFinishMode,
+         MenuStateType_Trainer_SelectBallPassDistance,
+         MenuStateType_Trainer_SelectBallPassAssociations,
+         MenuStateType_Trainer_BallPassComplete,
+         MenuStateType_Trainer_SelectBallFailLocation,
+         MenuStateType_Trainer_SelectBallFailFinishMode,
+         MenuStateType_Trainer_SelectBallFailDistance,
+         MenuStateType_Trainer_SelectBallFailAssociations,
+         MenuStateType_Trainer_BallFailComplete,
+         MenuStateType_Trainer_SelectTotalRuns,
+         MenuStateType_Trainer_SelectMaxSecondsPerRun,
+         MenuStateType_COUNT
       };
 
       enum ModeType
@@ -515,7 +515,7 @@ public: // TODO Gary - put back to private
       static const int SkipKeyIntervalMs;
       static const S32 LastProcessedKeySkip;
 
-      MenuState m_MenuState;
+      MenuStateType m_MenuState;
       ModeType m_ModeType;
       std::string m_MenuError;
 
