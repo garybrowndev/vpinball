@@ -2666,6 +2666,7 @@ void BallHistory::ProcessModeNormal(Player &player)
    if (BallInsideAutoControlVertex(player.m_vball))
    {
       m_Control = true;
+      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectBallHistory;
    }
 }
 
