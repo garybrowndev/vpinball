@@ -377,9 +377,17 @@ public:
 
    struct RunRecord
    {
-      bool m_Passed;
-      bool m_TimeElapsed;
+      enum ResultType
+      {
+         ResultType_Passed,
+         ResultType_FailedLocation,
+         ResultType_FailedTimeElapsed
+      };
+
+      ResultType m_Result;
       int m_TotalTimeMs;
+      std::vector<std::tuple<std::size_t, std::size_t>> m_StartToPassLocationIndexes;
+      std::vector<std::tuple<std::size_t, std::size_t>> m_StartToFailLocationIndexes;
    };
 
    static const DWORD RunCountdownMs = 3000;

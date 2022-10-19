@@ -1782,19 +1782,22 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          for (std::size_t x = 0; x < m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord; x++)
          {
             TrainerOptions::RunRecord &rr = m_MenuOptions.m_TrainerOptions.m_RunRecords[x];
-            if (rr.m_Passed == true)
+            switch (rr.m_Result)
             {
-               totalPasses++;
-               totalPassMs += rr.m_TotalTimeMs;
-            }
-            else if (rr.m_TimeElapsed == false)
-            {
-               totalFailsLocation++;
-               totalFailLocationMs += rr.m_TotalTimeMs;
-            }
-            else if (rr.m_TotalTimeMs > 0)
-            {
-               totalFailsTimeElapsed++;
+               case TrainerOptions::RunRecord::ResultType::ResultType_Passed:
+                  totalPasses++;
+                  totalPassMs += rr.m_TotalTimeMs;
+                  break;
+               case TrainerOptions::RunRecord::ResultType::ResultType_FailedLocation:
+                  totalFailsLocation++;
+                  totalFailLocationMs += rr.m_TotalTimeMs;
+                  break;
+               case TrainerOptions::RunRecord::ResultType::ResultType_FailedTimeElapsed:
+                  totalFailsTimeElapsed++;
+                  break;
+               default:
+                  assert(0);
+                  break;
             }
          }
 
@@ -2728,7 +2731,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          m_MenuOptions.m_TrainerOptions.m_RunRecords.clear();
          for (S32 x = 0; x < m_MenuOptions.m_TrainerOptions.m_TotalRuns; x++)
          {
-            m_MenuOptions.m_TrainerOptions.m_RunRecords.push_back({false, false, 0});
+            m_MenuOptions.m_TrainerOptions.m_RunRecords.push_back({TrainerOptions::RunRecord::ResultType::ResultType_Passed, 0, std::vector<std::tuple<std::size_t, std::size_t>>(), std::vector<std::tuple<std::size_t, std::size_t>>()});
          }
       }
       m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = currentTimeMs;
@@ -2739,22 +2742,38 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
    if (runElapsedTimeMs < TrainerOptions::RunCountdownMs)
    {
       // countdown before run starts
-      SHOW_MENU_TEXT("Run #%zu Begins in %.2f", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, (TrainerOptions::RunCountdownMs - runElapsedTimeMs) / 1000.0f);
+      SHOW_MENU_TEXT_TITLE("Run #%zu Begins in %.2f", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, (TrainerOptions::RunCountdownMs - runElapsedTimeMs) / 1000.0f);
       if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord > 0)
       {
          TrainerOptions::RunRecord &previousRunRecord = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord - 1];
          SHOW_MENU_TEXT("Previous Run Result");
-         if (previousRunRecord.m_Passed == true)
+
+         switch (previousRunRecord.m_Result)
          {
-            SHOW_MENU_TEXT("Pass");
-         }
-         else if (previousRunRecord.m_TimeElapsed)
-         {
-            SHOW_MENU_TEXT("Fail (time elapsed)");
-         }
-         else
-         {
-            SHOW_MENU_TEXT("Fail (location)");
+            case TrainerOptions::RunRecord::ResultType::ResultType_Passed:
+               SHOW_MENU_TEXT("Pass");
+               for each (const std::tuple<std::size_t, std::size_t> &startToPassLocationIndex in previousRunRecord.m_StartToPassLocationIndexes)
+               {
+                  std::stringstream startToPassLocationIndexes;
+                  startToPassLocationIndexes << "Start #" << std::get<0>(startToPassLocationIndex) + 1 << " --> Pass #" << std::get<1>(startToPassLocationIndex) + 1;
+                  SHOW_MENU_TEXT("%s", startToPassLocationIndexes.str().c_str());
+               }
+               break;
+            case TrainerOptions::RunRecord::ResultType::ResultType_FailedLocation:
+               SHOW_MENU_TEXT("Fail (location)");
+               for each (const std::tuple<std::size_t, std::size_t> &startToFailLocationIndex in previousRunRecord.m_StartToFailLocationIndexes)
+               {
+                  std::stringstream startToFailLocationIndexes;
+                  startToFailLocationIndexes << "Start #" << std::get<0>(startToFailLocationIndex) + 1 << " --> Fail #" << std::get<1>(startToFailLocationIndex) + 1;
+                  SHOW_MENU_TEXT("%s", startToFailLocationIndexes.str().c_str());
+               }
+               break;
+            case TrainerOptions::RunRecord::ResultType::ResultType_FailedTimeElapsed:
+               SHOW_MENU_TEXT("Fail (time elapsed)");
+               break;
+            default:
+               assert(0);
+               break;
          }
          SHOW_MENU_TEXT("%.2f seconds", static_cast<float>(previousRunRecord.m_TotalTimeMs) / 1000);
       }
@@ -2776,6 +2795,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
    {
       SHOW_MENU_TEXT("Monitoring %.2f", (runElapsedTimeMs - TrainerOptions::RunCountdownMs) / 1000.0f);
       bool allPass = true;
+      std::vector<std::tuple<std::size_t, std::size_t>> startToPassLocationIndexes;
       for (std::size_t vballIndex = 0; vballIndex < player.m_vball.size(); vballIndex++)
       {
          bool currentPass = false;
@@ -2807,6 +2827,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                      if ((currentTimeMs - stopBallMs) > 200)
                      {
                         currentPass = true;
+                        startToPassLocationIndexes.push_back(std::tuple<std::size_t, std::size_t>(vballIndex, passBeorIndex));
                         break;
                      }
                   }
@@ -2824,6 +2845,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
             }
             else if (distance < passBeor.m_Distance)
             {
+               startToPassLocationIndexes.push_back(std::tuple<std::size_t, std::size_t>(vballIndex, passBeorIndex));
                currentPass = true;
                break;
             }
@@ -2837,13 +2859,15 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       }
       if (allPass == true)
       {
-         currentRunRecord.m_Passed = true;
+         currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_Passed;
          currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - TrainerOptions::RunCountdownMs;
+         currentRunRecord.m_StartToPassLocationIndexes = startToPassLocationIndexes;
          m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
          m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
       }
 
       bool oneFail = false;
+      std::vector<std::tuple<std::size_t, std::size_t>> startToFailLocationIndexes;
       for (std::size_t vballIndex = 0; vballIndex < player.m_vball.size(); vballIndex++)
       {
          bool currentFail = false;
@@ -2875,7 +2899,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                      if ((currentTimeMs - stopBallMs) > 200)
                      {
                         currentFail = true;
-                        break;
+                        startToFailLocationIndexes.push_back(std::tuple<std::size_t, std::size_t>(vballIndex, failBeorIndex));
                      }
                   }
                   else
@@ -2893,6 +2917,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
             else if (distance < failBeor.m_Distance)
             {
                currentFail = true;
+               startToFailLocationIndexes.push_back(std::tuple<std::size_t, std::size_t>(vballIndex, failBeorIndex));
             }
          }
          if (currentFail == true)
@@ -2903,16 +2928,16 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       }
       if (oneFail == true)
       {
-         currentRunRecord.m_Passed = false;
+         currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_FailedLocation;
          currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - TrainerOptions::RunCountdownMs;
+         currentRunRecord.m_StartToFailLocationIndexes = startToFailLocationIndexes;
          m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
          m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
       }
    }
    else
    {
-      currentRunRecord.m_Passed = false;
-      currentRunRecord.m_TimeElapsed = true;
+      currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_FailedTimeElapsed;
       currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - TrainerOptions::RunCountdownMs;
       m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
       m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
