@@ -994,6 +994,10 @@ void BallHistory::ControlPrev()
 void BallHistory::ToggleControl()
 {
    m_Control = !m_Control;
+   if (m_Control)
+   {
+      m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+   }
 }
 
 void BallHistory::ToggleFavorite()
@@ -3240,17 +3244,6 @@ void BallHistory::Process(Player &player, int currentTimeMs)
    {
       case MenuOptionsRecord::ModeType::ModeType_Normal:
       case MenuOptionsRecord::ModeType::ModeType_Trainer:
-         /*
-         if (!player.m_vball.size() || !m_BallHistoryRecordsSize)
-         {
-            Init(player, currentTimeMs);
-            if (m_WasControlled)
-            {
-               m_Control = true;
-            }
-         }
-         */
-
          ProcessMode(player, currentTimeMs);
 
          if (m_Control)
@@ -8558,6 +8551,7 @@ void Player::Render()
          }
          else if ((m_closeType == 0) && !g_pvp->m_disable_pause_menu)
          {
+            m_BallHistory.m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
             ShowCursor(TRUE);
             option = DialogBox(g_pvp->theInstance, MAKEINTRESOURCE(IDD_GAMEPAUSE), GetHwnd(), PauseProc);
             if(option != ID_DEBUGWINDOW)
