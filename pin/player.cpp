@@ -2745,6 +2745,7 @@ void BallHistory::ProcessModeNormal(Player &player)
       {
          m_CurrentControlIndex = m_MenuOptions.m_NormalOptions.m_RecallControlIndex;
          m_WasRecalled = true;
+         m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectModeOptions;
       }
    }
 }
@@ -3428,24 +3429,14 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
             m_MenuOptions.m_SkipKeyPressed = true;
             m_MenuOptions.m_SkipKeyPressedMs = currentTimeMs;
             m_MenuOptions.m_SkipKeyLeft = true;
-
-            ProcessMenu(player, MenuOptionsRecord::MenuActionType_UpLeft, currentTimeMs);
-
-            if (m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Normal &&
-               m_MenuOptions.m_MenuState == MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectCurrentBallHistory)
-            {
-               return false;
-            }
-            else
-            {
-               return true;
-            }
          }
       }
       else if (input->dwData == 0)
       {
          if (m_Control)
          {
+            ProcessMenu(player, MenuOptionsRecord::MenuActionType_UpLeft, currentTimeMs);
+
             m_MenuOptions.m_SkipKeyPressed = false;
             m_MenuOptions.m_SkipKeyPressedMs = 0;
          }
@@ -3460,24 +3451,14 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
             m_MenuOptions.m_SkipKeyPressed = true;
             m_MenuOptions.m_SkipKeyPressedMs = currentTimeMs;
             m_MenuOptions.m_SkipKeyLeft = false;
-
-            ProcessMenu(player, MenuOptionsRecord::MenuActionType_DownRight, currentTimeMs);
-
-            if (m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Normal &&
-               m_MenuOptions.m_MenuState == MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectCurrentBallHistory)
-            {
-               return false;
-            }
-            else
-            {
-               return true;
-            }
          }
       }
       else if (input->dwData == 0)
       {
          if (m_Control)
          {
+            ProcessMenu(player, MenuOptionsRecord::MenuActionType_DownRight, currentTimeMs);
+
             m_MenuOptions.m_SkipKeyPressed = false;
             m_MenuOptions.m_SkipKeyPressedMs = 0;
          }
