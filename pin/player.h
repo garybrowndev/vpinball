@@ -426,10 +426,18 @@ class NormalOptions
 public:
    enum ModeStateType
    {
-      ModeStateType_SelectBallHistory,
+      ModeStateType_SelectCurrentBallHistory,
+      ModeStateType_SelectRecallBallHistory,
       ModeStateType_CreateAutoControlLocations,
       ModeStateType_Exit,
       ModeStateType_COUNT
+   };
+
+   enum SetupRecallBallHistoryModeType
+   {
+      SetupRecallBallHistoryModeType_Select,
+      SetupRecallBallHistoryModeType_Disable,
+      SetupRecallBallHistoryModeType_COUNT
    };
 
    struct AutoControlVertex
@@ -439,9 +447,12 @@ public:
       bool Active;
    };
 
+   static const std::size_t RecallControlIndexDisabled;
    static const std::size_t AutoControlVerticesMax;
 
    ModeStateType m_ModeState;
+   SetupRecallBallHistoryModeType m_SetupRecallBallHistoryMode;
+   std::size_t m_RecallControlIndex;
    std::vector<AutoControlVertex> m_AutoControlVertices;
 
    NormalOptions();
@@ -468,8 +479,6 @@ public:
    void ProcessMouse(Player &player, Vertex3Ds &mousePosition3D, POINT &mousePosition2D, int currentTimeMs);
    void ControlNext();
    void ControlPrev();
-   void ToggleFavorite();
-   void RecallFavorite();
 
 public: // TODO Gary - put back to private
    struct MenuOptionsRecord
@@ -489,7 +498,9 @@ public: // TODO Gary - put back to private
          MenuStateType_None,
          MenuStateType_Root_SelectMode,
          MenuStateType_Normal_SelectModeOptions,
-         MenuStateType_Normal_SelectBallHistory,
+         MenuStateType_Normal_SelectCurrentBallHistory,
+         MenuStateType_Normal_SetupRecallBallHistory,
+         MenuStateType_Normal_SelectRecallBallHistory,
          MenuStateType_Normal_CreateAutoControlLocations,
          MenuStateType_Trainer_SelectModeOptions,
          MenuStateType_Trainer_Results,
@@ -550,14 +561,12 @@ public: // TODO Gary - put back to private
 
    static const float BallHistoryMinPointSize;
    static const float BallHistoryMaxPointSize;
-   static const float FavoritePointSize;
    static const float ControlVerticesDistanceMax;
 
    bool m_Control;
    bool m_WasControlled;
    bool m_WasRecalled;
    std::size_t m_CurrentControlIndex;
-   std::size_t m_FavoriteControlIndex;
 
    NextPreviousByType m_NextPreviousBy;
    int m_BallHistoryControlStepMs;

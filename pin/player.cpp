@@ -121,10 +121,13 @@ TrainerOptions::TrainerOptions():
 {
 }
 
+const std::size_t NormalOptions::RecallControlIndexDisabled = -1;
 const std::size_t NormalOptions::AutoControlVerticesMax = 256;
 
 NormalOptions::NormalOptions():
-   m_ModeState(ModeStateType::ModeStateType_SelectBallHistory)
+   m_ModeState(ModeStateType::ModeStateType_SelectCurrentBallHistory),
+   m_SetupRecallBallHistoryMode(SetupRecallBallHistoryModeType::SetupRecallBallHistoryModeType_Select),
+   m_RecallControlIndex(RecallControlIndexDisabled)
 {
 }
 
@@ -195,7 +198,6 @@ const float BallHistory::BallHistoryControlStepPixelsDefault = 200.0f;
 
 const float BallHistory::BallHistoryMinPointSize = 5.0f;
 const float BallHistory::BallHistoryMaxPointSize = 20.0f;
-const float BallHistory::FavoritePointSize = BallHistory::BallHistoryMaxPointSize * 1.25f;
 const float BallHistory::ControlVerticesDistanceMax = 2000.0f;
 const char * BallHistory::SettingsFileExtension = "ini";
 const char * BallHistory::SettingsFolderName = "BallHistory";
@@ -236,7 +238,6 @@ BallHistory::BallHistory() :
    m_WasControlled(false),
    m_WasRecalled(false),
    m_CurrentControlIndex(0),
-   m_FavoriteControlIndex(0),
    m_BallHistoryControlStepMs(0),
    m_BallHistoryControlStepPixels(0.0f),
    m_BallHistoryRecordsHeadIndex(0),
@@ -630,7 +631,7 @@ void BallHistory::Init(Player &player, int currentTimeMs)
 
    m_CurrentControlIndex = 0;
 
-   m_FavoriteControlIndex = 0;
+   m_MenuOptions.m_NormalOptions.m_RecallControlIndex = NormalOptions::RecallControlIndexDisabled;
 
    m_NextPreviousBy = NextPreviousByDefault;
    m_BallHistoryControlStepMs = BallHistoryControlStepMsDefault;
@@ -776,8 +777,8 @@ void BallHistory::Add(std::vector<Ball*> &vball, int currentTimeMs)
       std::size_t prevBallHistoryRecordsSize = m_BallHistoryRecordsSize;
       std::size_t prevBallHistoryRecordsHeadIndex = m_BallHistoryRecordsHeadIndex;
       std::size_t prevCurrentControlIndex = m_CurrentControlIndex;
-      std::size_t prevFavoriteControlIndex = m_FavoriteControlIndex;
-      bool favoriteIndexIsLast = m_FavoriteControlIndex == GetTailIndex() && m_BallHistoryRecordsSize == m_BallHistoryRecords.size();
+      std::size_t prevRecallControlIndex = m_MenuOptions.m_NormalOptions.m_RecallControlIndex;
+      bool recallIndexIsLast = m_MenuOptions.m_NormalOptions.m_RecallControlIndex == GetTailIndex() && m_BallHistoryRecordsSize == m_BallHistoryRecords.size();
 
       if (m_BallHistoryRecordsSize)
       {
@@ -792,9 +793,9 @@ void BallHistory::Add(std::vector<Ball*> &vball, int currentTimeMs)
          m_BallHistoryRecordsSize++;
       }
       m_CurrentControlIndex = m_BallHistoryRecordsHeadIndex;
-      if (favoriteIndexIsLast)
+      if (recallIndexIsLast)
       {
-         m_FavoriteControlIndex = GetTailIndex();
+         m_MenuOptions.m_NormalOptions.m_RecallControlIndex = GetTailIndex();
       }
 
       BallHistoryRecord &ballHistoryRecordHead = m_BallHistoryRecords[m_BallHistoryRecordsHeadIndex];
@@ -823,7 +824,7 @@ void BallHistory::Add(std::vector<Ball*> &vball, int currentTimeMs)
             m_BallHistoryRecordsSize = prevBallHistoryRecordsSize;
             m_BallHistoryRecordsHeadIndex = prevBallHistoryRecordsHeadIndex;
             m_CurrentControlIndex = prevCurrentControlIndex;
-            m_FavoriteControlIndex = prevFavoriteControlIndex;
+            m_MenuOptions.m_NormalOptions.m_RecallControlIndex = prevRecallControlIndex;
          }
       }
    }
@@ -1000,17 +1001,6 @@ void BallHistory::ToggleControl()
    }
 }
 
-void BallHistory::ToggleFavorite()
-{
-   m_FavoriteControlIndex = m_CurrentControlIndex;
-}
-
-void BallHistory::RecallFavorite()
-{
-   m_CurrentControlIndex = m_FavoriteControlIndex;
-   m_WasRecalled = true;
-}
-
 void BallHistory::ShowStatus(Player &player, int currentTimeMs)
 {
    int textX = 10;
@@ -1068,7 +1058,14 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
             player.DebugPrint(textX, textY += textYStep, szFoo);
          }
 
-         sprintf_s(szFoo, "Favorite Control Index = %zu", m_FavoriteControlIndex);
+         if (m_MenuOptions.m_NormalOptions.m_RecallControlIndex == NormalOptions::RecallControlIndexDisabled)
+         {
+            sprintf_s(szFoo, "Recall Control Index = <disabled>");
+         }
+         else
+         {
+            sprintf_s(szFoo, "Recall Control Index = %zu", m_MenuOptions.m_NormalOptions.m_RecallControlIndex);
+         }
          player.DebugPrint(textX, textY += textYStep, szFoo);
 
          sprintf_s(szFoo, "BallHistoryRecords Size = %zu", m_BallHistoryRecords.size());
@@ -1587,7 +1584,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectModeOptions:
          SHOW_MENU_TEXT_TITLE("Normal Mode Options");
-         SHOW_MENU_TEXT_SELECT("Select Ball History", m_MenuOptions.m_NormalOptions.m_ModeState == NormalOptions::ModeStateType::ModeStateType_SelectBallHistory);
+         SHOW_MENU_TEXT_SELECT("Select Current Ball History", m_MenuOptions.m_NormalOptions.m_ModeState == NormalOptions::ModeStateType::ModeStateType_SelectCurrentBallHistory);
+         SHOW_MENU_TEXT_SELECT("Select Recall Ball History", m_MenuOptions.m_NormalOptions.m_ModeState == NormalOptions::ModeStateType::ModeStateType_SelectRecallBallHistory);
          SHOW_MENU_TEXT_SELECT("Create Auto Control Locations", m_MenuOptions.m_NormalOptions.m_ModeState == NormalOptions::ModeStateType::ModeStateType_CreateAutoControlLocations);
          SHOW_MENU_TEXT_SELECT("Exit", m_MenuOptions.m_NormalOptions.m_ModeState == NormalOptions::ModeStateType::ModeStateType_Exit);
 
@@ -1606,8 +1604,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             case MenuOptionsRecord::MenuActionType_Enter:
                switch (m_MenuOptions.m_NormalOptions.m_ModeState)
                {
-                  case NormalOptions::ModeStateType::ModeStateType_SelectBallHistory:
-                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectBallHistory;
+                  case NormalOptions::ModeStateType::ModeStateType_SelectCurrentBallHistory:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectCurrentBallHistory;
+                     break;
+                  case NormalOptions::ModeStateType::ModeStateType_SelectRecallBallHistory:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SetupRecallBallHistory;
                      break;
                   case NormalOptions::ModeStateType::ModeStateType_CreateAutoControlLocations:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_CreateAutoControlLocations;
@@ -1625,8 +1626,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                break;
          }
          break;
-      case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectBallHistory:
-         SHOW_MENU_TEXT_TITLE("Select Ball History");
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectCurrentBallHistory:
+         SHOW_MENU_TEXT_TITLE("Select Current Ball History");
          SHOW_MENU_TEXT("Use Flipper buttons to navigate");
          SHOW_MENU_TEXT("backward/forward through ball history");
          SHOW_MENU_TEXT("Hit Control button to continue simulation");
@@ -1645,6 +1646,71 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                ControlNext();
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
+               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectModeOptions;
+               break;
+            default:
+               assert(0);
+               break;
+         }
+         break;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SetupRecallBallHistory:
+         SHOW_MENU_TEXT_TITLE("Setup Recall Ball History");
+         SHOW_MENU_TEXT_SELECT("Select", m_MenuOptions.m_NormalOptions.m_SetupRecallBallHistoryMode == NormalOptions::SetupRecallBallHistoryModeType::SetupRecallBallHistoryModeType_Select);
+         SHOW_MENU_TEXT_SELECT("Disable", m_MenuOptions.m_NormalOptions.m_SetupRecallBallHistoryMode == NormalOptions::SetupRecallBallHistoryModeType::SetupRecallBallHistoryModeType_Disable);
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType_Toggle:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType_UpLeft:
+               ProcessMenuChangeValueStep<NormalOptions::SetupRecallBallHistoryModeType>(m_MenuOptions.m_NormalOptions.m_SetupRecallBallHistoryMode, -1, 0, NormalOptions::SetupRecallBallHistoryModeType::SetupRecallBallHistoryModeType_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType_DownRight:
+               ProcessMenuChangeValueStep<NormalOptions::SetupRecallBallHistoryModeType>(m_MenuOptions.m_NormalOptions.m_SetupRecallBallHistoryMode, 1, 0, NormalOptions::SetupRecallBallHistoryModeType::SetupRecallBallHistoryModeType_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType_Enter:
+               switch (m_MenuOptions.m_NormalOptions.m_SetupRecallBallHistoryMode)
+               {
+                  case NormalOptions::SetupRecallBallHistoryModeType::SetupRecallBallHistoryModeType_Select:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectRecallBallHistory;
+                     break;
+                  case NormalOptions::SetupRecallBallHistoryModeType::SetupRecallBallHistoryModeType_Disable:
+                     m_MenuOptions.m_NormalOptions.m_RecallControlIndex = NormalOptions::RecallControlIndexDisabled;
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectModeOptions;
+                     break;
+                  default:
+                     assert(0);
+                     break;
+               }
+               break;
+            default:
+               assert(0);
+               break;
+         }
+         break;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectRecallBallHistory:
+         SHOW_MENU_TEXT_TITLE("Select Recall Ball History");
+         SHOW_MENU_TEXT("Use Flipper buttons to navigate");
+         SHOW_MENU_TEXT("backward/forward through ball history");
+         SHOW_MENU_TEXT("Hit Control button to continue simulation");
+         SHOW_MENU_TEXT("Hit Plunger button to exit");
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType_Toggle:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType_UpLeft:
+               ControlPrev();
+               break;
+            case MenuOptionsRecord::MenuActionType_DownRight:
+               ControlNext();
+               break;
+            case MenuOptionsRecord::MenuActionType_Enter:
+               m_MenuOptions.m_NormalOptions.m_RecallControlIndex = m_CurrentControlIndex;
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectModeOptions;
                break;
             default:
@@ -2673,7 +2739,13 @@ void BallHistory::ProcessModeNormal(Player &player)
    if (BallInsideAutoControlVertex(player.m_vball))
    {
       m_Control = true;
-      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectBallHistory;
+      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectCurrentBallHistory;
+
+      if (m_MenuOptions.m_NormalOptions.m_RecallControlIndex != NormalOptions::RecallControlIndexDisabled)
+      {
+         m_CurrentControlIndex = m_MenuOptions.m_NormalOptions.m_RecallControlIndex;
+         m_WasRecalled = true;
+      }
    }
 }
 
@@ -3360,7 +3432,7 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
             ProcessMenu(player, MenuOptionsRecord::MenuActionType_UpLeft, currentTimeMs);
 
             if (m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Normal &&
-               m_MenuOptions.m_MenuState == MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectBallHistory)
+               m_MenuOptions.m_MenuState == MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectCurrentBallHistory)
             {
                return false;
             }
@@ -3392,7 +3464,7 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
             ProcessMenu(player, MenuOptionsRecord::MenuActionType_DownRight, currentTimeMs);
 
             if (m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Normal &&
-               m_MenuOptions.m_MenuState == MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectBallHistory)
+               m_MenuOptions.m_MenuState == MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectCurrentBallHistory)
             {
                return false;
             }
@@ -3421,22 +3493,6 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
             ProcessMenu(player, MenuOptionsRecord::MenuActionType_Enter, currentTimeMs);
             return true;
          }
-      }
-   }
-   else if (input->dwOfs == (DWORD)DIK_F)
-   {
-      if (input->dwData & 0x80)
-      {
-         ToggleFavorite();
-         return true;
-      }
-   }
-   else if (input->dwOfs == (DWORD)DIK_R)
-   {
-      if (input->dwData & 0x80)
-      {
-         RecallFavorite();
-         return true;
       }
    }
 
