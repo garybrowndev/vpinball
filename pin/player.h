@@ -656,6 +656,7 @@ public: // TODO Gary - put back to private
    S32 ProcessMenuChangeValue(S32 value, S32 delta, S32 min, S32 max, bool skip);
    template <class T> void ProcessMenuChangeValueStep(T &value, S32 step, S32 min, S32 max);
    template <class T> void ProcessMenuChangeValueSkip(T &value, S32 min, S32 max, int currentTimeMs);
+
    void Add(std::vector<Ball *> &vballs, int currentTimeMsec);
    BallHistoryRecord &Get(std::size_t index);
    std::size_t GetTailIndex();
@@ -672,6 +673,7 @@ public: // TODO Gary - put back to private
    bool BallInsideAutoControlVertex(std::vector<Ball *> &vball);
 
    std::vector<std::string> Split(const char * str, char delimeter);
+   void CenterMouse(Player &player);
 };
 
 struct TimerOnOff
@@ -769,6 +771,8 @@ public:
 #ifdef ENABLE_SDL
    SDL_Window  *m_sdl_playfieldHwnd;
    SDL_Window  *m_sdl_backdropHwnd;
+#else
+   HWND        m_playerHwnd;
 #endif
    Shader      *m_ballShader;
 

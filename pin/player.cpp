@@ -389,6 +389,13 @@ bool BallHistory::GetSettingsFileName(Player &player, std::string &fileName)
    return true;
 }
 
+void BallHistory::CenterMouse(Player &player)
+{
+   POINT p = {player.m_width / 2, player.m_height / 2};
+   ClientToScreen(player.m_playerHwnd, &p);
+   SetCursorPos(p.x, p.y);
+}
+
 std::vector<std::string> BallHistory::Split(const char * str, char delimeter)
 {
    std::vector<std::string> result;
@@ -1552,6 +1559,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SetupRecallBallHistory;
                      break;
                   case NormalOptions::ModeStateType::ModeStateType_CreateAutoControlLocations:
+                     CenterMouse(player);
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_CreateAutoControlLocations;
                      break;
                   case NormalOptions::ModeStateType::ModeStateType_Exit:
@@ -2253,6 +2261,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      m_MenuOptions.m_CurrentBallIndex = 0;
                      break;
                   case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select:
+                     CenterMouse(player);
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassLocation;
                      m_MenuOptions.m_CurrentBallIndex = m_MenuOptions.m_CurrentCompleteIndex;
                      break;
@@ -2561,6 +2570,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      m_MenuOptions.m_CurrentBallIndex = 0;
                      break;
                   case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select:
+                     CenterMouse(player);
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailLocation;
                      m_MenuOptions.m_CurrentBallIndex = m_MenuOptions.m_CurrentCompleteIndex;
                      break;
@@ -3458,6 +3468,8 @@ Player::Player(const bool cameraMode, PinTable * const ptable) : m_cameraMode(ca
    }
 #endif
 
+   m_playerHwnd = NULL;
+
 #ifdef STEPPING
    m_pause = false;
    m_step = false;
@@ -3870,7 +3882,7 @@ void Player::CreateWnd(HWND parent /* = 0 */)
          ShowWindow();
    }
 #else
-   Create();
+   m_playerHwnd = Create();
 #endif // ENABLE_SDL
 }
 
