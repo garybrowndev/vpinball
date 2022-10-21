@@ -392,7 +392,7 @@ bool BallHistory::GetSettingsFileName(Player &player, std::string &fileName)
 void BallHistory::CenterMouse(Player &player)
 {
    POINT p = {player.m_width / 2, player.m_height / 2};
-   ClientToScreen(player.m_playerHwnd, &p);
+   ClientToScreen(player.m_pininput.m_hwnd, &p);
    SetCursorPos(p.x, p.y);
 }
 
@@ -3208,9 +3208,9 @@ void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr,
 void BallHistory::DrawFakeBallAtMousePosition(Player &player, Texture &texture)
 {
    POINT mousePosition;
-   if (::GetCursorPos(&mousePosition) == TRUE)
+   if (GetCursorPos(&mousePosition) == TRUE)
    {
-      if (::ScreenToClient(player.m_pininput.m_hwnd, &mousePosition) == TRUE)
+      if (ScreenToClient(player.m_pininput.m_hwnd, &mousePosition) == TRUE)
       {
          Vertex3Ds autoPointVertex3D(g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition));
          if (Ball *pball = player.m_vball[0])
@@ -3467,8 +3467,6 @@ Player::Player(const bool cameraMode, PinTable * const ptable) : m_cameraMode(ca
          _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON); // only flush denorms to zero
    }
 #endif
-
-   m_playerHwnd = NULL;
 
 #ifdef STEPPING
    m_pause = false;
@@ -3882,7 +3880,7 @@ void Player::CreateWnd(HWND parent /* = 0 */)
          ShowWindow();
    }
 #else
-   m_playerHwnd = Create();
+   Create();
 #endif // ENABLE_SDL
 }
 

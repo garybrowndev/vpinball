@@ -771,8 +771,6 @@ public:
 #ifdef ENABLE_SDL
    SDL_Window  *m_sdl_playfieldHwnd;
    SDL_Window  *m_sdl_backdropHwnd;
-#else
-   HWND        m_playerHwnd;
 #endif
    Shader      *m_ballShader;
 
