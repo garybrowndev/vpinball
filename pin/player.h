@@ -481,6 +481,24 @@ public:
    void ControlPrev();
 
 public: // TODO Gary - put back to private
+   struct DebugPrintRecord
+   {
+      Player &m_Player;
+      int m_TextX;
+      int m_TextY;
+      int m_TextYStep;
+      char m_StrBuffer[1024];
+      
+      void ShowText(const char * format, ...);
+      void ShowTextTitle(const char * format, ...);
+      void ShowMenuText(const char * format, ...);
+      void ShowMenuTextPos(int x, int y, const char * format, ...);
+      void ShowMenuTextTitle(const char * format, ...);
+      void ShowMenuTextError(const char * format, ...);
+      void ShowMenuTextSelect(const char * format, bool selected, ...);
+      DebugPrintRecord(Player &player);
+   };
+
    struct MenuOptionsRecord
    {
       enum MenuActionType
@@ -625,11 +643,12 @@ public: // TODO Gary - put back to private
    void ToggleControl();
    void ResetBallHistoryRenderSizes();
    void DrawBallHistory(Player &player);
-   void DrawAutoControlVertices(Player &player, int currentTimeMs);
+   void DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
    void DrawFakeBallAtMousePosition(Player &player, Texture &texture);
-   void DrawTrainerBallLocations(Player &player, int currentTimeMs);
+   void DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
    void UpdateBallState(Player &player, BallHistoryRecord &ballHistoryRecord);
    void ShowStatus(Player &player, int currentTimeMs);
+   void ShowPreviousRunRecord(Player &player, DebugPrintRecord &dpr);
    void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs);
    void ProcessMode(Player &player, int currentTimeMs);
    void ProcessModeNormal(Player &player);
