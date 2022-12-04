@@ -495,7 +495,7 @@ public: // TODO Gary - put back to private
       void ShowMenuTextPos(int x, int y, const char * format, ...);
       void ShowMenuTextTitle(const char * format, ...);
       void ShowMenuTextError(const char * format, ...);
-      void ShowMenuTextSelect(const char * format, bool selected, ...);
+      void ShowMenuTextSelect(bool selected, const char * format, ...);
       DebugPrintRecord(Player &player);
    };
 
@@ -649,6 +649,9 @@ public: // TODO Gary - put back to private
    void UpdateBallState(Player &player, BallHistoryRecord &ballHistoryRecord);
    void ShowStatus(Player &player, int currentTimeMs);
    void ShowPreviousRunRecord(Player &player, DebugPrintRecord &dpr);
+   void ShowLiveRunRecordStats(Player &player, DebugPrintRecord &dpr);
+   void ShowFinalRunRecordStats(Player &player, DebugPrintRecord &dpr);
+
    void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs);
    void ProcessMode(Player &player, int currentTimeMs);
    void ProcessModeNormal(Player &player);
