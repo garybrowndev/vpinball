@@ -1257,6 +1257,12 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                else
                {
                   dpr.ShowText("  Distance = %.2f", beor.m_Distance);
+                  for (std::size_t vballIndex = 0; vballIndex < player.m_vball.size(); ++vballIndex)
+                  {
+                     Ball &vball = *player.m_vball[vballIndex];
+                     float distance = DistancePixelsXY(beor.m_Pos3D, vball.m_d.m_pos);
+                     dpr.ShowText("  Distance Ball #%zu = %.2f", vballIndex + 1, distance);
+                  }
                }
 
                if (beor.m_AssociatedBallStartIndexes.size() == 0)
@@ -1311,6 +1317,12 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                else
                {
                   dpr.ShowText("  Distance = %.2f", beor.m_Distance);
+                  for (std::size_t vballIndex = 0; vballIndex < player.m_vball.size(); ++vballIndex)
+                  {
+                     Ball &vball = *player.m_vball[vballIndex];
+                     float distance = DistancePixelsXY(beor.m_Pos3D, vball.m_d.m_pos);
+                     dpr.ShowText("  Distance Ball #%zu = %.2f", vballIndex + 1, distance);
+                  }
                }
 
                if (beor.m_AssociatedBallStartIndexes.size() == 0)
@@ -1358,7 +1370,7 @@ void BallHistory::ShowPreviousRunRecord(Player &player, DebugPrintRecord &dpr)
    if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord > 0)
    {
       TrainerOptions::RunRecord &previousRunRecord = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord - 1];
-      dpr.ShowMenuText("Previous Run Result");
+      dpr.ShowMenuText("Previous Run (#%zu) Result", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord);
 
       switch (previousRunRecord.m_Result)
       {
@@ -1387,62 +1399,35 @@ void BallHistory::ShowPreviousRunRecord(Player &player, DebugPrintRecord &dpr)
             assert(0);
             break;
       }
-      dpr.ShowMenuText("%.2f seconds", static_cast<float>(previousRunRecord.m_TotalTimeMs) / 1000);
+      dpr.ShowMenuText("%.2f seconds", float(previousRunRecord.m_TotalTimeMs) / 1000);
    }
 }
 
-void BallHistory::ShowLiveRunRecordStats(Player &player, DebugPrintRecord &dpr)
+void BallHistory::ShowCurrentRunRecord(Player &player, DebugPrintRecord &dpr, int currentTimeMs)
 {
-   // current run
-   // total runs
-   // how many more runs
-   // approximate time to completion
+   DWORD runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
 
-   // Completed %X%% (of %Y%%), %Z%% remaining
-   // Training X.XX seconds, ~X.XX remaining
-   std::size_t runsRemaining = m_MenuOptions.m_TrainerOptions.m_TotalRuns - m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord;
-   dpr.ShowMenuText("Next Run #%zu of %zu, %zu remaining", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_TotalRuns, runsRemaining);
-   float percentRunsRemaining = float(m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord) / m_MenuOptions.m_TrainerOptions.m_TotalRuns;
-   dpr.ShowMenuText("Completed %.2f, %.2f remaining", percentRunsRemaining, 1.0f - percentRunsRemaining);
+   std::size_t runsRemaining = m_MenuOptions.m_TrainerOptions.m_TotalRuns - m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord - 1;
+   dpr.ShowMenuText("Run %zu of %zu (%zu remaining)", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_TotalRuns, runsRemaining);
+   if (m_MenuOptions.m_TrainerOptions.m_RandomOrder != 0)
+   {
+      dpr.ShowMenuText("%.2f seconds remaining for current run", (runElapsedTimeMs - TrainerOptions::RunCountdownMs) / 1000.0f);
+   }
+
+   DWORD totalRunsMs = 0;
+   for (std::size_t x = 0; x < m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord; x++)
+   {
+      TrainerOptions::RunRecord &rr = m_MenuOptions.m_TrainerOptions.m_RunRecords[x];
+      totalRunsMs += rr.m_TotalTimeMs;
+   }
 
    if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord > 0)
    {
-      TrainerOptions::RunRecord &previousRunRecord = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord - 1];
-      dpr.ShowMenuText("Previous Run Result");
-
-      switch (previousRunRecord.m_Result)
-      {
-         case TrainerOptions::RunRecord::ResultType::ResultType_Passed:
-            dpr.ShowMenuText("Pass");
-            for each (const std::tuple<std::size_t, std::size_t> &startToPassLocationIndex in previousRunRecord.m_StartToPassLocationIndexes)
-            {
-               std::stringstream startToPassLocationIndexes;
-               startToPassLocationIndexes << "Start #" << std::get<0>(startToPassLocationIndex) + 1 << " --> Pass #" << std::get<1>(startToPassLocationIndex) + 1;
-               dpr.ShowMenuText("%s", startToPassLocationIndexes.str().c_str());
-            }
-            break;
-         case TrainerOptions::RunRecord::ResultType::ResultType_FailedLocation:
-            dpr.ShowMenuText("Fail (location)");
-            for each (const std::tuple<std::size_t, std::size_t> &startToFailLocationIndex in previousRunRecord.m_StartToFailLocationIndexes)
-            {
-               std::stringstream startToFailLocationIndexes;
-               startToFailLocationIndexes << "Start #" << std::get<0>(startToFailLocationIndex) + 1 << " --> Fail #" << std::get<1>(startToFailLocationIndex) + 1;
-               dpr.ShowMenuText("%s", startToFailLocationIndexes.str().c_str());
-            }
-            break;
-         case TrainerOptions::RunRecord::ResultType::ResultType_FailedTimeElapsed:
-            dpr.ShowMenuText("Fail (time elapsed)");
-            break;
-         default:
-            assert(0);
-            break;
-      }
-      dpr.ShowMenuText("%.2f seconds", static_cast<float>(previousRunRecord.m_TotalTimeMs) / 1000);
+      TrainerOptions::RunRecord &rr = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord];
+      float averageRunMs = float(totalRunsMs) / m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord;
+      float approximateRemainingMs = averageRunMs * (runsRemaining + 1);
+      dpr.ShowMenuText("Approximately %.2f seconds for remaining runs", (approximateRemainingMs - (runElapsedTimeMs - TrainerOptions::RunCountdownMs)) / 1000);
    }
-}
-
-void BallHistory::ShowFinalRunRecordStats(Player &player, DebugPrintRecord &dpr)
-{
 }
 
 void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr, int currentTimeMs)
@@ -1459,7 +1444,7 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
             {
                player.DrawFakeBall(bsor.m_Pos, pball->m_orientation, pball->m_d.m_radius, false, m_TrainerBallStartTexture, false);
                // TODO GARY figure out a way to get 2D point from 3D location
-               //player.SetDebugOutputPosition(static_cast<float>(beor.m_Pos2D.x), static_cast<float>(beor.m_Pos2D.y));
+               //player.SetDebugOutputPosition(float(beor.m_Pos2D.x), float(beor.m_Pos2D.y));
                //dpr.ShowMenuTextPos(0, 0, "#%zu", index + 1);
             }
          }
@@ -1470,7 +1455,7 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
             if (!beor.m_Pos3D.IsZero())
             {
                player.DrawFakeBall(beor.m_Pos3D, pball->m_orientation, pball->m_d.m_radius, false, m_TrainerBallPassTexture, false);
-               player.SetDebugOutputPosition(static_cast<float>(beor.m_Pos2D.x), static_cast<float>(beor.m_Pos2D.y));
+               player.SetDebugOutputPosition(float(beor.m_Pos2D.x), float(beor.m_Pos2D.y));
                dpr.ShowMenuTextPos(0, 0, "#%zu", index + 1);
             }
          }
@@ -1481,7 +1466,7 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
             if (!beor.m_Pos3D.IsZero())
             {
                player.DrawFakeBall(beor.m_Pos3D, pball->m_orientation, pball->m_d.m_radius, false, m_TrainerBallFailTexture, false);
-               player.SetDebugOutputPosition(static_cast<float>(beor.m_Pos2D.x), static_cast<float>(beor.m_Pos2D.y));
+               player.SetDebugOutputPosition(float(beor.m_Pos2D.x), float(beor.m_Pos2D.y));
                dpr.ShowMenuTextPos(0, 0, "#%zu", index + 1);
             }
          }
@@ -1820,9 +1805,38 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                switch (m_MenuOptions.m_TrainerOptions.m_ModeState)
                {
                   case TrainerOptions::ModeStateType::ModeStateType_Start:
-                     if (player.m_vball.size() == m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size())
+                     if (player.m_vball.size() == 0)
                      {
+                        std::ostringstream strStream;
+                        strStream << "No balls exist, at least one ball must exist to start training";
+                        m_MenuOptions.m_MenuError = strStream.str();
+                     }
+                     else
+                     {                        
+                        //TODO GARY this does not work quite right, because we are adding/removing balls, this is triggering
+                        //a Init() which resets the control, so control goes off here, than on again later due to the change in ball count
+                        //because ball history needs to be reset, hopefully this naturally gets fixed when the smart keeping of ball
+                        //history is implemented
                         ToggleControl();
+
+                        if (player.m_vball.size() < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size())
+                        {
+                           std::size_t ballsToCreate = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size() - player.m_vball.size();
+                           Ball &vball = *player.m_vball[0];
+                           for (std::size_t ballIndex = 0; ballIndex < ballsToCreate; ballIndex++)
+                           {
+                              player.CreateBall(0, 0, 0, 0, 0, 0, vball.m_d.m_radius, vball.m_d.m_mass); 
+                           }
+                        }
+                        else if (player.m_vball.size() > m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size())
+                        {
+                           std::size_t ballsToDestroy = player.m_vball.size() - m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size();
+                           for (std::size_t ballIndex = 0; ballIndex < ballsToDestroy; ballIndex++)
+                           {
+                              player.DestroyBall(player.m_vball[player.m_vball.size() - 1]); 
+                           }
+                        }
+
                         m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results;
 
                         m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord = 0;
@@ -1838,12 +1852,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                            TrainerOptions::BallEndOptionsRecord &beor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[bporIndex];
                            beor.m_StopBallsTracker.resize(m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size(), std::make_tuple<int, Vertex3Ds>(0, {0.0f, 0.0f, 0.0f}));
                         }
-                     }
-                     else
-                     {
-                        std::ostringstream strStream;
-                        strStream << "Ball Start Positions (" << m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size() << ") must equal existing balls (" << player.m_vball.size() << ")";
-                        m_MenuOptions.m_MenuError = strStream.str();
                      }
                      break;
                   case TrainerOptions::ModeStateType::ModeStateType_Resume:
@@ -1892,9 +1900,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          std::size_t totalFailsTimeElapsed = 0;
          DWORD totalPassMs = 0;
          DWORD totalFailLocationMs = 0;
+         DWORD totalRunsMs = 0;
          for (std::size_t x = 0; x < m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord; x++)
          {
             TrainerOptions::RunRecord &rr = m_MenuOptions.m_TrainerOptions.m_RunRecords[x];
+            totalRunsMs += rr.m_TotalTimeMs;
             switch (rr.m_Result)
             {
                case TrainerOptions::RunRecord::ResultType::ResultType_Passed:
@@ -1917,11 +1927,12 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowText("%zu = Pass", totalPasses);
          dpr.ShowText("%zu = Fail (location)", totalFailsLocation);
          dpr.ShowText("%zu = Fail (time elapsed)", totalFailsTimeElapsed);
-         dpr.ShowText("%.2f%% = Pass Percentage", static_cast<float>(totalPasses) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
-         dpr.ShowText("%.2f%% = Fail (location) Percentage", static_cast<float>(totalFailsLocation) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
-         dpr.ShowText("%.2f%% = Fail (time elapsed)", static_cast<float>(totalFailsTimeElapsed) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
-         dpr.ShowText("%.2f (%.2f) = Average Pass Elapsed Seconds (stddev)", static_cast<float>(totalPassMs) / totalPasses / 1000, 0.0f);
-         dpr.ShowText("%.2f (%.2f) = Average Fail (location) Elapsed Seconds (stddev)", static_cast<float>(totalFailLocationMs) / totalFailsLocation / 1000, 0.0f);
+         dpr.ShowText("%.2f%% = Pass Percentage", float(totalPasses) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
+         dpr.ShowText("%.2f%% = Fail (location) Percentage", float(totalFailsLocation) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
+         dpr.ShowText("%.2f%% = Fail (time elapsed)", float(totalFailsTimeElapsed) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
+         dpr.ShowText("%.2f (%.2f) = Average Pass Elapsed Seconds (stddev)", float(totalPassMs) / totalPasses / 1000, 0.0f);
+         dpr.ShowText("%.2f (%.2f) = Average Fail (location) Elapsed Seconds (stddev)", float(totalFailLocationMs) / totalFailsLocation / 1000, 0.0f);
+         dpr.ShowText("%.2f (%.2f) = Average Run Seconds (stddev)", float(totalRunsMs) / m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord / 1000, 0.0f);
 
          switch (menuAction)
          {
@@ -2865,8 +2876,8 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
    }
 
    DebugPrintRecord dpr(player);
-
-   player.SetDebugOutputPosition(player.m_width / 2.0f, player.m_height / 2.0f);
+   dpr.m_TextYStep *= -1;
+   player.SetDebugOutputPosition(player.m_width / 2.0f, float(player.m_height));
 
    if (m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs == 0)
    {
@@ -2886,7 +2897,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
    if (runElapsedTimeMs < TrainerOptions::RunCountdownMs)
    {
       // countdown before run starts
-      dpr.ShowMenuTextTitle("Run #%zu (of %zu) Begins in %.2f", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_TotalRuns, (TrainerOptions::RunCountdownMs - runElapsedTimeMs) / 1000.0f);
+      dpr.ShowMenuTextTitle("Run #%zu (of %zu) starts in %.2f seconds", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_TotalRuns, (TrainerOptions::RunCountdownMs - runElapsedTimeMs) / 1000.0f);
       ShowPreviousRunRecord(player, dpr);
 
       for (std::size_t vballIndex = 0; vballIndex < player.m_vball.size(); ++vballIndex)
@@ -2904,7 +2915,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
    }
    else if (runElapsedTimeMs < (TrainerOptions::RunCountdownMs + (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * 1000)))
    {
-      dpr.ShowMenuText("Monitoring %.2f", (runElapsedTimeMs - TrainerOptions::RunCountdownMs) / 1000.0f);
+      ShowCurrentRunRecord(player, dpr, currentTimeMs);
       bool allPass = true;
       std::vector<std::tuple<std::size_t, std::size_t>> startToPassLocationIndexes;
       for (std::size_t vballIndex = 0; vballIndex < player.m_vball.size(); vballIndex++)
@@ -3315,7 +3326,7 @@ void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr,
          {
             NormalOptions::AutoControlVertex &acv = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[index];
             player.DrawFakeBall(acv.m_Pos3D, pball->m_orientation, pball->m_d.m_radius, false, m_AutoControlBallTexture, false);
-            player.SetDebugOutputPosition(static_cast<float>(acv.m_Pos2D.x), static_cast<float>(acv.m_Pos2D.y));
+            player.SetDebugOutputPosition(float(acv.m_Pos2D.x), float(acv.m_Pos2D.y));
             dpr.ShowMenuTextPos(0, 0, "#%zu", index + 1);
          }
       }
