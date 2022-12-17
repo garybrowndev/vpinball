@@ -415,7 +415,7 @@ void PinInput::GetInputDeviceData(/*const U32 curr_time_msec*/)
 
          if ((hr == S_OK || hr == DI_BUFFEROVERFLOW) && (m_hwnd == GetForegroundWindow()))
          {
-            if (g_pplayer->m_throwBalls || g_pplayer->m_ballControl || g_pplayer->m_BallHistory.m_Control) // debug ball throw functionality
+            if (g_pplayer->m_throwBalls || g_pplayer->m_ballControl || g_pplayer->m_BallHistory.Control()) // debug ball throw functionality
             {
                if ((mouseState.rgbButtons[0] & 0x80) && !leftMouseButtonDown && !rightMouseButtonDown && !middleMouseButtonDown)
                {
@@ -1893,7 +1893,7 @@ void PinInput::ProcessKeys(/*const U32 curr_sim_msec,*/ int curr_time_msec) // l
             ProcessThrowBalls(input);
          else if (g_pplayer->m_ballControl)
             ProcessBallControl(input);
-         else if (g_pplayer->m_BallHistory.m_Control)
+         else if (g_pplayer->m_BallHistory.Control())
          {
             POINT point = { mouseX, mouseY };
             ScreenToClient(m_hwnd, &point);

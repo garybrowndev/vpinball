@@ -717,7 +717,7 @@ void BallHistory::SaveSettings(Player &player)
    iniFile.SaveFile(m_SettingsFilePath.c_str());
 }
 
-void BallHistory::Init(Player &player, int currentTimeMs)
+void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
 {
    m_Control = m_WasControlled;
    m_WasControlled = false;
@@ -732,12 +732,12 @@ void BallHistory::Init(Player &player, int currentTimeMs)
    m_BallHistoryControlStepPixels = BallHistoryControlStepPixelsDefault;
 
    // TODO GARY should be smarter here, only clear the ball history dimensions
-   // for the balls that disappeared. there can be a case where the are two balls
-   // in play, one drains, and than the other is in a drain trajectory
+   // for the balls that disappeared. there can be a case where there are two balls
+   // in play, one drains, and than the other is in a drain trajectory.
    // you may want to, and it is possible with a little logic and coding
    // to figure out which ball is new or which balls are pre-existing
    // match up with current balls in play, clear the balls which are not there
-   // and keep the ball histories for the balls still in plays
+   // and keep the ball histories for the balls still in play
    m_BallHistoryRecordIds.clear();
    for (std::size_t vballIndex = 0; vballIndex < player.m_vball.size(); ++vballIndex)
    {
@@ -796,6 +796,11 @@ void BallHistory::Init(Player &player, int currentTimeMs)
             m_SettingsFilePath = settingsFolderPath + "\\" + settingsFileName;
          }
       }
+   }
+   
+   if (loadSettings)
+   {
+      LoadSettings(player);
    }
 }
 
@@ -968,6 +973,11 @@ bool BallHistory::ControlNextMove()
    return m_CurrentControlIndex != m_BallHistoryRecordsHeadIndex;
 }
 
+bool BallHistory::Control()
+{
+   return m_Control;
+}
+
 void BallHistory::ControlNext()
 {
    if (!m_Control)
@@ -1084,6 +1094,11 @@ void BallHistory::ControlPrev()
             break;
       }
    }
+}
+
+void BallHistory::ResetTrainerRunStartTime()
+{
+   m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
 }
 
 void BallHistory::ToggleControl()
@@ -1571,7 +1586,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectModeOptions;
                      break;
                   case MenuOptionsRecord::ModeType::ModeType_Disabled:
-                     Init(player, currentTimeMs);
+                     Init(player, currentTimeMs, false);
                      ToggleControl();
                      break;
                   default:
@@ -1813,7 +1828,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      }
                      else
                      {                        
-                        //TODO GARY this does not work quite right, because we are adding/removing balls, this is triggering
+                        // TODO GARY this does not work quite right, because we are adding/removing balls, this is triggering
                         //a Init() which resets the control, so control goes off here, than on again later due to the change in ball count
                         //because ball history needs to be reset, hopefully this naturally gets fixed when the smart keeping of ball
                         //history is implemented
@@ -3380,7 +3395,7 @@ void BallHistory::Process(Player &player, int currentTimeMs)
             BallHistoryRecord &headBhr = Get(m_BallHistoryRecordsHeadIndex);
             if (BallCountChange(player.m_vball, headBhr) > 0 || BallFrozenChanged(player.m_vball, headBhr))
             {
-               Init(player, currentTimeMs);
+               Init(player, currentTimeMs, false);
             }
             else if (BallCountChange(player.m_vball, headBhr) < 0)
             {
@@ -3437,7 +3452,7 @@ void BallHistory::Process(Player &player, int currentTimeMs)
 
                UpdateBallState(player, m_MostRecentBallHistoryRecord);
 
-               Init(player, currentTimeMs);
+               Init(player, currentTimeMs, false);
             }
 
             m_MostRecentBallHistoryRecord.Set(player.m_vball, currentTimeMs);
@@ -5096,8 +5111,7 @@ HRESULT Player::Init()
    assert(m_ballTrailVertexBuffer == nullptr);
    VertexBuffer::CreateVertexBuffer((MAX_BALL_TRAIL_POS-2)*2+4, USAGE_DYNAMIC, MY_D3DFVF_NOTEX2_VERTEX, &m_ballTrailVertexBuffer, PRIMARY_DEVICE);
 
-   m_BallHistory.Init(*this, 0);
-   m_BallHistory.LoadSettings(*this);
+   m_BallHistory.Init(*this, 0, true);
 
    m_ptable->m_pcv->Start(); // Hook up to events and start cranking script
 
@@ -8628,7 +8642,7 @@ void Player::Render()
          }
          else if ((m_closeType == 0) && !g_pvp->m_disable_pause_menu)
          {
-            m_BallHistory.m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+            m_BallHistory.ResetTrainerRunStartTime();
             ShowCursor(TRUE);
             option = DialogBox(g_pvp->theInstance, MAKEINTRESOURCE(IDD_GAMEPAUSE), GetHwnd(), PauseProc);
             if(option != ID_DEBUGWINDOW)

@@ -461,26 +461,22 @@ public:
 struct BallHistory
 {
 public:
+   BallHistory();
+   void Init(Player &player, int currentTimeMs, bool loadSettings);
+   void UnInit(Player &player);
+   void Process(Player &player, int currentTimeMsec);
+   bool ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, int currentTimeMs);
+   void ProcessMouse(Player &player, Vertex3Ds &mousePosition3D, POINT &mousePosition2D, int currentTimeMs);
+   bool Control();
+   void ResetTrainerRunStartTime();
+
+private:
    enum NextPreviousByType
    {
       eTimeMs,
       eDistancePixels
    };
 
-   BallHistory();
-   bool GetSettingsFileName(Player &player, std::string &fileName);
-   void LoadSettings(Player &player);
-   void SaveSettings(Player &player);
-   void Init(Player &player, int currentTimeMs);
-   void InitBallLost(Player &player);
-   void UnInit(Player &player);
-   void Process(Player &player, int currentTimeMsec);
-   bool ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, int currentTimeMs);
-   void ProcessMouse(Player &player, Vertex3Ds &mousePosition3D, POINT &mousePosition2D, int currentTimeMs);
-   void ControlNext();
-   void ControlPrev();
-
-public: // TODO Gary - put back to private
    struct DebugPrintRecord
    {
       Player &m_Player;
@@ -640,7 +636,13 @@ public: // TODO Gary - put back to private
    static const char * TrainerModeBallFailAssociationsKeyName;
    std::string m_SettingsFilePath;
 
+   bool GetSettingsFileName(Player &player, std::string &fileName);
+   void LoadSettings(Player &player);
+   void SaveSettings(Player &player);
+   void InitBallLost(Player &player);
    void ToggleControl();
+   void ControlNext();
+   void ControlPrev();
    void ResetBallHistoryRenderSizes();
    void DrawBallHistory(Player &player);
    void DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs);

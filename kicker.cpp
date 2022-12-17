@@ -1249,7 +1249,7 @@ void KickerHitCircle::DoCollide(Ball * const pball, const Vertex3Ds& hitnormal, 
             if (pball->m_d.m_frozen)
             {
                pball->m_d.m_vpVolObjs->push_back(m_obj);		// add kicker to ball's volume set
-               if (!g_pplayer->m_BallHistory.m_Control)
+               if (!g_pplayer->m_BallHistory.Control())
                {
                   m_pball = pball;
                }
