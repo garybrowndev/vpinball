@@ -265,7 +265,6 @@ struct BallHistoryState
    Vertex3Ds m_Vel;
    Vertex3Ds m_AngMom;
    Vertex3Ds m_LastEventPos;
-   bool m_Frozen;
 
    Matrix3 m_Orientation;
 
@@ -280,7 +279,7 @@ struct BallHistoryRecord
 {
    BallHistoryRecord();
    BallHistoryRecord(int timeMs);
-   void Set(std::vector<Ball*> &vball, int timeMs);
+   void Set(std::vector<Ball*> &controlVBalls, int timeMs);
 
    int m_TimeMs;
    std::vector<BallHistoryState> m_BallHistoryStates;
@@ -468,6 +467,7 @@ public:
    bool ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, int currentTimeMs);
    void ProcessMouse(Player &player, Vertex3Ds &mousePosition3D, POINT &mousePosition2D, int currentTimeMs);
    bool Control();
+   void ToggleControl();
    void ResetTrainerRunStartTime();
 
 private:
@@ -577,6 +577,9 @@ private:
    static const float BallHistoryMaxPointSize;
    static const float ControlVerticesDistanceMax;
 
+   std::vector<Ball*> m_ControlVBalls;
+   std::vector<Ball*> m_ControlVBallsPrevious;
+
    bool m_Control;
    bool m_WasControlled;
    bool m_WasRecalled;
@@ -640,13 +643,13 @@ private:
    void LoadSettings(Player &player);
    void SaveSettings(Player &player);
    void InitBallLost(Player &player);
-   void ToggleControl();
+   void InitControlVBalls(Player &player);
    void ControlNext();
    void ControlPrev();
    void ResetBallHistoryRenderSizes();
    void DrawBallHistory(Player &player);
    void DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
-   void DrawFakeBallAtMousePosition(Player &player, Texture &texture);
+   void DrawFakeBallAtMousePosition(Player &player, Texture &texture, DebugPrintRecord &dpr);
    void DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
    void UpdateBallState(Player &player, BallHistoryRecord &ballHistoryRecord);
    void ShowStatus(Player &player, int currentTimeMs);
@@ -661,7 +664,7 @@ private:
    template <class T> void ProcessMenuChangeValueStep(T &value, S32 step, S32 min, S32 max);
    template <class T> void ProcessMenuChangeValueSkip(T &value, S32 min, S32 max, int currentTimeMs);
 
-   void Add(std::vector<Ball *> &vballs, int currentTimeMsec);
+   void Add(std::vector<Ball *> &controlVBalls, int currentTimeMsec);
    BallHistoryRecord &Get(std::size_t index);
    std::size_t GetTailIndex();
 
@@ -671,10 +674,10 @@ private:
    bool ControlNextMove();
    bool ControlPrevMove();
 
-   std::size_t BallCountChange(std::vector<Ball *> &vball, BallHistoryRecord &headBhr);
-   bool BallFrozenChanged(std::vector<Ball *> &vball, BallHistoryRecord &headBhr);
-   bool BallAllFrozen(std::vector<Ball *> &vball);
-   bool BallInsideAutoControlVertex(std::vector<Ball *> &vball);
+   std::size_t BallCountChange();
+   bool BallChanged();
+
+   bool BallInsideAutoControlVertex(std::vector<Ball *> &controlVBalls);
 
    std::vector<std::string> Split(const char * str, char delimeter);
    void CenterMouse(Player &player);
@@ -736,7 +739,7 @@ public:
    Ball *CreateBall(const float x, const float y, const float z, const float vx, const float vy, const float vz, const float radius = 25.0f, const float mass = 1.0f);
    void DestroyBall(Ball *pball);
 
-   void DrawFakeBall(const Vertex3Ds &position, const Matrix3 &orientation, float radius, bool frozen, Texture *pballImageColor, bool showSpin);
+   void DrawFakeBall(const Vertex3Ds &position, const Matrix3 &orientation, float radius, Texture *pballImageColor, bool showSpin);
 
    void AddCabinetBoundingHitShapes();
 
