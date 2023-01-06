@@ -3607,6 +3607,8 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
       {
          if (m_Control)
          {
+            ProcessMenu(player, MenuOptionsRecord::MenuActionType_UpLeft, currentTimeMs);
+
             m_MenuOptions.m_SkipKeyPressed = true;
             m_MenuOptions.m_SkipKeyPressedMs = currentTimeMs;
             m_MenuOptions.m_SkipKeyLeft = true;
@@ -3616,8 +3618,6 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
       {
          if (m_Control)
          {
-            ProcessMenu(player, MenuOptionsRecord::MenuActionType_UpLeft, currentTimeMs);
-
             m_MenuOptions.m_SkipKeyPressed = false;
             m_MenuOptions.m_SkipKeyPressedMs = 0;
          }
@@ -3629,6 +3629,8 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
       {
          if (m_Control)
          {
+            ProcessMenu(player, MenuOptionsRecord::MenuActionType_DownRight, currentTimeMs);
+
             m_MenuOptions.m_SkipKeyPressed = true;
             m_MenuOptions.m_SkipKeyPressedMs = currentTimeMs;
             m_MenuOptions.m_SkipKeyLeft = false;
@@ -3638,8 +3640,6 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
       {
          if (m_Control)
          {
-            ProcessMenu(player, MenuOptionsRecord::MenuActionType_DownRight, currentTimeMs);
-
             m_MenuOptions.m_SkipKeyPressed = false;
             m_MenuOptions.m_SkipKeyPressedMs = 0;
          }
