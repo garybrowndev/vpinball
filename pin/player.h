@@ -471,6 +471,7 @@ public:
    bool Control();
    void SetControl(bool control);
    void ToggleControl();
+   void ToggleRecall();
    void ResetTrainerRunStartTime();
 
 private:

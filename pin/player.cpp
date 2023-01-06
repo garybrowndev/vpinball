@@ -1166,22 +1166,35 @@ void BallHistory::ResetTrainerRunStartTime()
 
 void BallHistory::SetControl(bool control)
 {
-   m_Control = control;
-   if (m_Control)
+   if (m_Control != control)
    {
-      g_pplayer->PauseMusic();
-      g_pplayer->m_noTimeCorrect = true;
-      m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
-   }
-   else
-   {
-      g_pplayer->UnpauseMusic();
+      m_Control = control;
+      if (m_Control)
+      {
+         g_pplayer->PauseMusic();
+         g_pplayer->m_noTimeCorrect = true;
+         m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+      }
+      else
+      {
+         g_pplayer->UnpauseMusic();
+      }
    }
 }
 
 void BallHistory::ToggleControl()
 {
    SetControl(!m_Control);
+}
+
+void BallHistory::ToggleRecall()
+{
+   if (m_MenuOptions.m_NormalOptions.m_RecallControlIndex != NormalOptions::RecallControlIndexDisabled)
+   {
+      SetControl(true);
+      m_CurrentControlIndex = m_MenuOptions.m_NormalOptions.m_RecallControlIndex;
+      m_WasRecalled = true;
+   }
 }
 
 void BallHistory::ShowStatus(Player &player, int currentTimeMs)
@@ -1732,7 +1745,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("Use Flipper buttons to navigate");
          dpr.ShowMenuText("backward/forward through ball history");
          dpr.ShowMenuText("Hit Control button to continue simulation");
-         dpr.ShowMenuText("Hit Plunger button to exit");
+         dpr.ShowMenuText("Hit Plunger button to return to previous menu");
 
 
          switch (menuAction)
@@ -1820,7 +1833,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("Use Flipper buttons to navigate");
          dpr.ShowMenuText("backward/forward through ball history");
          dpr.ShowMenuText("Hit Control button to continue simulation");
-         dpr.ShowMenuText("Hit Plunger button to exit");
+         dpr.ShowMenuText("Hit Plunger button to accept and return to previous menu");
 
          switch (menuAction)
          {
@@ -1847,7 +1860,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuTextTitle("Create Auto Control Locations");
          dpr.ShowMenuText("Use Mouse click to create new locations");
          dpr.ShowMenuText("Click existing location to remove");
-         dpr.ShowMenuText("Hit plunger button to exit");
+         dpr.ShowMenuText("Hit plunger button to return to previous menu");
 
          for (std::size_t autoControlVerticesIndex = 0; autoControlVerticesIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); ++autoControlVerticesIndex)
          {
@@ -2936,13 +2949,7 @@ void BallHistory::ProcessModeNormal(Player &player)
    {
       SetControl(true);
       m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectCurrentBallHistory;
-
-      if (m_MenuOptions.m_NormalOptions.m_RecallControlIndex != NormalOptions::RecallControlIndexDisabled)
-      {
-         m_CurrentControlIndex = m_MenuOptions.m_NormalOptions.m_RecallControlIndex;
-         m_WasRecalled = true;
-         m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectModeOptions;
-      }
+      ToggleRecall();
    }
 }
 
@@ -3576,11 +3583,20 @@ void BallHistory::Process(Player &player, int currentTimeMs)
 
 bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, int currentTimeMs)
 {
-   if (input->dwOfs == (DWORD)DIK_C)
+   if (input->dwOfs == (DWORD)DIK_C) // TODO GARY Replace with proper programmable key from nudge/keys setup menu
    {
       if (input->dwData & 0x80)
       {
          ToggleControl();
+         Process(player, currentTimeMs);
+         return true;
+      }
+   }
+   if (input->dwOfs == (DWORD)DIK_R) // TODO GARY Replace with proper programmable key from nudge/keys setup menu
+   {
+      if (input->dwData & 0x80)
+      {
+         ToggleRecall();
          Process(player, currentTimeMs);
          return true;
       }
