@@ -249,7 +249,10 @@ void BallHistory::DebugPrintRecord::ShowMenuTextSelect(bool selected, const char
 
 const int BallHistory::MenuOptionsRecord::SkipKeyPressHoldMs = 2000;
 const int BallHistory::MenuOptionsRecord::SkipKeyIntervalMs = 500;
-const S32 BallHistory::MenuOptionsRecord::LastProcessedKeySkip = 10;
+const S32 BallHistory::MenuOptionsRecord::SkipKeyStepFactor = 10;
+
+const int BallHistory::MenuOptionsRecord::SkipControlIntervalMs = 300;
+const S32 BallHistory::MenuOptionsRecord::SkipControlStepFactor = 3;
 
 BallHistory::MenuOptionsRecord::MenuOptionsRecord():
    m_MenuState(MenuStateType::MenuStateType_Root_SelectMode),
@@ -258,6 +261,7 @@ BallHistory::MenuOptionsRecord::MenuOptionsRecord():
    m_SkipKeyPressedMs(0),
    m_SkipKeyLeft(false),
    m_SkipKeyUsedMs(0),
+   m_SkipControlUsedMs(0),
    m_CurrentBallIndex(0),
    m_CurrentAssociationIndex(0),
    m_MousePosition3D(0.0f, 0.0f, 0.0f),
@@ -718,7 +722,7 @@ void BallHistory::SaveSettings(Player &player)
 
 void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
 {
-   m_Control = m_WasControlled;
+   SetControl(false);
    m_WasControlled = false;
    m_WasRecalled = false;
 
@@ -985,7 +989,7 @@ void BallHistory::ControlNext()
    }
    else if (m_CurrentControlIndex == m_BallHistoryRecordsHeadIndex)
    {
-      m_CurrentControlIndex = GetTailIndex();
+      // at end of 'next' ball history, do nothing
    }
    else
    {
@@ -1053,7 +1057,7 @@ void BallHistory::ControlPrev()
    }
    else if (m_CurrentControlIndex == GetTailIndex())
    {
-      m_CurrentControlIndex = m_BallHistoryRecordsHeadIndex;
+      // at end of 'prev' ball history, do nothing
    }
    else
    {
@@ -1100,9 +1104,9 @@ void BallHistory::ResetTrainerRunStartTime()
    m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
 }
 
-void BallHistory::ToggleControl()
+void BallHistory::SetControl(bool control)
 {
-   m_Control = !m_Control;
+   m_Control = control;
    if (m_Control)
    {
       g_pplayer->PauseMusic();
@@ -1113,6 +1117,11 @@ void BallHistory::ToggleControl()
    {
       g_pplayer->UnpauseMusic();
    }
+}
+
+void BallHistory::ToggleControl()
+{
+   SetControl(!m_Control);
 }
 
 void BallHistory::ShowStatus(Player &player, int currentTimeMs)
@@ -1536,12 +1545,11 @@ template <class T> void BallHistory::ProcessMenuChangeValueSkip(T &value, S32 mi
       {
          if (m_MenuOptions.m_SkipKeyLeft == true)
          {
-            value = static_cast<T>(ProcessMenuChangeValue(static_cast<S32>(value), m_MenuOptions.LastProcessedKeySkip * -1, min, max, true));
-            m_MenuOptions.m_SkipKeyUsedMs = currentTimeMs;
+            value = static_cast<T>(ProcessMenuChangeValue(static_cast<S32>(value), m_MenuOptions.SkipKeyStepFactor * -1, min, max, true));
          }
          else
          {
-            value = static_cast<T>(ProcessMenuChangeValue(static_cast<S32>(value), m_MenuOptions.LastProcessedKeySkip, min, max, true));
+            value = static_cast<T>(ProcessMenuChangeValue(static_cast<S32>(value), m_MenuOptions.SkipKeyStepFactor, min, max, true));
          }
          m_MenuOptions.m_SkipKeyUsedMs = currentTimeMs;
       }
@@ -1666,6 +1674,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("Hit Control button to continue simulation");
          dpr.ShowMenuText("Hit Plunger button to exit");
 
+
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
@@ -1673,10 +1682,31 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ControlPrev();
-               break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ControlNext();
+               {
+               std::size_t controlCount = 1;
+               if ((currentTimeMs - m_MenuOptions.m_SkipControlUsedMs) < MenuOptionsRecord::SkipControlIntervalMs)
+               {
+                  controlCouqnt = MenuOptionsRecord::SkipControlStepFactor;
+                  ::OutputDebugString("Here in control count\n");
+               }
+               for (std::size_t x = 0; x < controlCount; x++)
+               {
+                  switch (menuAction)
+                  {
+                     case MenuOptionsRecord::MenuActionType_UpLeft:
+                        ControlPrev();
+                        break;
+                     case MenuOptionsRecord::MenuActionType_DownRight:
+                        ControlNext();
+                        break;
+                     default:
+                        assert(0);
+                        break;
+                  }
+               }
+               m_MenuOptions.m_SkipControlUsedMs = currentTimeMs;
+               }
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectModeOptions;
@@ -2844,7 +2874,7 @@ void BallHistory::ProcessModeNormal(Player &player)
 {
    if (BallInsideAutoControlVertex(m_ControlVBalls))
    {
-      m_Control = true;
+      SetControl(true);
       m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectCurrentBallHistory;
 
       if (m_MenuOptions.m_NormalOptions.m_RecallControlIndex != NormalOptions::RecallControlIndexDisabled)
@@ -2930,10 +2960,10 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          m_ControlVBalls[controlVBallIndex]->m_d.m_pos = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[controlVBallIndex].m_Pos;
          m_ControlVBalls[controlVBallIndex]->m_d.m_vel = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[controlVBallIndex].m_Vel;
          m_ControlVBalls[controlVBallIndex]->m_angularmomentum = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[controlVBallIndex].m_AngMom;
-         //m_ControlVBalls[controlVBallIndex]->m_lastEventPos = currentControlBhr.m_BallHistoryStates[controlVBallIndex].m_LastEventPos;
-         //m_ControlVBalls[controlVBallIndex]->m_orientation = currentControlBhr.m_BallHistoryStates[controlVBallIndex].m_Orientation;
-         //memcpy(m_ControlVBalls[controlVBallIndex]->m_oldpos, currentControlBhr.m_BallHistoryStates[controlVBallIndex].m_OldPos, sizeof(m_ControlVBalls[controlVBallIndex]->m_oldpos));
-         //m_ControlVBalls[controlVBallIndex]->m_ringcounter_oldpos = currentControlBhr.m_BallHistoryStates[controlVBallIndex].m_RingCounter_OldPos;
+         //m_ControlVBalls[controlVBallIndex]->m_lastEventPos = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[controlVBallIndex].m_LastEventPos;
+         //m_ControlVBalls[controlVBallIndex]->m_orientation = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[controlVBallIndex].m_Orientation;
+         //memcpy(m_ControlVBalls[controlVBallIndex]->m_oldpos, m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[controlVBallIndex].m_OldPos, sizeof(m_ControlVBalls[controlVBallIndex]->m_oldpos));
+         //m_ControlVBalls[controlVBallIndex]->m_ringcounter_oldpos = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[controlVBallIndex].m_RingCounter_OldPos;
       }
 
    }
@@ -3095,19 +3125,15 @@ void BallHistory::UpdateBallState(Player &player, BallHistoryRecord &ballHistory
    for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
    {
       m_ControlVBalls[controlVBallIndex]->m_d.m_pos = ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_Pos;
-      if (m_Control)
-      {
-         //m_ControlVBalls[controlVBallIndex]->m_d.m_vel = { 0.0f, 0.0f, 0.0f };
-      }
-      else
+      if (!m_Control)
       {
          m_ControlVBalls[controlVBallIndex]->m_d.m_vel = ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_Vel;
+         m_ControlVBalls[controlVBallIndex]->m_angularmomentum = ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_AngMom;
+         m_ControlVBalls[controlVBallIndex]->m_lastEventPos = ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_LastEventPos;
+         m_ControlVBalls[controlVBallIndex]->m_orientation = ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_Orientation;
+         memcpy(m_ControlVBalls[controlVBallIndex]->m_oldpos, ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_OldPos, sizeof(m_ControlVBalls[controlVBallIndex]->m_oldpos));
+         m_ControlVBalls[controlVBallIndex]->m_ringcounter_oldpos = ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_RingCounter_OldPos;
       }
-      m_ControlVBalls[controlVBallIndex]->m_angularmomentum = ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_AngMom;
-      m_ControlVBalls[controlVBallIndex]->m_lastEventPos = ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_LastEventPos;
-      m_ControlVBalls[controlVBallIndex]->m_orientation = ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_Orientation;
-      memcpy(m_ControlVBalls[controlVBallIndex]->m_oldpos, ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_OldPos, sizeof(m_ControlVBalls[controlVBallIndex]->m_oldpos));
-      m_ControlVBalls[controlVBallIndex]->m_ringcounter_oldpos = ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_RingCounter_OldPos;
    }
 }
 
@@ -3387,14 +3413,18 @@ void BallHistory::Process(Player &player, int currentTimeMs)
          if (BallCountChange() > 0)
          {
             Init(player, currentTimeMs, false);
+            SetControl(false);
          }
          else if (BallCountChange() < 0)
          {
             InitBallLost(player);
+            SetControl(false);
          }
          else if (BallChanged())
          {
+            m_WasControlled = false;
             Init(player, currentTimeMs, false);
+            SetControl(false);
          }
 
          ProcessMode(player, currentTimeMs);
@@ -6519,6 +6549,10 @@ void Player::PhysicsSimulateCycle(float dtime) // move physics forward to this t
 
 void Player::UpdatePhysics()
 {
+   if (m_BallHistory.Control())
+   {
+      return;
+   }
    U64 initial_time_usec = usec();
 
    // DJRobX's crazy latency-reduction code

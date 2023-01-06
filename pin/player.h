@@ -467,6 +467,7 @@ public:
    bool ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, int currentTimeMs);
    void ProcessMouse(Player &player, Vertex3Ds &mousePosition3D, POINT &mousePosition2D, int currentTimeMs);
    bool Control();
+   void SetControl(bool control);
    void ToggleControl();
    void ResetTrainerRunStartTime();
 
@@ -546,7 +547,10 @@ private:
 
       static const int SkipKeyPressHoldMs;
       static const int SkipKeyIntervalMs;
-      static const S32 LastProcessedKeySkip;
+      static const S32 SkipKeyStepFactor;
+
+      static const int SkipControlIntervalMs;
+      static const S32 SkipControlStepFactor;
 
       MenuStateType m_MenuState;
       ModeType m_ModeType;
@@ -559,6 +563,7 @@ private:
       int m_SkipKeyPressedMs;
       bool m_SkipKeyLeft;
       int m_SkipKeyUsedMs;
+      int m_SkipControlUsedMs;
       std::size_t m_CurrentBallIndex;
       std::size_t m_CurrentAssociationIndex;
       std::size_t m_CurrentCompleteIndex;
