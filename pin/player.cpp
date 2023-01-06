@@ -154,6 +154,17 @@ BallHistoryRecord::BallHistoryRecord(int timeMs):
 {
 }
 
+void BallHistoryRecord::Set(const Ball * controlVBall, BallHistoryState &bhr)
+{
+   bhr.m_Pos = controlVBall->m_d.m_pos;
+   bhr.m_Vel = controlVBall->m_d.m_vel;
+   bhr.m_AngMom = controlVBall->m_angularmomentum;
+   bhr.m_LastEventPos = controlVBall->m_lastEventPos;
+   bhr.m_Orientation = controlVBall->m_orientation;
+   memcpy(bhr.m_OldPos, controlVBall->m_oldpos, sizeof(bhr.m_OldPos));
+   bhr.m_RingCounter_OldPos = controlVBall->m_ringcounter_oldpos;
+}
+
 void BallHistoryRecord::Set(std::vector<Ball*> &controlVBalls, int timeMs)
 {
    m_TimeMs = timeMs;
@@ -161,15 +172,14 @@ void BallHistoryRecord::Set(std::vector<Ball*> &controlVBalls, int timeMs)
    for (std::vector<Ball*>::iterator it = controlVBalls.begin(); it != controlVBalls.end(); ++it)
    {
       m_BallHistoryStates.emplace_back(BallHistoryState());
-      BallHistoryState &newBhr = m_BallHistoryStates.back();
-      newBhr.m_Pos = (*it)->m_d.m_pos;
-      newBhr.m_Vel = (*it)->m_d.m_vel;
-      newBhr.m_AngMom = (*it)->m_angularmomentum;
-      newBhr.m_LastEventPos = (*it)->m_lastEventPos;
-      newBhr.m_Orientation = (*it)->m_orientation;
-      memcpy(newBhr.m_OldPos, (*it)->m_oldpos, sizeof(newBhr.m_OldPos));
-      newBhr.m_RingCounter_OldPos = (*it)->m_ringcounter_oldpos;
+      Set(*it, m_BallHistoryStates.back());
    }
+}
+
+void BallHistoryRecord::Insert(const Ball * controlVBall, int insertIndex)
+{
+   m_BallHistoryStates.insert(m_BallHistoryStates.begin() + insertIndex, BallHistoryState());
+   Set(controlVBall, m_BallHistoryStates[insertIndex]);
 }
 
 BallHistory::DebugPrintRecord::DebugPrintRecord(Player &player):
@@ -733,14 +743,10 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
    m_NextPreviousBy = NextPreviousByDefault;
    m_BallHistoryControlStepMs = BallHistoryControlStepMsDefault;
    m_BallHistoryControlStepPixels = BallHistoryControlStepPixelsDefault;
-
-   // TODO GARY should be smarter here, only clear the ball history dimensions
-   // for the balls that disappeared. there can be a case where there are two balls
-   // in play, one drains, and than the other is in a drain trajectory.
-   // you may want to, and it is possible with a little logic and coding
-   // to figure out which ball is new or which balls are pre-existing
-   // match up with current balls in play, clear the balls which are not there
-   // and keep the ball histories for the balls still in play
+   
+   // TODO GARY i think m_BallHistoryRecordIds and m_ControlVBallsPrevious are the same
+   // and m_BallHistoryRecordIds can be removed all together, or maybe the otherway around
+   // remove m_ControlVBallsPrevious
    m_BallHistoryRecordIds.clear();
    for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
    {
@@ -750,6 +756,10 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
    m_BallHistoryRecordsSize = 0;
    m_BallHistoryRecordsHeadIndex = 0;
    m_MaxBallVelocityPixels = 0.0f;
+
+   // TODO GARY i don't think m_MostRecentBallHistoryRecord is needed as we don't 
+   // set the ball velocity to zero to stop the ball anymore, now we do the pause/unpause
+   // and no running of UpdatePhysics
    m_MostRecentBallHistoryRecord.Set(m_ControlVBalls, currentTimeMs);
 
    if (!m_AutoControlBallTexture)
@@ -807,16 +817,66 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
    }
 }
 
-void BallHistory::InitBallLost(Player &player)
+void BallHistory::InitBallsIncreased(Player &player)
+{
+   for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
+   {
+      const Ball *controlVBall = m_ControlVBalls[controlVBallIndex];
+
+      std::size_t ballHistoryRecordsIdIndex = 0;
+      std::size_t ballHistoryRecordsIdInsertIndex = m_BallHistoryRecordIds.size();
+      for (; ballHistoryRecordsIdIndex < m_BallHistoryRecordIds.size(); ++ballHistoryRecordsIdIndex)
+      {
+         const Ball * ballHistoryRecordId = m_BallHistoryRecordIds[ballHistoryRecordsIdIndex];
+         if (controlVBall < ballHistoryRecordId)
+         {
+            ballHistoryRecordsIdInsertIndex = ballHistoryRecordsIdIndex;
+         }
+
+         if (controlVBall == ballHistoryRecordId)
+         {
+            break;
+         }
+      }
+
+      if (ballHistoryRecordsIdIndex >= m_BallHistoryRecordIds.size())
+      {
+         std::size_t tempCurrentIndex = m_CurrentControlIndex;
+         std::size_t tailIndex = GetTailIndex();
+         while (tempCurrentIndex != tailIndex)
+         {
+            BallHistoryRecord &currentBhr = m_BallHistoryRecords[tempCurrentIndex];
+            currentBhr.Insert(controlVBall, ballHistoryRecordsIdInsertIndex);
+
+            if (tempCurrentIndex == 0)
+            {
+               tempCurrentIndex = m_BallHistoryRecords.size() - 1;
+            }
+            else
+            {
+               tempCurrentIndex--;
+            }
+         }
+      }
+   }
+
+   m_BallHistoryRecordIds.clear();
+   for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
+   {
+      m_BallHistoryRecordIds.push_back(m_ControlVBalls[controlVBallIndex]);
+   }
+}
+
+void BallHistory::InitBallsDecreased(Player &player)
 {
    for (std::size_t ballHistoryRecordIndex = 0; ballHistoryRecordIndex < m_BallHistoryRecordIds.size();)
    {
-      const Ball *controlVBall = m_BallHistoryRecordIds[ballHistoryRecordIndex];
+      const Ball *ballHistoryRecordId = m_BallHistoryRecordIds[ballHistoryRecordIndex];
 
       std::size_t controlVBallIndex = 0;
       for (; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
       {
-         if (m_ControlVBalls[controlVBallIndex] == controlVBall)
+         if (m_ControlVBalls[controlVBallIndex] == ballHistoryRecordId)
          {
             break;
          }
@@ -1687,7 +1747,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                std::size_t controlCount = 1;
                if ((currentTimeMs - m_MenuOptions.m_SkipControlUsedMs) < MenuOptionsRecord::SkipControlIntervalMs)
                {
-                  controlCouqnt = MenuOptionsRecord::SkipControlStepFactor;
+                  controlCount = MenuOptionsRecord::SkipControlStepFactor;
                   ::OutputDebugString("Here in control count\n");
                }
                for (std::size_t x = 0; x < controlCount; x++)
@@ -3137,9 +3197,14 @@ void BallHistory::UpdateBallState(Player &player, BallHistoryRecord &ballHistory
    }
 }
 
-std::size_t BallHistory::BallCountChange()
+bool BallHistory::BallCountIncreased()
 {
-   return m_ControlVBalls.size() - m_ControlVBallsPrevious.size();
+   return m_ControlVBalls.size() > m_ControlVBallsPrevious.size();
+}
+
+bool BallHistory::BallCountDecreased()
+{
+   return m_ControlVBalls.size() < m_ControlVBallsPrevious.size();
 }
 
 bool BallHistory::BallChanged()
@@ -3410,14 +3475,14 @@ void BallHistory::Process(Player &player, int currentTimeMs)
       case MenuOptionsRecord::ModeType::ModeType_Normal:
       case MenuOptionsRecord::ModeType::ModeType_Trainer:
 
-         if (BallCountChange() > 0)
+         if (BallCountIncreased())
          {
-            Init(player, currentTimeMs, false);
+            InitBallsIncreased(player);
             SetControl(false);
          }
-         else if (BallCountChange() < 0)
+         else if (BallCountDecreased())
          {
-            InitBallLost(player);
+            InitBallsDecreased(player);
             SetControl(false);
          }
          else if (BallChanged())

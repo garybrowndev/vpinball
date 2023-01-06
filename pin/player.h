@@ -279,7 +279,9 @@ struct BallHistoryRecord
 {
    BallHistoryRecord();
    BallHistoryRecord(int timeMs);
+   void Set(const Ball * controlVBall, BallHistoryState &bhr);
    void Set(std::vector<Ball*> &controlVBalls, int timeMs);
+   void Insert(const Ball * controlVBall, int insertIndex);
 
    int m_TimeMs;
    std::vector<BallHistoryState> m_BallHistoryStates;
@@ -647,7 +649,8 @@ private:
    bool GetSettingsFileName(Player &player, std::string &fileName);
    void LoadSettings(Player &player);
    void SaveSettings(Player &player);
-   void InitBallLost(Player &player);
+   void InitBallsDecreased(Player &player);
+   void InitBallsIncreased(Player &player);
    void InitControlVBalls(Player &player);
    void ControlNext();
    void ControlPrev();
@@ -679,7 +682,8 @@ private:
    bool ControlNextMove();
    bool ControlPrevMove();
 
-   std::size_t BallCountChange();
+   bool BallCountIncreased();
+   bool BallCountDecreased();
    bool BallChanged();
 
    bool BallInsideAutoControlVertex(std::vector<Ball *> &controlVBalls);
