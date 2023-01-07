@@ -1510,10 +1510,7 @@ void BallHistory::ShowCurrentRunRecord(Player &player, DebugPrintRecord &dpr, in
 
    std::size_t runsRemaining = m_MenuOptions.m_TrainerOptions.m_TotalRuns - m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord - 1;
    dpr.ShowMenuText("Run %zu of %zu (%zu remaining)", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_TotalRuns, runsRemaining);
-   if (m_MenuOptions.m_TrainerOptions.m_RandomOrder != 0)
-   {
-      dpr.ShowMenuText("%.2f seconds remaining for current run", (runElapsedTimeMs - TrainerOptions::RunCountdownMs) / 1000.0f);
-   }
+   dpr.ShowMenuText("%.2f seconds remaining for current run", ((m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * 1000) - runElapsedTimeMs + TrainerOptions::RunCountdownMs) / 1000.0f);
 
    DWORD totalRunsMs = 0;
    for (std::size_t x = 0; x < m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord; x++)
@@ -1527,7 +1524,13 @@ void BallHistory::ShowCurrentRunRecord(Player &player, DebugPrintRecord &dpr, in
       TrainerOptions::RunRecord &rr = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord];
       float averageRunMs = float(totalRunsMs) / m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord;
       float approximateRemainingMs = averageRunMs * (runsRemaining + 1);
-      dpr.ShowMenuText("Approximately %.2f seconds for remaining runs", (approximateRemainingMs - (runElapsedTimeMs - TrainerOptions::RunCountdownMs)) / 1000);
+      float approximateRemainingTotalMs = (approximateRemainingMs - (runElapsedTimeMs - TrainerOptions::RunCountdownMs)) / 1000;
+      approximateRemainingTotalMs = std::max<float>(0, approximateRemainingTotalMs);
+      dpr.ShowMenuText("Approximately %.2f seconds for remaining runs", approximateRemainingTotalMs);
+   }
+   else
+   {
+      dpr.ShowMenuText("Approximately <n/a> seconds for remaining runs");
    }
 }
 
@@ -1934,37 +1937,15 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                switch (m_MenuOptions.m_TrainerOptions.m_ModeState)
                {
                   case TrainerOptions::ModeStateType::ModeStateType_Start:
-                     if (m_ControlVBalls.size() == 0)
+                     if (m_ControlVBalls.size() != m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size())
                      {
                         std::ostringstream strStream;
-                        strStream << "No balls exist, at least one ball must exist to start training";
+                        strStream << "Available non-frozen balls (" << m_ControlVBalls.size() << ") must equal Ball Start Positions (" << m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size() << ")";
                         m_MenuOptions.m_MenuError = strStream.str();
                      }
                      else
                      {                        
-                        // TODO GARY this does not work quite right, because we are adding/removing balls, this is triggering
-                        //a Init() which resets the control, so control goes off here, than on again later due to the change in ball count
-                        //because ball history needs to be reset, hopefully this naturally gets fixed when the smart keeping of ball
-                        //history is implemented
                         ToggleControl();
-
-                        if (m_ControlVBalls.size() < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size())
-                        {
-                           std::size_t ballsToCreate = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size() - m_ControlVBalls.size();
-                           Ball &controlVBall = *m_ControlVBalls[0];
-                           for (std::size_t ballIndex = 0; ballIndex < ballsToCreate; ballIndex++)
-                           {
-                              player.CreateBall(0, 0, 0, 0, 0, 0, controlVBall.m_d.m_radius, controlVBall.m_d.m_mass); 
-                           }
-                        }
-                        else if (m_ControlVBalls.size() > m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size())
-                        {
-                           std::size_t ballsToDestroy = m_ControlVBalls.size() - m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size();
-                           for (std::size_t ballIndex = 0; ballIndex < ballsToDestroy; ballIndex++)
-                           {
-                              player.DestroyBall(m_ControlVBalls[m_ControlVBalls.size() - 1]); 
-                           }
-                        }
 
                         m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results;
 
@@ -2105,7 +2086,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                switch (m_MenuOptions.m_TrainerOptions.m_BallStartMode)
                {
                   case TrainerOptions::BallStartModeType::BallStartModeType_Existing:
-                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_ExistingBallStartComplete;
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectExistingBallStart;
                      break;
                   case TrainerOptions::BallStartModeType::BallStartModeType_Drop:
                      assert(0);
@@ -2124,8 +2105,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                break;
          }
          break;
-      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_ExistingBallStartComplete:
-         dpr.ShowMenuTextTitle("Ball Start Complete (Existing)");
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectExistingBallStart:
+         dpr.ShowMenuTextTitle("Existing Ball Start Location");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode == TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept,
             "Accept");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode == TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Select,
@@ -2159,7 +2140,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode = TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept;
                      break;
                   case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Select:
-                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_ExistingSelectBallStartLocation;
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectExistingBallStartLocation;
                      break;
                }
                break;
@@ -2168,8 +2149,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                break;
          }
          break;
-      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_ExistingSelectBallStartLocation:
-         dpr.ShowMenuTextTitle("Existing Ball Start Position");
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectExistingBallStartLocation:
+         dpr.ShowMenuTextTitle("Existing Ball Start Location");
          dpr.ShowMenuText("Use Flipper buttons to navigate");
          dpr.ShowMenuText("backward/forward through ball history");
          dpr.ShowMenuText("Hit Plunger button to accept");
@@ -2202,7 +2183,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                ControlNext();
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
-               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_ExistingBallStartComplete;
+               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectExistingBallStart;
+               m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode = TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept;
                break;
             default:
                assert(0);
@@ -2361,7 +2343,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
          TrainerOptions::BallEndOptionsRecord &beor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
          
-         dpr.ShowMenuTextTitle("Ball Pass(s) Associations");
+         dpr.ShowMenuTextTitle("Ball Pass(es) Associations");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode == TrainerOptions::BallEndAssociationModeType::BallEndAssociationModeType_Accept,
             "Accept");
          for (std::size_t index = 0; index < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size(); index++)
@@ -2446,7 +2428,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          break;
        case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_BallPassComplete:
          {
-         dpr.ShowMenuTextTitle("Ball Pass(s) Complete");
+         dpr.ShowMenuTextTitle("Ball Pass(es) Complete");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode == TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept,
             "Accept");
          for (std::size_t index = 0; index < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); index++)
@@ -2969,21 +2951,30 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          break;
    }
 
-   if (m_ControlVBalls.size() != m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size())
+   std::ostringstream strStream;
+   bool cancelRun = true;
+   if (BallCountIncreased())
    {
-      std::ostringstream strStream;
-      if (m_ControlVBalls.size() >= m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size())
-      {
-         strStream << "Trainer run cancelled - new ball created";
-      }
-      else
-      {
-         strStream << "Trainer run cancelled - existing ball destroyed";
-      }
+      strStream << "Trainer run cancelled - new ball created";
+   }
+   else if (BallCountDecreased())
+   {
+      strStream << "Trainer run cancelled - existing ball destroyed";
+   }
+   else if (BallChanged())
+   {
+      strStream << "Trainer run cancelled - existing ball changed";
+   }
+   else
+   {
+      cancelRun = false;
+   }
+
+   if (cancelRun)
+   {
       m_MenuOptions.m_MenuError = strStream.str();
 
-      // TODO Gary figure out a way to put back into control with screwing up state of balls
-      //ToggleControl();
+      ToggleControl();
       m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results;
       m_MenuOptions.m_TrainerOptions.m_ModeState = TrainerOptions::ModeStateType::ModeStateType_Config;
       return;
@@ -3485,18 +3476,15 @@ void BallHistory::Process(Player &player, int currentTimeMs)
          if (BallCountIncreased())
          {
             InitBallsIncreased(player);
-            SetControl(false);
          }
          else if (BallCountDecreased())
          {
             InitBallsDecreased(player);
-            SetControl(false);
          }
          else if (BallChanged())
          {
             m_WasControlled = false;
             Init(player, currentTimeMs, false);
-            SetControl(false);
          }
 
          ProcessMode(player, currentTimeMs);
