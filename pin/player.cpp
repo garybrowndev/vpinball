@@ -916,9 +916,6 @@ void BallHistory::InitBallsDecreased(Player &player)
             }
          }
 
-         BallHistoryRecord &currentBhr = m_BallHistoryRecords[tempCurrentIndex];
-         currentBhr.m_BallHistoryStates.erase(currentBhr.m_BallHistoryStates.begin() + ballHistoryRecordIndex);
-
          m_BallHistoryRecordIds.erase(m_BallHistoryRecordIds.begin() + ballHistoryRecordIndex);
       }
       else
