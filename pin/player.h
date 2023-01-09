@@ -489,7 +489,7 @@ private:
       int m_TextYStep;
       char m_StrBuffer[1024];
       
-      DebugPrintRecord(Player &player, float x, float y);
+      DebugPrintRecord(Player &player);
       void SetPosition(float x, float y);
       void SetPositionPercent(float x, float y);
       void SetReverse();
