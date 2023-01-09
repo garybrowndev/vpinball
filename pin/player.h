@@ -489,6 +489,8 @@ private:
       int m_TextYStep;
       char m_StrBuffer[1024];
       
+      DebugPrintRecord(Player &player, float x, float y);
+      void SetPosition(float x, float y);
       void ShowText(const char * format, ...);
       void ShowTextTitle(const char * format, ...);
       void ShowMenuText(const char * format, ...);
@@ -496,7 +498,6 @@ private:
       void ShowMenuTextTitle(const char * format, ...);
       void ShowMenuTextError(const char * format, ...);
       void ShowMenuTextSelect(bool selected, const char * format, ...);
-      DebugPrintRecord(Player &player);
    };
 
    struct MenuOptionsRecord

@@ -182,12 +182,27 @@ void BallHistoryRecord::Insert(const Ball * controlVBall, int insertIndex)
    Set(controlVBall, m_BallHistoryStates[insertIndex]);
 }
 
-BallHistory::DebugPrintRecord::DebugPrintRecord(Player &player):
+BallHistory::DebugPrintRecord::DebugPrintRecord(Player &player, float x, float y):
    m_Player(player),
    m_TextX(10),
    m_TextY(-10),
    m_TextYStep(20)
 {
+   SetPosition(x, y);
+}
+
+void BallHistory::DebugPrintRecord::SetPosition(float x, float y)
+{
+   if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 270.0f)
+   {
+      y = (float)(m_Player.m_height - DBG_SPRITE_SIZE) - y;
+   }
+   else if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 90.0f)
+   {
+      x = (float)(m_Player.m_width - DBG_SPRITE_SIZE) - x;
+   }
+
+   m_Player.SetDebugOutputPosition(x, y);
 }
 
 void BallHistory::DebugPrintRecord::ShowText(const char * format, ...)
@@ -1199,8 +1214,7 @@ void BallHistory::ToggleRecall()
 
 void BallHistory::ShowStatus(Player &player, int currentTimeMs)
 {
-   DebugPrintRecord dpr(player);
-   player.SetDebugOutputPosition(0, 0);
+   DebugPrintRecord dpr(player, 0, 0);
 
    dpr.ShowText("Ball History Status");
 
@@ -1564,7 +1578,7 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
             {
                player.DrawFakeBall(beor.m_Pos3D, controlVBall->m_orientation, controlVBall->m_d.m_radius, m_TrainerBallPassTexture, false);
             }
-            player.SetDebugOutputPosition(float(beor.m_Pos2D.x), float(beor.m_Pos2D.y));
+            dpr.SetPosition(float(beor.m_Pos2D.x), float(beor.m_Pos2D.y));
             dpr.ShowMenuTextPos(0, 0, "#%zu", index + 1);
          }
       }
@@ -1578,7 +1592,7 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
             {
                player.DrawFakeBall(beor.m_Pos3D, controlVBall->m_orientation, controlVBall->m_d.m_radius, m_TrainerBallFailTexture, false);
             }
-            player.SetDebugOutputPosition(float(beor.m_Pos2D.x), float(beor.m_Pos2D.y));
+            dpr.SetPosition(float(beor.m_Pos2D.x), float(beor.m_Pos2D.y));
             dpr.ShowMenuTextPos(0, 0, "#%zu", index + 1);
          }
       }
@@ -1639,9 +1653,7 @@ template <class T> void BallHistory::ProcessMenuChangeValueStep(T &value, S32 st
 
 void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs)
 {
-   DebugPrintRecord dpr(player);
-
-   player.SetDebugOutputPosition(player.m_width / 2.0f, player.m_height / 2.0f);
+   DebugPrintRecord dpr(player, player.m_width / 2.0f, player.m_height / 2.0f);
 
    if (!m_MenuOptions.m_MenuError.empty())
    {
@@ -2220,10 +2232,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos2D = m_MenuOptions.m_MousePosition2D;
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<TrainerOptions::BallEndLocationModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode, 0, -1, TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_COUNT - 1);
+               ProcessMenuChangeValueStep<TrainerOptions::BallEndLocationModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode,-1, 0, TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<TrainerOptions::BallEndLocationModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode, 0, 1, TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_COUNT - 1);
+               ProcessMenuChangeValueStep<TrainerOptions::BallEndLocationModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode, 1, 0, TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode)
@@ -2988,9 +3000,8 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       return;
    }
 
-   DebugPrintRecord dpr(player);
+   DebugPrintRecord dpr(player, player.m_width / 2.0f, float(player.m_height));
    dpr.m_TextYStep *= -1;
-   player.SetDebugOutputPosition(player.m_width / 2.0f, float(player.m_height));
 
    if (m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs == 0)
    {
@@ -3419,7 +3430,7 @@ void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr,
          {
             player.DrawFakeBall(acv.m_Pos3D, controlVBall->m_orientation, controlVBall->m_d.m_radius, m_AutoControlBallTexture, false);
          }
-         player.SetDebugOutputPosition(float(acv.m_Pos2D.x), float(acv.m_Pos2D.y));
+         dpr.SetPosition(float(acv.m_Pos2D.x), float(acv.m_Pos2D.y));
          dpr.ShowMenuTextPos(0, 0, "#%zu", index + 1);
       }
    }
@@ -3440,7 +3451,7 @@ void BallHistory::DrawFakeBallAtMousePosition(Player &player, Texture &texture, 
          }
          else
          {
-            player.SetDebugOutputPosition(float(mousePosition.x), float(mousePosition.y));
+            dpr.SetPosition(float(mousePosition.x), float(mousePosition.y));
             dpr.ShowMenuTextPos(0, 0, "<BALL>");
          }
       }
