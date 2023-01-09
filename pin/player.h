@@ -491,6 +491,8 @@ private:
       
       DebugPrintRecord(Player &player, float x, float y);
       void SetPosition(float x, float y);
+      void SetPositionPercent(float x, float y);
+      void SetReverse();
       void ShowText(const char * format, ...);
       void ShowTextTitle(const char * format, ...);
       void ShowMenuText(const char * format, ...);
