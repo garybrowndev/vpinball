@@ -29,10 +29,6 @@
 #define USHOCKTYPE_VIRTUAPIN	4
 #define USHOCKTYPE_GENERIC		5
 
-#define APP_KEYBOARD 0
-#define APP_JOYSTICKMN 1
-#define APP_MOUSE 2
-
 // handle multiple joysticks, APP_JOYSTICKMN..APP_JOYSTICKMX
 #define PININ_JOYMXCNT 4
 
@@ -43,6 +39,10 @@
 
 #define APP_JOYSTICKMX (APP_JOYSTICKMN + PININ_JOYMXCNT -1)
 #define APP_JOYSTICK(n) (APP_JOYSTICKMN + (n))
+
+#define APP_KEYBOARD 0
+#define APP_JOYSTICKMN 1
+#define APP_MOUSE APP_JOYSTICKMN + PININ_JOYMXCNT
 
 #define USE_DINPUT_FOR_KEYBOARD // can lead to less input lag maybe on some systems if disabled, but can miss input if key is only pressed very very quickly and/or FPS are low
 
