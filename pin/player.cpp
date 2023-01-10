@@ -2015,7 +2015,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                bool removedExisting = false;
                for (std::vector<NormalOptions::AutoControlVertex>::iterator autoControlVerticesIt = m_MenuOptions.m_NormalOptions.m_AutoControlVertices.begin(); autoControlVerticesIt < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.end(); autoControlVerticesIt++)
                {
-                  if (DistancePixels(autoControlVerticesIt->m_Pos3D, m_MenuOptions.m_MousePosition3D) < m_ControlVBalls[0]->m_d.m_radius)
+                  // TODO GARY this is hacky, this should be based on some percentage of the width/height
+                  // or some constant to trap the mouse and create an consistent experience of adding/removing
+                  // points regardless of resolution or orientation
+                  float checkRadius = m_ControlVBalls.size() ? m_ControlVBalls[0]->m_d.m_radius : 25.0f;
+                  if (DistancePixels(autoControlVerticesIt->m_Pos3D, m_MenuOptions.m_MousePosition3D) < checkRadius)
                   {
                      m_MenuOptions.m_NormalOptions.m_AutoControlVertices.erase(autoControlVerticesIt);
                      removedExisting = true;
@@ -3572,7 +3576,24 @@ void BallHistory::DrawFakeBallAtMousePosition(Player &player, Texture &texture, 
          }
          else
          {
-            dpr.SetPosition(float(mousePosition.x), float(mousePosition.y));
+            POINT tempMousePosition2D;
+            if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 270.0f)
+            {
+               tempMousePosition2D.x = player.m_height - mousePosition.y;
+               tempMousePosition2D.y = mousePosition.x;
+            }
+            else if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 90.0f)
+            {
+               tempMousePosition2D.x = mousePosition.y;
+               tempMousePosition2D.y = player.m_width - mousePosition.x;
+            }
+            else
+            {
+               tempMousePosition2D = mousePosition;
+            }
+
+
+            dpr.SetPosition(float(tempMousePosition2D.x), float(tempMousePosition2D.y));
             dpr.ShowMenuTextPos(0, 0, "<BALL>");
          }
       }
