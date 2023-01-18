@@ -591,6 +591,7 @@ private:
    std::vector<Ball*> m_ControlVBalls;
    std::vector<Ball*> m_ControlVBallsPrevious;
 
+   bool m_ShowStatus;
    bool m_Control;
    bool m_WasControlled;
    bool m_WasRecalled;

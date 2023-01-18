@@ -361,6 +361,7 @@ const char * BallHistory::TrainerModeBallFailDistanceKeyName = "FailDistance";
 const char * BallHistory::TrainerModeBallFailAssociationsKeyName = "FailAssociations";
 
 BallHistory::BallHistory() :
+   m_ShowStatus(false),
    m_Control(false),
    m_WasControlled(false),
    m_WasRecalled(false),
@@ -1332,6 +1333,11 @@ void BallHistory::ToggleRecall()
 
 void BallHistory::ShowStatus(Player &player, int currentTimeMs)
 {
+   if (!m_ShowStatus)
+   {
+      return;
+   }
+
    DebugPrintRecord dpr(player);
    dpr.SetPositionPercent(0.0f, 0.0f);
 
@@ -3728,9 +3734,18 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
    {
       if (input->dwData & 0x80)
       {
-         ToggleControl();
-         Process(player, currentTimeMs);
-         return true;
+         bool shiftDown = ::GetKeyState(VK_SHIFT) & 0x8000;
+         if (shiftDown)
+         {
+            m_ShowStatus = !m_ShowStatus;
+            return true;
+         }
+         else
+         {
+            ToggleControl();
+            Process(player, currentTimeMs);
+            return true;
+         }
       }
    }
    if (input->dwOfs == (DWORD)DIK_R) // TODO GARY Replace with proper programmable key from nudge/keys setup menu
