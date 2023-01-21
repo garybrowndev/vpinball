@@ -391,8 +391,6 @@ public:
       std::vector<std::tuple<std::size_t, std::size_t>> m_StartToFailLocationIndexes;
    };
 
-   static const DWORD RunCountdownMs = 3000;
-
    ModeStateType m_ModeState;
    BallStartModeType m_BallStartMode;
    BallStartCompleteModeType m_BallStartCompleteMode;
@@ -400,6 +398,10 @@ public:
    BallEndFinishModeType m_BallEndFinishMode;
    BallEndAssociationModeType m_BallEndAssociationMode;
    BallEndCompleteModeType m_BallEndCompleteMode;
+
+   static const S32 CreateBallEndZMinimum = 0;
+   static const S32 CreateBallEndZMaximum = 150;
+   S32 m_CreateBallEndZ;
 
    static const S32 TotalRunsMinimum = 1;
    static const S32 TotalRunsMaximum = 100;
@@ -409,6 +411,10 @@ public:
    static const S32 MaxSecondsPerRunMaximum = 30;
    S32 m_MaxSecondsPerRun;
 
+   static const S32 RunCountdownSecondsMinimum = 0;
+   static const S32 RunCountdownSecondsMaximum = 5;
+   S32 m_RunCountdownSeconds;
+   
    bool m_RandomOrder; // Applies to Random mode
 
    std::vector<BallStartOptionsRecord> m_BallStartOptionsRecords;
@@ -418,6 +424,7 @@ public:
    std::vector<RunRecord> m_RunRecords;
    std::size_t m_CurrentRunRecord;
    int m_RunStartTimeMs;
+   bool m_RunExtraStartPositionSet;
 
    TrainerOptions();
 };
@@ -448,12 +455,18 @@ public:
       bool Active;
    };
 
-   static const std::size_t RecallControlIndexDisabled;
-   static const std::size_t AutoControlVerticesMax;
+   static const std::size_t RecallControlIndexDisabled = -1;
+   static const std::size_t AutoControlVerticesMax = 256;
 
    ModeStateType m_ModeState;
+
    SetupRecallBallHistoryModeType m_SetupRecallBallHistoryMode;
    std::size_t m_RecallControlIndex;
+
+   static const S32 CreateZMinimum = 0;
+   static const S32 CreateZMaximum = 150;
+   S32 m_CreateZ;
+
    std::vector<AutoControlVertex> m_AutoControlVertices;
 
    NormalOptions();
@@ -529,17 +542,20 @@ private:
          MenuStateType_Trainer_SelectExistingBallStart,
          MenuStateType_Trainer_SelectExistingBallStartLocation,
          MenuStateType_Trainer_SelectBallPassLocation,
+         MenuStateType_Trainer_SelectBallPassAccept,
          MenuStateType_Trainer_SelectBallPassFinishMode,
          MenuStateType_Trainer_SelectBallPassDistance,
          MenuStateType_Trainer_SelectBallPassAssociations,
          MenuStateType_Trainer_BallPassComplete,
          MenuStateType_Trainer_SelectBallFailLocation,
+         MenuStateType_Trainer_SelectBallFailAccept,
          MenuStateType_Trainer_SelectBallFailFinishMode,
          MenuStateType_Trainer_SelectBallFailDistance,
          MenuStateType_Trainer_SelectBallFailAssociations,
          MenuStateType_Trainer_BallFailComplete,
          MenuStateType_Trainer_SelectTotalRuns,
          MenuStateType_Trainer_SelectMaxSecondsPerRun,
+         MenuStateType_Trainer_SelectRunCountdownSeconds,
          MenuStateType_COUNT
       };
 
@@ -631,6 +647,7 @@ private:
    static const char * TrainerModeSettingsSectionName;
    static const char * TrainerModeTotalRunsKeyName;
    static const char * TrainerModeMaxSecondsPerRunKeyName;
+   static const char * TrainerModeRunCountdownSecondsKeyName;
    static const char * TrainerModeRandomOrderKeyName;
    static const char * TrainerModeBallStartPositionKeyName;
    static const char * TrainerModeBallStartVelocityKeyName;
@@ -662,7 +679,7 @@ private:
    void ResetBallHistoryRenderSizes();
    void DrawBallHistory(Player &player);
    void DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
-   void DrawFakeBallAtMousePosition(Player &player, Texture &texture, DebugPrintRecord &dpr);
+   void DrawFakeBallAtMousePosition(Player &player, float heightZ, Texture &texture, DebugPrintRecord &dpr);
    void DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
    void UpdateBallState(Player &player, BallHistoryRecord &ballHistoryRecord);
    void ShowStatus(Player &player, int currentTimeMs);
@@ -682,7 +699,6 @@ private:
    std::size_t GetTailIndex();
 
    float DistancePixels(const Vertex3Ds &pos1, const Vertex3Ds &pos2);
-   float DistancePixelsXY(const Vertex3Ds &pos1, const Vertex3Ds &pos2);
    float VelocityPixels(Vertex3Ds &vel);
    bool ControlNextMove();
    bool ControlPrevMove();
