@@ -184,12 +184,17 @@ void BallHistoryRecord::Insert(const Ball * controlVBall, int insertIndex)
 }
 
 BallHistory::DebugPrintRecord::DebugPrintRecord(Player &player):
-   m_Player(player),
-   m_TextX(10),
-   m_TextY(-10),
-   m_TextYStep(20)
+   m_Player(player)
 {
+   InitTextXY();
    SetPosition(0, 0);
+}
+
+void BallHistory::DebugPrintRecord::InitTextXY()
+{
+   m_TextX = 10;
+   m_TextY = -10,
+   m_TextYStep = 20;
 }
 
 void BallHistory::DebugPrintRecord::SetPosition(float x, float y)
@@ -299,7 +304,7 @@ void BallHistory::DebugPrintRecord::ShowMenuTextSelect(bool selected, const char
 }
 
 const int BallHistory::MenuOptionsRecord::SkipKeyPressHoldMs = 2000;
-const int BallHistory::MenuOptionsRecord::SkipKeyIntervalMs = 500;
+const int BallHistory::MenuOptionsRecord::SkipKeyIntervalMs = 333;
 const S32 BallHistory::MenuOptionsRecord::SkipKeyStepFactor = 10;
 
 const int BallHistory::MenuOptionsRecord::SkipControlIntervalMs = 300;
@@ -904,6 +909,8 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
    m_CurrentControlIndex = 0;
 
    m_MenuOptions.m_NormalOptions.m_RecallControlIndex = NormalOptions::RecallControlIndexDisabled;
+   m_MenuOptions.m_NormalOptions.m_CreateZ = S32(std::max(player.m_ptable->m_tableheight, std::min(float(m_MenuOptions.m_NormalOptions.m_CreateZ), player.m_ptable->m_glassheight)));
+   m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ = S32(std::max(player.m_ptable->m_tableheight, std::min(float(m_MenuOptions.m_NormalOptions.m_CreateZ), player.m_ptable->m_glassheight)));
 
    m_NextPreviousBy = NextPreviousByDefault;
    m_BallHistoryControlStepMs = BallHistoryControlStepMsDefault;
@@ -1670,9 +1677,26 @@ void BallHistory::ShowCurrentRunRecord(Player &player, DebugPrintRecord &dpr, in
 {
    DWORD runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
 
-   std::size_t runsRemaining = m_MenuOptions.m_TrainerOptions.m_TotalRuns - m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord - 1;
-   dpr.ShowMenuText("Run %zu of %zu (%zu remaining)", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_TotalRuns, runsRemaining);
-   dpr.ShowMenuText("%.2f seconds remaining for current run", ((m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * 1000) - runElapsedTimeMs + (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000)) / 1000.0f);
+   std::size_t runsRemaining = m_MenuOptions.m_TrainerOptions.m_TotalRuns - m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord;
+   float runsRemainingPercent = runsRemaining / float(m_MenuOptions.m_TrainerOptions.m_TotalRuns);
+
+   if (runsRemaining > 0)
+   {
+      dpr.ShowMenuText("Run %zu of %zu (%zu or %.2f%% remaining)", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_TotalRuns, runsRemaining, runsRemainingPercent * 100);
+   }
+   else
+   {
+      dpr.ShowMenuText("Run <n/a> of %zu (%zu or %.2f%% remaining)", m_MenuOptions.m_TrainerOptions.m_TotalRuns, runsRemaining, runsRemainingPercent * 100);
+   }
+
+   if (m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs > 0)
+   {
+      dpr.ShowMenuText("%.2f seconds remaining for current run", ((m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * 1000) - runElapsedTimeMs + (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000)) / 1000.0f);
+   }
+   else
+   {
+      dpr.ShowMenuText("<n/a> seconds remaining for current run", ((m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * 1000) - runElapsedTimeMs + (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000)) / 1000.0f);
+   }
 
    DWORD totalRunsMs = 0;
    for (std::size_t x = 0; x < m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord; x++)
@@ -1684,11 +1708,9 @@ void BallHistory::ShowCurrentRunRecord(Player &player, DebugPrintRecord &dpr, in
    if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord > 0)
    {
       TrainerOptions::RunRecord &rr = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord];
-      float averageRunMs = float(totalRunsMs) / m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord;
-      float approximateRemainingMs = averageRunMs * (runsRemaining + 1);
-      float approximateRemainingTotalMs = (approximateRemainingMs - (runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000))) / 1000;
-      approximateRemainingTotalMs = std::max<float>(0, approximateRemainingTotalMs);
-      dpr.ShowMenuText("Approximately %.2f seconds for remaining runs", approximateRemainingTotalMs);
+      float averageRunMs = totalRunsMs / float(m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord);
+      float approximateRemainingMs = averageRunMs * runsRemaining;
+      dpr.ShowMenuText("Approximately %.2f seconds for remaining runs", approximateRemainingMs / 1000.0f);
    }
    else
    {
@@ -2043,7 +2065,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
 
          dpr.ShowMenuText("Ball Height");
-         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", NormalOptions::CreateZMinimum, m_MenuOptions.m_NormalOptions.m_CreateZ, NormalOptions::CreateZMaximum);
+         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", S32(player.m_ptable->m_tableheight), m_MenuOptions.m_NormalOptions.m_CreateZ, S32(player.m_ptable->m_glassheight));
          m_MenuOptions.m_MousePosition3D.z = float(m_MenuOptions.m_NormalOptions.m_CreateZ);
 
          DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_NormalOptions.m_CreateZ), *m_AutoControlBallTexture, dpr);
@@ -2051,7 +2073,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
-               ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_NormalOptions.m_CreateZ, NormalOptions::CreateZMinimum, NormalOptions::CreateZMaximum, currentTimeMs);
+               ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_NormalOptions.m_CreateZ, S32(S32(player.m_ptable->m_tableheight)), S32(player.m_ptable->m_glassheight), currentTimeMs);
                break;
             case MenuOptionsRecord::MenuActionType_Toggle:
                {
@@ -2076,10 +2098,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_NormalOptions.m_CreateZ, -1, NormalOptions::CreateZMinimum, NormalOptions::CreateZMaximum);
+               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_NormalOptions.m_CreateZ, -1, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_NormalOptions.m_CreateZ, 1, NormalOptions::CreateZMinimum, NormalOptions::CreateZMaximum);
+               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_NormalOptions.m_CreateZ, 1, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectModeOptions;
@@ -2224,6 +2246,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowText("%.2f (%.2f) = Average Pass Elapsed Seconds (stddev)", float(totalPassMs) / totalPasses / 1000, 0.0f);
          dpr.ShowText("%.2f (%.2f) = Average Fail (location) Elapsed Seconds (stddev)", float(totalFailLocationMs) / totalFailsLocation / 1000, 0.0f);
          dpr.ShowText("%.2f (%.2f) = Average Run Seconds (stddev)", float(totalRunsMs) / m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord / 1000, 0.0f);
+
+         dpr.InitTextXY();
+         dpr.SetPositionPercent(0.50f, 1.00f);
+         dpr.SetReverse();
+         ShowCurrentRunRecord(player, dpr, currentTimeMs);
 
          switch (menuAction)
          {
@@ -2397,7 +2424,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             }
          }
          dpr.ShowMenuText("Ball Height");
-         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::CreateBallEndZMinimum, m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, TrainerOptions::CreateBallEndZMaximum);
+         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", S32(player.m_ptable->m_tableheight), m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_glassheight));
          m_MenuOptions.m_MousePosition3D.z = float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ);
 
          DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), *m_TrainerBallPassTexture, dpr);
@@ -2405,17 +2432,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
-               ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, TrainerOptions::CreateBallEndZMinimum, TrainerOptions::CreateBallEndZMaximum, currentTimeMs);
+               ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight), currentTimeMs);
                break;
             case MenuOptionsRecord::MenuActionType_Toggle:
                m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos3D = m_MenuOptions.m_MousePosition3D;
                m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos2D = m_MenuOptions.m_MousePosition2D;
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, -1, TrainerOptions::CreateBallEndZMinimum, TrainerOptions::CreateBallEndZMaximum);
+               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, -1, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, 1, TrainerOptions::CreateBallEndZMinimum, TrainerOptions::CreateBallEndZMaximum);
+               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, 1, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassAccept;
@@ -2754,7 +2781,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
 
          dpr.ShowMenuText("Ball Height");
-         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::CreateBallEndZMinimum, m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, TrainerOptions::CreateBallEndZMaximum);
+         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", S32(player.m_ptable->m_tableheight), m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_glassheight));
          m_MenuOptions.m_MousePosition3D.z = float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ);
 
          DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), *m_TrainerBallFailTexture, dpr);
@@ -2762,17 +2789,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
-               ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, TrainerOptions::CreateBallEndZMinimum, TrainerOptions::CreateBallEndZMaximum, currentTimeMs);
+               ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight), currentTimeMs);
                break;
             case MenuOptionsRecord::MenuActionType_Toggle:
                m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos3D = m_MenuOptions.m_MousePosition3D;
                m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos2D = m_MenuOptions.m_MousePosition2D;
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, -1, TrainerOptions::CreateBallEndZMinimum, TrainerOptions::CreateBallEndZMaximum);
+               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, -1, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, 1, TrainerOptions::CreateBallEndZMinimum, TrainerOptions::CreateBallEndZMaximum);
+               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, 1, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailAccept;
@@ -3287,7 +3314,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
    }
 
    TrainerOptions::RunRecord &currentRunRecord = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord];
-   DWORD runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
+   S32 runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
    if (m_MenuOptions.m_TrainerOptions.m_RunExtraStartPositionSet || runElapsedTimeMs == 0 || runElapsedTimeMs < (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000))
    {
       for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)

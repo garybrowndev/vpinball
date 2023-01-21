@@ -399,8 +399,6 @@ public:
    BallEndAssociationModeType m_BallEndAssociationMode;
    BallEndCompleteModeType m_BallEndCompleteMode;
 
-   static const S32 CreateBallEndZMinimum = 0;
-   static const S32 CreateBallEndZMaximum = 150;
    S32 m_CreateBallEndZ;
 
    static const S32 TotalRunsMinimum = 1;
@@ -463,8 +461,6 @@ public:
    SetupRecallBallHistoryModeType m_SetupRecallBallHistoryMode;
    std::size_t m_RecallControlIndex;
 
-   static const S32 CreateZMinimum = 0;
-   static const S32 CreateZMaximum = 150;
    S32 m_CreateZ;
 
    std::vector<AutoControlVertex> m_AutoControlVertices;
@@ -503,6 +499,7 @@ private:
       char m_StrBuffer[1024];
       
       DebugPrintRecord(Player &player);
+      void InitTextXY();
       void SetPosition(float x, float y);
       void SetPositionPercent(float x, float y);
       void SetReverse();
