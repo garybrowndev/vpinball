@@ -538,6 +538,8 @@ private:
          MenuStateType_Trainer_SelectBallStartMode,
          MenuStateType_Trainer_SelectExistingBallStart,
          MenuStateType_Trainer_SelectExistingBallStartLocation,
+         MenuStateType_Trainer_SelectDropBallStart,
+         MenuStateType_Trainer_SelectDropBallStartLocation,
          MenuStateType_Trainer_SelectBallPassLocation,
          MenuStateType_Trainer_SelectBallPassAccept,
          MenuStateType_Trainer_SelectBallPassFinishMode,

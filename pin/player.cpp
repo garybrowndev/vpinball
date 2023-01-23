@@ -1527,12 +1527,13 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                else
                {
                   dpr.ShowText("  Distance = %.2f", beor.m_Distance);
-                  for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
-                  {
-                     Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
-                     float distance = DistancePixels(beor.m_Pos3D, controlVBall.m_d.m_pos);
-                     dpr.ShowText("  Distance Ball #%zu = %.2f", controlVBallIndex + 1, distance);
-                  }
+               }
+
+               for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
+               {
+                  Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
+                  float distance = DistancePixels(beor.m_Pos3D, controlVBall.m_d.m_pos);
+                  dpr.ShowText("  Distance Ball #%zu = %.2f", controlVBallIndex + 1, distance);
                }
 
                if (beor.m_AssociatedBallStartIndexes.size() == 0)
@@ -2297,12 +2298,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectExistingBallStart;
                      break;
                   case TrainerOptions::BallStartModeType::BallStartModeType_Drop:
-                     assert(0);
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDropBallStart;
                      break;
                   case TrainerOptions::BallStartModeType::BallStartModeType_Custom:
                      assert(0);
                      break;
-
                   default:
                      assert(0);
                      break;
@@ -2393,6 +2393,137 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             case MenuOptionsRecord::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectExistingBallStart;
                m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode = TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept;
+               break;
+            default:
+               assert(0);
+               break;
+         }
+         break;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDropBallStart:
+         dpr.ShowMenuTextTitle("Drop Ball Start Location");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode == TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept,
+            "Accept");
+
+         m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.resize(m_ControlVBalls.size());
+         for (std::size_t index = 0; index < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size(); index++)
+         {
+            TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[index];
+            dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode == TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Select && m_MenuOptions.m_CurrentCompleteIndex == index,
+               "Edit Ball #%zu%s", index + 1, bsor.m_Pos.IsZero() ? " (Not Set)" : "");
+         }
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType_Toggle:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType_UpLeft:
+               switch (m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode)
+               {
+                  case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept:
+                     m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode = TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Select;
+                     m_MenuOptions.m_CurrentCompleteIndex = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size() - 1;
+                     break;
+                  case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Select:
+                     if (m_MenuOptions.m_CurrentCompleteIndex == 0)
+                     {
+                        m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode = TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept;
+                     }
+                     else
+                     {
+                        m_MenuOptions.m_CurrentCompleteIndex--;
+                     }
+                     break;
+               }
+               break;
+            case MenuOptionsRecord::MenuActionType_DownRight:
+               switch (m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode)
+               {
+                  case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept:
+                     m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode = TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Select;
+                     m_MenuOptions.m_CurrentCompleteIndex = 0;
+                     break;
+                  case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Select:
+                     m_MenuOptions.m_CurrentCompleteIndex++;
+                     if (m_MenuOptions.m_CurrentCompleteIndex == m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size())
+                     {
+                        m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode = TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept;
+                        m_MenuOptions.m_CurrentCompleteIndex = 0;
+                     }
+                     break;
+               }
+               break;
+            case MenuOptionsRecord::MenuActionType_Enter:
+               switch (m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode)
+               {
+                  case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept:
+                     if (m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos.IsZero())
+                     {
+                        std::ostringstream strStream;
+                        strStream << "Ball #" << (m_MenuOptions.m_CurrentBallIndex + 1) << " must be set";
+                        m_MenuOptions.m_MenuError = strStream.str();
+                     }
+                     else
+                     {
+                        m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_BallPassComplete;
+                        m_MenuOptions.m_CurrentBallIndex = 0;
+                     }
+                     break;
+                  case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Select:
+                     CenterMouse(player);
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDropBallStartLocation;
+                     m_MenuOptions.m_CurrentBallIndex = m_MenuOptions.m_CurrentCompleteIndex;
+                     break;
+               }
+               m_MenuOptions.m_MousePosition3D.SetZero();
+               m_MenuOptions.m_MousePosition2D = { 0, 0 };
+               m_MenuOptions.m_CurrentCompleteIndex = 0;
+               m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode = TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept;
+               break;
+            default:
+               assert(0);
+               break;
+         }
+         break;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDropBallStartLocation:
+         dpr.ShowMenuTextTitle("Drop Ball Start #%zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
+         dpr.ShowMenuText("Use Mouse click to create new locations");
+         dpr.ShowMenuText("Click existing location to remove");
+         dpr.ShowMenuText("Hit plunger button to accept");
+
+         if (GetCursorPos(&mousePosition2D) == TRUE)
+         {
+            if (ScreenToClient(player.m_pininput.m_hwnd, &mousePosition2D) == TRUE)
+            {
+               Vertex3Ds mousePosition3D(g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D));
+               dpr.ShowMenuText("Location %.2f,%.2f,%.2f,%ld,%ld (3x,3y,3z,2x,2y)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z, mousePosition2D.x, mousePosition2D.y);
+            }
+         }
+         dpr.ShowMenuText("Ball Height");
+         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", S32(player.m_ptable->m_tableheight), m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_glassheight));
+         m_MenuOptions.m_MousePosition3D.z = float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ);
+
+         DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), *m_AutoControlBallTexture, dpr);
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType_None:
+               ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight), currentTimeMs);
+               break;
+            case MenuOptionsRecord::MenuActionType_Toggle:
+               m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos = m_MenuOptions.m_MousePosition3D;
+               break;
+            case MenuOptionsRecord::MenuActionType_UpLeft:
+               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, -1, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
+               break;
+            case MenuOptionsRecord::MenuActionType_DownRight:
+               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, 1, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
+               break;
+            case MenuOptionsRecord::MenuActionType_Enter:
+               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDropBallStart;
+               m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode = TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept;
+               m_MenuOptions.m_CurrentCompleteIndex = 0;
                break;
             default:
                assert(0);
