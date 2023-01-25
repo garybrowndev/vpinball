@@ -355,6 +355,7 @@ const char * BallHistory::VersionKeyName = "Version";
 const char * BallHistory::DateSavedKeyName = "DateSaved";
 const char * BallHistory::NormalModeSettingsSectionName = "NormalModeSettings";
 const char * BallHistory::NormalModeAutoControlVerticesPosition2DKeyName = "Position2D";
+const char * BallHistory::NormalModeAutoControlVerticesPosition3DKeyName = "Position3D";
 const char * BallHistory::TrainerModeSettingsSectionName = "TrainerModeSettings";
 const char * BallHistory::TrainerModeStateSectionName = "TrainerModeState";
 const char * BallHistory::TrainerModeStartModeSectionName = "TrainerModeStartMode";
@@ -510,25 +511,19 @@ void BallHistory::LoadSettings(Player &player)
    {
       // Normal Mode Settings
       std::istringstream autoControlVerticesPosition2D;
-      if (LoadSettingsGetValue(iniFile, NormalModeSettingsSectionName, NormalModeAutoControlVerticesPosition2DKeyName, autoControlVerticesPosition2D) == true)
+      std::istringstream autoControlVerticesPosition3D;
+      if (LoadSettingsGetValue(iniFile, NormalModeSettingsSectionName, NormalModeAutoControlVerticesPosition2DKeyName, autoControlVerticesPosition2D) == true &&
+         LoadSettingsGetValue(iniFile, NormalModeSettingsSectionName, NormalModeAutoControlVerticesPosition3DKeyName, autoControlVerticesPosition3D) == true)
       {
-         while (autoControlVerticesPosition2D.peek() != EOF)
+         while (autoControlVerticesPosition2D.peek() != EOF &&
+            autoControlVerticesPosition3D.peek() != EOF)
          {
             m_MenuOptions.m_NormalOptions.m_AutoControlVertices.push_back({ {0.0f, 0.0f, 0.0f}, {0, 0}, true });
             NormalOptions::AutoControlVertex &acv = m_MenuOptions.m_NormalOptions.m_AutoControlVertices.back();
             autoControlVerticesPosition2D >> tempXFloat >> delimeter >> tempYFloat >> delimeter;
  
-            // TODO GARY 3D is not stored and is always recalculated on load
-            // this creates an issue i don't know how to fix at the moment
-            // create control points in one rotation, close, load a different rotation
-            // because the points were made using mouse (relative to screen) and not the 3D world
-            // different rotations and views will have the table in a different camera angle
-            // and any 2D points you made in one view will not translate to the same 3D points
-            // in another view. I need ability to go back and forth between 3D --> 2D point to fix this
-            // Once the function to go from 3D --> 2D (given the current camera angle), will need to
-            // put the 3D saving back here and the calculation will be the opposite
-            // instead of storing 2D and going to 3D, 3D will be stored and translated back to 2D
-            // on the screen so clicking lines up correctly
+            // TODO GARY figure out issue with the #X values are not being drawin in the write place
+            // after rotation or when "height" is set to large value
 
             POINT point2DTo3D;
             if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 270.0f)
@@ -554,8 +549,8 @@ void BallHistory::LoadSettings(Player &player)
 
                point2DTo3D = acv.m_Pos2D;
             }
-
-            acv.m_Pos3D = g_pplayer->m_pin3d.Get3DPointFrom2D(point2DTo3D);
+            
+            autoControlVerticesPosition3D >> acv.m_Pos3D.x >> delimeter >> acv.m_Pos3D.y >> delimeter >> acv.m_Pos3D.z >> delimeter;
          }
       }
    }
@@ -814,6 +809,7 @@ void BallHistory::SaveSettings(Player &player)
    {
       // Normal Mode Settings
       std::ostringstream autoControlVerticesPosition2D;
+      std::ostringstream autoControlVerticesPosition3D;
       for each (const NormalOptions::AutoControlVertex &acv in m_MenuOptions.m_NormalOptions.m_AutoControlVertices)
       {
          if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 270.0f)
@@ -828,10 +824,14 @@ void BallHistory::SaveSettings(Player &player)
          {
             autoControlVerticesPosition2D << (acv.m_Pos2D.x / float(player.m_width)) << SettingsValueDelimeter << (acv.m_Pos2D.y / float(player.m_height)) << SettingsValueDelimeter;
          }
+
+         autoControlVerticesPosition3D << acv.m_Pos3D.x << SettingsValueDelimeter << acv.m_Pos3D.y << SettingsValueDelimeter << acv.m_Pos3D.z << SettingsValueDelimeter;
       }
 
       tempStr = autoControlVerticesPosition2D.str();
       iniFile.SetValue(NormalModeSettingsSectionName, NormalModeAutoControlVerticesPosition2DKeyName, tempStr.c_str());
+      tempStr = autoControlVerticesPosition3D.str();
+      iniFile.SetValue(NormalModeSettingsSectionName, NormalModeAutoControlVerticesPosition3DKeyName, tempStr.c_str());
    }
 
    {
@@ -1296,6 +1296,11 @@ std::size_t BallHistory::GetTailIndex()
       tailIndex = m_BallHistoryRecords.size() - backStepRemaining + 1;
    }
    return tailIndex;
+}
+
+float BallHistory::DistancePixels(POINT &p1, POINT &p2)
+{
+   return sqrtf(float(powl(p1.x - p2.x, 2)) + float(powl(p1.y - p2.y, 2)));
 }
 
 float BallHistory::DistancePixels(const Vertex3Ds &pos1, const Vertex3Ds &pos2)
@@ -2186,6 +2191,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuText("Ball Height");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", S32(player.m_ptable->m_tableheight), m_MenuOptions.m_NormalOptions.m_CreateZ, S32(player.m_ptable->m_glassheight));
+         m_MenuOptions.m_MousePosition3D.z = float(m_MenuOptions.m_NormalOptions.m_CreateZ);
 
          DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_NormalOptions.m_CreateZ), *m_AutoControlBallTexture, dpr);
 
@@ -2202,8 +2208,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   // TODO GARY this is hacky, this should be based on some percentage of the width/height
                   // or some constant to trap the mouse and create an consistent experience of adding/removing
                   // points regardless of resolution or orientation
-                  float checkRadius = m_ControlVBalls.size() ? m_ControlVBalls[0]->m_d.m_radius : 25.0f;
-                  if (DistancePixels(autoControlVerticesIt->m_Pos3D, m_MenuOptions.m_MousePosition3D) < checkRadius)
+                  float checkRadius = std::min(player.m_width, player.m_height) * 0.025f;
+                  if (DistancePixels(autoControlVerticesIt->m_Pos2D, m_MenuOptions.m_MousePosition2D) < checkRadius)
                   {
                      m_MenuOptions.m_NormalOptions.m_AutoControlVertices.erase(autoControlVerticesIt);
                      removedExisting = true;
@@ -4026,6 +4032,12 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
    S32 runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
    if (m_MenuOptions.m_TrainerOptions.m_RunExtraStartPositionSet || runElapsedTimeMs == 0 || runElapsedTimeMs < (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000))
    {
+      // TODO GARY setting the velocity to a value here causes the ball to twitch and the ball trail
+      // to draw eratically. I think this is because the physics is trying to run while the ball is frozen
+      // here. Proposed Solution - Set the velocity to zero until the last moment before letting simuation
+      // run. Then one time in the next else in this if/else chain to set the velocity one last time so
+      // only the last frame before the simulation continues will get the velocity update and properly
+      // render at the start of the run record
       for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
       {
          m_ControlVBalls[controlVBallIndex]->m_d.m_pos = currentRunRecord.m_StartPositions[controlVBallIndex];

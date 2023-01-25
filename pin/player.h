@@ -681,8 +681,8 @@ private:
    static const char * VersionKeyName;
    static const char * DateSavedKeyName;
    static const char * NormalModeSettingsSectionName;
-   static const char * NormalModeAutoControlVerticesPosition3DKeyName;
    static const char * NormalModeAutoControlVerticesPosition2DKeyName;
+   static const char * NormalModeAutoControlVerticesPosition3DKeyName;
    static const char * TrainerModeSettingsSectionName;
    static const char * TrainerModeStateSectionName;
    static const char * TrainerModeStartModeSectionName;
@@ -739,6 +739,7 @@ private:
    BallHistoryRecord &Get(std::size_t index);
    std::size_t GetTailIndex();
 
+   float DistancePixels(POINT &p1, POINT &p2);
    float DistancePixels(const Vertex3Ds &pos1, const Vertex3Ds &pos2);
    float VelocityPixels(Vertex3Ds &vel);
    bool ControlNextMove();
