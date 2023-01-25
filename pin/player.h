@@ -303,11 +303,17 @@ public:
    enum BallStartModeType
    {
       BallStartModeType_Existing,
-      BallStartModeType_Drop,
       BallStartModeType_Custom,
       BallStartModeType_COUNT
    };
    
+   enum BallStartAngleVelocityModeType
+   {
+      BallStartAngleVelocityModeType_Drop,
+      BallStartAngleVelocityModeType_Custom,
+      BallStartAngleVelocityModeType_COUNT
+   };
+
    enum BallStartCompleteModeType
    {
       BallStartCompleteModeType_Accept,
@@ -345,18 +351,48 @@ public:
 
    struct BallStartOptionsRecord
    {
+      enum AngleOrderModeType
+      {
+         AngleOrderModeType_InOrder,
+         AngleOrderModeType_Random,
+         AngleOrderModeType_COUNT
+      };
+
+      enum VelocityOrderModeType
+      {
+         VelocityOrderModeType_InOrder,
+         VelocityOrderModeType_Random,
+         VelocityOrderModeType_COUNT
+      };
+
+      static const S32 AngleMinimum = 0;
+      static const S32 AngleMaximum = 359;
+
+      static const S32 TotalAnglesMinimum = 0;
+      static const S32 TotalAnglesMaximum = 100;
+
+      static const S32 VelocityMinimum = 0;
+      static const S32 VelocityMaximum = 100;
+
+      static const S32 TotalVelocitiesMinimum = 0;
+      static const S32 TotalVelocitiesMaximum = 100;
+
       Vertex3Ds m_Pos;
       Vertex3Ds m_Vel;
       Vertex3Ds m_AngMom;
-      float m_AngleMinimum;
-      float m_AngleMaximum;
+      float m_AngleStart;
+      float m_AngleFinish;
       S32 m_TotalAngles;
-      float m_VelocityMinimum;
-      float m_VelocityMaximum;
+      AngleOrderModeType m_AngleOrderMode;
+      float m_VelocityStart;
+      float m_VelocityFinish;
       S32 m_TotalVelocities;
+      VelocityOrderModeType m_VelocityOrderMode;
 
       BallStartOptionsRecord();
-      BallStartOptionsRecord(Vertex3Ds &pos, Vertex3Ds &vel, Vertex3Ds &angMom, float angleMin, float angleMax, S32 angleTotal, float velMin, float velMax, S32 velTotal);
+      BallStartOptionsRecord(Vertex3Ds &pos, Vertex3Ds &vel, Vertex3Ds &angMom,
+         float angleStart, float angleFinish, S32 totalAngles, AngleOrderModeType angleOrderMode,
+         float velocityStart, float velocityFinish, S32 totalVelocities, VelocityOrderModeType velocityOrderMode);
    };
 
    struct BallEndOptionsRecord
@@ -385,14 +421,20 @@ public:
          ResultType_FailedTimeElapsed
       };
 
+      std::vector<Vertex3Ds> m_StartPositions;
+      std::vector<Vertex3Ds> m_StartVelocities;
+      std::vector<Vertex3Ds> m_StartAngularMomentums;
       ResultType m_Result;
       int m_TotalTimeMs;
       std::vector<std::tuple<std::size_t, std::size_t>> m_StartToPassLocationIndexes;
       std::vector<std::tuple<std::size_t, std::size_t>> m_StartToFailLocationIndexes;
+
+      RunRecord();
    };
 
    ModeStateType m_ModeState;
    BallStartModeType m_BallStartMode;
+   BallStartAngleVelocityModeType m_BallStartAngleVelocityMode;
    BallStartCompleteModeType m_BallStartCompleteMode;
    BallEndLocationModeType m_BallEndLocationMode;
    BallEndFinishModeType m_BallEndFinishMode;
@@ -403,7 +445,7 @@ public:
 
    static const S32 TotalRunsMinimum = 1;
    static const S32 TotalRunsMaximum = 100;
-   S32 m_TotalRuns; // Applies to Existing and Drop modes
+   S32 m_TotalRuns; // Applies to Existing mode
 
    static const S32 MaxSecondsPerRunMinimum = 1;
    static const S32 MaxSecondsPerRunMaximum = 30;
@@ -413,7 +455,7 @@ public:
    static const S32 RunCountdownSecondsMaximum = 5;
    S32 m_RunCountdownSeconds;
    
-   bool m_RandomOrder; // Applies to Random mode
+   bool m_RandomOrder; // Applies to Custom mode
 
    std::vector<BallStartOptionsRecord> m_BallStartOptionsRecords;
    std::vector<BallEndOptionsRecord> m_BallPassOptionsRecords;
@@ -538,8 +580,17 @@ private:
          MenuStateType_Trainer_SelectBallStartMode,
          MenuStateType_Trainer_SelectExistingBallStart,
          MenuStateType_Trainer_SelectExistingBallStartLocation,
-         MenuStateType_Trainer_SelectDropBallStart,
-         MenuStateType_Trainer_SelectDropBallStartLocation,
+         MenuStateType_Trainer_SelectCustomBallStart,
+         MenuStateType_Trainer_SelectCustomBallStartLocation,
+         MenuStateType_Trainer_SelectCustomBallStartAngleVelocityMode,
+         MenuStateType_Trainer_SelectCustomBallStartAngleStart,
+         MenuStateType_Trainer_SelectCustomBallStartAngleFinish,
+         MenuStateType_Trainer_SelectCustomBallStartAngleTotal,
+         MenuStateType_Trainer_SelectCustomBallStartAngleOrder,
+         MenuStateType_Trainer_SelectCustomBallStartVelocityStart,
+         MenuStateType_Trainer_SelectCustomBallStartVelocityFinish,
+         MenuStateType_Trainer_SelectCustomBallStartVelocityTotal,
+         MenuStateType_Trainer_SelectCustomBallStartVelocityOrder,
          MenuStateType_Trainer_SelectBallPassLocation,
          MenuStateType_Trainer_SelectBallPassAccept,
          MenuStateType_Trainer_SelectBallPassFinishMode,
@@ -644,6 +695,8 @@ private:
    static const char * NormalModeAutoControlVerticesPosition3DKeyName;
    static const char * NormalModeAutoControlVerticesPosition2DKeyName;
    static const char * TrainerModeSettingsSectionName;
+   static const char * TrainerModeStateSectionName;
+   static const char * TrainerModeStartModeSectionName;
    static const char * TrainerModeTotalRunsKeyName;
    static const char * TrainerModeMaxSecondsPerRunKeyName;
    static const char * TrainerModeRunCountdownSecondsKeyName;
@@ -651,11 +704,11 @@ private:
    static const char * TrainerModeBallStartPositionKeyName;
    static const char * TrainerModeBallStartVelocityKeyName;
    static const char * TrainerModeBallStartAngularMomentumKeyName;
-   static const char * TrainerModeBallStartAngleMinimumKeyName;
-   static const char * TrainerModeBallStartAngleMaximumKeyName;
+   static const char * TrainerModeBallStartAngleStartKeyName;
+   static const char * TrainerModeBallStartAngleFinishKeyName;
    static const char * TrainerModeBallStartTotalAnglesKeyName;
-   static const char * TrainerModeBallStartVelocityMinimumKeyName;
-   static const char * TrainerModeBallStartVelocityMaximumKeyName;
+   static const char * TrainerModeBallStartVelocityStartKeyName;
+   static const char * TrainerModeBallStartVelocityFinishKeyName;
    static const char * TrainerModeBallStartTotalVelocitiesKeyName;
    static const char * TrainerModeBallPassPosition3DKeyName;
    static const char * TrainerModeBallPassPosition2DKeyName;
