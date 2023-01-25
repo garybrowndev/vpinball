@@ -349,22 +349,15 @@ public:
       BallEndCompleteModeType_COUNT
    };
 
+   enum RunOrderModeType
+   {
+      RunOrderModeType_InOrder,
+      RunOrderModeType_Random,
+      RunOrderModeType_COUNT
+   };
+
    struct BallStartOptionsRecord
    {
-      enum AngleOrderModeType
-      {
-         AngleOrderModeType_InOrder,
-         AngleOrderModeType_Random,
-         AngleOrderModeType_COUNT
-      };
-
-      enum VelocityOrderModeType
-      {
-         VelocityOrderModeType_InOrder,
-         VelocityOrderModeType_Random,
-         VelocityOrderModeType_COUNT
-      };
-
       static const S32 AngleMinimum = 0;
       static const S32 AngleMaximum = 359;
 
@@ -383,16 +376,14 @@ public:
       float m_AngleStart;
       float m_AngleFinish;
       S32 m_TotalAngles;
-      AngleOrderModeType m_AngleOrderMode;
       float m_VelocityStart;
       float m_VelocityFinish;
       S32 m_TotalVelocities;
-      VelocityOrderModeType m_VelocityOrderMode;
 
       BallStartOptionsRecord();
       BallStartOptionsRecord(Vertex3Ds &pos, Vertex3Ds &vel, Vertex3Ds &angMom,
-         float angleStart, float angleFinish, S32 totalAngles, AngleOrderModeType angleOrderMode,
-         float velocityStart, float velocityFinish, S32 totalVelocities, VelocityOrderModeType velocityOrderMode);
+         float angleStart, float angleFinish, S32 totalAngles,
+         float velocityStart, float velocityFinish, S32 totalVelocities);
    };
 
    struct BallEndOptionsRecord
@@ -440,6 +431,7 @@ public:
    BallEndFinishModeType m_BallEndFinishMode;
    BallEndAssociationModeType m_BallEndAssociationMode;
    BallEndCompleteModeType m_BallEndCompleteMode;
+   RunOrderModeType m_RunOrderMode; // Applies to Custom mode
 
    S32 m_CreateBallEndZ;
 
@@ -455,8 +447,6 @@ public:
    static const S32 RunCountdownSecondsMaximum = 5;
    S32 m_RunCountdownSeconds;
    
-   bool m_RandomOrder; // Applies to Custom mode
-
    std::vector<BallStartOptionsRecord> m_BallStartOptionsRecords;
    std::vector<BallEndOptionsRecord> m_BallPassOptionsRecords;
    std::vector<BallEndOptionsRecord> m_BallFailOptionsRecords;
@@ -586,11 +576,9 @@ private:
          MenuStateType_Trainer_SelectCustomBallStartAngleStart,
          MenuStateType_Trainer_SelectCustomBallStartAngleFinish,
          MenuStateType_Trainer_SelectCustomBallStartAngleTotal,
-         MenuStateType_Trainer_SelectCustomBallStartAngleOrder,
          MenuStateType_Trainer_SelectCustomBallStartVelocityStart,
          MenuStateType_Trainer_SelectCustomBallStartVelocityFinish,
          MenuStateType_Trainer_SelectCustomBallStartVelocityTotal,
-         MenuStateType_Trainer_SelectCustomBallStartVelocityOrder,
          MenuStateType_Trainer_SelectBallPassLocation,
          MenuStateType_Trainer_SelectBallPassAccept,
          MenuStateType_Trainer_SelectBallPassFinishMode,
@@ -604,6 +592,7 @@ private:
          MenuStateType_Trainer_SelectBallFailAssociations,
          MenuStateType_Trainer_BallFailComplete,
          MenuStateType_Trainer_SelectTotalRuns,
+         MenuStateType_Trainer_SelectRunOrderMode,
          MenuStateType_Trainer_SelectMaxSecondsPerRun,
          MenuStateType_Trainer_SelectRunCountdownSeconds,
          MenuStateType_COUNT
@@ -698,9 +687,9 @@ private:
    static const char * TrainerModeStateSectionName;
    static const char * TrainerModeStartModeSectionName;
    static const char * TrainerModeTotalRunsKeyName;
+   static const char * TrainerModeRunOrderModeKeyName;
    static const char * TrainerModeMaxSecondsPerRunKeyName;
    static const char * TrainerModeRunCountdownSecondsKeyName;
-   static const char * TrainerModeRandomOrderKeyName;
    static const char * TrainerModeBallStartPositionKeyName;
    static const char * TrainerModeBallStartVelocityKeyName;
    static const char * TrainerModeBallStartAngularMomentumKeyName;
