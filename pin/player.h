@@ -740,7 +740,8 @@ private:
    void ShowStatus(Player &player, int currentTimeMs);
    void ShowPreviousRunRecord(Player &player, DebugPrintRecord &dpr);
    void ShowCurrentRunRecord(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
-
+   void ShowBallStartOptionsRecord(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallStartOptionsRecord &bsor);
+   void ShowBallEndOptionsRecord(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallEndOptionsRecord &beor);
    void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs);
    void ProcessMode(Player &player, int currentTimeMs);
    void ProcessModeNormal(Player &player);

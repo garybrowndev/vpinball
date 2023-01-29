@@ -1687,7 +1687,6 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                if (beor.m_StopBallsTracker.size() == 0)
                {
                   dpr.ShowText("  Stop Ball <None>");
-                  
                }
                else
                {
@@ -1849,6 +1848,67 @@ void BallHistory::ShowCurrentRunRecord(Player &player, DebugPrintRecord &dpr, in
    else
    {
       dpr.ShowMenuText("Approximately <n/a> seconds for remaining runs");
+   }
+}
+
+
+void BallHistory::ShowBallStartOptionsRecord(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallStartOptionsRecord &bsor)
+{
+   dpr.ShowMenuText("Position = %.2f,%.2f,%.2f (x,y,z)", bsor.m_Pos.x, bsor.m_Pos.y, bsor.m_Pos.z);
+   dpr.ShowMenuText("Velocity = %.2f,%.2f,%.2f (x,y,z)", bsor.m_Vel.x, bsor.m_Vel.y, bsor.m_Vel.z);
+   dpr.ShowMenuText("Momentum = %.2f,%.2f,%.2f (x,y,z)", bsor.m_AngMom.x, bsor.m_AngMom.y, bsor.m_AngMom.z);
+   dpr.ShowMenuText("AngleOps = %.2f,%.2f,%u (start,finish,total)", bsor.m_AngleStart, bsor.m_AngleFinish, bsor.m_TotalAngles);
+   dpr.ShowMenuText("VelocOps = %.2f,%.2f,%u (start,finish,total)", bsor.m_VelocityStart, bsor.m_VelocityFinish, bsor.m_TotalVelocities);
+}
+
+void BallHistory::ShowBallEndOptionsRecord(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallEndOptionsRecord &beor)
+{
+   dpr.ShowMenuText("Position(3D) = %.2f,%.2f,%.2f (x,y,z)", beor.m_Pos3D.x, beor.m_Pos3D.y, beor.m_Pos3D.z);
+   dpr.ShowMenuText("Position(2D) = %ld,%ld (x,y)", beor.m_Pos2D.x, beor.m_Pos2D.y);
+
+   if (beor.m_Distance == TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
+   {
+      dpr.ShowMenuText("Distance = <disabled/stop mode>");
+   }
+   else
+   {
+      dpr.ShowMenuText("Distance = %.2f", beor.m_Distance);
+   }
+
+   for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
+   {
+      Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
+      float distance = DistancePixels(beor.m_Pos3D, controlVBall.m_d.m_pos);
+      dpr.ShowMenuText("Distance Ball #%zu = %.2f", controlVBallIndex + 1, distance);
+   }
+
+   if (beor.m_AssociatedBallStartIndexes.size() == 0)
+   {
+      dpr.ShowMenuText("Association(s) = <None>");
+   }
+   else
+   {
+      std::string associatedBallStartIndexesOutput;
+      for (std::size_t associatedBallStartIndex : beor.m_AssociatedBallStartIndexes)
+      {
+         associatedBallStartIndexesOutput += std::to_string(associatedBallStartIndex) + ",";
+      }
+      associatedBallStartIndexesOutput = associatedBallStartIndexesOutput.substr(0, associatedBallStartIndexesOutput.length() - 1);
+      dpr.ShowMenuText("Association(s) = %s", associatedBallStartIndexesOutput.c_str());
+   }
+              
+   if (beor.m_StopBallsTracker.size() == 0)
+   {
+      dpr.ShowMenuText("Stop Ball <None>");
+   }
+   else
+   {
+      for (std::size_t stopBallTrackerIndex = 0; stopBallTrackerIndex < beor.m_StopBallsTracker.size(); stopBallTrackerIndex++)
+      {
+         int stopBallMs = std::get<0>(beor.m_StopBallsTracker[stopBallTrackerIndex]);
+         Vertex3Ds &stopBallPos = std::get<1>(beor.m_StopBallsTracker[stopBallTrackerIndex]);
+         dpr.ShowMenuText("Stop Ball #%zu (ms,x,y,z) = %d,%.2f,%.2f,%.2f", stopBallTrackerIndex + 1, stopBallMs, stopBallPos.x, stopBallPos.y, stopBallPos.z);
+      }
    }
 }
 
@@ -2350,7 +2410,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_CreateAutoControlLocations:
          dpr.ShowMenuTextTitle("Create Auto Control Locations");
-         dpr.ShowMenuText("Use Mouse click to create new locations");
+         dpr.ShowMenuText("Move and Click Mouse to create or set location");
          dpr.ShowMenuText("Click existing location to remove");
          dpr.ShowMenuText("Hit plunger button to return to previous menu");
 
@@ -2725,6 +2785,20 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                "Edit Ball #%zu%s", index + 1, bsor.m_Pos.IsZero() ? " (Not Set)" : "");
          }
 
+         switch (m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode)
+         {
+            case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept:
+               // do nothing
+               break;
+            case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Select:
+               dpr.ShowMenuText("");
+               ShowBallStartOptionsRecord(player, dpr, m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex]);
+               break;
+            default:
+               assert(0);
+               break;
+         }
+
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
@@ -2804,8 +2878,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
          TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
          dpr.ShowMenuTextTitle("Custom Ball Start #%zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
-         dpr.ShowMenuText("Use Mouse click to create new locations");
-         dpr.ShowMenuText("Click existing location to remove");
+         dpr.ShowMenuText("Move and Click Mouse to create or set location");
          dpr.ShowMenuText("Hit plunger button to accept");
 
          if (GetCursorPos(&mousePosition2D) == TRUE)
@@ -2814,7 +2887,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             {
                Vertex3Ds mousePosition3D(g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D));
                mousePosition3D.z = float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ);
-               dpr.ShowMenuText("Location %.2f,%.2f,%.2f,%ld,%ld (3x,3y,3z,2x,2y)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z, mousePosition2D.x, mousePosition2D.y);
+               dpr.ShowMenuText("Position(3D) %.2f,%.2f,%.2f (3x,3y,3z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
             }
          }
          dpr.ShowMenuText("Ball Height");
@@ -2822,6 +2895,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          m_MenuOptions.m_MousePosition3D.z = float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ);
 
          DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), *m_AutoControlBallTexture, dpr);
+
+         dpr.ShowText("");
+         ShowBallStartOptionsRecord(player, dpr, bsor);
 
          switch (menuAction)
          {
@@ -2878,6 +2954,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallStartAngleVelocityMode == TrainerOptions::BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_Custom,
             "Custom");
 
+         dpr.ShowText("");
+         ShowBallStartOptionsRecord(player, dpr, bsor);
+
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
@@ -2924,6 +3003,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuTextTitle("Custom Ball Start #%zu Start Angle", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::AngleMinimum, static_cast<S32>(bsor.m_AngleStart), TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1);
 
+         dpr.ShowMenuText("");
+         ShowBallStartOptionsRecord(player, dpr, bsor);
+
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
@@ -2952,6 +3034,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuTextTitle("Custom Ball Start #%zu Finish Angle", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::AngleMinimum, static_cast<S32>(bsor.m_AngleFinish), TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1);
+
+         dpr.ShowText("");
+         ShowBallStartOptionsRecord(player, dpr, bsor);
 
          switch (menuAction)
          {
@@ -2983,6 +3068,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          // you to set total values to 0
          dpr.ShowMenuTextTitle("Custom Ball Start #%zu Total Angles", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum, static_cast<S32>(bsor.m_TotalAngles), TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum);
+
+         dpr.ShowText("");
+         ShowBallStartOptionsRecord(player, dpr, bsor);
 
          switch (menuAction)
          {
@@ -3021,6 +3109,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuTextTitle("Custom Ball Start #%zu Start Velocity", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::VelocityMinimum, static_cast<S32>(bsor.m_VelocityStart), TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
 
+         dpr.ShowText("");
+         ShowBallStartOptionsRecord(player, dpr, bsor);
+
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
@@ -3049,6 +3140,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuTextTitle("Custom Ball Start #%zu Finish Velocity", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::VelocityMinimum, static_cast<S32>(bsor.m_VelocityFinish), TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
+
+         dpr.ShowText("");
+         ShowBallStartOptionsRecord(player, dpr, bsor);
 
          switch (menuAction)
          {
@@ -3082,6 +3176,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuTextTitle("Custom Ball Start #%zu Total Velocities", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum, static_cast<S32>(bsor.m_TotalVelocities), TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMaximum);
 
+         dpr.ShowText("");
+         ShowBallStartOptionsRecord(player, dpr, bsor);
+
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
@@ -3109,9 +3206,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassLocation:
+         {
          dpr.ShowMenuTextTitle("Ball Pass #%zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
-         dpr.ShowMenuText("Use Mouse click to create new locations");
-         dpr.ShowMenuText("Click existing location to remove");
+         dpr.ShowMenuText("Move and Click Mouse to create or set location");
          dpr.ShowMenuText("Hit plunger button to accept");
 
          if (m_MenuOptions.m_CurrentBallIndex == m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size())
@@ -3124,13 +3221,16 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.back().m_StopBallsTracker.resize(m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size(), std::make_tuple<int, Vertex3Ds>(0, {0.0f, 0.0f, 0.0f}));
          }
 
+         TrainerOptions::BallEndOptionsRecord &beor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
+
          if (GetCursorPos(&mousePosition2D) == TRUE)
          {
             if (ScreenToClient(player.m_pininput.m_hwnd, &mousePosition2D) == TRUE)
             {
                Vertex3Ds mousePosition3D(g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D));
                mousePosition3D.z = float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ);
-               dpr.ShowMenuText("Location %.2f,%.2f,%.2f,%ld,%ld (3x,3y,3z,2x,2y)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z, mousePosition2D.x, mousePosition2D.y);
+               dpr.ShowMenuText("Position(3D) = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
+               dpr.ShowMenuText("Position(2D) = %ld,%ld (x,y)", mousePosition2D.x, mousePosition2D.y);
             }
          }
          dpr.ShowMenuText("Ball Height");
@@ -3139,14 +3239,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), *m_TrainerBallPassTexture, dpr);
 
+         dpr.ShowMenuText("");
+         ShowBallEndOptionsRecord(player, dpr, beor);
+
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
                ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight), currentTimeMs);
                break;
             case MenuOptionsRecord::MenuActionType_Toggle:
-               m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos3D = m_MenuOptions.m_MousePosition3D;
-               m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos2D = m_MenuOptions.m_MousePosition2D;
+               beor.m_Pos3D = m_MenuOptions.m_MousePosition3D;
+               beor.m_Pos2D = m_MenuOptions.m_MousePosition2D;
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
@@ -3155,19 +3258,35 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
-               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassAccept;
+               if (beor.m_Pos3D.IsZero())
+               {
+                  std::ostringstream strStream;
+                  strStream << "Ball #" << (m_MenuOptions.m_CurrentBallIndex + 1) << " must be set";
+                  m_MenuOptions.m_MenuError = strStream.str();
+               }
+               else
+               {
+                  m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassAccept;
+               }
                break;
             default:
                assert(0);
                break;
          }
+         }
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassAccept:
+         {
+         TrainerOptions::BallEndOptionsRecord &beor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
+
          dpr.ShowMenuTextTitle("Ball Pass #%zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode == TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_Accept,
             "Accept");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode == TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_Delete,
             "Delete");
+
+         dpr.ShowMenuText("");
+         ShowBallEndOptionsRecord(player, dpr, beor);
 
          switch (menuAction)
          {
@@ -3185,10 +3304,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode)
                {
                   case TrainerOptions::BallEndLocationModeType_Accept:
-                     if (m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos3D.IsZero() == false)
+                     if (beor.m_Pos3D.IsZero() == false)
                      {
                         m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassFinishMode;
-                        if (m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Distance == TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
+                        if (beor.m_Distance == TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
                         {
                            m_MenuOptions.m_TrainerOptions.m_BallEndFinishMode = TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop;
                         }
@@ -3212,6 +3331,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                assert(0);
                break;
          }
+         }
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassFinishMode:
          {
@@ -3222,6 +3342,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Stop");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallEndFinishMode == TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Distance,
             "Distance");
+
+         dpr.ShowMenuText("");
+         ShowBallEndOptionsRecord(player, dpr, beor);
 
          switch (menuAction)
          {
@@ -3273,6 +3396,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuTextTitle("Ball Pass Distance");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallEndOptionsRecord::DistanceMinimum, static_cast<S32>(beor.m_Distance), TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
 
+         dpr.ShowMenuText("");
+         ShowBallEndOptionsRecord(player, dpr, beor);
+
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
@@ -3315,6 +3441,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   "(X) Ball #%zu", index + 1);
             }
          }
+
+         dpr.ShowMenuText("");
+         ShowBallEndOptionsRecord(player, dpr, beor);
+
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
@@ -3395,6 +3525,23 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode == TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select && m_MenuOptions.m_CurrentCompleteIndex == m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(),
             "Create Ball #%zu", m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size() + 1);
 
+         switch (m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode)
+         {
+            case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept:
+               // do nothing
+               break;
+            case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select:
+               if (m_MenuOptions.m_CurrentCompleteIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size())
+               {
+                  dpr.ShowMenuText("");
+                  ShowBallEndOptionsRecord(player, dpr, m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentCompleteIndex]);
+               }
+               break;
+            default:
+               assert(0);
+               break;
+         }
+
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
@@ -3466,9 +3613,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailLocation:
+         {
          dpr.ShowMenuTextTitle("Ball Fail #%zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
-         dpr.ShowMenuText("Use Mouse click to create new locations");
-         dpr.ShowMenuText("Click existing location to remove");
+         dpr.ShowMenuText("Move and Click Mouse to create or set location");
          dpr.ShowMenuText("Hit plunger button to accept");
 
          if (m_MenuOptions.m_CurrentBallIndex == m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size())
@@ -3481,13 +3628,16 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.back().m_StopBallsTracker.resize(m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size(), std::make_tuple<int, Vertex3Ds>(0, {0.0f, 0.0f, 0.0f}));
          }
 
+         TrainerOptions::BallEndOptionsRecord &beor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
+
          if (GetCursorPos(&mousePosition2D) == TRUE)
          {
             if (ScreenToClient(player.m_pininput.m_hwnd, &mousePosition2D) == TRUE)
             {
                Vertex3Ds mousePosition3D(g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D));
                mousePosition3D.z = float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ);
-               dpr.ShowMenuText("Location %.2f,%.2f,%.2f,%ld,%ld (3x,3y,3z,2x,2y)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z, mousePosition2D.x, mousePosition2D.y);
+               dpr.ShowMenuText("Position(3D) = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
+               dpr.ShowMenuText("Position(2D) = %ld,%ld (x,y)", mousePosition2D.x, mousePosition2D.y);
             }
          }
 
@@ -3497,14 +3647,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), *m_TrainerBallFailTexture, dpr);
 
+         dpr.ShowMenuText("");
+         ShowBallEndOptionsRecord(player, dpr, beor);
+
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
                ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight), currentTimeMs);
                break;
             case MenuOptionsRecord::MenuActionType_Toggle:
-               m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos3D = m_MenuOptions.m_MousePosition3D;
-               m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos2D = m_MenuOptions.m_MousePosition2D;
+               beor.m_Pos3D = m_MenuOptions.m_MousePosition3D;
+               beor.m_Pos2D = m_MenuOptions.m_MousePosition2D;
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
@@ -3513,16 +3666,32 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
-               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailAccept;
+               if (beor.m_Pos3D.IsZero())
+               {
+                  std::ostringstream strStream;
+                  strStream << "Ball #" << (m_MenuOptions.m_CurrentBallIndex + 1) << " must be set";
+                  m_MenuOptions.m_MenuError = strStream.str();
+               }
+               else
+               {
+                  m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailAccept;
+               }
                break;
+         }
          }
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailAccept:
+         {
+         TrainerOptions::BallEndOptionsRecord &beor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
+
          dpr.ShowMenuTextTitle("Ball Fail #%zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode == TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_Accept,
             "Accept");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode == TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_Delete,
             "Delete");
+
+         dpr.ShowMenuText("");
+         ShowBallEndOptionsRecord(player, dpr, beor);
 
          switch (menuAction)
          {
@@ -3540,10 +3709,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode)
                {
                   case TrainerOptions::BallEndLocationModeType_Accept:
-                     if (m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos3D.IsZero() == false)
+                     if (beor.m_Pos3D.IsZero() == false)
                      {
                         m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailFinishMode;
-                        if (m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Distance == TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
+                        if (beor.m_Distance == TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
                         {
                            m_MenuOptions.m_TrainerOptions.m_BallEndFinishMode = TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop;
                         }
@@ -3567,6 +3736,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                assert(0);
                break;
          }
+         }
          break;
        case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailFinishMode:
          {
@@ -3577,6 +3747,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Stop");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallEndFinishMode == TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Distance,
             "Distance");
+
+         dpr.ShowMenuText("");
+         ShowBallEndOptionsRecord(player, dpr, beor);
 
          switch (menuAction)
          {
@@ -3628,6 +3801,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuTextTitle("Ball Fail Distance");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallEndOptionsRecord::DistanceMinimum, static_cast<S32>(beor.m_Distance), TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
 
+         dpr.ShowMenuText("");
+         ShowBallEndOptionsRecord(player, dpr, beor);
+
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
@@ -3671,6 +3847,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   "(X) Ball #%zu", index + 1);
             }
          }
+
+         dpr.ShowMenuText("");
+         ShowBallEndOptionsRecord(player, dpr, beor);
+
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
@@ -3750,6 +3930,23 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode == TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select && m_MenuOptions.m_CurrentCompleteIndex == m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size(),
             "Create Ball #%zu", m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size() + 1);
+
+         switch (m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode)
+         {
+            case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept:
+               // do nothing
+               break;
+            case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select:
+               if (m_MenuOptions.m_CurrentCompleteIndex < m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size())
+               {
+                  dpr.ShowMenuText("");
+                  ShowBallEndOptionsRecord(player, dpr, m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentCompleteIndex]);
+               }
+               break;
+            default:
+               assert(0);
+               break;
+         }
 
          switch (menuAction)
          {
