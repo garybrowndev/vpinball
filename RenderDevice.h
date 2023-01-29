@@ -487,4 +487,5 @@ public:
    static VertexDeclaration* m_pVertexNormalTexelDeclaration;
    //static VertexDeclaration* m_pVertexNormalTexelTexelDeclaration;
    static VertexDeclaration* m_pVertexTrafoTexelDeclaration;
+   static VertexDeclaration* m_pVertexColorDeclaration;
 };

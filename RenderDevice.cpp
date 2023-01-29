@@ -180,6 +180,14 @@ constexpr VertexElement VertexTrafoTexelElement[] =
 };
 VertexDeclaration* RenderDevice::m_pVertexTrafoTexelDeclaration = nullptr;
 
+constexpr VertexElement VertexColorElement[] =
+{
+   { 0, 0 * sizeof(float), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 }, // pos
+   { 0, 3 * sizeof(float), D3DDECLTYPE_D3DCOLOR, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR, 0 },  // color
+   D3DDECL_END()
+};
+VertexDeclaration* RenderDevice::m_pVertexColorDeclaration = nullptr;
+
 static unsigned int fvfToSize(const DWORD fvf)
 {
    switch (fvf)
@@ -189,6 +197,8 @@ static unsigned int fvfToSize(const DWORD fvf)
       return sizeof(Vertex3D_NoTex2);
    case MY_D3DFVF_TEX:
       return sizeof(Vertex3D_TexelOnly);
+   case MY_D3DFVF_COLOR_VERTEX:
+      return sizeof(Vertex3D_ColorOnly);
    default:
       assert(!"Unknown FVF type in fvfToSize");
       return 0;
@@ -205,6 +215,8 @@ static VertexDeclaration* fvfToDecl(const DWORD fvf)
       return RenderDevice::m_pVertexTrafoTexelDeclaration;
    case MY_D3DFVF_TEX:
       return RenderDevice::m_pVertexTexelDeclaration;
+   case MY_D3DFVF_COLOR_VERTEX:
+      return RenderDevice::m_pVertexColorDeclaration;
    default:
       assert(!"Unknown FVF type in fvfToDecl");
       return nullptr;
@@ -937,6 +949,7 @@ void RenderDevice::CreateDevice(int &refreshrate, UINT adapterIndex)
    CreateVertexDeclaration(VertexNormalTexelElement, &m_pVertexNormalTexelDeclaration);
    //CreateVertexDeclaration( VertexNormalTexelTexelElement, &m_pVertexNormalTexelTexelDeclaration );
    CreateVertexDeclaration(VertexTrafoTexelElement, &m_pVertexTrafoTexelDeclaration);
+   CreateVertexDeclaration(VertexColorElement, &m_pVertexColorDeclaration);
 
    if(m_FXAA == Quality_SMAA)
        UploadAndSetSMAATextures();
@@ -1116,6 +1129,7 @@ RenderDevice::~RenderDevice()
    SAFE_RELEASE(m_pVertexNormalTexelDeclaration);
    //SAFE_RELEASE(m_pVertexNormalTexelTexelDeclaration);
    SAFE_RELEASE(m_pVertexTrafoTexelDeclaration);
+   SAFE_RELEASE(m_pVertexColorDeclaration);
 
    m_texMan.UnloadAll();
    delete m_pOffscreenBackBufferTexture;

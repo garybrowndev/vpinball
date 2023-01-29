@@ -314,6 +314,16 @@ void BallHistory::DebugPrintRecord::ShowMenuTextSelect(bool selected, const char
    }
 }
 
+
+
+BallHistory::Vertex3DColor::Vertex3DColor() :
+   x(0.0f),
+   y(0.0f),
+   z(0.0f),
+   color(D3DCOLOR_ARGB(0, 0, 0, 0))
+{
+}
+
 const int BallHistory::MenuOptionsRecord::SkipKeyPressHoldMs = 2000;
 const int BallHistory::MenuOptionsRecord::SkipKeyIntervalMs = 333;
 const S32 BallHistory::MenuOptionsRecord::SkipKeyStepFactor = 10;
@@ -1845,6 +1855,9 @@ void BallHistory::ShowCurrentRunRecord(Player &player, DebugPrintRecord &dpr, in
 void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr, int currentTimeMs)
 {
    // TODO GARY Instead of blinking, rotate the color from light to dark and back of the Pass/Fail color
+
+   // TODO GARY Only blink the ball you are currently editing, this will be based on MenuState probably
+
    if ((currentTimeMs % 1000) >= 200)
    {
       Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr;
@@ -1857,6 +1870,8 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
             {
                player.DrawFakeBall(bsor.m_Pos, controlVBall->m_orientation, controlVBall->m_d.m_radius, m_TrainerBallStartTexture, false);
             }
+
+            DrawAngleVelocityPreview(player, bsor);
             // TODO GARY figure out a way to get 2D point from 3D location
             //player.SetDebugOutputPosition(float(beor.m_Pos2D.x), float(beor.m_Pos2D.y));
             //dpr.ShowMenuTextPos(0, 0, "#%zu", index + 1);
@@ -1893,6 +1908,105 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
    }
 }
 
+void BallHistory::DrawAngleVelocityPreviewHelperAdd(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angle, float velocity, float height)
+{
+   Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr;
+   float radius = (controlVBall ? controlVBall->m_d.m_radius : 25.0f) + 10.0f; // TODO GARY Magix number 10.0f, this is minimum distance from ball edge to give some idea of velocity at low value
+
+   float velocityRange = TrainerOptions::BallStartOptionsRecord::VelocityMaximum - TrainerOptions::BallStartOptionsRecord::VelocityMinimum;
+   unsigned char red = (unsigned char)(TrainerOptions::BallStartOptionsRecord::VelocityMinimum + (0xFF / float(velocityRange)) * velocity);
+   unsigned char blue = 0xFF - red;
+   D3DCOLOR color = D3DCOLOR_ARGB(0x00, red, 0x00, blue);
+
+   //TODO GARY Magic number 1.50f, which is the width of the edge arc (3 degrees because its before and after)
+   float angleBefore = std::fabsf(std::fmodf(angle - 3.0f + TrainerOptions::BallStartOptionsRecord::AngleMaximum, TrainerOptions::BallStartOptionsRecord::AngleMaximum));
+   testVertices.emplace_back();
+   testVertices.back().x = bsor.m_Pos.x + (std::sinf((angleBefore * float(M_PI)) / 180.0f) * (radius + (velocity * 2.0f)));
+   testVertices.back().y = bsor.m_Pos.y + (std::cosf((angleBefore * float(M_PI)) / 180.0f) * -(radius + (velocity * 2.0f)));
+   testVertices.back().z = height;
+   testVertices.back().color = color;
+
+   //TODO GARY Magic number 1.50f, which is the width of the edge arc (3 degrees because its before and after)
+   float angleAfter = std::fabsf(std::fmodf(angle + 3.0f + TrainerOptions::BallStartOptionsRecord::AngleMaximum, TrainerOptions::BallStartOptionsRecord::AngleMaximum));
+   testVertices.emplace_back();
+   testVertices.back().x = bsor.m_Pos.x + (std::sinf((angleAfter * float(M_PI)) / 180.0f) * (radius + (velocity * 2.0f))); // TODO GARY Magic number 2.0f, which is a multiplier to the length of the directional indicator
+   testVertices.back().y = bsor.m_Pos.y + (std::cosf((angleAfter * float(M_PI)) / 180.0f) * -(radius + (velocity * 2.0f))); // TODO GARY Magic number 2.0f, which is a multiplier to the length of the directional indicator
+   testVertices.back().z = height;
+   testVertices.back().color = color;
+
+   testVertices.emplace_back();
+   testVertices.back().x = bsor.m_Pos.x;
+   testVertices.back().y = bsor.m_Pos.y;
+   testVertices.back().z = bsor.m_Pos.z;
+   testVertices.back().color = color;
+}
+
+void BallHistory::DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angleStep, float velocityStep)
+{
+   for (S32 angleIndex = 0; angleIndex < bsor.m_TotalAngles; angleIndex++)
+   {
+      float height = bsor.m_Pos.z;
+      float angle = std::fmodf(bsor.m_AngleStart + (angleStep * angleIndex), TrainerOptions::BallStartOptionsRecord::AngleMaximum);
+      for (S32 velocityIndex = bsor.m_TotalVelocities - 1; velocityIndex >= 0; velocityIndex--)
+      //for (S32 velocityIndex = 0; velocityIndex < bsor.m_TotalVelocities; velocityIndex++)
+      {
+         float velocity = std::fmodf(bsor.m_VelocityStart + (velocityStep * velocityIndex), TrainerOptions::BallStartOptionsRecord::VelocityMaximum + 1);
+         height += 2.0f; // TODO GARY Magic number for increasing height hack for missing colors due to some type of render state needed
+         DrawAngleVelocityPreviewHelperAdd(testVertices, bsor, angle, velocity, height);
+      }
+   }
+}
+
+void BallHistory::DrawAngleVelocityPreview(Player &player, TrainerOptions::BallStartOptionsRecord &bsor)
+{
+   std::vector<Vertex3DColor> testVertices;
+   testVertices.emplace_back();
+   testVertices.back().x = bsor.m_Pos.x;
+   testVertices.back().y = bsor.m_Pos.y;
+   testVertices.back().z = bsor.m_Pos.z;
+
+   float angleRange = bsor.m_AngleFinish - bsor.m_AngleStart;
+   if (angleRange < 0.0f)
+   {
+      angleRange = (TrainerOptions::BallStartOptionsRecord::AngleMaximum) - bsor.m_AngleStart + bsor.m_AngleFinish;
+   }
+   float angleStep = angleRange / (bsor.m_TotalAngles - 1);
+   if (bsor.m_AngleStart == bsor.m_AngleFinish)
+   {
+      angleStep = (TrainerOptions::BallStartOptionsRecord::AngleMaximum) / float(bsor.m_TotalAngles);
+   }
+   if (bsor.m_TotalAngles <= 1)
+   {
+      angleStep = 0;
+   }
+
+   float velocityRange = bsor.m_VelocityFinish - bsor.m_VelocityStart;
+   if (velocityRange < 0.0f)
+   {
+      velocityRange = (TrainerOptions::BallStartOptionsRecord::VelocityMaximum) / float(bsor.m_TotalVelocities);
+   }
+   float velocityStep = velocityRange / (bsor.m_TotalVelocities - 1);
+   if (bsor.m_VelocityStart == bsor.m_VelocityFinish)
+   {
+      velocityStep = (TrainerOptions::BallStartOptionsRecord::VelocityMaximum) / float(bsor.m_TotalVelocities);
+   }
+   if (bsor.m_TotalVelocities <= 1)
+   {
+      velocityStep = 0;
+   }
+
+   DrawAngleVelocityPreviewHelper(testVertices, bsor, angleStep, velocityStep);
+
+   VertexBuffer *testVerticesVB = nullptr;
+   VertexBuffer::CreateVertexBuffer((unsigned int)testVertices.size(), 0, MY_D3DFVF_COLOR_VERTEX, &testVerticesVB, PRIMARY_DEVICE);
+   void *buf;
+   testVerticesVB->lock(0, 0, &buf, VertexBuffer::WRITEONLY);
+   memcpy(buf, testVertices.data(), testVertices.size() * sizeof(testVertices[0]));
+   testVerticesVB->unlock();
+
+   player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::TRIANGLEFAN, MY_D3DFVF_COLOR_VERTEX, testVerticesVB, 0, testVertices.size(), false);
+}
+
 S32 BallHistory::ProcessMenuChangeValue(S32 value, S32 delta, S32 min, S32 max, bool skip)
 {
    value += delta;
@@ -1921,6 +2035,78 @@ S32 BallHistory::ProcessMenuChangeValue(S32 value, S32 delta, S32 min, S32 max, 
    return value;
 }
 
+template <class T> void BallHistory::ProcessMenuChangeValueInc(T &value, S32 min, S32 max)
+{
+   S32 tempValue = S32(value);
+   if (tempValue == max)
+   {
+      tempValue = min;
+   }
+   else
+   {
+      tempValue++;
+   }
+   value = T(tempValue);
+}
+
+template <class T> void BallHistory::ProcessMenuChangeValueIncSkip(T &value, S32 min, S32 max)
+{
+   S32 tempValue = S32(value);
+   if (tempValue == max)
+   {
+      tempValue = min;
+   }
+   else
+   {
+      tempValue += m_MenuOptions.SkipKeyStepFactor;
+      if (tempValue > max)
+      {
+         tempValue = max;
+      }
+      else
+      {
+         tempValue = tempValue - (tempValue % m_MenuOptions.SkipKeyStepFactor);
+      }
+   }
+   value = T(tempValue);
+}
+
+template <class T> void BallHistory::ProcessMenuChangeValueDec(T &value, S32 min, S32 max)
+{
+   S32 tempValue = S32(value);
+   if (tempValue == min)
+   {
+      tempValue = max;
+   }
+   else
+   {
+      tempValue--;
+   }
+   value = T(tempValue);
+}
+
+template <class T> void BallHistory::ProcessMenuChangeValueDecSkip(T &value, S32 min, S32 max)
+{
+   S32 tempValue = S32(value);
+   if (tempValue == min)
+   {
+      tempValue = max;
+   }
+   else
+   {
+      tempValue -= m_MenuOptions.SkipKeyStepFactor;
+      if (tempValue < min)
+      {
+         tempValue = min;
+      }
+      else if (tempValue % m_MenuOptions.SkipKeyStepFactor != 0)
+      {
+         tempValue = tempValue + (m_MenuOptions.SkipKeyStepFactor - (tempValue % m_MenuOptions.SkipKeyStepFactor));
+      }
+   }
+   value = T(tempValue);
+}
+
 template <class T> void BallHistory::ProcessMenuChangeValueSkip(T &value, S32 min, S32 max, int currentTimeMs)
 {
    if (m_MenuOptions.m_SkipKeyPressed && (currentTimeMs - m_MenuOptions.m_SkipKeyPressedMs) > MenuOptionsRecord::SkipKeyIntervalMs)
@@ -1929,20 +2115,15 @@ template <class T> void BallHistory::ProcessMenuChangeValueSkip(T &value, S32 mi
       {
          if (m_MenuOptions.m_SkipKeyLeft == true)
          {
-            value = static_cast<T>(ProcessMenuChangeValue(static_cast<S32>(value), m_MenuOptions.SkipKeyStepFactor * -1, min, max, true));
+            ProcessMenuChangeValueDecSkip(value, min, max);
          }
          else
          {
-            value = static_cast<T>(ProcessMenuChangeValue(static_cast<S32>(value), m_MenuOptions.SkipKeyStepFactor, min, max, true));
+            ProcessMenuChangeValueIncSkip(value, min, max);
          }
          m_MenuOptions.m_SkipKeyUsedMs = currentTimeMs;
       }
    }
-}
-
-template <class T> void BallHistory::ProcessMenuChangeValueStep(T &value, S32 step, S32 min, S32 max)
-{
-   value = static_cast<T>(ProcessMenuChangeValue(static_cast<S32>(value), step, min, max, false));
 }
 
 void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs)
@@ -1975,10 +2156,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<MenuOptionsRecord::ModeType>(m_MenuOptions.m_ModeType, -1, 0, MenuOptionsRecord::ModeType::ModeType_COUNT - 1);
+               ProcessMenuChangeValueDec<MenuOptionsRecord::ModeType>(m_MenuOptions.m_ModeType, 0, MenuOptionsRecord::ModeType::ModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<MenuOptionsRecord::ModeType>(m_MenuOptions.m_ModeType, 1, 0, MenuOptionsRecord::ModeType::ModeType_COUNT - 1);
+               ProcessMenuChangeValueInc<MenuOptionsRecord::ModeType>(m_MenuOptions.m_ModeType, 0, MenuOptionsRecord::ModeType::ModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                switch (m_MenuOptions.m_ModeType)
@@ -2021,10 +2202,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<NormalOptions::ModeStateType>(m_MenuOptions.m_NormalOptions.m_ModeState, -1, 0, NormalOptions::ModeStateType::ModeStateType_COUNT - 1);
+               ProcessMenuChangeValueDec<NormalOptions::ModeStateType>(m_MenuOptions.m_NormalOptions.m_ModeState, 0, NormalOptions::ModeStateType::ModeStateType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<NormalOptions::ModeStateType>(m_MenuOptions.m_NormalOptions.m_ModeState, 1, 0, NormalOptions::ModeStateType::ModeStateType_COUNT - 1);
+               ProcessMenuChangeValueInc<NormalOptions::ModeStateType>(m_MenuOptions.m_NormalOptions.m_ModeState, 0, NormalOptions::ModeStateType::ModeStateType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                switch (m_MenuOptions.m_NormalOptions.m_ModeState)
@@ -2114,10 +2295,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<NormalOptions::SetupRecallBallHistoryModeType>(m_MenuOptions.m_NormalOptions.m_SetupRecallBallHistoryMode, -1, 0, NormalOptions::SetupRecallBallHistoryModeType::SetupRecallBallHistoryModeType_COUNT - 1);
+               ProcessMenuChangeValueDec<NormalOptions::SetupRecallBallHistoryModeType>(m_MenuOptions.m_NormalOptions.m_SetupRecallBallHistoryMode, 0, NormalOptions::SetupRecallBallHistoryModeType::SetupRecallBallHistoryModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<NormalOptions::SetupRecallBallHistoryModeType>(m_MenuOptions.m_NormalOptions.m_SetupRecallBallHistoryMode, 1, 0, NormalOptions::SetupRecallBallHistoryModeType::SetupRecallBallHistoryModeType_COUNT - 1);
+               ProcessMenuChangeValueInc<NormalOptions::SetupRecallBallHistoryModeType>(m_MenuOptions.m_NormalOptions.m_SetupRecallBallHistoryMode, 0, NormalOptions::SetupRecallBallHistoryModeType::SetupRecallBallHistoryModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                switch (m_MenuOptions.m_NormalOptions.m_SetupRecallBallHistoryMode)
@@ -2223,10 +2404,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_NormalOptions.m_CreateZ, -1, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
+               ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_NormalOptions.m_CreateZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_NormalOptions.m_CreateZ, 1, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
+               ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_NormalOptions.m_CreateZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectModeOptions;
@@ -2256,10 +2437,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<TrainerOptions::ModeStateType>(m_MenuOptions.m_TrainerOptions.m_ModeState, -1, 0, TrainerOptions::ModeStateType::ModeStateType_COUNT - 1);
+               ProcessMenuChangeValueDec<TrainerOptions::ModeStateType>(m_MenuOptions.m_TrainerOptions.m_ModeState, 0, TrainerOptions::ModeStateType::ModeStateType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<TrainerOptions::ModeStateType>(m_MenuOptions.m_TrainerOptions.m_ModeState, 1, 0, TrainerOptions::ModeStateType::ModeStateType_COUNT - 1);
+               ProcessMenuChangeValueInc<TrainerOptions::ModeStateType>(m_MenuOptions.m_TrainerOptions.m_ModeState, 0, TrainerOptions::ModeStateType::ModeStateType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_ModeState)
@@ -2408,10 +2589,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<TrainerOptions::BallStartModeType>(m_MenuOptions.m_TrainerOptions.m_BallStartMode, -1, 0, TrainerOptions::BallStartModeType::BallStartModeType_COUNT - 1);
+               ProcessMenuChangeValueDec<TrainerOptions::BallStartModeType>(m_MenuOptions.m_TrainerOptions.m_BallStartMode, 0, TrainerOptions::BallStartModeType::BallStartModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<TrainerOptions::BallStartModeType>(m_MenuOptions.m_TrainerOptions.m_BallStartMode, 1, 0, TrainerOptions::BallStartModeType::BallStartModeType_COUNT - 1);
+               ProcessMenuChangeValueInc<TrainerOptions::BallStartModeType>(m_MenuOptions.m_TrainerOptions.m_BallStartMode, 0, TrainerOptions::BallStartModeType::BallStartModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_BallStartMode)
@@ -2456,10 +2637,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<TrainerOptions::BallStartCompleteModeType>(m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode, -1, 0, TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_COUNT - 1);
+               ProcessMenuChangeValueDec<TrainerOptions::BallStartCompleteModeType>(m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode, 0, TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<TrainerOptions::BallStartCompleteModeType>(m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode, 1, 0, TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_COUNT - 1);
+               ProcessMenuChangeValueInc<TrainerOptions::BallStartCompleteModeType>(m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode, 0, TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode)
@@ -2651,10 +2832,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                bsor.m_Pos = m_MenuOptions.m_MousePosition3D;
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, -1, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
+               ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, 1, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
+               ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                if (m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos.IsZero())
@@ -2704,10 +2885,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<TrainerOptions::BallStartAngleVelocityModeType>(m_MenuOptions.m_TrainerOptions.m_BallStartAngleVelocityMode, -1, 0, TrainerOptions::BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_COUNT - 1);
+               ProcessMenuChangeValueDec<TrainerOptions::BallStartAngleVelocityModeType>(m_MenuOptions.m_TrainerOptions.m_BallStartAngleVelocityMode, 0, TrainerOptions::BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<TrainerOptions::BallStartAngleVelocityModeType>(m_MenuOptions.m_TrainerOptions.m_BallStartAngleVelocityMode, 1, 0, TrainerOptions::BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_COUNT - 1);
+               ProcessMenuChangeValueInc<TrainerOptions::BallStartAngleVelocityModeType>(m_MenuOptions.m_TrainerOptions.m_BallStartAngleVelocityMode, 0, TrainerOptions::BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_BallStartAngleVelocityMode)
@@ -2741,20 +2922,20 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          // TODO GARY Fix bug where you hold down left flipper button and get back to zero
          // it is showing value of 360 and it should be 0 instead
          dpr.ShowMenuTextTitle("Custom Ball Start #%zu Start Angle", m_MenuOptions.m_CurrentBallIndex + 1);
-         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::AngleMinimum, static_cast<S32>(bsor.m_AngleStart), TrainerOptions::BallStartOptionsRecord::AngleMaximum);
+         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::AngleMinimum, static_cast<S32>(bsor.m_AngleStart), TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1);
 
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
-               ProcessMenuChangeValueSkip<float>(bsor.m_AngleStart, TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMaximum, currentTimeMs);
+               ProcessMenuChangeValueSkip<float>(bsor.m_AngleStart, TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1, currentTimeMs);
                break;
             case MenuOptionsRecord::MenuActionType_Toggle:
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<float>(bsor.m_AngleStart, -1, TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMaximum);
+               ProcessMenuChangeValueDec<float>(bsor.m_AngleStart, TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<float>(bsor.m_AngleStart, 1, TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMaximum);
+               ProcessMenuChangeValueInc<float>(bsor.m_AngleStart, TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartAngleFinish;
@@ -2770,20 +2951,20 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
          dpr.ShowMenuTextTitle("Custom Ball Start #%zu Finish Angle", m_MenuOptions.m_CurrentBallIndex + 1);
-         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::AngleMinimum, static_cast<S32>(bsor.m_AngleFinish), TrainerOptions::BallStartOptionsRecord::AngleMaximum);
+         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::AngleMinimum, static_cast<S32>(bsor.m_AngleFinish), TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1);
 
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
-               ProcessMenuChangeValueSkip<float>(bsor.m_AngleFinish, TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMaximum, currentTimeMs);
+               ProcessMenuChangeValueSkip<float>(bsor.m_AngleFinish, TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1, currentTimeMs);
                break;
             case MenuOptionsRecord::MenuActionType_Toggle:
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<float>(bsor.m_AngleFinish, -1, TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMaximum);
+               ProcessMenuChangeValueDec<float>(bsor.m_AngleFinish, TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<float>(bsor.m_AngleFinish, 1, TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMaximum);
+               ProcessMenuChangeValueInc<float>(bsor.m_AngleFinish, TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartAngleTotal;
@@ -2798,6 +2979,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
          TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
+         // TODO GARY fix issue where setting AngleStart and AngleFinish to different values, this should not allow
+         // you to set total values to 0
          dpr.ShowMenuTextTitle("Custom Ball Start #%zu Total Angles", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum, static_cast<S32>(bsor.m_TotalAngles), TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum);
 
@@ -2809,10 +2992,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             case MenuOptionsRecord::MenuActionType_Toggle:
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<S32>(bsor.m_TotalAngles, -1, TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum, TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum);
+               ProcessMenuChangeValueDec<S32>(bsor.m_TotalAngles, TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum, TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<S32>(bsor.m_TotalAngles, 1, TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum, TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum);
+               ProcessMenuChangeValueInc<S32>(bsor.m_TotalAngles, TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum, TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                if (bsor.m_TotalAngles == 0 || bsor.m_TotalAngles == 1)
@@ -2846,10 +3029,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             case MenuOptionsRecord::MenuActionType_Toggle:
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<float>(bsor.m_VelocityStart, -1, TrainerOptions::BallStartOptionsRecord::VelocityMinimum, TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
+               ProcessMenuChangeValueDec<float>(bsor.m_VelocityStart, TrainerOptions::BallStartOptionsRecord::VelocityMinimum, TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<float>(bsor.m_VelocityStart, 1, TrainerOptions::BallStartOptionsRecord::VelocityMinimum, TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
+               ProcessMenuChangeValueInc<float>(bsor.m_VelocityStart, TrainerOptions::BallStartOptionsRecord::VelocityMinimum, TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartVelocityFinish;
@@ -2875,10 +3058,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             case MenuOptionsRecord::MenuActionType_Toggle:
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<float>(bsor.m_VelocityFinish, -1, TrainerOptions::BallStartOptionsRecord::VelocityMinimum, TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
+               ProcessMenuChangeValueDec<float>(bsor.m_VelocityFinish, TrainerOptions::BallStartOptionsRecord::VelocityMinimum, TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<float>(bsor.m_VelocityFinish, 1, TrainerOptions::BallStartOptionsRecord::VelocityMinimum, TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
+               ProcessMenuChangeValueInc<float>(bsor.m_VelocityFinish, TrainerOptions::BallStartOptionsRecord::VelocityMinimum, TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartVelocityTotal;
@@ -2893,6 +3076,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
          TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
+         // TODO GARY fix issue where setting VelocityStart and VelocityFinish to different values, this should not allow
+         // you to set total values to 0
+
          dpr.ShowMenuTextTitle("Custom Ball Start #%zu Total Velocities", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum, static_cast<S32>(bsor.m_TotalVelocities), TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMaximum);
 
@@ -2904,10 +3090,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             case MenuOptionsRecord::MenuActionType_Toggle:
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<S32>(bsor.m_TotalVelocities, -1, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMaximum);
+               ProcessMenuChangeValueDec<S32>(bsor.m_TotalVelocities, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<S32>(bsor.m_TotalVelocities, 1, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMaximum);
+               ProcessMenuChangeValueInc<S32>(bsor.m_TotalVelocities, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                if (bsor.m_TotalVelocities == 0 || bsor.m_TotalVelocities == 1)
@@ -2963,10 +3149,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos2D = m_MenuOptions.m_MousePosition2D;
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, -1, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
+               ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, 1, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
+               ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassAccept;
@@ -2990,10 +3176,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<TrainerOptions::BallEndLocationModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode,-1, 0, TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_COUNT - 1);
+               ProcessMenuChangeValueDec<TrainerOptions::BallEndLocationModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode, 0, TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<TrainerOptions::BallEndLocationModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode, 1, 0, TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_COUNT - 1);
+               ProcessMenuChangeValueInc<TrainerOptions::BallEndLocationModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode, 0, TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode)
@@ -3044,10 +3230,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndFinishMode, -1, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
+               ProcessMenuChangeValueDec<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndFinishMode, 1, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
+               ProcessMenuChangeValueInc<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndFinishMode)
@@ -3095,10 +3281,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             case MenuOptionsRecord::MenuActionType_Toggle:
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<float>(beor.m_Distance, -1, TrainerOptions::BallEndOptionsRecord::DistanceMinimum, TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
+               ProcessMenuChangeValueDec<float>(beor.m_Distance, TrainerOptions::BallEndOptionsRecord::DistanceMinimum, TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<float>(beor.m_Distance, 1, TrainerOptions::BallEndOptionsRecord::DistanceMinimum, TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
+               ProcessMenuChangeValueInc<float>(beor.m_Distance, TrainerOptions::BallEndOptionsRecord::DistanceMinimum, TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassAssociations;
@@ -3321,10 +3507,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos2D = m_MenuOptions.m_MousePosition2D;
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, -1, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
+               ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, 1, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
+               ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailAccept;
@@ -3345,10 +3531,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<TrainerOptions::BallEndLocationModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode,-1, 0, TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_COUNT - 1);
+               ProcessMenuChangeValueDec<TrainerOptions::BallEndLocationModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode, 0, TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<TrainerOptions::BallEndLocationModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode, 1, 0, TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_COUNT - 1);
+               ProcessMenuChangeValueInc<TrainerOptions::BallEndLocationModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode, 0, TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode)
@@ -3399,10 +3585,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndFinishMode, -1, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
+               ProcessMenuChangeValueDec<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndFinishMode, 1, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
+               ProcessMenuChangeValueInc<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndFinishMode)
@@ -3451,10 +3637,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<float>(beor.m_Distance, -1, TrainerOptions::BallEndOptionsRecord::DistanceMinimum, TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
+               ProcessMenuChangeValueDec<float>(beor.m_Distance, TrainerOptions::BallEndOptionsRecord::DistanceMinimum, TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<float>(beor.m_Distance, 1, TrainerOptions::BallEndOptionsRecord::DistanceMinimum, TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
+               ProcessMenuChangeValueInc<float>(beor.m_Distance, TrainerOptions::BallEndOptionsRecord::DistanceMinimum, TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailAssociations;
@@ -3674,10 +3860,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_TotalRuns, -1, TrainerOptions::TotalRunsMinimum, TrainerOptions::TotalRunsMaximum);
+               ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_TotalRuns, TrainerOptions::TotalRunsMinimum, TrainerOptions::TotalRunsMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_TotalRuns, 1, TrainerOptions::TotalRunsMinimum, TrainerOptions::TotalRunsMaximum);
+               ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_TotalRuns, TrainerOptions::TotalRunsMinimum, TrainerOptions::TotalRunsMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectRunOrderMode;
@@ -3702,10 +3888,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<TrainerOptions::RunOrderModeType>(m_MenuOptions.m_TrainerOptions.m_RunOrderMode, -1, 0, TrainerOptions::RunOrderModeType::RunOrderModeType_COUNT - 1);
+               ProcessMenuChangeValueDec<TrainerOptions::RunOrderModeType>(m_MenuOptions.m_TrainerOptions.m_RunOrderMode, 0, TrainerOptions::RunOrderModeType::RunOrderModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<TrainerOptions::RunOrderModeType>(m_MenuOptions.m_TrainerOptions.m_RunOrderMode, 1, 0, TrainerOptions::RunOrderModeType::RunOrderModeType_COUNT - 1);
+               ProcessMenuChangeValueInc<TrainerOptions::RunOrderModeType>(m_MenuOptions.m_TrainerOptions.m_RunOrderMode, 0, TrainerOptions::RunOrderModeType::RunOrderModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectMaxSecondsPerRun;
@@ -3728,10 +3914,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun, -1, TrainerOptions::MaxSecondsPerRunMinimum, TrainerOptions::MaxSecondsPerRunMaximum);
+               ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun, TrainerOptions::MaxSecondsPerRunMinimum, TrainerOptions::MaxSecondsPerRunMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun, 1, TrainerOptions::MaxSecondsPerRunMinimum, TrainerOptions::MaxSecondsPerRunMaximum);
+               ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun, TrainerOptions::MaxSecondsPerRunMinimum, TrainerOptions::MaxSecondsPerRunMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectRunCountdownSeconds;
@@ -3754,10 +3940,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds, -1, TrainerOptions::RunCountdownSecondsMinimum, TrainerOptions::RunCountdownSecondsMaximum);
+               ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds, TrainerOptions::RunCountdownSecondsMinimum, TrainerOptions::RunCountdownSecondsMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueStep<S32>(m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds, 1, TrainerOptions::RunCountdownSecondsMinimum, TrainerOptions::RunCountdownSecondsMaximum);
+               ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds, TrainerOptions::RunCountdownSecondsMinimum, TrainerOptions::RunCountdownSecondsMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectModeOptions;
@@ -3901,16 +4087,16 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                float angleRange = bsor.m_AngleFinish - bsor.m_AngleStart;
                if (angleRange == 0.0f)
                {
-                  angleRange = TrainerOptions::BallStartOptionsRecord::AngleMaximum + 1;
+                  angleRange = TrainerOptions::BallStartOptionsRecord::AngleMaximum;
                }
                else if (angleRange < 0.0f)
                {
-                  angleRange = (TrainerOptions::BallStartOptionsRecord::AngleMaximum + 1) - bsor.m_AngleStart + bsor.m_AngleFinish;
+                  angleRange = (TrainerOptions::BallStartOptionsRecord::AngleMaximum) - bsor.m_AngleStart + bsor.m_AngleFinish;
                }
                float angleStep = angleRange / bsor.m_TotalAngles;
                for (S32 angleIndex = 0; angleIndex < bsor.m_TotalAngles; angleIndex++)
                {
-                  angleAndVelocityPairs.back()[angleIndex] = std::fmodf(bsor.m_AngleStart + (angleStep * angleIndex), TrainerOptions::BallStartOptionsRecord::AngleMaximum + 1);
+                  angleAndVelocityPairs.back()[angleIndex] = std::fmodf(bsor.m_AngleStart + (angleStep * angleIndex), TrainerOptions::BallStartOptionsRecord::AngleMaximum);
                }
             }
             else
@@ -3964,9 +4150,9 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                // TODO GARY do some ad-hoc testing to make sure the velocity translation into the
                // other vector direction keeps the expected velocity
                Vertex3Ds &startVelocity = m_MenuOptions.m_TrainerOptions.m_RunRecords.back().m_StartVelocities.back();
-               startVelocity.x = std::sinf((std::fmodf(angleAndVelocityPairs[angleAndVelocityPairsIndex][indexes[angleAndVelocityPairsIndex]] + 0.0f, TrainerOptions::BallStartOptionsRecord::AngleMaximum + 1) * float(M_PI)) / 180.0f);
+               startVelocity.x = std::sinf((std::fmodf(angleAndVelocityPairs[angleAndVelocityPairsIndex][indexes[angleAndVelocityPairsIndex]] + 0.0f, TrainerOptions::BallStartOptionsRecord::AngleMaximum) * float(M_PI)) / 180.0f);
                startVelocity.x *= angleAndVelocityPairs[angleAndVelocityPairsIndex + 1][indexes[angleAndVelocityPairsIndex + 1]];
-               startVelocity.y = std::cosf((std::fmodf(angleAndVelocityPairs[angleAndVelocityPairsIndex][indexes[angleAndVelocityPairsIndex]] + 0.0f, TrainerOptions::BallStartOptionsRecord::AngleMaximum + 1) * float(M_PI)) / 180.0f);
+               startVelocity.y = std::cosf((std::fmodf(angleAndVelocityPairs[angleAndVelocityPairsIndex][indexes[angleAndVelocityPairsIndex]] + 0.0f, TrainerOptions::BallStartOptionsRecord::AngleMaximum) * float(M_PI)) / 180.0f);
                startVelocity.y *= angleAndVelocityPairs[angleAndVelocityPairsIndex + 1][indexes[angleAndVelocityPairsIndex + 1]] * -1;
                   
                m_MenuOptions.m_TrainerOptions.m_RunRecords.back().m_StartAngularMomentums.push_back(bsor.m_AngMom);

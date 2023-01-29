@@ -359,16 +359,16 @@ public:
    struct BallStartOptionsRecord
    {
       static const S32 AngleMinimum = 0;
-      static const S32 AngleMaximum = 359;
+      static const S32 AngleMaximum = 360;
 
-      static const S32 TotalAnglesMinimum = 0;
-      static const S32 TotalAnglesMaximum = 100;
+      static const S32 TotalAnglesMinimum = 1;
+      static const S32 TotalAnglesMaximum = 36;
 
       static const S32 VelocityMinimum = 0;
       static const S32 VelocityMaximum = 100;
 
-      static const S32 TotalVelocitiesMinimum = 0;
-      static const S32 TotalVelocitiesMaximum = 100;
+      static const S32 TotalVelocitiesMinimum = 1;
+      static const S32 TotalVelocitiesMaximum = 20;
 
       Vertex3Ds m_Pos;
       Vertex3Ds m_Vel;
@@ -542,6 +542,17 @@ private:
       void ShowMenuTextTitle(const char * format, ...);
       void ShowMenuTextError(const char * format, ...);
       void ShowMenuTextSelect(bool selected, const char * format, ...);
+   };
+
+   struct Vertex3DColor
+   {
+      D3DVALUE x;
+      D3DVALUE y;
+      D3DVALUE z;
+
+      D3DCOLOR color;
+
+      Vertex3DColor();
    };
 
    struct MenuOptionsRecord
@@ -722,6 +733,9 @@ private:
    void DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
    void DrawFakeBallAtMousePosition(Player &player, float heightZ, Texture &texture, DebugPrintRecord &dpr);
    void DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
+   void DrawAngleVelocityPreview(Player &player, TrainerOptions::BallStartOptionsRecord &bsor);
+   void DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angleStep, float velocityStep);
+   void DrawAngleVelocityPreviewHelperAdd(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angle, float velocity, float height);
    void UpdateBallState(Player &player, BallHistoryRecord &ballHistoryRecord);
    void ShowStatus(Player &player, int currentTimeMs);
    void ShowPreviousRunRecord(Player &player, DebugPrintRecord &dpr);
@@ -732,7 +746,10 @@ private:
    void ProcessModeNormal(Player &player);
    void ProcessModeTrainer(Player &player, int currentTimeMs);
    S32 ProcessMenuChangeValue(S32 value, S32 delta, S32 min, S32 max, bool skip);
-   template <class T> void ProcessMenuChangeValueStep(T &value, S32 step, S32 min, S32 max);
+   template <class T> void ProcessMenuChangeValueInc(T &value, S32 min, S32 max);
+   template <class T> void ProcessMenuChangeValueIncSkip(T &value, S32 min, S32 max);
+   template <class T> void ProcessMenuChangeValueDec(T &value, S32 min, S32 max);
+   template <class T> void ProcessMenuChangeValueDecSkip(T &value, S32 min, S32 max);
    template <class T> void ProcessMenuChangeValueSkip(T &value, S32 min, S32 max, int currentTimeMs);
 
    void Add(std::vector<Ball *> &controlVBalls, int currentTimeMsec);
