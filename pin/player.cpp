@@ -1666,8 +1666,8 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                dpr.ShowText("  Position = %.2f,%.2f,%.2f (x,y,z)", bsor.m_Pos.x, bsor.m_Pos.y, bsor.m_Pos.z);
                dpr.ShowText("  Velocity = %.2f,%.2f,%.2f (x,y,z)", bsor.m_Vel.x, bsor.m_Vel.y, bsor.m_Vel.z);
                dpr.ShowText("  Momentum = %.2f,%.2f,%.2f (x,y,z)", bsor.m_AngMom.x, bsor.m_AngMom.y, bsor.m_AngMom.z);
-               dpr.ShowText("  AngleOps = %.2f,%.2f,%u (start,finish,total)", bsor.m_AngleStart, bsor.m_AngleFinish, bsor.m_TotalAngles);
                dpr.ShowText("  VelocOps = %.2f,%.2f,%u (start,finish,total)", bsor.m_VelocityStart, bsor.m_VelocityFinish, bsor.m_TotalVelocities);
+               dpr.ShowText("  AngleOps = %.2f,%.2f,%u (start,finish,total)", bsor.m_AngleStart, bsor.m_AngleFinish, bsor.m_TotalAngles);
             }
          }
 
@@ -1888,8 +1888,8 @@ void BallHistory::ShowBallStartOptionsRecord(Player &player, DebugPrintRecord &d
    dpr.ShowMenuText("Position = %.2f,%.2f,%.2f (x,y,z)", bsor.m_Pos.x, bsor.m_Pos.y, bsor.m_Pos.z);
    dpr.ShowMenuText("Velocity = %.2f,%.2f,%.2f (x,y,z)", bsor.m_Vel.x, bsor.m_Vel.y, bsor.m_Vel.z);
    dpr.ShowMenuText("Momentum = %.2f,%.2f,%.2f (x,y,z)", bsor.m_AngMom.x, bsor.m_AngMom.y, bsor.m_AngMom.z);
-   dpr.ShowMenuText("AngleOps = %.2f,%.2f,%u (start,finish,total)", bsor.m_AngleStart, bsor.m_AngleFinish, bsor.m_TotalAngles);
    dpr.ShowMenuText("VelocOps = %.2f,%.2f,%u (start,finish,total)", bsor.m_VelocityStart, bsor.m_VelocityFinish, bsor.m_TotalVelocities);
+   dpr.ShowMenuText("AngleOps = %.2f,%.2f,%u (start,finish,total)", bsor.m_AngleStart, bsor.m_AngleFinish, bsor.m_TotalAngles);
 }
 
 void BallHistory::ShowBallEndOptionsRecord(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallEndOptionsRecord &beor)
