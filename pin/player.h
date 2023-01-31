@@ -697,7 +697,6 @@ private:
    static const char * TrainerModeSettingsSectionName;
    static const char * TrainerModeStateSectionName;
    static const char * TrainerModeStartModeSectionName;
-   static const char * TrainerModeStartAngleVelocityMode;
    static const char * TrainerModeTotalRunsKeyName;
    static const char * TrainerModeRunOrderModeKeyName;
    static const char * TrainerModeMaxSecondsPerRunKeyName;
