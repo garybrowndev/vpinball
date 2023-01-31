@@ -80,7 +80,7 @@ public:
 const float TrainerOptions::BallEndOptionsRecord::DistanceDisabled = -1.0f; // Stop mode is enabled
 
 TrainerOptions::BallStartOptionsRecord::BallStartOptionsRecord():
-   BallStartOptionsRecord(Vertex3Ds(0.0f, 0.0f, 0.0f), Vertex3Ds(0.0f, 0.0f, 0.0f), Vertex3Ds(0.0f, 0.0f, 0.0f), 0.0f, 0.0f, 0, 0.0f, 0.0f, 0)
+   BallStartOptionsRecord(Vertex3Ds(0.0f, 0.0f, 0.0f), Vertex3Ds(0.0f, 0.0f, 0.0f), Vertex3Ds(0.0f, 0.0f, 0.0f), AngleMinimum, AngleMinimum, TotalAnglesMinimum, VelocityMinimum, VelocityMinimum, TotalVelocitiesMinimum)
 {
 }
 
@@ -369,6 +369,7 @@ const char * BallHistory::NormalModeAutoControlVerticesPosition3DKeyName = "Posi
 const char * BallHistory::TrainerModeSettingsSectionName = "TrainerModeSettings";
 const char * BallHistory::TrainerModeStateSectionName = "TrainerModeState";
 const char * BallHistory::TrainerModeStartModeSectionName = "TrainerModeStartMode";
+const char * BallHistory::TrainerModeStartAngleVelocityMode = "TrainerModeStartAngleVelocityMode";
 const char * BallHistory::TrainerModeTotalRunsKeyName = "TotalRuns";
 const char * BallHistory::TrainerModeRunOrderModeKeyName = "RunOrderMode";
 const char * BallHistory::TrainerModeMaxSecondsPerRunKeyName = "MaxSecondsPerRun";
@@ -606,6 +607,22 @@ void BallHistory::LoadSettings(Player &player)
          else if (tempStream.str() == "Custom")
          {
             m_MenuOptions.m_TrainerOptions.m_BallStartMode = TrainerOptions::BallStartModeType::BallStartModeType_Custom;
+         }
+         else
+         {
+            assert(0);
+         }
+      }
+            
+      if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeStartAngleVelocityMode, tempStream) == true)
+      {
+         if (tempStream.str() == "Drop")
+         {
+            m_MenuOptions.m_TrainerOptions.m_BallStartAngleVelocityMode = TrainerOptions::BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_Drop;
+         }
+         else if (tempStream.str() == "Custom")
+         {
+            m_MenuOptions.m_TrainerOptions.m_BallStartAngleVelocityMode = TrainerOptions::BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_Custom;
          }
          else
          {
@@ -882,6 +899,20 @@ void BallHistory::SaveSettings(Player &player)
             break;
       }
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeStartModeSectionName, tempStr.c_str());
+
+      switch (m_MenuOptions.m_TrainerOptions.m_BallStartAngleVelocityMode)
+      {
+         case TrainerOptions::BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_Drop:
+            tempStr = "Drop";
+            break;
+         case TrainerOptions::BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_Custom:
+            tempStr = "Custom";
+            break;
+         default:
+            assert(0);
+            break;
+       }
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeStartAngleVelocityMode, tempStr.c_str());
 
       tempStr = std::to_string(m_MenuOptions.m_TrainerOptions.m_TotalRuns);
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeTotalRunsKeyName, tempStr.c_str());
@@ -2008,7 +2039,6 @@ void BallHistory::DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &tes
       float height = bsor.m_Pos.z;
       float angle = std::fmodf(bsor.m_AngleStart + (angleStep * angleIndex), TrainerOptions::BallStartOptionsRecord::AngleMaximum);
       for (S32 velocityIndex = bsor.m_TotalVelocities - 1; velocityIndex >= 0; velocityIndex--)
-      //for (S32 velocityIndex = 0; velocityIndex < bsor.m_TotalVelocities; velocityIndex++)
       {
          float velocity = std::fmodf(bsor.m_VelocityStart + (velocityStep * velocityIndex), TrainerOptions::BallStartOptionsRecord::VelocityMaximum + 1);
          height += 2.0f; // TODO GARY Magic number for increasing height hack for missing colors due to some type of render state needed
@@ -2025,35 +2055,9 @@ void BallHistory::DrawAngleVelocityPreview(Player &player, TrainerOptions::BallS
    testVertices.back().y = bsor.m_Pos.y;
    testVertices.back().z = bsor.m_Pos.z;
 
-   float angleRange = bsor.m_AngleFinish - bsor.m_AngleStart;
-   if (angleRange < 0.0f)
-   {
-      angleRange = (TrainerOptions::BallStartOptionsRecord::AngleMaximum) - bsor.m_AngleStart + bsor.m_AngleFinish;
-   }
-   float angleStep = angleRange / (bsor.m_TotalAngles - 1);
-   if (bsor.m_AngleStart == bsor.m_AngleFinish)
-   {
-      angleStep = (TrainerOptions::BallStartOptionsRecord::AngleMaximum) / float(bsor.m_TotalAngles);
-   }
-   if (bsor.m_TotalAngles <= 1)
-   {
-      angleStep = 0;
-   }
-
-   float velocityRange = bsor.m_VelocityFinish - bsor.m_VelocityStart;
-   if (velocityRange < 0.0f)
-   {
-      velocityRange = (TrainerOptions::BallStartOptionsRecord::VelocityMaximum) / float(bsor.m_TotalVelocities);
-   }
-   float velocityStep = velocityRange / (bsor.m_TotalVelocities - 1);
-   if (bsor.m_VelocityStart == bsor.m_VelocityFinish)
-   {
-      velocityStep = (TrainerOptions::BallStartOptionsRecord::VelocityMaximum) / float(bsor.m_TotalVelocities);
-   }
-   if (bsor.m_TotalVelocities <= 1)
-   {
-      velocityStep = 0;
-   }
+   float angleStep = 0.0f;
+   float velocityStep = 0.0f;
+   CalculateAngleVelocityStep(bsor, angleStep, velocityStep);
 
    DrawAngleVelocityPreviewHelper(testVertices, bsor, angleStep, velocityStep);
 
@@ -2065,6 +2069,45 @@ void BallHistory::DrawAngleVelocityPreview(Player &player, TrainerOptions::BallS
    testVerticesVB->unlock();
 
    player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::TRIANGLEFAN, MY_D3DFVF_COLOR_VERTEX, testVerticesVB, 0, testVertices.size(), false);
+}
+
+void BallHistory::CalculateAngleVelocityStep(TrainerOptions::BallStartOptionsRecord &bsor, float &angleStep, float &velocityStep)
+{
+   if (bsor.m_TotalAngles == 1)
+   {
+      angleStep = 0.0f;
+   }
+   else
+   {
+      float angleRange = bsor.m_AngleFinish - bsor.m_AngleStart;
+      if (angleRange > 0.0f)
+      {
+         angleStep = angleRange / (bsor.m_TotalAngles - 1);
+      }
+      else if (angleRange == 0.0f)
+      {
+         angleStep = TrainerOptions::BallStartOptionsRecord::AngleMaximum / float(bsor.m_TotalAngles);
+      }
+      else
+      {
+         angleRange = TrainerOptions::BallStartOptionsRecord::AngleMaximum - bsor.m_AngleStart + bsor.m_AngleFinish;
+         angleStep = angleRange / (bsor.m_TotalAngles - 1);
+      }
+   }
+
+   if (bsor.m_VelocityFinish == bsor.m_VelocityStart || bsor.m_TotalVelocities == 1)
+   {
+      velocityStep = 0.0f;
+   }
+   else
+   {
+      float velocityRange = bsor.m_VelocityFinish - bsor.m_VelocityStart;
+      if (velocityRange < 0.0f)
+      {
+         velocityRange = (TrainerOptions::BallStartOptionsRecord::VelocityMaximum) - bsor.m_VelocityStart + bsor.m_VelocityFinish;
+      }
+      velocityStep = velocityRange / (bsor.m_TotalVelocities - 1);
+   }
 }
 
 S32 BallHistory::ProcessMenuChangeValue(S32 value, S32 delta, S32 min, S32 max, bool skip)
@@ -2747,8 +2790,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
                m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.push_back(
                   TrainerOptions::BallStartOptionsRecord(ballHistoryState.m_Pos, ballHistoryState.m_Vel, ballHistoryState.m_AngMom,
-                  0.0f, 0.0f, 0,
-                  0.0f, 0.0f, 0));
+                  TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum,
+                  TrainerOptions::BallStartOptionsRecord::VelocityMinimum,TrainerOptions::BallStartOptionsRecord::VelocityMinimum, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum));
             }
          }
          switch (menuAction)
@@ -2924,15 +2967,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                {
                   m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartAngleVelocityMode;
                   m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode = TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept;
-                  if (bsor.m_AngleStart == 0.0f && bsor.m_AngleFinish == 0.0f && bsor.m_TotalAngles == 0 &&
-                     bsor.m_VelocityStart == 0.0f && bsor.m_VelocityFinish == 0.0f && bsor.m_TotalVelocities == 0)
-                  {
-                     m_MenuOptions.m_TrainerOptions.m_BallStartAngleVelocityMode = TrainerOptions::BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_Drop;
-                  }
-                  else
-                  {
-                     m_MenuOptions.m_TrainerOptions.m_BallStartAngleVelocityMode = TrainerOptions::BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_Custom;
-                  }
                   bsor.m_Vel.SetZero();
                   bsor.m_AngMom.SetZero();
                   m_MenuOptions.m_CurrentCompleteIndex = 0;
@@ -2982,6 +3016,12 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStart;
                      break;
                   case TrainerOptions::BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_Custom:
+                     bsor.m_AngleStart = std::max(std::min(S32(bsor.m_AngleStart), TrainerOptions::BallStartOptionsRecord::AngleMaximum), TrainerOptions::BallStartOptionsRecord::AngleMinimum);
+                     bsor.m_AngleFinish = std::max(std::min(S32(bsor.m_AngleFinish), TrainerOptions::BallStartOptionsRecord::AngleMaximum), TrainerOptions::BallStartOptionsRecord::AngleMinimum);
+                     bsor.m_TotalAngles = std::max(std::min(S32(bsor.m_TotalAngles), TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum), TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum);
+                     bsor.m_VelocityStart = std::max(std::min(S32(bsor.m_VelocityStart), TrainerOptions::BallStartOptionsRecord::VelocityMaximum), TrainerOptions::BallStartOptionsRecord::VelocityMinimum);
+                     bsor.m_VelocityFinish = std::max(std::min(S32(bsor.m_VelocityFinish), TrainerOptions::BallStartOptionsRecord::VelocityMaximum), TrainerOptions::BallStartOptionsRecord::VelocityMinimum);
+                     bsor.m_TotalVelocities = std::max(std::min(S32(bsor.m_TotalVelocities), TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMaximum), TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum);
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartAngleStart;
                      break;
                   default:
@@ -4269,109 +4309,90 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       {
          m_MenuOptions.m_TrainerOptions.m_RunRecords.clear();
 
-         std::vector<std::vector<float>> angleAndVelocityPairs;
-         for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size(); bsorIndex++)
+         switch (m_MenuOptions.m_TrainerOptions.m_BallStartAngleVelocityMode)
          {
-            TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
-            angleAndVelocityPairs.push_back(std::vector<float>());
-            if (bsor.m_AngleStart == bsor.m_AngleFinish && bsor.m_TotalAngles == 0)
-            {
-               angleAndVelocityPairs.back().push_back(bsor.m_AngleStart);
-            }
-            else if (bsor.m_TotalAngles > 0)
-            {
-               angleAndVelocityPairs.back().resize(bsor.m_TotalAngles);
-               float angleRange = bsor.m_AngleFinish - bsor.m_AngleStart;
-               if (angleRange == 0.0f)
+            case TrainerOptions::BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_Drop:
+               m_MenuOptions.m_TrainerOptions.m_RunRecords.push_back(TrainerOptions::RunRecord());
+               for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size(); bsorIndex++)
                {
-                  angleRange = TrainerOptions::BallStartOptionsRecord::AngleMaximum;
+                  TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
+                  m_MenuOptions.m_TrainerOptions.m_RunRecords.back().m_StartPositions.push_back(bsor.m_Pos);
+                  m_MenuOptions.m_TrainerOptions.m_RunRecords.back().m_StartVelocities.push_back(bsor.m_Vel);
+                  m_MenuOptions.m_TrainerOptions.m_RunRecords.back().m_StartAngularMomentums.push_back(bsor.m_AngMom);
                }
-               else if (angleRange < 0.0f)
-               {
-                  angleRange = (TrainerOptions::BallStartOptionsRecord::AngleMaximum) - bsor.m_AngleStart + bsor.m_AngleFinish;
-               }
-               float angleStep = angleRange / bsor.m_TotalAngles;
-               for (S32 angleIndex = 0; angleIndex < bsor.m_TotalAngles; angleIndex++)
-               {
-                  angleAndVelocityPairs.back()[angleIndex] = std::fmodf(bsor.m_AngleStart + (angleStep * angleIndex), TrainerOptions::BallStartOptionsRecord::AngleMaximum);
-               }
-            }
-            else
-            {
-               assert(0);
-            }
-
-            angleAndVelocityPairs.push_back(std::vector<float>());
-            if (bsor.m_VelocityStart == bsor.m_VelocityFinish && bsor.m_TotalVelocities == 0)
-            {
-               angleAndVelocityPairs.back().push_back(bsor.m_VelocityStart);
-            }
-            else if (bsor.m_TotalVelocities > 0)
-            {
-               angleAndVelocityPairs.back().resize(bsor.m_TotalVelocities);
-               float velocityRange = bsor.m_VelocityFinish - bsor.m_VelocityStart;
-               if (velocityRange == 0.0f)
-               {
-                  velocityRange = TrainerOptions::BallStartOptionsRecord::VelocityMaximum;
-               }
-               else if (velocityRange < 0.0f)
-               {
-                  velocityRange = TrainerOptions::BallStartOptionsRecord::VelocityMaximum - bsor.m_VelocityStart + bsor.m_VelocityFinish;
-               }
-               float velocityStep = velocityRange / bsor.m_TotalVelocities;
-               for (S32 velocityIndex = 0; velocityIndex < bsor.m_TotalVelocities; velocityIndex++)
-               {
-                  angleAndVelocityPairs.back()[velocityIndex] = std::fmodf(bsor.m_VelocityStart + (velocityStep * velocityIndex), TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
-               }
-            }
-            else
-            {
-               assert(0);
-            }
-         }
-
-         // following code is adaptation of algorithm code found here:
-         // https://www.geeksforgeeks.org/combinations-from-n-arrays-picking-one-element-from-each-array/
-         std::vector<std::size_t> indexes(angleAndVelocityPairs.size(), 0);
-         while (true)
-         {
-            m_MenuOptions.m_TrainerOptions.m_RunRecords.push_back(TrainerOptions::RunRecord());
-            for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size(); bsorIndex++)
-            {
-               TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
-               m_MenuOptions.m_TrainerOptions.m_RunRecords.back().m_StartPositions.push_back(bsor.m_Pos);
-
-               m_MenuOptions.m_TrainerOptions.m_RunRecords.back().m_StartVelocities.push_back(bsor.m_Vel);
-               std::size_t angleAndVelocityPairsIndex = bsorIndex * 2; // angles and velocities
-
-               // TODO GARY do some ad-hoc testing to make sure the velocity translation into the
-               // other vector direction keeps the expected velocity
-               Vertex3Ds &startVelocity = m_MenuOptions.m_TrainerOptions.m_RunRecords.back().m_StartVelocities.back();
-               startVelocity.x = std::sinf((std::fmodf(angleAndVelocityPairs[angleAndVelocityPairsIndex][indexes[angleAndVelocityPairsIndex]] + 0.0f, TrainerOptions::BallStartOptionsRecord::AngleMaximum) * float(M_PI)) / 180.0f);
-               startVelocity.x *= angleAndVelocityPairs[angleAndVelocityPairsIndex + 1][indexes[angleAndVelocityPairsIndex + 1]];
-               startVelocity.y = std::cosf((std::fmodf(angleAndVelocityPairs[angleAndVelocityPairsIndex][indexes[angleAndVelocityPairsIndex]] + 0.0f, TrainerOptions::BallStartOptionsRecord::AngleMaximum) * float(M_PI)) / 180.0f);
-               startVelocity.y *= angleAndVelocityPairs[angleAndVelocityPairsIndex + 1][indexes[angleAndVelocityPairsIndex + 1]] * -1;
-                  
-               m_MenuOptions.m_TrainerOptions.m_RunRecords.back().m_StartAngularMomentums.push_back(bsor.m_AngMom);
-            }
-
-            S32 next = indexes.size() - 1;
-            while (next >= 0 && (indexes[next] + 1 >= angleAndVelocityPairs[next].size()))
-            {
-               next--;
-            }
-
-            if (next < 0)
-            {
                break;
-            }
+            case TrainerOptions::BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_Custom:
+               {
+               std::vector<std::vector<float>> angleAndVelocityPairs;
+               for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size(); bsorIndex++)
+               {
+                  TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
 
-            indexes[next]++;
+                  float angleStep = 0.0f;
+                  float velocityStep = 0.0f;
+                  CalculateAngleVelocityStep(bsor, angleStep, velocityStep);
 
-            for (std::size_t x = next + 1; x < indexes.size(); x++)
-            {
-               indexes[x] = 0;
-            }
+                  angleAndVelocityPairs.emplace_back();
+                  for (S32 angleIndex = 0; angleIndex < bsor.m_TotalAngles; angleIndex++)
+                  {
+                     angleAndVelocityPairs.back().push_back(std::fmodf(bsor.m_AngleStart + (angleStep * angleIndex), TrainerOptions::BallStartOptionsRecord::AngleMaximum));
+                  }
+
+                  angleAndVelocityPairs.emplace_back();
+                  for (S32 velocityIndex = 0; velocityIndex < bsor.m_TotalVelocities; velocityIndex++)
+                  {
+                     angleAndVelocityPairs.back().push_back(std::fmodf(bsor.m_VelocityStart + (velocityStep * velocityIndex), TrainerOptions::BallStartOptionsRecord::VelocityMaximum + 1));
+                  }
+               }
+
+               // following code is adaptation of algorithm code found here:
+               // https://www.geeksforgeeks.org/combinations-from-n-arrays-picking-one-element-from-each-array/
+               std::vector<std::size_t> indexes(angleAndVelocityPairs.size(), 0);
+               while (true)
+               {
+                  m_MenuOptions.m_TrainerOptions.m_RunRecords.push_back(TrainerOptions::RunRecord());
+                  for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size(); bsorIndex++)
+                  {
+                     TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
+                     m_MenuOptions.m_TrainerOptions.m_RunRecords.back().m_StartPositions.push_back(bsor.m_Pos);
+
+                     m_MenuOptions.m_TrainerOptions.m_RunRecords.back().m_StartVelocities.push_back(bsor.m_Vel);
+                     std::size_t angleAndVelocityPairsIndex = bsorIndex * 2; // angles and velocities
+
+                     // TODO GARY do some ad-hoc testing to make sure the velocity translation into the
+                     // other vector direction keeps the expected velocity
+                     Vertex3Ds &startVelocity = m_MenuOptions.m_TrainerOptions.m_RunRecords.back().m_StartVelocities.back();
+                     startVelocity.x = std::sinf((std::fmodf(angleAndVelocityPairs[angleAndVelocityPairsIndex][indexes[angleAndVelocityPairsIndex]], TrainerOptions::BallStartOptionsRecord::AngleMaximum) * float(M_PI)) / 180.0f);
+                     startVelocity.x *= angleAndVelocityPairs[angleAndVelocityPairsIndex + 1][indexes[angleAndVelocityPairsIndex + 1]];
+                     startVelocity.y = std::cosf((std::fmodf(angleAndVelocityPairs[angleAndVelocityPairsIndex][indexes[angleAndVelocityPairsIndex]], TrainerOptions::BallStartOptionsRecord::AngleMaximum) * float(M_PI)) / 180.0f);
+                     startVelocity.y *= angleAndVelocityPairs[angleAndVelocityPairsIndex + 1][indexes[angleAndVelocityPairsIndex + 1]] * -1;
+
+                     m_MenuOptions.m_TrainerOptions.m_RunRecords.back().m_StartAngularMomentums.push_back(bsor.m_AngMom);
+                  }
+
+                  S32 next = indexes.size() - 1;
+                  while (next >= 0 && (indexes[next] + 1 >= angleAndVelocityPairs[next].size()))
+                  {
+                     next--;
+                  }
+
+                  if (next < 0)
+                  {
+                     break;
+                  }
+
+                  indexes[next]++;
+
+                  for (std::size_t x = next + 1; x < indexes.size(); x++)
+                  {
+                     indexes[x] = 0;
+                  }
+               }
+               }
+               break;
+            default:
+               assert(0);
+               break;
          }
 
          std::size_t totalRunRecords = m_MenuOptions.m_TrainerOptions.m_RunRecords.size();

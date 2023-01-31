@@ -306,7 +306,7 @@ public:
       BallStartModeType_Custom,
       BallStartModeType_COUNT
    };
-   
+
    enum BallStartAngleVelocityModeType
    {
       BallStartAngleVelocityModeType_Drop,
@@ -697,6 +697,7 @@ private:
    static const char * TrainerModeSettingsSectionName;
    static const char * TrainerModeStateSectionName;
    static const char * TrainerModeStartModeSectionName;
+   static const char * TrainerModeStartAngleVelocityMode;
    static const char * TrainerModeTotalRunsKeyName;
    static const char * TrainerModeRunOrderModeKeyName;
    static const char * TrainerModeMaxSecondsPerRunKeyName;
@@ -736,6 +737,7 @@ private:
    void DrawAngleVelocityPreview(Player &player, TrainerOptions::BallStartOptionsRecord &bsor);
    void DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angleStep, float velocityStep);
    void DrawAngleVelocityPreviewHelperAdd(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angle, float velocity, float height);
+   void CalculateAngleVelocityStep(TrainerOptions::BallStartOptionsRecord &bsor, float &angleStep, float &velocityStep);
    void UpdateBallState(Player &player, BallHistoryRecord &ballHistoryRecord);
    void ShowStatus(Player &player, int currentTimeMs);
    void ShowPreviousRunRecord(Player &player, DebugPrintRecord &dpr);
