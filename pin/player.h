@@ -388,7 +388,7 @@ public:
 
    struct BallEndOptionsRecord
    {
-      static const S32 DistanceMinimum = 0;
+      static const S32 DistanceMinimum = 1;
       static const S32 DistanceMaximum = 100;
       static const float DistanceDisabled;
 
@@ -428,7 +428,8 @@ public:
    BallStartAngleVelocityModeType m_BallStartAngleVelocityMode;
    BallStartCompleteModeType m_BallStartCompleteMode;
    BallEndLocationModeType m_BallEndLocationMode;
-   BallEndFinishModeType m_BallEndFinishMode;
+   BallEndFinishModeType m_BallPassFinishMode;
+   BallEndFinishModeType m_BallFailFinishMode;
    BallEndAssociationModeType m_BallEndAssociationMode;
    BallEndCompleteModeType m_BallEndCompleteMode;
    RunOrderModeType m_RunOrderMode; // Applies to Custom mode
