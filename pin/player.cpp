@@ -355,6 +355,12 @@ const float BallHistory::BallHistoryControlStepPixelsDefault = 200.0f;
 const float BallHistory::BallHistoryMinPointSize = 5.0f;
 const float BallHistory::BallHistoryMaxPointSize = 20.0f;
 const float BallHistory::ControlVerticesDistanceMax = 2000.0f;
+
+const float BallHistory::DrawAngleVelocityRadiusExtraMinimum = 10.0f;
+const float BallHistory::DrawAngleVelocityRadiusArc = 6.0f;
+const float BallHistory::DrawAngleVelocityLengthMultiplier = 2.0f;
+const float BallHistory::DrawAngleVelocityHeightOffset = 2.0f;
+
 const char * BallHistory::SettingsFileExtension = "ini";
 const char * BallHistory::SettingsFolderName = "BallHistory";
 const char BallHistory::SettingsValueDelimeter = ',';
@@ -1988,26 +1994,24 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
 void BallHistory::DrawAngleVelocityPreviewHelperAdd(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angle, float velocity, float height)
 {
    Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr;
-   float radius = (controlVBall ? controlVBall->m_d.m_radius : 25.0f) + 10.0f; // TODO GARY Magix number 10.0f, this is minimum distance from ball edge to give some idea of velocity at low value
+   float radius = (controlVBall ? controlVBall->m_d.m_radius : 25.0f) + DrawAngleVelocityRadiusExtraMinimum;
 
    float velocityRange = TrainerOptions::BallStartOptionsRecord::VelocityMaximum - TrainerOptions::BallStartOptionsRecord::VelocityMinimum;
    unsigned char red = (unsigned char)(TrainerOptions::BallStartOptionsRecord::VelocityMinimum + (0xFF / float(velocityRange)) * velocity);
    unsigned char blue = 0xFF - red;
    D3DCOLOR color = D3DCOLOR_ARGB(0x00, red, 0x00, blue);
 
-   //TODO GARY Magic number 1.50f, which is the width of the edge arc (3 degrees because its before and after)
-   float angleBefore = std::fabsf(std::fmodf(angle - 3.0f + TrainerOptions::BallStartOptionsRecord::AngleMaximum, TrainerOptions::BallStartOptionsRecord::AngleMaximum));
+   float angleBefore = std::fabsf(std::fmodf(angle - (DrawAngleVelocityRadiusArc / 2.0f) + TrainerOptions::BallStartOptionsRecord::AngleMaximum, TrainerOptions::BallStartOptionsRecord::AngleMaximum));
    testVertices.emplace_back();
    testVertices.back().x = bsor.m_Pos.x + (std::sinf((angleBefore * float(M_PI)) / 180.0f) * (radius + (velocity * 2.0f)));
    testVertices.back().y = bsor.m_Pos.y + (std::cosf((angleBefore * float(M_PI)) / 180.0f) * -(radius + (velocity * 2.0f)));
    testVertices.back().z = height;
    testVertices.back().color = color;
 
-   //TODO GARY Magic number 1.50f, which is the width of the edge arc (3 degrees because its before and after)
-   float angleAfter = std::fabsf(std::fmodf(angle + 3.0f + TrainerOptions::BallStartOptionsRecord::AngleMaximum, TrainerOptions::BallStartOptionsRecord::AngleMaximum));
+   float angleAfter = std::fabsf(std::fmodf(angle + (DrawAngleVelocityRadiusArc / 2.0f) + TrainerOptions::BallStartOptionsRecord::AngleMaximum, TrainerOptions::BallStartOptionsRecord::AngleMaximum));
    testVertices.emplace_back();
-   testVertices.back().x = bsor.m_Pos.x + (std::sinf((angleAfter * float(M_PI)) / 180.0f) * (radius + (velocity * 2.0f))); // TODO GARY Magic number 2.0f, which is a multiplier to the length of the directional indicator
-   testVertices.back().y = bsor.m_Pos.y + (std::cosf((angleAfter * float(M_PI)) / 180.0f) * -(radius + (velocity * 2.0f))); // TODO GARY Magic number 2.0f, which is a multiplier to the length of the directional indicator
+   testVertices.back().x = bsor.m_Pos.x + (std::sinf((angleAfter * float(M_PI)) / 180.0f) * (radius + (velocity * DrawAngleVelocityLengthMultiplier)));
+   testVertices.back().y = bsor.m_Pos.y + (std::cosf((angleAfter * float(M_PI)) / 180.0f) * -(radius + (velocity * DrawAngleVelocityLengthMultiplier)));
    testVertices.back().z = height;
    testVertices.back().color = color;
 
@@ -2027,7 +2031,7 @@ void BallHistory::DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &tes
       for (S32 velocityIndex = bsor.m_TotalVelocities - 1; velocityIndex >= 0; velocityIndex--)
       {
          float velocity = std::fmodf(bsor.m_VelocityStart + (velocityStep * velocityIndex), TrainerOptions::BallStartOptionsRecord::VelocityMaximum + 1);
-         height += 2.0f; // TODO GARY Magic number for increasing height hack for missing colors due to some type of render state needed
+         height += DrawAngleVelocityHeightOffset;
          DrawAngleVelocityPreviewHelperAdd(testVertices, bsor, angle, velocity, height);
       }
    }

@@ -685,6 +685,11 @@ private:
 
    MenuOptionsRecord m_MenuOptions;
 
+   static const float BallHistory::DrawAngleVelocityRadiusExtraMinimum;
+   static const float BallHistory::DrawAngleVelocityRadiusArc;
+   static const float BallHistory::DrawAngleVelocityLengthMultiplier;
+   static const float BallHistory::DrawAngleVelocityHeightOffset;
+
    static const char * SettingsFileExtension;
    static const char * SettingsFolderName;
    static const char SettingsValueDelimeter;
