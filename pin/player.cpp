@@ -2213,6 +2213,8 @@ template <class T> void BallHistory::ProcessMenuChangeValueSkip(T &value, S32 mi
    }
 }
 
+// yes i know this is a huuuuge function, so sue me
+// in my defense, this is menu/ui handling and a huge switch statement, which is kinda like many functions
 void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs)
 {
    DebugPrintRecord dpr(player);
@@ -2436,6 +2438,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_CreateAutoControlLocations:
+         {
          dpr.ShowMenuTextTitle("Create Auto Control Locations");
          dpr.ShowMenuText("Move and Click Mouse to create or set location");
          dpr.ShowMenuText("Click existing location to remove");
@@ -2457,8 +2460,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             }
          }
 
+         float radius = m_ControlVBalls.size() ? m_ControlVBalls[0]->m_d.m_radius : 25.0f;
+         S32 heightMinimum = S32(player.m_ptable->m_tableheight + radius);
+         S32 heightMaximum = S32(player.m_ptable->m_glassheight - radius);
          dpr.ShowMenuText("Ball Height");
-         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", S32(player.m_ptable->m_tableheight), m_MenuOptions.m_NormalOptions.m_CreateZ, S32(player.m_ptable->m_glassheight));
+         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_NormalOptions.m_CreateZ, heightMaximum);
          m_MenuOptions.m_MousePosition3D.z = float(m_MenuOptions.m_NormalOptions.m_CreateZ);
 
          DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_NormalOptions.m_CreateZ), *m_AutoControlBallTexture, dpr);
@@ -2466,7 +2472,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
-               ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_NormalOptions.m_CreateZ, S32(S32(player.m_ptable->m_tableheight)), S32(player.m_ptable->m_glassheight), currentTimeMs);
+               ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_NormalOptions.m_CreateZ, S32(heightMinimum), heightMaximum, currentTimeMs);
                break;
             case MenuOptionsRecord::MenuActionType_Toggle:
                {
@@ -2491,10 +2497,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_NormalOptions.m_CreateZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
+               ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_NormalOptions.m_CreateZ, heightMinimum, heightMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_NormalOptions.m_CreateZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
+               ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_NormalOptions.m_CreateZ, heightMinimum, heightMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectModeOptions;
@@ -2502,6 +2508,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             default:
                assert(0);
                break;
+         }
          }
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectModeOptions:
@@ -2915,9 +2922,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("Move and Click Mouse to create or set location");
          dpr.ShowMenuText("Hit plunger button to accept");
 
-         // TODO GARY Set the default height of the ball to table height plus the radius of the first ball in the list
-         // if it exists
-
          if (GetCursorPos(&mousePosition2D) == TRUE)
          {
             if (ScreenToClient(player.m_pininput.m_hwnd, &mousePosition2D) == TRUE)
@@ -2927,8 +2931,12 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                dpr.ShowMenuText("Position(3D) %.2f,%.2f,%.2f (3x,3y,3z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
             }
          }
+
+         float radius = m_ControlVBalls.size() ? m_ControlVBalls[0]->m_d.m_radius : 25.0f;
+         S32 heightMinimum = S32(player.m_ptable->m_tableheight + radius);
+         S32 heightMaximum = S32(player.m_ptable->m_glassheight - radius);
          dpr.ShowMenuText("Ball Height");
-         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", S32(player.m_ptable->m_tableheight), m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_glassheight));
+         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMaximum);
          m_MenuOptions.m_MousePosition3D.z = float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ);
 
          DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), *m_AutoControlBallTexture, dpr);
@@ -2939,16 +2947,16 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
-               ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight), currentTimeMs);
+               ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum, currentTimeMs);
                break;
             case MenuOptionsRecord::MenuActionType_Toggle:
                bsor.m_Pos = m_MenuOptions.m_MousePosition3D;
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
+               ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
+               ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                if (m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos.IsZero())
@@ -3264,8 +3272,12 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                dpr.ShowMenuText("Position(2D) = %ld,%ld (x,y)", mousePosition2D.x, mousePosition2D.y);
             }
          }
+
+         float radius = m_ControlVBalls.size() ? m_ControlVBalls[0]->m_d.m_radius : 25.0f;
+         S32 heightMinimum = S32(player.m_ptable->m_tableheight + radius);
+         S32 heightMaximum = S32(player.m_ptable->m_glassheight - radius);
          dpr.ShowMenuText("Ball Height");
-         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", S32(player.m_ptable->m_tableheight), m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_glassheight));
+         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMaximum);
          m_MenuOptions.m_MousePosition3D.z = float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ);
 
          DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), *m_TrainerBallPassTexture, dpr);
@@ -3276,17 +3288,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
-               ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight), currentTimeMs);
+               ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum, currentTimeMs);
                break;
             case MenuOptionsRecord::MenuActionType_Toggle:
                bpor.m_Pos3D = m_MenuOptions.m_MousePosition3D;
                bpor.m_Pos2D = m_MenuOptions.m_MousePosition2D;
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
+               ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
+               ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                if (bpor.m_Pos3D.IsZero())
@@ -3399,7 +3411,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      break;
                   case TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Distance:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassDistance;
-                     if (m_ControlVBalls.size() > 0)
+                     if (m_ControlVBalls.size())
                      {
                         bpor.m_Distance = m_ControlVBalls[0]->m_d.m_radius * 2;
                      }
@@ -3669,8 +3681,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             }
          }
 
+         float radius = m_ControlVBalls.size() ? m_ControlVBalls[0]->m_d.m_radius : 25.0f;
+         S32 heightMinimum = S32(player.m_ptable->m_tableheight + radius);
+         S32 heightMaximum = S32(player.m_ptable->m_glassheight - radius);
          dpr.ShowMenuText("Ball Height");
-         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", S32(player.m_ptable->m_tableheight), m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_glassheight));
+         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMaximum);
          m_MenuOptions.m_MousePosition3D.z = float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ);
 
          DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), *m_TrainerBallFailTexture, dpr);
@@ -3681,17 +3696,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType_None:
-               ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight), currentTimeMs);
+               ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum, currentTimeMs);
                break;
             case MenuOptionsRecord::MenuActionType_Toggle:
                bfor.m_Pos3D = m_MenuOptions.m_MousePosition3D;
                bfor.m_Pos2D = m_MenuOptions.m_MousePosition2D;
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
+               ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, S32(player.m_ptable->m_tableheight), S32(player.m_ptable->m_glassheight));
+               ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum);
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                if (bfor.m_Pos3D.IsZero())
@@ -3801,7 +3816,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      break;
                   case TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Distance:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailDistance;
-                     if (m_ControlVBalls.size() > 0)
+                     if (m_ControlVBalls.size())
                      {
                         bfor.m_Distance = m_ControlVBalls[0]->m_d.m_radius * 2;
                      }
