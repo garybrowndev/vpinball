@@ -1071,11 +1071,6 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
    m_BallHistoryRecordsHeadIndex = 0;
    m_MaxBallVelocityPixels = 0.0f;
 
-   // TODO GARY i don't think m_MostRecentBallHistoryRecord is needed as we don't 
-   // set the ball velocity to zero to stop the ball anymore, now we do the pause/unpause
-   // and no running of UpdatePhysics
-   m_MostRecentBallHistoryRecord.Set(m_ControlVBalls, currentTimeMs);
-
    if (!m_AutoControlBallTexture)
    {
       RGBQUAD color = { 0x00, 0x00, 0x00, 0x00 };
@@ -4924,6 +4919,9 @@ void BallHistory::Process(Player &player, int currentTimeMs)
 
    ShowStatus(player, currentTimeMs);
 
+   BallHistoryRecord currentBhr;
+   currentBhr.Set(m_ControlVBalls, currentTimeMs);
+
    switch (m_MenuOptions.m_ModeType)
    {
       case MenuOptionsRecord::ModeType::ModeType_Normal:
@@ -4951,7 +4949,7 @@ void BallHistory::Process(Player &player, int currentTimeMs)
 
             if (m_BallHistoryRecordsSize == 0)
             {
-               UpdateBallState(player, m_MostRecentBallHistoryRecord);
+               UpdateBallState(player, currentBhr);
             }
             else
             {
@@ -4970,7 +4968,7 @@ void BallHistory::Process(Player &player, int currentTimeMs)
 
                if (m_BallHistoryRecordsSize == 0)
                {
-                  UpdateBallState(player, m_MostRecentBallHistoryRecord);
+                  UpdateBallState(player, currentBhr);
                }
                else
                {
@@ -4992,8 +4990,6 @@ void BallHistory::Process(Player &player, int currentTimeMs)
             {
                Add(m_ControlVBalls, currentTimeMs);
             }
-
-            m_MostRecentBallHistoryRecord.Set(m_ControlVBalls, currentTimeMs);
          }
          break;
       case MenuOptionsRecord::ModeType::ModeType_Disabled:
@@ -5001,7 +4997,7 @@ void BallHistory::Process(Player &player, int currentTimeMs)
          {
             m_WasControlled = true;
 
-            UpdateBallState(player, m_MostRecentBallHistoryRecord);
+            UpdateBallState(player, currentBhr);
 
             ProcessMenu(player, MenuOptionsRecord::MenuActionType_None, currentTimeMs);
          }
@@ -5011,12 +5007,10 @@ void BallHistory::Process(Player &player, int currentTimeMs)
             {
                m_WasControlled = false;
 
-               UpdateBallState(player, m_MostRecentBallHistoryRecord);
+               UpdateBallState(player, currentBhr);
 
                Init(player, currentTimeMs, false);
             }
-
-            m_MostRecentBallHistoryRecord.Set(m_ControlVBalls, currentTimeMs);
          }
          break;
       default:

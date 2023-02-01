@@ -674,7 +674,6 @@ private:
    std::size_t m_BallHistoryRecordsHeadIndex;
    std::size_t m_BallHistoryRecordsSize;
    float m_MaxBallVelocityPixels;
-   BallHistoryRecord m_MostRecentBallHistoryRecord;
 
    Texture *m_AutoControlBallTexture;
    Texture *m_TrainerBallStartTexture;
