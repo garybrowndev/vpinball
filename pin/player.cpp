@@ -1969,6 +1969,9 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
             if (controlVBall)
             {
                player.DrawFakeBall(bpor.m_Pos3D, controlVBall->m_orientation, controlVBall->m_d.m_radius, m_TrainerBallPassTexture, false);
+
+               // TODO GARY draw a circle representing the radius boundary (for distance) around the ball
+               // to indicate where the other ball has to be in order for the pass/fail to occur
             }
             dpr.SetPosition(float(bpor.m_Pos2D.x), float(bpor.m_Pos2D.y));
             dpr.ShowMenuTextPos(0, 0, "#%zu", bporIndex + 1);
@@ -1983,6 +1986,9 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
             if (controlVBall)
             {
                player.DrawFakeBall(bfor.m_Pos3D, controlVBall->m_orientation, controlVBall->m_d.m_radius, m_TrainerBallFailTexture, false);
+
+               // TODO GARY draw a circle representing the radius boundary (for distance) around the ball
+               // to indicate where the other ball has to be in order for the pass/fail to occur
             }
             dpr.SetPosition(float(bfor.m_Pos2D.x), float(bfor.m_Pos2D.y));
             dpr.ShowMenuTextPos(0, 0, "#%zu", bforIndex + 1);
@@ -3044,8 +3050,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
          TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
-         // TODO GARY Fix bug where you hold down left flipper button and get back to zero
-         // it is showing value of 360 and it should be 0 instead
          dpr.ShowMenuTextTitle("Custom Ball Start #%zu Start Angle", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::AngleMinimum, static_cast<S32>(bsor.m_AngleStart), TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1);
 
@@ -3110,8 +3114,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
          TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
-         // TODO GARY fix issue where setting AngleStart and AngleFinish to different values, this should not allow
-         // you to set total values to 0
          dpr.ShowMenuTextTitle("Custom Ball Start #%zu Total Angles", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum, static_cast<S32>(bsor.m_TotalAngles), TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum);
 
@@ -3211,9 +3213,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartVelocityTotal:
          {
          TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
-
-         // TODO GARY fix issue where setting VelocityStart and VelocityFinish to different values, this should not allow
-         // you to set total values to 0
 
          dpr.ShowMenuTextTitle("Custom Ball Start #%zu Total Velocities", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum, static_cast<S32>(bsor.m_TotalVelocities), TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMaximum);
