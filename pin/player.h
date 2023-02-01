@@ -669,7 +669,6 @@ private:
    int m_BallHistoryControlStepMs;
    float m_BallHistoryControlStepPixels;
 
-   std::vector<const Ball *> m_BallHistoryRecordIds;
    std::vector<BallHistoryRecord> m_BallHistoryRecords;
    std::size_t m_BallHistoryRecordsHeadIndex;
    std::size_t m_BallHistoryRecordsSize;

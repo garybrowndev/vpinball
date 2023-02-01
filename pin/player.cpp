@@ -1058,14 +1058,6 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
    m_BallHistoryControlStepMs = BallHistoryControlStepMsDefault;
    m_BallHistoryControlStepPixels = BallHistoryControlStepPixelsDefault;
    
-   // TODO GARY i think m_BallHistoryRecordIds and m_ControlVBallsPrevious are the same
-   // and m_BallHistoryRecordIds can be removed all together, or maybe the otherway around
-   // remove m_ControlVBallsPrevious
-   m_BallHistoryRecordIds.clear();
-   for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
-   {
-      m_BallHistoryRecordIds.push_back(m_ControlVBalls[controlVBallIndex]);
-   }
    m_BallHistoryRecords.resize(BallHistorySizeDefault);
    m_BallHistoryRecordsSize = 0;
    m_BallHistoryRecordsHeadIndex = 0;
@@ -1134,30 +1126,30 @@ void BallHistory::InitBallsIncreased(Player &player)
    {
       const Ball *controlVBall = m_ControlVBalls[controlVBallIndex];
 
-      std::size_t ballHistoryRecordsIdIndex = 0;
-      std::size_t ballHistoryRecordsIdInsertIndex = m_BallHistoryRecordIds.size();
-      for (; ballHistoryRecordsIdIndex < m_BallHistoryRecordIds.size(); ++ballHistoryRecordsIdIndex)
+      std::size_t controlVBallsPreviousIndex = 0;
+      std::size_t controlVBallsPreviousInsertIndex = m_ControlVBallsPrevious.size();
+      for (; controlVBallsPreviousIndex < m_ControlVBallsPrevious.size(); ++controlVBallsPreviousIndex)
       {
-         const Ball * ballHistoryRecordId = m_BallHistoryRecordIds[ballHistoryRecordsIdIndex];
-         if (controlVBall < ballHistoryRecordId)
+         const Ball * controlVBallPrevious = m_ControlVBallsPrevious[controlVBallsPreviousIndex];
+         if (controlVBall < controlVBallPrevious)
          {
-            ballHistoryRecordsIdInsertIndex = ballHistoryRecordsIdIndex;
+            controlVBallsPreviousInsertIndex = controlVBallsPreviousIndex;
          }
 
-         if (controlVBall == ballHistoryRecordId)
+         if (controlVBall == controlVBallPrevious)
          {
             break;
          }
       }
 
-      if (ballHistoryRecordsIdIndex >= m_BallHistoryRecordIds.size())
+      if (controlVBallsPreviousIndex >= m_ControlVBallsPrevious.size())
       {
          std::size_t tempCurrentIndex = m_CurrentControlIndex;
          std::size_t tailIndex = GetTailIndex();
          while (tempCurrentIndex != tailIndex)
          {
             BallHistoryRecord &currentBhr = m_BallHistoryRecords[tempCurrentIndex];
-            currentBhr.Insert(controlVBall, ballHistoryRecordsIdInsertIndex);
+            currentBhr.Insert(controlVBall, controlVBallsPreviousInsertIndex);
 
             if (tempCurrentIndex == 0)
             {
@@ -1171,23 +1163,23 @@ void BallHistory::InitBallsIncreased(Player &player)
       }
    }
 
-   m_BallHistoryRecordIds.clear();
+   m_ControlVBallsPrevious.clear();
    for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
    {
-      m_BallHistoryRecordIds.push_back(m_ControlVBalls[controlVBallIndex]);
+      m_ControlVBallsPrevious.push_back(m_ControlVBalls[controlVBallIndex]);
    }
 }
 
 void BallHistory::InitBallsDecreased(Player &player)
 {
-   for (std::size_t ballHistoryRecordIndex = 0; ballHistoryRecordIndex < m_BallHistoryRecordIds.size();)
+   for (std::size_t controlVBallsPreviousIndex = 0; controlVBallsPreviousIndex < m_ControlVBallsPrevious.size();)
    {
-      const Ball *ballHistoryRecordId = m_BallHistoryRecordIds[ballHistoryRecordIndex];
+      const Ball *controlVBallPrevious = m_ControlVBallsPrevious[controlVBallsPreviousIndex];
 
       std::size_t controlVBallIndex = 0;
       for (; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
       {
-         if (m_ControlVBalls[controlVBallIndex] == ballHistoryRecordId)
+         if (m_ControlVBalls[controlVBallIndex] == controlVBallPrevious)
          {
             break;
          }
@@ -1200,7 +1192,7 @@ void BallHistory::InitBallsDecreased(Player &player)
          while (tempCurrentIndex != tailIndex)
          {
             BallHistoryRecord &currentBhr = m_BallHistoryRecords[tempCurrentIndex];
-            currentBhr.m_BallHistoryStates.erase(currentBhr.m_BallHistoryStates.begin() + ballHistoryRecordIndex);
+            currentBhr.m_BallHistoryStates.erase(currentBhr.m_BallHistoryStates.begin() + controlVBallsPreviousIndex);
 
             if (tempCurrentIndex == 0)
             {
@@ -1212,18 +1204,18 @@ void BallHistory::InitBallsDecreased(Player &player)
             }
          }
 
-         m_BallHistoryRecordIds.erase(m_BallHistoryRecordIds.begin() + ballHistoryRecordIndex);
+         m_ControlVBallsPrevious.erase(m_ControlVBallsPrevious.begin() + controlVBallsPreviousIndex);
       }
       else
       {
-         ballHistoryRecordIndex++;
+         controlVBallsPreviousIndex++;
       }
    }
 
-   m_BallHistoryRecordIds.clear();
+   m_ControlVBallsPrevious.clear();
    for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
    {
-      m_BallHistoryRecordIds.push_back(m_ControlVBalls[controlVBallIndex]);
+      m_ControlVBallsPrevious.push_back(m_ControlVBalls[controlVBallIndex]);
    }
 }
 
@@ -2922,6 +2914,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuTextTitle("Custom Ball Start #%zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuText("Move and Click Mouse to create or set location");
          dpr.ShowMenuText("Hit plunger button to accept");
+
+         // TODO GARY Set the default height of the ball to table height plus the radius of the first ball in the list
+         // if it exists
 
          if (GetCursorPos(&mousePosition2D) == TRUE)
          {
