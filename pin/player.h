@@ -455,7 +455,7 @@ public:
    std::vector<RunRecord> m_RunRecords;
    std::size_t m_CurrentRunRecord;
    int m_RunStartTimeMs;
-   bool m_RunExtraStartPositionSet;
+   bool m_SetupBallStarts;
 
    TrainerOptions();
 };
@@ -680,6 +680,8 @@ private:
    Texture *m_TrainerBallPassTexture;
    Texture *m_TrainerBallFailTexture;
    std::map<U32, Texture *> m_ControlHistoryBallTextures;
+
+   int m_UseTrailsForBallsInitialValue;
 
    MenuOptionsRecord m_MenuOptions;
 

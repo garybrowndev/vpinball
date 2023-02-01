@@ -132,7 +132,7 @@ TrainerOptions::TrainerOptions():
    m_BallStartOptionsRecordsSize(0),
    m_CurrentRunRecord(0),
    m_RunStartTimeMs(0),
-   m_RunExtraStartPositionSet(false)
+   m_SetupBallStarts(true)
 {
 }
 
@@ -406,7 +406,8 @@ BallHistory::BallHistory() :
    m_AutoControlBallTexture(nullptr),
    m_TrainerBallStartTexture(nullptr),
    m_TrainerBallPassTexture(nullptr),
-   m_TrainerBallFailTexture(nullptr)
+   m_TrainerBallFailTexture(nullptr),
+   m_UseTrailsForBallsInitialValue(0)
 {
 }
 
@@ -533,7 +534,7 @@ void BallHistory::LoadSettings(Player &player)
             NormalOptions::AutoControlVertex &acv = m_MenuOptions.m_NormalOptions.m_AutoControlVertices.back();
             autoControlVerticesPosition2D >> tempXFloat >> delimeter >> tempYFloat >> delimeter;
  
-            // TODO GARY figure out issue with the #X values are not being drawin in the write place
+            // TODO GARY figure out issue with the #X values are not being drawin in the right place
             // after rotation or when "height" is set to large value
 
             POINT point2DTo3D;
@@ -1117,6 +1118,8 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
       }
    }
    
+   m_UseTrailsForBallsInitialValue = player.m_ptable->m_useTrailForBalls;
+
    if (loadSettings)
    {
       LoadSettings(player);
@@ -1171,12 +1174,6 @@ void BallHistory::InitBallsIncreased(Player &player)
    {
       m_BallHistoryRecordIds.push_back(m_ControlVBalls[controlVBallIndex]);
    }
-
-   if (player.m_vball.size() > m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize)
-   {
-      m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.resize(player.m_vball.size());
-   }
-   m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize = m_ControlVBalls.size();
 }
 
 void BallHistory::InitBallsDecreased(Player &player)
@@ -1226,8 +1223,6 @@ void BallHistory::InitBallsDecreased(Player &player)
    {
       m_BallHistoryRecordIds.push_back(m_ControlVBalls[controlVBallIndex]);
    }
-
-   m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize--;
 }
 
 void BallHistory::UnInit(Player &player)
@@ -1472,6 +1467,7 @@ void BallHistory::ControlPrev()
 
 void BallHistory::ResetTrainerRunStartTime()
 {
+   m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
    m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
 }
 
@@ -1484,6 +1480,7 @@ void BallHistory::SetControl(bool control)
       {
          g_pplayer->PauseMusic();
          g_pplayer->m_noTimeCorrect = true;
+         m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
          m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
       }
       else
@@ -4418,6 +4415,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                break;
          }
       }
+
       m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = currentTimeMs;
    }
 
@@ -4431,19 +4429,13 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
 
    TrainerOptions::RunRecord &currentRunRecord = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord];
    S32 runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
-   if (m_MenuOptions.m_TrainerOptions.m_RunExtraStartPositionSet || runElapsedTimeMs == 0 || runElapsedTimeMs < (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000))
+   if (runElapsedTimeMs == 0 || runElapsedTimeMs < (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000))
    {
-      // TODO GARY setting the velocity to a value here causes the ball to twitch and the ball trail
-      // to draw eratically. I think this is because the physics is trying to run while the ball is frozen
-      // here. Proposed Solution - Set the velocity to zero until the last moment before letting simuation
-      // run. Then one time in the next else in this if/else chain to set the velocity one last time so
-      // only the last frame before the simulation continues will get the velocity update and properly
-      // render at the start of the run record
       for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
       {
          m_ControlVBalls[controlVBallIndex]->m_d.m_pos = currentRunRecord.m_StartPositions[controlVBallIndex];
-         m_ControlVBalls[controlVBallIndex]->m_d.m_vel = currentRunRecord.m_StartVelocities[controlVBallIndex];
-         m_ControlVBalls[controlVBallIndex]->m_angularmomentum = currentRunRecord.m_StartAngularMomentums[controlVBallIndex];
+         m_ControlVBalls[controlVBallIndex]->m_d.m_vel.SetZero();
+         m_ControlVBalls[controlVBallIndex]->m_angularmomentum.SetZero();
       }
 
       if (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds > 0)
@@ -4452,18 +4444,38 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          dpr.ShowMenuTextTitle("Run #%zu (of %zu) starts in %.2f seconds", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_RunRecords.size(), ((m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000) - runElapsedTimeMs) / 1000.0f);
          ShowPreviousRunRecord(player, dpr);
       }
-      else if (m_MenuOptions.m_TrainerOptions.m_RunExtraStartPositionSet == true)
-      {
-         m_MenuOptions.m_TrainerOptions.m_RunExtraStartPositionSet = false;
-      }
-      else
-      {
-         m_MenuOptions.m_TrainerOptions.m_RunExtraStartPositionSet = true;
-      }
 
+      player.m_ptable->m_useTrailForBalls = 0;
    }
    else if (runElapsedTimeMs < ((m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000) + (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * 1000)))
    {
+      if (m_MenuOptions.m_TrainerOptions.m_SetupBallStarts)
+      {
+         bool anyVelocityAngularMomentumSet = false;
+         for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
+         {
+            m_ControlVBalls[controlVBallIndex]->m_d.m_pos = currentRunRecord.m_StartPositions[controlVBallIndex];
+            m_ControlVBalls[controlVBallIndex]->m_d.m_vel = currentRunRecord.m_StartVelocities[controlVBallIndex];
+            m_ControlVBalls[controlVBallIndex]->m_angularmomentum = currentRunRecord.m_StartAngularMomentums[controlVBallIndex];
+
+            if (m_ControlVBalls[controlVBallIndex]->m_d.m_vel.IsZero() == false || m_ControlVBalls[controlVBallIndex]->m_angularmomentum.IsZero() == false)
+            {
+               m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = false;
+            }
+
+            if (currentRunRecord.m_StartVelocities[controlVBallIndex].IsZero() == false || currentRunRecord.m_StartAngularMomentums[controlVBallIndex].IsZero() == false)
+            {
+               anyVelocityAngularMomentumSet = true;
+            }
+         }
+
+         if (anyVelocityAngularMomentumSet == false)
+         {
+            m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = false;
+            player.m_ptable->m_useTrailForBalls = m_UseTrailsForBallsInitialValue;
+         }
+      }
+
       ShowCurrentRunRecord(player, dpr, currentTimeMs);
       bool allPass = true;
       std::vector<std::tuple<std::size_t, std::size_t>> startToPassLocationIndexes;
@@ -4526,6 +4538,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_Passed;
          currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000);
          currentRunRecord.m_StartToPassLocationIndexes = startToPassLocationIndexes;
+         m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
          m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
          m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
       }
@@ -4588,6 +4601,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_FailedLocation;
          currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000);
          currentRunRecord.m_StartToFailLocationIndexes = startToFailLocationIndexes;
+         m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
          m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
          m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
       }
@@ -4596,6 +4610,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
    {
       currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_FailedTimeElapsed;
       currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000);
+      m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
       m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
       m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
    }
@@ -4901,6 +4916,10 @@ void BallHistory::InitControlVBalls(Player &player)
    }
    std::sort(m_ControlVBalls.begin(), m_ControlVBalls.end());
 
+   if (player.m_vball.size() > m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize)
+   {
+      m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.resize(player.m_vball.size());
+   }
    m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize = m_ControlVBalls.size();
 }
 
