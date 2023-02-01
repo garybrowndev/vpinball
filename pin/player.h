@@ -448,6 +448,7 @@ public:
    S32 m_RunCountdownSeconds;
    
    std::vector<BallStartOptionsRecord> m_BallStartOptionsRecords;
+   std::size_t m_BallStartOptionsRecordsSize;
    std::vector<BallEndOptionsRecord> m_BallPassOptionsRecords;
    std::vector<BallEndOptionsRecord> m_BallFailOptionsRecords;
 
