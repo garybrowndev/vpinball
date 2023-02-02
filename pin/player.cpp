@@ -1817,29 +1817,105 @@ void BallHistory::ShowBallEndOptionsRecord(Player &player, DebugPrintRecord &dpr
    }
 }
 
+bool BallHistory::ShouldDrawTrainerBallStartLocations(std::size_t index, int currentTimeMs)
+{
+   switch (m_MenuOptions.m_MenuState)
+   {
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartLocation:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartAngleVelocityMode:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartAngleStart:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartAngleFinish:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartAngleTotal:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartVelocityStart:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartVelocityFinish:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartVelocityTotal:
+         return index != m_MenuOptions.m_CurrentBallIndex || (currentTimeMs % 1000) >= 200;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStart:
+         switch (m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode)
+         {
+            case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept:
+               break;
+            case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Select:
+               return index != m_MenuOptions.m_CurrentCompleteIndex || (currentTimeMs % 1000) >= 200;
+            default:
+               break;
+         }
+      default:
+         break;
+   }
+   return true;
+}
+
+bool BallHistory::ShouldDrawTrainerBallPassLocations(std::size_t index, int currentTimeMs)
+{
+   switch (m_MenuOptions.m_MenuState)
+   {
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassLocation:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassAccept:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassFinishMode:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassDistance:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassAssociations:
+         return index != m_MenuOptions.m_CurrentBallIndex || (currentTimeMs % 1000) >= 200;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_BallPassComplete:
+         switch (m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode)
+         {
+            case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept:
+               break;
+            case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select:
+               return index != m_MenuOptions.m_CurrentCompleteIndex || (currentTimeMs % 1000) >= 200;
+            default:
+               break;
+         }
+      default:
+         break;
+   }
+   return true;
+}
+
+bool BallHistory::ShouldDrawTrainerBallFailLocations(std::size_t index, int currentTimeMs)
+{
+   switch (m_MenuOptions.m_MenuState)
+   {
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailLocation:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailAccept:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailFinishMode:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailDistance:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailAssociations:
+         return index != m_MenuOptions.m_CurrentBallIndex || (currentTimeMs % 1000) >= 200;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_BallFailComplete:
+         switch (m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode)
+         {
+            case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept:
+               break;
+            case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select:
+               return index != m_MenuOptions.m_CurrentCompleteIndex || (currentTimeMs % 1000) >= 200;
+            default:
+               break;
+         }
+      default:
+         break;
+   }
+   return true;
+}
+
 void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr, int currentTimeMs)
 {
    // TODO GARY Instead of blinking, rotate the color from light to dark and back of the Pass/Fail color
 
-   // TODO GARY Only blink the ball you are currently editing, this will be based on MenuState probably
+   Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr;
+   Matrix3 orientation;
+   orientation.Identity();
+   float radius = 25.0f;
 
-   if ((currentTimeMs % 1000) >= 200)
+   if (Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr)
    {
-      // TODO GARY FIX THIS Something is wrong with the color of pass/fail balls
-      // Doctor Who does not work for color of trainer or ball history
+      orientation = controlVBall->m_orientation;
+      radius = controlVBall->m_d.m_radius;
+   }
 
-      Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr;
-      Matrix3 orientation;
-      orientation.Identity();
-      float radius = 25.0f;
-
-      if (Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr)
-      {
-         orientation = controlVBall->m_orientation;
-         radius = controlVBall->m_d.m_radius;
-      }
-
-      for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
+   for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
+   {
+      if (ShouldDrawTrainerBallStartLocations(bsorIndex, currentTimeMs))
       {
          TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
          if (!bsor.m_Pos.IsZero())
@@ -1851,8 +1927,11 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
             dpr.ShowMenuTextPos(0, 0, "S-%zu", bsorIndex + 1);
          }
       }
+   }
 
-      for (std::size_t bporIndex = 0; bporIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); bporIndex++)
+   for (std::size_t bporIndex = 0; bporIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); bporIndex++)
+   {
+      if (ShouldDrawTrainerBallPassLocations(bporIndex, currentTimeMs))
       {
          TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[bporIndex];
          if (!bpor.m_Pos.IsZero())
@@ -1867,8 +1946,11 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
             dpr.ShowMenuTextPos(0, 0, "P-%zu", bporIndex + 1);
          }
       }
+   }
 
-      for (std::size_t bforIndex = 0; bforIndex < m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size(); bforIndex++)
+   for (std::size_t bforIndex = 0; bforIndex < m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size(); bforIndex++)
+   {
+      if (ShouldDrawTrainerBallFailLocations(bforIndex, currentTimeMs))
       {
          TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[bforIndex];
          if (!bfor.m_Pos.IsZero())
@@ -4781,7 +4863,7 @@ void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr,
          player.DrawFakeBall(acv.m_Pos3D, radius, orientation, m_AutoControlBallTexture);
          POINT screenPoint = Get2DPointFrom3D(player, acv.m_Pos3D);
          dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
-         dpr.ShowMenuTextPos(0, 0, "#%zu", acvIndex + 1);
+         dpr.ShowMenuTextPos(0, 0, "%zu", acvIndex + 1);
       }
    }
 }
