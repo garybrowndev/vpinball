@@ -672,11 +672,11 @@ private:
    std::size_t m_BallHistoryRecordsSize;
    float m_MaxBallVelocityPixels;
 
-   Texture *m_AutoControlBallTexture;
-   Texture *m_TrainerBallStartTexture;
-   Texture *m_TrainerBallPassTexture;
-   Texture *m_TrainerBallFailTexture;
-   std::map<U32, Texture *> m_ControlHistoryBallTextures;
+   Texture * m_AutoControlBallTexture;
+   Texture * m_TrainerBallStartTexture;
+   Texture * m_TrainerBallPassTexture;
+   Texture * m_TrainerBallFailTexture;
+   std::map<U32, Texture*> m_ControlHistoryBallTextures;
 
    int m_UseTrailsForBallsInitialValue;
 
@@ -835,8 +835,7 @@ public:
 
    Ball *CreateBall(const float x, const float y, const float z, const float vx, const float vy, const float vz, const float radius = 25.0f, const float mass = 1.0f);
    void DestroyBall(Ball *pball);
-
-   void DrawFakeBall(const Vertex3Ds &position, const Matrix3 &orientation, float radius, Texture *pballImageColor, bool showSpin);
+   void DrawFakeBall(Vertex3Ds &m_pos, float radius, Matrix3 m_orientation, Texture *ballColor);
 
    void AddCabinetBoundingHitShapes();
 
