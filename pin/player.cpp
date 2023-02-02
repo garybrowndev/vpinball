@@ -1825,17 +1825,27 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
 
    if ((currentTimeMs % 1000) >= 200)
    {
+
+      // TODO GARY FIX THIS Something is wrong with the color of pass/fail balls
+      // Doctor Who does not work for color of trainer or ball history
+
       Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr;
+      Matrix3 orientation;
+      orientation.Identity();
+      float radius = 25.0f;
+
+      if (Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr)
+      {
+         orientation = controlVBall->m_orientation;
+         radius = controlVBall->m_d.m_radius;
+      }
+
       for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
       {
          TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
          if (!bsor.m_Pos.IsZero())
          {
-            if (controlVBall)
-            {
-               player.DrawFakeBall(bsor.m_Pos, controlVBall->m_orientation, controlVBall->m_d.m_radius, m_TrainerBallStartTexture, false);
-            }
-
+            player.DrawFakeBall(bsor.m_Pos, orientation, radius, m_TrainerBallStartTexture, false);
             DrawAngleVelocityPreview(player, bsor);
             POINT screenPoint = Get2DPointFrom3D(player, bsor.m_Pos);
             player.SetDebugOutputPosition(float(screenPoint.x), float(screenPoint.y));
@@ -1848,10 +1858,7 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
          TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[bporIndex];
          if (!bpor.m_Pos.IsZero())
          {
-            if (controlVBall)
-            {
-               player.DrawFakeBall(bpor.m_Pos, controlVBall->m_orientation, controlVBall->m_d.m_radius, m_TrainerBallPassTexture, false);
-            }
+            player.DrawFakeBall(bpor.m_Pos, orientation, radius, m_TrainerBallPassTexture, false);
             if (bpor.m_Distance != TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
             {
                DrawIntersectionCircle(player, bpor.m_Pos, bpor.m_Distance, IntersectionCircleColor);
@@ -1867,10 +1874,7 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
          TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[bforIndex];
          if (!bfor.m_Pos.IsZero())
          {
-            if (controlVBall)
-            {
-               player.DrawFakeBall(bfor.m_Pos, controlVBall->m_orientation, controlVBall->m_d.m_radius, m_TrainerBallFailTexture, false);
-            }
+            player.DrawFakeBall(bfor.m_Pos, orientation, radius, m_TrainerBallFailTexture, false);
             if (bfor.m_Distance != TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
             {
                DrawIntersectionCircle(player, bfor.m_Pos, bfor.m_Distance, IntersectionCircleColor);
@@ -4762,14 +4766,20 @@ void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr,
 {
    if ((currentTimeMs % 1000) >= 200)
    {
-      Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr;
+      Matrix3 orientation;
+      orientation.Identity();
+      float radius = 25.0f;
+
+      if (Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr)
+      {
+         orientation = controlVBall->m_orientation;
+         radius = controlVBall->m_d.m_radius;
+      }
+
       for (std::size_t acvIndex = 0; acvIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); acvIndex++)
       {
          NormalOptions::AutoControlVertex &acv = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[acvIndex];
-         if (controlVBall)
-         {
-            player.DrawFakeBall(acv.m_Pos3D, controlVBall->m_orientation, controlVBall->m_d.m_radius, m_AutoControlBallTexture, false);
-         }
+         player.DrawFakeBall(acv.m_Pos3D, orientation, radius, m_AutoControlBallTexture, false);
          POINT screenPoint = Get2DPointFrom3D(player, acv.m_Pos3D);
          dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
          dpr.ShowMenuTextPos(0, 0, "#%zu", acvIndex + 1);
@@ -4786,19 +4796,20 @@ void BallHistory::DrawFakeBallAtMousePosition(Player &player, float heightZ, flo
       if (ScreenToClient(player.m_pininput.m_hwnd, &mousePosition) == TRUE)
       {
          Vertex3Ds vertex(g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition, heightZ));
-         Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr;
-         if (controlVBall)
+
+         Matrix3 orientation;
+         orientation.Identity();
+         float radius = 25.0f;
+
+         if (Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr)
          {
-            player.DrawFakeBall(Vertex3Ds(vertex.x, vertex.y, heightZ), controlVBall->m_orientation, controlVBall->m_d.m_radius, &texture, false);
+            orientation = controlVBall->m_orientation;
+            radius = controlVBall->m_d.m_radius;
          }
-         else
-         {
-            // TODO GARY Ball is drawn pure black, will want to choose colors for basic
-            // auto control, start, pass and fail locations to be consistent and nice looking
-            Matrix3 dummyOrientation;
-            dummyOrientation.Identity();
-            player.DrawFakeBall(Vertex3Ds(vertex.x, vertex.y, heightZ), dummyOrientation, 25.0f, &texture, false);
-         }
+
+         // TODO GARY Ball is drawn pure black, will want to choose colors for basic
+         // auto control, start, pass and fail locations to be consistent and nice looking
+         player.DrawFakeBall(Vertex3Ds(vertex.x, vertex.y, heightZ), orientation, radius, &texture, false);
          DrawIntersectionCircle(player, vertex, intersectionRadius, IntersectionCircleColor);
       }
    }
