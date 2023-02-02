@@ -1939,7 +1939,7 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
             player.DrawFakeBall(bpor.m_Pos, radius, orientation, m_TrainerBallPassTexture);
             if (bpor.m_Distance != TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
             {
-               DrawIntersectionCircle(player, bpor.m_Pos, bpor.m_Distance, IntersectionCircleColor);
+               DrawIntersectionCircle(player, bpor.m_Pos, radius, bpor.m_Distance, IntersectionCircleColor);
             }
             POINT screenPoint = Get2DPointFrom3D(player, bpor.m_Pos);
             dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
@@ -1958,7 +1958,7 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
             player.DrawFakeBall(bfor.m_Pos, radius, orientation, m_TrainerBallFailTexture);
             if (bfor.m_Distance != TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
             {
-               DrawIntersectionCircle(player, bfor.m_Pos, bfor.m_Distance, IntersectionCircleColor);
+               DrawIntersectionCircle(player, bfor.m_Pos, radius, bfor.m_Distance, IntersectionCircleColor);
             }
             POINT screenPoint = Get2DPointFrom3D(player, bfor.m_Pos);
             dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
@@ -3407,6 +3407,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
          TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
          
+         //TODO GARY consider making the minimum distance the radius of the ball
+
          dpr.ShowMenuTextTitle("Ball Pass Distance");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallEndOptionsRecord::DistanceMinimum, static_cast<S32>(bpor.m_Distance), TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
 
@@ -4810,12 +4812,14 @@ void BallHistory::DrawBallHistory(Player &player)
    }
 }
 
-void BallHistory::DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float radius, D3DCOLOR color)
+void BallHistory::DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float ballRadius, float intersectionRadius, D3DCOLOR color)
 {
    static const std::size_t NumTriangles = 36;
 
+   float heightZ = intersectionRadius > ballRadius ? pos.z : pos.z + ballRadius;
+
    std::vector<Vertex3DColor> testVertices;
-   testVertices.push_back({pos.x, pos.y, pos.z, color});
+   testVertices.push_back({pos.x, pos.y, heightZ, color});
 
    float angleStep = (2.0f * M_PI) / NumTriangles;
    float currentAngle = 0.0f;
@@ -4824,9 +4828,9 @@ void BallHistory::DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float r
       currentAngle += angleStep;
       testVertices.push_back(
       {
-         pos.x + radius * std::cosf(currentAngle),
-         pos.y + radius * std::sinf(currentAngle),
-         pos.z,
+         pos.x + intersectionRadius * std::cosf(currentAngle),
+         pos.y + intersectionRadius * std::sinf(currentAngle),
+         heightZ,
          color
       });
    }
@@ -4891,7 +4895,7 @@ void BallHistory::DrawFakeBallAtMousePosition(Player &player, float heightZ, flo
          // TODO GARY Ball is drawn pure black, will want to choose colors for basic
          // auto control, start, pass and fail locations to be consistent and nice looking
          player.DrawFakeBall(Vertex3Ds(vertex.x, vertex.y, heightZ), radius, orientation, &texture);
-         DrawIntersectionCircle(player, vertex, intersectionRadius, IntersectionCircleColor);
+         DrawIntersectionCircle(player, vertex, radius, intersectionRadius, IntersectionCircleColor);
       }
    }
 }
