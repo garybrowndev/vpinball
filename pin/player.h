@@ -393,14 +393,13 @@ public:
       static const float DistanceDisabled;
 
       Vertex3Ds m_Pos3D;
-      POINT m_Pos2D;
       float m_Distance;
       std::set<std::size_t> m_AssociatedBallStartIndexes;
 
       std::vector<std::tuple<int, Vertex3Ds>> m_StopBallsTracker;
 
       BallEndOptionsRecord();
-      BallEndOptionsRecord(Vertex3Ds &pos, POINT pos2D, float distance);
+      BallEndOptionsRecord(Vertex3Ds &pos, float distance);
    };
 
    struct RunRecord
@@ -483,7 +482,6 @@ public:
    struct AutoControlVertex
    {
       Vertex3Ds m_Pos3D;
-      POINT m_Pos2D;
       bool Active;
    };
 
@@ -510,7 +508,7 @@ public:
    void UnInit(Player &player);
    void Process(Player &player, int currentTimeMsec);
    bool ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, int currentTimeMs);
-   void ProcessMouse(Player &player, Vertex3Ds &mousePosition3D, POINT &mousePosition2D, int currentTimeMs);
+   void ProcessMouse(Player &player, int currentTimeMs);
    bool Control();
    void SetControl(bool control);
    void ToggleControl();
@@ -641,7 +639,6 @@ private:
       std::size_t m_CurrentBallIndex;
       std::size_t m_CurrentAssociationIndex;
       std::size_t m_CurrentCompleteIndex;
-      Vertex3Ds m_MousePosition3D;
       POINT m_MousePosition2D;
 
       MenuOptionsRecord();
@@ -699,7 +696,6 @@ private:
    static const char * VersionKeyName;
    static const char * DateSavedKeyName;
    static const char * NormalModeSettingsSectionName;
-   static const char * NormalModeAutoControlVerticesPosition2DKeyName;
    static const char * NormalModeAutoControlVerticesPosition3DKeyName;
    static const char * TrainerModeSettingsSectionName;
    static const char * TrainerModeStateSectionName;
@@ -718,11 +714,9 @@ private:
    static const char * TrainerModeBallStartVelocityFinishKeyName;
    static const char * TrainerModeBallStartTotalVelocitiesKeyName;
    static const char * TrainerModeBallPassPosition3DKeyName;
-   static const char * TrainerModeBallPassPosition2DKeyName;
    static const char * TrainerModeBallPassDistanceKeyName;
    static const char * TrainerModeBallPassAssociationsKeyName;
    static const char * TrainerModeBallFailPosition3DKeyName;
-   static const char * TrainerModeBallFailPosition2DKeyName;
    static const char * TrainerModeBallFailDistanceKeyName;
    static const char * TrainerModeBallFailAssociationsKeyName;
    std::string m_SettingsFilePath;
@@ -768,6 +762,7 @@ private:
    float DistancePixels(POINT &p1, POINT &p2);
    float DistancePixels(const Vertex3Ds &pos1, const Vertex3Ds &pos2);
    float VelocityPixels(Vertex3Ds &vel);
+   POINT Get2DPointFrom3D(Player &player, const Vertex3Ds& vertex);
    bool ControlNextMove();
    bool ControlPrevMove();
 

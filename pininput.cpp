@@ -1895,10 +1895,7 @@ void PinInput::ProcessKeys(/*const U32 curr_sim_msec,*/ int curr_time_msec) // l
             ProcessBallControl(input);
          else if (g_pplayer->m_BallHistory.Control())
          {
-            POINT point = { mouseX, mouseY };
-            ScreenToClient(m_hwnd, &point);
-            Vertex3Ds autoPointVertex3D(g_pplayer->m_pin3d.Get3DPointFrom2D(point));
-            g_pplayer->m_BallHistory.ProcessMouse(*g_pplayer, autoPointVertex3D, point, curr_time_msec);
+            g_pplayer->m_BallHistory.ProcessMouse(*g_pplayer, curr_time_msec);
          }
          else
          {

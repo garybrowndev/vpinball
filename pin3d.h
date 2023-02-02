@@ -81,6 +81,7 @@ public:
 
    Vertex3Ds Unproject(const Vertex3Ds& point);
    Vertex3Ds Get3DPointFrom2D(const POINT& p);
+   Vertex3Ds Get3DPointFrom2D(const POINT& p, float heightZ);
 
    void Flip(const bool vsync);
 

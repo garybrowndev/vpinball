@@ -98,13 +98,12 @@ TrainerOptions::BallStartOptionsRecord::BallStartOptionsRecord(Vertex3Ds &pos, V
 }
 
 TrainerOptions::BallEndOptionsRecord::BallEndOptionsRecord():
-   BallEndOptionsRecord(Vertex3Ds(0.0f, 0.0f, 0.0f), {0, 0}, 0.0f)
+   BallEndOptionsRecord(Vertex3Ds(0.0f, 0.0f, 0.0f), 0.0f)
 {
 }
 
-TrainerOptions::BallEndOptionsRecord::BallEndOptionsRecord(Vertex3Ds &pos3D, POINT pos2D, float distance):
+TrainerOptions::BallEndOptionsRecord::BallEndOptionsRecord(Vertex3Ds &pos3D, float distance):
    m_Pos3D(pos3D),
-   m_Pos2D(pos2D),
    m_Distance(distance)
 {
 }
@@ -342,9 +341,7 @@ BallHistory::MenuOptionsRecord::MenuOptionsRecord():
    m_SkipKeyUsedMs(0),
    m_SkipControlUsedMs(0),
    m_CurrentBallIndex(0),
-   m_CurrentAssociationIndex(0),
-   m_MousePosition3D(0.0f, 0.0f, 0.0f),
-   m_MousePosition2D({ 0, 0 })
+   m_CurrentAssociationIndex(0)
 {
 }
 
@@ -372,7 +369,6 @@ const char * BallHistory::AuthorKeyName = "Author";
 const char * BallHistory::VersionKeyName = "Version";
 const char * BallHistory::DateSavedKeyName = "DateSaved";
 const char * BallHistory::NormalModeSettingsSectionName = "NormalModeSettings";
-const char * BallHistory::NormalModeAutoControlVerticesPosition2DKeyName = "Position2D";
 const char * BallHistory::NormalModeAutoControlVerticesPosition3DKeyName = "Position3D";
 const char * BallHistory::TrainerModeSettingsSectionName = "TrainerModeSettings";
 const char * BallHistory::TrainerModeStateSectionName = "TrainerModeState";
@@ -391,11 +387,9 @@ const char * BallHistory::TrainerModeBallStartVelocityStartKeyName = "StartVeloc
 const char * BallHistory::TrainerModeBallStartVelocityFinishKeyName = "StartVelocityFinish";
 const char * BallHistory::TrainerModeBallStartTotalVelocitiesKeyName = "StartVelocities";
 const char * BallHistory::TrainerModeBallPassPosition3DKeyName = "PassPosition3D";
-const char * BallHistory::TrainerModeBallPassPosition2DKeyName = "PassPosition2D";
 const char * BallHistory::TrainerModeBallPassDistanceKeyName = "PassDistance";
 const char * BallHistory::TrainerModeBallPassAssociationsKeyName = "PassAssociations";
 const char * BallHistory::TrainerModeBallFailPosition3DKeyName = "FailPosition3D";
-const char * BallHistory::TrainerModeBallFailPosition2DKeyName = "FailPosition2D";
 const char * BallHistory::TrainerModeBallFailDistanceKeyName = "FailDistance";
 const char * BallHistory::TrainerModeBallFailAssociationsKeyName = "FailAssociations";
 
@@ -529,46 +523,13 @@ void BallHistory::LoadSettings(Player &player)
    iniFile.LoadFile(m_SettingsFilePath.c_str());
    {
       // Normal Mode Settings
-      std::istringstream autoControlVerticesPosition2D;
       std::istringstream autoControlVerticesPosition3D;
-      if (LoadSettingsGetValue(iniFile, NormalModeSettingsSectionName, NormalModeAutoControlVerticesPosition2DKeyName, autoControlVerticesPosition2D) == true &&
-         LoadSettingsGetValue(iniFile, NormalModeSettingsSectionName, NormalModeAutoControlVerticesPosition3DKeyName, autoControlVerticesPosition3D) == true)
+      if (LoadSettingsGetValue(iniFile, NormalModeSettingsSectionName, NormalModeAutoControlVerticesPosition3DKeyName, autoControlVerticesPosition3D) == true)
       {
-         while (autoControlVerticesPosition2D.peek() != EOF &&
-            autoControlVerticesPosition3D.peek() != EOF)
+         while (autoControlVerticesPosition3D.peek() != EOF)
          {
-            m_MenuOptions.m_NormalOptions.m_AutoControlVertices.push_back({ {0.0f, 0.0f, 0.0f}, {0, 0}, true });
+            m_MenuOptions.m_NormalOptions.m_AutoControlVertices.push_back({ {0.0f, 0.0f, 0.0f}, true });
             NormalOptions::AutoControlVertex &acv = m_MenuOptions.m_NormalOptions.m_AutoControlVertices.back();
-            autoControlVerticesPosition2D >> tempXFloat >> delimeter >> tempYFloat >> delimeter;
- 
-            // TODO GARY figure out issue with the #X values are not being drawin in the right place
-            // after rotation or when "height" is set to large value
-
-            POINT point2DTo3D;
-            if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 270.0f)
-            {
-               acv.m_Pos2D.x = LONG(tempXFloat * player.m_height);
-               acv.m_Pos2D.y = LONG(tempYFloat * player.m_width);
-
-               point2DTo3D.x = acv.m_Pos2D.y;
-               point2DTo3D.y = player.m_height - acv.m_Pos2D.x;
-            }
-            else if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 90.0f)
-            {
-               acv.m_Pos2D.x = LONG(tempXFloat * player.m_height);
-               acv.m_Pos2D.y = LONG(tempYFloat * player.m_width);
-
-               point2DTo3D.x = player.m_width - acv.m_Pos2D.y;
-               point2DTo3D.y = acv.m_Pos2D.x;
-            }
-            else
-            {
-               acv.m_Pos2D.x = LONG(tempXFloat * player.m_width);
-               acv.m_Pos2D.y = LONG(tempYFloat * player.m_height);
-
-               point2DTo3D = acv.m_Pos2D;
-            }
-            
             autoControlVerticesPosition3D >> acv.m_Pos3D.x >> delimeter >> acv.m_Pos3D.y >> delimeter >> acv.m_Pos3D.z >> delimeter;
          }
       }
@@ -700,51 +661,20 @@ void BallHistory::LoadSettings(Player &player)
          }
       }
 
-      std::istringstream ballPassOptionsPos2D;
       std::istringstream ballPassOptionsPos3D;
       std::istringstream ballPassOptionsDistance;
       std::istringstream ballPassOptionsAssociations;
-      if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallPassPosition2DKeyName, ballPassOptionsPos2D) == true &&
-         LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallPassPosition3DKeyName, ballPassOptionsPos3D) == true &&
+      if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallPassPosition3DKeyName, ballPassOptionsPos3D) == true &&
          LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallPassDistanceKeyName, ballPassOptionsDistance) == true &&
          LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallPassAssociationsKeyName, ballPassOptionsAssociations) == true)
       {
-         while (ballPassOptionsPos2D.peek() != EOF &&
-            ballPassOptionsPos3D.peek() != EOF &&
+         while (ballPassOptionsPos3D.peek() != EOF &&
             ballPassOptionsDistance.peek() != EOF &&
             ballPassOptionsAssociations.peek() != EOF)
          {
             m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.push_back(TrainerOptions::BallEndOptionsRecord());
             TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.back();
-            ballPassOptionsPos2D >> tempXFloat >> delimeter >> tempYFloat >> delimeter;
-
-            POINT point2DTo3D;
-            if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 270.0f)
-            {
-               bpor.m_Pos2D.x = LONG(tempXFloat * player.m_height);
-               bpor.m_Pos2D.y = LONG(tempYFloat * player.m_width);
-
-               point2DTo3D.x = bpor.m_Pos2D.y;
-               point2DTo3D.y = player.m_height - bpor.m_Pos2D.x;
-            }
-            else if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 90.0f)
-            {
-               bpor.m_Pos2D.x = LONG(tempXFloat * player.m_height);
-               bpor.m_Pos2D.y = LONG(tempYFloat * player.m_width);
-
-               point2DTo3D.x = player.m_width - bpor.m_Pos2D.y;
-               point2DTo3D.y = bpor.m_Pos2D.x;
-            }
-            else
-            {
-               bpor.m_Pos2D.x = LONG(tempXFloat * player.m_width);
-               bpor.m_Pos2D.y = LONG(tempYFloat * player.m_height);
-
-               point2DTo3D = bpor.m_Pos2D;
-            }
-
             ballPassOptionsPos3D >> bpor.m_Pos3D.x >> delimeter >> bpor.m_Pos3D.y >> delimeter >> bpor.m_Pos3D.z >> delimeter;
-
             ballPassOptionsDistance >> bpor.m_Distance >> delimeter;
             std::size_t associatedBallStartIndexesSize;
             ballPassOptionsAssociations >> associatedBallStartIndexesSize >> delimeter;
@@ -757,51 +687,20 @@ void BallHistory::LoadSettings(Player &player)
          }
       }
 
-      std::istringstream ballFailOptionsPos2D;
       std::istringstream ballFailOptionsPos3D;
       std::istringstream ballFailOptionsDistance;
       std::istringstream ballFailOptionsAssociations;
-      if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallFailPosition2DKeyName, ballFailOptionsPos2D) == true &&
-         LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallFailPosition3DKeyName, ballFailOptionsPos3D) == true &&
+      if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallFailPosition3DKeyName, ballFailOptionsPos3D) == true &&
          LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallFailDistanceKeyName, ballFailOptionsDistance) == true &&
          LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallFailAssociationsKeyName, ballFailOptionsAssociations) == true)
       {
-         while (ballFailOptionsPos2D.peek() != EOF &&
-            ballFailOptionsPos3D.peek() != EOF &&
+         while (ballFailOptionsPos3D.peek() != EOF &&
             ballFailOptionsDistance.peek() != EOF &&
             ballFailOptionsAssociations.peek() != EOF)
          {
             m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.push_back(TrainerOptions::BallEndOptionsRecord());
             TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.back();
-            ballFailOptionsPos2D >> tempXFloat >> delimeter >> tempYFloat >> delimeter;
-
-            POINT point2DTo3D;
-            if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 270.0f)
-            {
-               bfor.m_Pos2D.x = LONG(tempXFloat * player.m_height);
-               bfor.m_Pos2D.y = LONG(tempYFloat * player.m_width);
-
-               point2DTo3D.x = bfor.m_Pos2D.y;
-               point2DTo3D.y = player.m_height - bfor.m_Pos2D.x;
-            }
-            else if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 90.0f)
-            {
-               bfor.m_Pos2D.x = LONG(tempXFloat * player.m_height);
-               bfor.m_Pos2D.y = LONG(tempYFloat * player.m_width);
-
-               point2DTo3D.x = player.m_width - bfor.m_Pos2D.y;
-               point2DTo3D.y = bfor.m_Pos2D.x;
-            }
-            else
-            {
-               bfor.m_Pos2D.x = LONG(tempXFloat * player.m_width);
-               bfor.m_Pos2D.y = LONG(tempYFloat * player.m_height);
-
-               point2DTo3D = bfor.m_Pos2D;
-            }
-
             ballFailOptionsPos3D >> bfor.m_Pos3D.x >> delimeter >> bfor.m_Pos3D.y >> delimeter >> bfor.m_Pos3D.z >> delimeter;
-
             ballFailOptionsDistance >> bfor.m_Distance >> delimeter;
             std::size_t associatedBallStartIndexesSize;
             ballFailOptionsAssociations >> associatedBallStartIndexesSize >> delimeter;
@@ -835,24 +734,9 @@ void BallHistory::SaveSettings(Player &player)
       std::ostringstream autoControlVerticesPosition3D;
       for each (const NormalOptions::AutoControlVertex &acv in m_MenuOptions.m_NormalOptions.m_AutoControlVertices)
       {
-         if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 270.0f)
-         {
-            autoControlVerticesPosition2D << (acv.m_Pos2D.x / float(player.m_height)) << SettingsValueDelimeter << (acv.m_Pos2D.y / float(player.m_width)) << SettingsValueDelimeter;
-         }
-         else if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 90.0f)
-         {
-            autoControlVerticesPosition2D << (acv.m_Pos2D.x / float(player.m_height)) << SettingsValueDelimeter << (acv.m_Pos2D.y / float(player.m_width)) << SettingsValueDelimeter;
-         }
-         else
-         {
-            autoControlVerticesPosition2D << (acv.m_Pos2D.x / float(player.m_width)) << SettingsValueDelimeter << (acv.m_Pos2D.y / float(player.m_height)) << SettingsValueDelimeter;
-         }
-
          autoControlVerticesPosition3D << acv.m_Pos3D.x << SettingsValueDelimeter << acv.m_Pos3D.y << SettingsValueDelimeter << acv.m_Pos3D.z << SettingsValueDelimeter;
       }
 
-      tempStr = autoControlVerticesPosition2D.str();
-      iniFile.SetValue(NormalModeSettingsSectionName, NormalModeAutoControlVerticesPosition2DKeyName, tempStr.c_str());
       tempStr = autoControlVerticesPosition3D.str();
       iniFile.SetValue(NormalModeSettingsSectionName, NormalModeAutoControlVerticesPosition3DKeyName, tempStr.c_str());
    }
@@ -961,37 +845,19 @@ void BallHistory::SaveSettings(Player &player)
       tempStr = ballStartOptionsTotalVelocities.str();
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallStartTotalVelocitiesKeyName, tempStr.c_str());
 
-      std::ostringstream ballPassOptionsPos2D;
       std::ostringstream ballPassOptionsPos3D;
       std::ostringstream ballPassOptionsDistance;
       std::ostringstream ballPassOptionsAssociations;
       for each (const TrainerOptions::BallEndOptionsRecord &bpor in m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords)
       {
-         if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 270.0f)
-         {
-            ballPassOptionsPos2D << (bpor.m_Pos2D.x / float(player.m_height)) << SettingsValueDelimeter << (bpor.m_Pos2D.y / float(player.m_width)) << SettingsValueDelimeter;
-         }
-         else if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 90.0f)
-         {
-            ballPassOptionsPos2D << (bpor.m_Pos2D.x / float(player.m_height)) << SettingsValueDelimeter << (bpor.m_Pos2D.y / float(player.m_width)) << SettingsValueDelimeter;
-         }
-         else
-         {
-            ballPassOptionsPos2D << (bpor.m_Pos2D.x / float(player.m_width)) << SettingsValueDelimeter << (bpor.m_Pos2D.y / float(player.m_height)) << SettingsValueDelimeter;
-         }
-
          ballPassOptionsPos3D << bpor.m_Pos3D.x << SettingsValueDelimeter << bpor.m_Pos3D.y << SettingsValueDelimeter << bpor.m_Pos3D.z << SettingsValueDelimeter;
-
          ballPassOptionsDistance << bpor.m_Distance << SettingsValueDelimeter;
-
          ballPassOptionsAssociations << bpor.m_AssociatedBallStartIndexes.size() << SettingsValueDelimeter;
          for each (const std::size_t &index in bpor.m_AssociatedBallStartIndexes)
          {
             ballPassOptionsAssociations << index << SettingsValueDelimeter;
          }
       }
-      tempStr = ballPassOptionsPos2D.str();
-      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallPassPosition2DKeyName, tempStr.c_str());
       tempStr = ballPassOptionsPos3D.str();
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallPassPosition3DKeyName, tempStr.c_str());
       tempStr = ballPassOptionsDistance.str();
@@ -1005,23 +871,8 @@ void BallHistory::SaveSettings(Player &player)
       std::ostringstream ballFailOptionsAssociations;
       for each (const TrainerOptions::BallEndOptionsRecord &bfor in m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords)
       {
-         if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 270.0f)
-         {
-            ballFailOptionsPos2D << (bfor.m_Pos2D.x / float(player.m_height)) << SettingsValueDelimeter << (bfor.m_Pos2D.y / float(player.m_width)) << SettingsValueDelimeter;
-         }
-         else if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 90.0f)
-         {
-            ballFailOptionsPos2D << (bfor.m_Pos2D.x / float(player.m_height)) << SettingsValueDelimeter << (bfor.m_Pos2D.y / float(player.m_width)) << SettingsValueDelimeter;
-         }
-         else
-         {
-            ballFailOptionsPos2D << (bfor.m_Pos2D.x / float(player.m_width)) << SettingsValueDelimeter << (bfor.m_Pos2D.y / float(player.m_height)) << SettingsValueDelimeter;
-         }
-
          ballFailOptionsPos3D << bfor.m_Pos3D.x << SettingsValueDelimeter << bfor.m_Pos3D.y << SettingsValueDelimeter << bfor.m_Pos3D.z << SettingsValueDelimeter;
-
          ballFailOptionsDistance << bfor.m_Distance << SettingsValueDelimeter;
-
          ballFailOptionsAssociations << bfor.m_AssociatedBallStartIndexes.size() << SettingsValueDelimeter;
          for each (const std::size_t &index in bfor.m_AssociatedBallStartIndexes)
          {
@@ -1029,8 +880,6 @@ void BallHistory::SaveSettings(Player &player)
          }
       }
 
-      tempStr = ballFailOptionsPos2D.str();
-      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallFailPosition2DKeyName, tempStr.c_str());
       tempStr = ballFailOptionsPos3D.str();
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallFailPosition3DKeyName, tempStr.c_str());
       tempStr = ballFailOptionsDistance.str();
@@ -1325,6 +1174,47 @@ float BallHistory::VelocityPixels(Vertex3Ds &vel)
    return sqrtf(powf(vel.x, 2) + powf(vel.y, 2) + powf(vel.z, 2));
 }
 
+// Generated via ChatGPT (and refactored to fit vpinball style/types) using the prompt:
+// "Write me a function in C++ which converts a 3d vertex in DirectX to screen space x/y coordinate"
+POINT BallHistory::Get2DPointFrom3D(Player &player, const Vertex3Ds& vertex)
+{
+   D3DMATRIX viewMatrix;
+   D3DMATRIX projectionMatrix;
+   player.m_pin3d.m_pd3dPrimaryDevice->GetTransform(TRANSFORMSTATE_VIEW, &viewMatrix);
+   player.m_pin3d.m_pd3dPrimaryDevice->GetTransform(TRANSFORMSTATE_PROJECTION, &projectionMatrix);
+
+   // Calculate the view-projection matrix
+   D3DXMATRIX viewProjectionMatrix;
+   D3DXVECTOR3 transformedVertex;
+   D3DXMatrixMultiply(&viewProjectionMatrix, (D3DXMATRIX*)&viewMatrix, (D3DXMATRIX*)&projectionMatrix);
+
+   // Transform the vertex from 3D world space to 2D screen space
+   D3DXVec3TransformCoord(&transformedVertex, (D3DXVECTOR3*)&vertex, &viewProjectionMatrix);
+
+   // Calculate the screen space (x, y) coordinate
+   POINT screenPoint = 
+   {
+      LONG((transformedVertex.x + 1.0f) * 0.5f * player.m_screenwidth),
+      LONG((-transformedVertex.y + 1.0f) * 0.5f * player.m_screenheight)
+   };
+
+   // Correct for table BG rotation
+   if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 270.0f)
+   {
+      LONG tempX = screenPoint.x;
+      screenPoint.x = player.m_height - screenPoint.y;
+      screenPoint.y = tempX;
+   }
+   else if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 90.0f)
+   {
+      LONG tempX = screenPoint.x;
+      screenPoint.x = screenPoint.y;
+      screenPoint.y = player.m_width - tempX;
+   }
+
+   return screenPoint;
+}
+
 bool BallHistory::ControlNextMove()
 {
    m_CurrentControlIndex++;
@@ -1534,7 +1424,7 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
          for (std::size_t autoControlVerticesIndex = 0; autoControlVerticesIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); ++autoControlVerticesIndex)
          {
             NormalOptions::AutoControlVertex &autoControlVertex = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[autoControlVerticesIndex];
-            dpr.ShowText("  Auto Control Point #%zu %.2f,%.2f,%.2f,%ld,%ld,%s (3x,3y,3z,2x,2y,active)", autoControlVerticesIndex + 1, autoControlVertex.m_Pos3D.x, autoControlVertex.m_Pos3D.y, autoControlVertex.m_Pos3D.z, autoControlVertex.m_Pos2D.x, autoControlVertex.m_Pos2D.y, autoControlVertex.Active ? "true" : "false");
+            dpr.ShowText("  Auto Control Point #%zu %.2f,%.2f,%.2f,%s (3x,3y,3z,active)", autoControlVerticesIndex + 1, autoControlVertex.m_Pos3D.x, autoControlVertex.m_Pos3D.y, autoControlVertex.m_Pos3D.z, autoControlVertex.Active ? "true" : "false");
          }
 
          if (m_MenuOptions.m_NormalOptions.m_RecallControlIndex == NormalOptions::RecallControlIndexDisabled)
@@ -1661,8 +1551,7 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
             {
                TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[bporIndex];
                dpr.ShowText("Ball Pass #%zu", bporIndex + 1);
-               dpr.ShowText("  Position(3D) = %.2f,%.2f,%.2f (x,y,z)", bpor.m_Pos3D.x, bpor.m_Pos3D.y, bpor.m_Pos3D.z);
-               dpr.ShowText("  Position(2D) = %ld,%ld (x,y)", bpor.m_Pos2D.x, bpor.m_Pos2D.y);
+               dpr.ShowText("  Position = %.2f,%.2f,%.2f (x,y,z)", bpor.m_Pos3D.x, bpor.m_Pos3D.y, bpor.m_Pos3D.z);
 
                if (bpor.m_Distance == TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
                {
@@ -1721,8 +1610,7 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
             {
                TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[bforIndex];
                dpr.ShowText("Ball Fail #%zu", bforIndex + 1);
-               dpr.ShowText("  Position(3D) = %.2f,%.2f,%.2f (x,y,z)", bfor.m_Pos3D.x, bfor.m_Pos3D.y, bfor.m_Pos3D.z);
-               dpr.ShowText("  Position(2D) = %ld,%ld (x,y)", bfor.m_Pos2D.x, bfor.m_Pos2D.y);
+               dpr.ShowText("  Position = %.2f,%.2f,%.2f (x,y,z)", bfor.m_Pos3D.x, bfor.m_Pos3D.y, bfor.m_Pos3D.z);
 
                if (bfor.m_Distance == TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
                {
@@ -1874,8 +1762,7 @@ void BallHistory::ShowBallStartOptionsRecord(Player &player, DebugPrintRecord &d
 
 void BallHistory::ShowBallEndOptionsRecord(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallEndOptionsRecord &beor)
 {
-   dpr.ShowMenuText("Position(3D) = %.2f,%.2f,%.2f (x,y,z)", beor.m_Pos3D.x, beor.m_Pos3D.y, beor.m_Pos3D.z);
-   dpr.ShowMenuText("Position(2D) = %ld,%ld (x,y)", beor.m_Pos2D.x, beor.m_Pos2D.y);
+   dpr.ShowMenuText("Position = %.2f,%.2f,%.2f (x,y,z)", beor.m_Pos3D.x, beor.m_Pos3D.y, beor.m_Pos3D.z);
 
    if (beor.m_Distance == TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
    {
@@ -1943,9 +1830,9 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
             }
 
             DrawAngleVelocityPreview(player, bsor);
-            // TODO GARY figure out a way to get 2D point from 3D location
-            //player.SetDebugOutputPosition(float(bsor.m_Pos2D.x), float(bsor.m_Pos2D.y));
-            //dpr.ShowMenuTextPos(0, 0, "#%zu", bsorIndex + 1);
+            POINT screenPoint = Get2DPointFrom3D(player, bsor.m_Pos);
+            player.SetDebugOutputPosition(float(screenPoint.x), float(screenPoint.y));
+            dpr.ShowMenuTextPos(0, 0, "#%zu", bsorIndex + 1);
          }
       }
 
@@ -1961,7 +1848,8 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
                // TODO GARY draw a circle representing the radius boundary (for distance) around the ball
                // to indicate where the other ball has to be in order for the pass/fail to occur
             }
-            dpr.SetPosition(float(bpor.m_Pos2D.x), float(bpor.m_Pos2D.y));
+            POINT screenPoint = Get2DPointFrom3D(player, bpor.m_Pos3D);
+            dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
             dpr.ShowMenuTextPos(0, 0, "#%zu", bporIndex + 1);
          }
       }
@@ -1978,7 +1866,8 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
                // TODO GARY draw a circle representing the radius boundary (for distance) around the ball
                // to indicate where the other ball has to be in order for the pass/fail to occur
             }
-            dpr.SetPosition(float(bfor.m_Pos2D.x), float(bfor.m_Pos2D.y));
+            POINT screenPoint = Get2DPointFrom3D(player, bfor.m_Pos3D);
+            dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
             dpr.ShowMenuTextPos(0, 0, "#%zu", bforIndex + 1);
          }
       }
@@ -2226,6 +2115,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
    }
 
    POINT mousePosition2D;
+   Vertex3Ds mousePosition3D;
 
    switch (m_MenuOptions.m_MenuState)
    {
@@ -2447,15 +2337,14 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          for (std::size_t autoControlVerticesIndex = 0; autoControlVerticesIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); ++autoControlVerticesIndex)
          {
             NormalOptions::AutoControlVertex &autoControlVertex = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[autoControlVerticesIndex];
-            dpr.ShowMenuText("Point #%zu %.2f,%.2f,%.2f,%ld,%ld,%s (3x,3y,3z,2x,2y,active)", autoControlVerticesIndex + 1, autoControlVertex.m_Pos3D.x, autoControlVertex.m_Pos3D.y, autoControlVertex.m_Pos3D.z, autoControlVertex.m_Pos2D.x, autoControlVertex.m_Pos2D.y, autoControlVertex.Active ? "true" : "false");
+            dpr.ShowMenuText("Point #%zu %.2f,%.2f,%.2f,%s (3x,3y,3z,active)", autoControlVerticesIndex + 1, autoControlVertex.m_Pos3D.x, autoControlVertex.m_Pos3D.y, autoControlVertex.m_Pos3D.z, autoControlVertex.Active ? "true" : "false");
          }
 
          if (GetCursorPos(&mousePosition2D) == TRUE)
          {
             if (ScreenToClient(player.m_pininput.m_hwnd, &mousePosition2D) == TRUE)
             {
-               Vertex3Ds mousePosition3D(g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D));
-               mousePosition3D.z = float(m_MenuOptions.m_NormalOptions.m_CreateZ);
+               mousePosition3D = g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D, float(m_MenuOptions.m_NormalOptions.m_CreateZ));
                dpr.ShowMenuText("New Point %.2f,%.2f,%.2f,%ld,%ld (3x,3y,3z,2x,2y)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z, mousePosition2D.x, mousePosition2D.y);
             }
          }
@@ -2463,9 +2352,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          float radius = m_ControlVBalls.size() ? m_ControlVBalls[0]->m_d.m_radius : 25.0f;
          S32 heightMinimum = S32(player.m_ptable->m_tableheight + radius);
          S32 heightMaximum = S32(player.m_ptable->m_glassheight - radius);
+         m_MenuOptions.m_NormalOptions.m_CreateZ = std::max(std::min(S32(m_MenuOptions.m_NormalOptions.m_CreateZ), heightMaximum), heightMinimum);
          dpr.ShowMenuText("Ball Height");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_NormalOptions.m_CreateZ, heightMaximum);
-         m_MenuOptions.m_MousePosition3D.z = float(m_MenuOptions.m_NormalOptions.m_CreateZ);
 
          DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_NormalOptions.m_CreateZ), *m_AutoControlBallTexture, dpr);
 
@@ -2477,13 +2366,12 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             case MenuOptionsRecord::MenuActionType_Toggle:
                {
                bool removedExisting = false;
+
                for (std::vector<NormalOptions::AutoControlVertex>::iterator autoControlVerticesIt = m_MenuOptions.m_NormalOptions.m_AutoControlVertices.begin(); autoControlVerticesIt < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.end(); autoControlVerticesIt++)
                {
-                  // TODO GARY this is hacky, this should be based on some percentage of the width/height
-                  // or some constant to trap the mouse and create an consistent experience of adding/removing
-                  // points regardless of resolution or orientation
-                  float checkRadius = std::min(player.m_width, player.m_height) * 0.025f;
-                  if (DistancePixels(autoControlVerticesIt->m_Pos2D, m_MenuOptions.m_MousePosition2D) < checkRadius)
+                  POINT screenPoint = Get2DPointFrom3D(player, autoControlVerticesIt->m_Pos3D);
+                  float checkRadius = std::min(player.m_width, player.m_height) * 0.025f; // TODO GARY Fix magic number which determines the size of location to click to remove auto control point
+                  if (DistancePixels(screenPoint, mousePosition2D) < checkRadius)
                   {
                      m_MenuOptions.m_NormalOptions.m_AutoControlVertices.erase(autoControlVerticesIt);
                      removedExisting = true;
@@ -2492,7 +2380,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                if (!removedExisting && m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size() < NormalOptions::AutoControlVerticesMax)
                {
-                  m_MenuOptions.m_NormalOptions.m_AutoControlVertices.push_back({ m_MenuOptions.m_MousePosition3D, m_MenuOptions.m_MousePosition2D, true });
+                  m_MenuOptions.m_NormalOptions.m_AutoControlVertices.push_back({ mousePosition3D, true });
                }
                }
                break;
@@ -2741,8 +2629,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                {
                   case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_BallPassComplete;
-                     m_MenuOptions.m_MousePosition3D.SetZero();
-                     m_MenuOptions.m_MousePosition2D = { 0, 0 };
                      m_MenuOptions.m_CurrentBallIndex = 0;
                      m_MenuOptions.m_CurrentAssociationIndex = 0;
                      m_MenuOptions.m_CurrentCompleteIndex = 0;
@@ -2905,8 +2791,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ = S32(m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos.z);
                      break;
                }
-               m_MenuOptions.m_MousePosition3D.SetZero();
-               m_MenuOptions.m_MousePosition2D = { 0, 0 };
                m_MenuOptions.m_CurrentCompleteIndex = 0;
                m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode = TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept;
                break;
@@ -2926,18 +2810,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
             if (ScreenToClient(player.m_pininput.m_hwnd, &mousePosition2D) == TRUE)
             {
-               Vertex3Ds mousePosition3D(g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D));
-               mousePosition3D.z = float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ);
-               dpr.ShowMenuText("Position(3D) %.2f,%.2f,%.2f (3x,3y,3z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
+               mousePosition3D = g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ));
+               dpr.ShowMenuText("Position %.2f,%.2f,%.2f (3x,3y,3z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
             }
          }
 
          float radius = m_ControlVBalls.size() ? m_ControlVBalls[0]->m_d.m_radius : 25.0f;
          S32 heightMinimum = S32(player.m_ptable->m_tableheight + radius);
          S32 heightMaximum = S32(player.m_ptable->m_glassheight - radius);
+         m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ = std::max(std::min(S32(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), heightMaximum), heightMinimum);
          dpr.ShowMenuText("Ball Height");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMaximum);
-         m_MenuOptions.m_MousePosition3D.z = float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ);
 
          DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), *m_AutoControlBallTexture, dpr);
 
@@ -2950,7 +2833,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum, currentTimeMs);
                break;
             case MenuOptionsRecord::MenuActionType_Toggle:
-               bsor.m_Pos = m_MenuOptions.m_MousePosition3D;
+               bsor.m_Pos = mousePosition3D;
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum);
@@ -3266,19 +3149,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
             if (ScreenToClient(player.m_pininput.m_hwnd, &mousePosition2D) == TRUE)
             {
-               Vertex3Ds mousePosition3D(g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D));
-               mousePosition3D.z = float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ);
-               dpr.ShowMenuText("Position(3D) = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
-               dpr.ShowMenuText("Position(2D) = %ld,%ld (x,y)", mousePosition2D.x, mousePosition2D.y);
+               mousePosition3D = g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ));
+               dpr.ShowMenuText("Position = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
             }
          }
 
          float radius = m_ControlVBalls.size() ? m_ControlVBalls[0]->m_d.m_radius : 25.0f;
          S32 heightMinimum = S32(player.m_ptable->m_tableheight + radius);
          S32 heightMaximum = S32(player.m_ptable->m_glassheight - radius);
+         m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ = std::max(std::min(S32(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), heightMaximum), heightMinimum);
          dpr.ShowMenuText("Ball Height");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMaximum);
-         m_MenuOptions.m_MousePosition3D.z = float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ);
 
          DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), *m_TrainerBallPassTexture, dpr);
 
@@ -3291,8 +3172,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum, currentTimeMs);
                break;
             case MenuOptionsRecord::MenuActionType_Toggle:
-               bpor.m_Pos3D = m_MenuOptions.m_MousePosition3D;
-               bpor.m_Pos2D = m_MenuOptions.m_MousePosition2D;
+               bpor.m_Pos3D = mousePosition3D;
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum);
@@ -3364,8 +3244,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   case TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_Delete:
                      m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.erase(m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.begin() + m_MenuOptions.m_CurrentBallIndex);
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_BallPassComplete;
-                     m_MenuOptions.m_MousePosition3D.SetZero();
-                     m_MenuOptions.m_MousePosition2D = { 0, 0 };
                      break;
                   default:
                      break;
@@ -3638,8 +3516,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      m_MenuOptions.m_CurrentBallIndex = m_MenuOptions.m_CurrentCompleteIndex;
                      break;
                }
-               m_MenuOptions.m_MousePosition3D.SetZero();
-               m_MenuOptions.m_MousePosition2D = { 0, 0 };
                m_MenuOptions.m_CurrentAssociationIndex = 0;
                m_MenuOptions.m_CurrentCompleteIndex = 0;
                m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode = TrainerOptions::BallEndLocationModeType_Accept;
@@ -3674,19 +3550,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
             if (ScreenToClient(player.m_pininput.m_hwnd, &mousePosition2D) == TRUE)
             {
-               Vertex3Ds mousePosition3D(g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D));
-               mousePosition3D.z = float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ);
-               dpr.ShowMenuText("Position(3D) = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
-               dpr.ShowMenuText("Position(2D) = %ld,%ld (x,y)", mousePosition2D.x, mousePosition2D.y);
+               mousePosition3D = g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ));
+               dpr.ShowMenuText("Position = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
             }
          }
 
          float radius = m_ControlVBalls.size() ? m_ControlVBalls[0]->m_d.m_radius : 25.0f;
          S32 heightMinimum = S32(player.m_ptable->m_tableheight + radius);
          S32 heightMaximum = S32(player.m_ptable->m_glassheight - radius);
+         m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ = std::max(std::min(S32(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), heightMaximum), heightMinimum);
          dpr.ShowMenuText("Ball Height");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMaximum);
-         m_MenuOptions.m_MousePosition3D.z = float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ);
 
          DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), *m_TrainerBallFailTexture, dpr);
 
@@ -3699,8 +3573,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum, currentTimeMs);
                break;
             case MenuOptionsRecord::MenuActionType_Toggle:
-               bfor.m_Pos3D = m_MenuOptions.m_MousePosition3D;
-               bfor.m_Pos2D = m_MenuOptions.m_MousePosition2D;
+               bfor.m_Pos3D = mousePosition3D;
                break;
             case MenuOptionsRecord::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum);
@@ -3769,8 +3642,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   case TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_Delete:
                      m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.erase(m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.begin() + m_MenuOptions.m_CurrentBallIndex);
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_BallFailComplete;
-                     m_MenuOptions.m_MousePosition3D.SetZero();
-                     m_MenuOptions.m_MousePosition2D = { 0, 0 };
                      break;
                   default:
                      break;
@@ -4044,8 +3915,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      m_MenuOptions.m_CurrentBallIndex = m_MenuOptions.m_CurrentCompleteIndex;
                      break;
                }
-               m_MenuOptions.m_MousePosition3D.SetZero();
-               m_MenuOptions.m_MousePosition2D = { 0, 0 };
                m_MenuOptions.m_CurrentAssociationIndex = 0;
                m_MenuOptions.m_CurrentCompleteIndex = 0;
                m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode = TrainerOptions::BallEndLocationModeType_Accept;
@@ -4857,11 +4726,13 @@ void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr,
          {
             player.DrawFakeBall(acv.m_Pos3D, controlVBall->m_orientation, controlVBall->m_d.m_radius, m_AutoControlBallTexture, false);
          }
-         dpr.SetPosition(float(acv.m_Pos2D.x), float(acv.m_Pos2D.y));
+         POINT screenPoint = Get2DPointFrom3D(player, acv.m_Pos3D);
+         dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
          dpr.ShowMenuTextPos(0, 0, "#%zu", acvIndex + 1);
       }
    }
 }
+
 
 void BallHistory::DrawFakeBallAtMousePosition(Player &player, float heightZ, Texture &texture, DebugPrintRecord &dpr)
 {
@@ -4870,7 +4741,7 @@ void BallHistory::DrawFakeBallAtMousePosition(Player &player, float heightZ, Tex
    {
       if (ScreenToClient(player.m_pininput.m_hwnd, &mousePosition) == TRUE)
       {
-         Vertex3Ds autoPointVertex3D(g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition));
+         Vertex3Ds autoPointVertex3D(g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition, heightZ));
          Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr;
          if (controlVBall)
          {
@@ -4878,25 +4749,11 @@ void BallHistory::DrawFakeBallAtMousePosition(Player &player, float heightZ, Tex
          }
          else
          {
-            POINT tempMousePosition2D;
-            if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 270.0f)
-            {
-               tempMousePosition2D.x = player.m_height - mousePosition.y;
-               tempMousePosition2D.y = mousePosition.x;
-            }
-            else if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 90.0f)
-            {
-               tempMousePosition2D.x = mousePosition.y;
-               tempMousePosition2D.y = player.m_width - mousePosition.x;
-            }
-            else
-            {
-               tempMousePosition2D = mousePosition;
-            }
-
-
-            dpr.SetPosition(float(tempMousePosition2D.x), float(tempMousePosition2D.y));
-            dpr.ShowMenuTextPos(0, 0, "<BALL>");
+            // TODO GARY Ball is drawn pure black, will want to choose colors for basic
+            // auto control, start, pass and fail locations to be consistent and nice looking
+            Matrix3 dummyOrientation;
+            dummyOrientation.Identity();
+            player.DrawFakeBall(Vertex3Ds(autoPointVertex3D.x, autoPointVertex3D.y, heightZ), dummyOrientation, 25.0f, &texture, false);
          }
       }
    }
@@ -5118,24 +4975,8 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
    return false;
 }
 
-void BallHistory::ProcessMouse(Player &player, Vertex3Ds &mousePosition3D, POINT &mousePosition2D, int currentTimeMs)
+void BallHistory::ProcessMouse(Player &player, int currentTimeMs)
 {
-   m_MenuOptions.m_MousePosition3D = mousePosition3D;
-   if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 270.0f)
-   {
-      m_MenuOptions.m_MousePosition2D.x = player.m_height - mousePosition2D.y;
-      m_MenuOptions.m_MousePosition2D.y = mousePosition2D.x;
-   }
-   else if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 90.0f)
-   {
-      m_MenuOptions.m_MousePosition2D.x = mousePosition2D.y;
-      m_MenuOptions.m_MousePosition2D.y = player.m_width - mousePosition2D.x;
-   }
-   else
-   {
-      m_MenuOptions.m_MousePosition2D = mousePosition2D;
-   }
-
    ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_Toggle, currentTimeMs);
 }
 
