@@ -392,7 +392,7 @@ public:
       static const S32 DistanceMaximum = 100;
       static const float DistanceDisabled;
 
-      Vertex3Ds m_Pos3D;
+      Vertex3Ds m_Pos;
       float m_Distance;
       std::set<std::size_t> m_AssociatedBallStartIndexes;
 
@@ -553,6 +553,7 @@ private:
       D3DCOLOR color;
 
       Vertex3DColor();
+      Vertex3DColor(D3DVALUE x, D3DVALUE y, D3DVALUE z, D3DCOLOR color);
    };
 
    struct MenuOptionsRecord
@@ -681,10 +682,12 @@ private:
 
    MenuOptionsRecord m_MenuOptions;
 
-   static const float BallHistory::DrawAngleVelocityRadiusExtraMinimum;
-   static const float BallHistory::DrawAngleVelocityRadiusArc;
-   static const float BallHistory::DrawAngleVelocityLengthMultiplier;
-   static const float BallHistory::DrawAngleVelocityHeightOffset;
+   static const float DrawAngleVelocityRadiusExtraMinimum;
+   static const float DrawAngleVelocityRadiusArc;
+   static const float DrawAngleVelocityLengthMultiplier;
+   static const float DrawAngleVelocityHeightOffset;
+
+   static const D3DCOLOR IntersectionCircleColor;
 
    static const char * SettingsFileExtension;
    static const char * SettingsFolderName;
@@ -731,8 +734,9 @@ private:
    void ControlPrev();
    void ResetBallHistoryRenderSizes();
    void DrawBallHistory(Player &player);
+   void DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float radius, D3DCOLOR color);
    void DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
-   void DrawFakeBallAtMousePosition(Player &player, float heightZ, Texture &texture, DebugPrintRecord &dpr);
+   void DrawFakeBallAtMousePosition(Player &player, float heightZ, float intersectionRadius, Texture &texture, DebugPrintRecord &dpr);
    void DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
    void DrawAngleVelocityPreview(Player &player, TrainerOptions::BallStartOptionsRecord &bsor);
    void DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angleStep, float velocityStep);
