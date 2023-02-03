@@ -733,9 +733,10 @@ private:
    void ControlPrev();
    void ResetBallHistoryRenderSizes();
    void DrawBallHistory(Player &player);
+   void DrawLine(Player &player, const Vertex3Ds &posA, const Vertex3Ds &posB, D3DCOLOR color);
    void DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float ballRadius, float intersectionRadius, D3DCOLOR color);
    void DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
-   void DrawFakeBallAtMousePosition(Player &player, float heightZ, float intersectionRadius, Texture &texture, DebugPrintRecord &dpr);
+   void DrawFakeBallAtMousePosition(Player &player, float heightZ, float intersectionRadius, Texture &texture, const Vertex3Ds * lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr);
    bool ShouldDrawTrainerBallStartLocations(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallPassLocations(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallFailLocations(std::size_t index, int currentTimeMs);

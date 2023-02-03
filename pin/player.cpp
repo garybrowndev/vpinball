@@ -2420,7 +2420,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("Ball Height");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_NormalOptions.m_CreateZ, heightMaximum);
 
-         DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_NormalOptions.m_CreateZ), 0.0f, *m_AutoControlBallTexture, dpr);
+         DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_NormalOptions.m_CreateZ), 0.0f, *m_AutoControlBallTexture, nullptr, 0, dpr);
 
          switch (menuAction)
          {
@@ -2876,7 +2876,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("Ball Height");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMaximum);
 
-         DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), 0.0f, *m_TrainerBallStartTexture, dpr);
+         DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), 0.0f, *m_TrainerBallStartTexture, &bsor.m_Pos, D3DCOLOR_ARGB(0x00, 0x00, 0x00, 0xFF), dpr);
 
          dpr.ShowText("");
          ShowBallStartOptionsRecord(player, dpr, bsor);
@@ -3216,7 +3216,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMaximum);
 
          float intersectionRadius = bpor.m_Distance != TrainerOptions::BallEndOptionsRecord::DistanceDisabled ? bpor.m_Distance : 0.0f;
-         DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), intersectionRadius, *m_TrainerBallPassTexture, dpr);
+         DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), intersectionRadius, *m_TrainerBallPassTexture, &bpor.m_Pos, D3DCOLOR_ARGB(0x00, 0x00, 0xFF, 0x00), dpr);
 
          dpr.ShowMenuText("");
          ShowBallEndOptionsRecord(player, dpr, bpor);
@@ -3620,7 +3620,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMaximum);
 
          float intersectionRadius = bfor.m_Distance != TrainerOptions::BallEndOptionsRecord::DistanceDisabled ? bfor.m_Distance : 0.0f;
-         DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), intersectionRadius, *m_TrainerBallFailTexture, dpr);
+         DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), intersectionRadius, *m_TrainerBallFailTexture, &bfor.m_Pos, D3DCOLOR_ARGB(0x00, 0xFF, 0x00, 0x00), dpr);
 
          dpr.ShowMenuText("");
          ShowBallEndOptionsRecord(player, dpr, bfor);
@@ -4772,6 +4772,22 @@ void BallHistory::DrawBallHistory(Player &player)
    }
 }
 
+void BallHistory::DrawLine(Player &player, const Vertex3Ds &posA, const Vertex3Ds &posB, D3DCOLOR color)
+{
+   std::vector<Vertex3DColor> testVertices;
+   testVertices.push_back({posA.x, posA.y, posA.z, color});
+   testVertices.push_back({posB.x, posB.y, posB.z, color});
+
+   VertexBuffer *testVerticesVB = nullptr;
+   VertexBuffer::CreateVertexBuffer((unsigned int)testVertices.size(), 0, MY_D3DFVF_COLOR_VERTEX, &testVerticesVB, PRIMARY_DEVICE);
+   void *buf;
+   testVerticesVB->lock(0, 0, &buf, VertexBuffer::WRITEONLY);
+   memcpy(buf, testVertices.data(), testVertices.size() * sizeof(testVertices[0]));
+   testVerticesVB->unlock();
+
+   player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::LINELIST, MY_D3DFVF_COLOR_VERTEX, testVerticesVB, 0, testVertices.size(), false);
+}
+
 void BallHistory::DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float ballRadius, float intersectionRadius, D3DCOLOR color)
 {
    static const std::size_t NumTriangles = 36;
@@ -4832,11 +4848,8 @@ void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr,
    }
 }
 
-
-void BallHistory::DrawFakeBallAtMousePosition(Player &player, float heightZ, float intersectionRadius, Texture &texture, DebugPrintRecord &dpr)
+void BallHistory::DrawFakeBallAtMousePosition(Player &player, float heightZ, float intersectionRadius, Texture &texture, const Vertex3Ds * lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr)
 {
-   // TODO GARY draw a line between where the ball at the mouse is and the ball that
-   // that will currently be reset to this position
    POINT mousePosition;
    if (GetCursorPos(&mousePosition) == TRUE)
    {
@@ -4854,8 +4867,13 @@ void BallHistory::DrawFakeBallAtMousePosition(Player &player, float heightZ, flo
             radius = controlVBall->m_d.m_radius;
          }
 
-         player.DrawFakeBall(Vertex3Ds(vertex.x, vertex.y, heightZ), radius, orientation, &texture);
+         Vertex3Ds fakeBallPosition(vertex.x, vertex.y, heightZ);
+         player.DrawFakeBall(fakeBallPosition, radius, orientation, &texture);
          DrawIntersectionCircle(player, vertex, radius, intersectionRadius, IntersectionCircleColor);
+         if (lineEndPosition)
+         {
+            DrawLine(player, fakeBallPosition, *lineEndPosition, lineColor);
+         }
       }
    }
 }
