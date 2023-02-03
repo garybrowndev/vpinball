@@ -2214,6 +2214,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectModeOptions;
                      break;
                   case MenuOptionsRecord::ModeType::ModeType_Disabled:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Disabled_Disabled;
                      Init(player, currentTimeMs, false);
                      ToggleControl();
                      break;
@@ -2278,8 +2279,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectCurrentBallHistory:
          dpr.ShowMenuTextTitle("Select Current Ball History");
-         dpr.ShowMenuText("Use Flipper buttons to navigate");
-         dpr.ShowMenuText("backward/forward through ball history");
+         dpr.ShowMenuText("Use Flipper buttons to navigate backward/forward");
          dpr.ShowMenuText("Hit Control button to continue simulation");
          dpr.ShowMenuText("Hit Plunger button to return to previous menu");
 
@@ -2365,8 +2365,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectRecallBallHistory:
          dpr.ShowMenuTextTitle("Select Recall Ball History");
-         dpr.ShowMenuText("Use Flipper buttons to navigate");
-         dpr.ShowMenuText("backward/forward through ball history");
+         dpr.ShowMenuText("Use Flipper buttons to navigate backward/forward");
          dpr.ShowMenuText("Hit Control button to continue simulation");
          dpr.ShowMenuText("Hit Plunger button to accept and return to previous menu");
 
@@ -2394,9 +2393,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_CreateAutoControlLocations:
          {
          dpr.ShowMenuTextTitle("Create Auto Control Locations");
-         dpr.ShowMenuText("Move and Click Mouse to create or set location");
+         dpr.ShowMenuText("Move and click mouse to create or set location");
          dpr.ShowMenuText("Click existing location to remove");
-         dpr.ShowMenuText("Hit plunger button to return to previous menu");
+         dpr.ShowMenuText("Hit Plunger button to return to previous menu");
 
          for (std::size_t autoControlVerticesIndex = 0; autoControlVerticesIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); ++autoControlVerticesIndex)
          {
@@ -2695,8 +2694,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectExistingBallStartLocation:
          dpr.ShowMenuTextTitle("Existing Ball Start Location");
-         dpr.ShowMenuText("Use Flipper buttons to navigate");
-         dpr.ShowMenuText("backward/forward through ball history");
+         dpr.ShowMenuText("Use Flipper buttons to navigate backward/forward");
          dpr.ShowMenuText("Hit Plunger button to accept");
 
          if (m_BallHistoryRecordsSize)
@@ -2857,8 +2855,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
          TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
          dpr.ShowMenuTextTitle("Custom Ball Start %zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
-         dpr.ShowMenuText("Move and Click Mouse to create or set location");
-         dpr.ShowMenuText("Hit plunger button to accept");
+         dpr.ShowMenuText("Move and click mouse to create or set location");
+         dpr.ShowMenuText("Hit Plunger button to accept");
 
          if (GetCursorPos(&mousePosition2D) == TRUE)
          {
@@ -3184,8 +3182,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassLocation:
          {
          dpr.ShowMenuTextTitle("Ball Pass %zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
-         dpr.ShowMenuText("Move and Click Mouse to create or set location");
-         dpr.ShowMenuText("Hit plunger button to accept");
+         dpr.ShowMenuText("Move and click mouse to create or set location");
+         dpr.ShowMenuText("Hit Plunger button to accept");
 
          if (m_MenuOptions.m_CurrentBallIndex == m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size())
          {
@@ -3588,8 +3586,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailLocation:
          {
          dpr.ShowMenuTextTitle("Ball Fail %zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
-         dpr.ShowMenuText("Move and Click Mouse to create or set location");
-         dpr.ShowMenuText("Hit plunger button to accept");
+         dpr.ShowMenuText("Move and click mouse to create or set location");
+         dpr.ShowMenuText("Hit Plunger button to accept");
 
          if (m_MenuOptions.m_CurrentBallIndex == m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size())
          {
@@ -4111,6 +4109,27 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectModeOptions;
+               break;
+            default:
+               assert(0);
+               break;
+         }
+         break;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Disabled_Disabled:
+         dpr.ShowMenuTextTitle("Ball Control Disabled");
+         dpr.ShowMenuText("Hit Control button to continue simulation");
+         dpr.ShowMenuText("Hit Plunger button to return to previous menu");
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType_DownRight:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType_Enter:
+               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Root_SelectMode;
                break;
             default:
                assert(0);

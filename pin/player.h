@@ -607,6 +607,7 @@ private:
          MenuStateType_Trainer_SelectRunOrderMode,
          MenuStateType_Trainer_SelectMaxSecondsPerRun,
          MenuStateType_Trainer_SelectRunCountdownSeconds,
+         MenuStateType_Disabled_Disabled,
          MenuStateType_COUNT
       };
 
