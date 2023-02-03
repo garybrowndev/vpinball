@@ -352,8 +352,10 @@
 #define IDD_KEYS                        261
 #define IDC_LEFTFLIPPERBUTTON           262
 #define IDD_TRANSLATE                   262
+#define IDC_BALLHISTORYMENUBUTTON       263
 #define IDC_RIGHTFLIPPERBUTTON          264
 #define IDB_LOGO                        264
+#define IDC_BALLHISTORYRECALLBUTTON     265
 #define IDC_LEFTTILTBUTTON              266
 #define IDI_TABLE                       266
 #define IDR_SCRIPTMENU                  267
@@ -420,6 +422,7 @@
 #define IDC_PLAY_MUSIC                  285
 #define IDC_OUT2                        285
 #define IDR_TABLEMENU                   285
+#define IDC_BALLHISTORYMENU             285
 #define IDC_MUSIC_SLIDER                286
 #define IDD_TABLEINFO                   286
 #define IDC_JOYCUSTOM2                  286
@@ -431,6 +434,7 @@
 #define IDC_JOYCUSTOM4                  288
 #define IDC_STATIC_MUSIC                289
 #define IDD_PROPLIGHT_VISUALS           289
+#define IDC_BALLHISTORYRECALL           289
 #define IDC_STATIC_SOUND                290
 #define IDD_PROPLIGHT_POSITION          290
 #define IDC_STATIC_SCALEY               291
@@ -819,8 +823,12 @@
 #define IDC_GLOBALNMOUNT                526
 #define IDC_GLOBALROTATION              527
 #define IDC_GLOBALJOLT                  528
+#define IDC_JOYLFLIPCOMBO2              528
+#define IDC_JOYBHMENUCOMBO              528
 #define IDC_CBGLOBALROTATION            529
 #define IDC_CBGLOBALJOLT                530
+#define IDC_JOYBHMENUCOMBO2             530
+#define IDC_JOYBHRECALLCOMBO            530
 #define IDC_JOYPMBUYIN                  531
 #define IDC_JOYPMCOIN3                  532
 #define IDC_JOYPMCOIN4                  533

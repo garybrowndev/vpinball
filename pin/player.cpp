@@ -5026,7 +5026,7 @@ void BallHistory::Process(Player &player, int currentTimeMs)
 
 bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, int currentTimeMs)
 {
-   if (input->dwOfs == (DWORD)DIK_C) // TODO GARY Replace with proper programmable key from nudge/keys setup menu
+   if (input->dwOfs == (DWORD)g_pplayer->m_rgKeys[eBallHistoryMenu])
    {
       if (input->dwData & 0x80)
       {
@@ -5038,13 +5038,14 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
          }
          else
          {
+            // TODO GARY convert this to menu option
             ToggleControl();
             Process(player, currentTimeMs);
             return true;
          }
       }
    }
-   if (input->dwOfs == (DWORD)DIK_R) // TODO GARY Replace with proper programmable key from nudge/keys setup menu
+   if (input->dwOfs == (DWORD)g_pplayer->m_rgKeys[eBallHistoryRecall])
    {
       if (input->dwData & 0x80)
       {

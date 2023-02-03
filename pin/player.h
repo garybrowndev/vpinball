@@ -44,6 +44,8 @@ enum EnumAssignKeys
    eLockbarKey,
    eEnable3D,
    eEscape,
+   eBallHistoryMenu,
+   eBallHistoryRecall,
    eCKeys
 };
 static const char* regkey_string[eCKeys] = {
@@ -67,7 +69,9 @@ static const char* regkey_string[eCKeys] = {
    "VolumeDown",
    "LockbarKey",
    "Enable3DKey",
-   "EscapeKey"
+   "EscapeKey",
+   "BallHistoryMenu",
+   "BallHistoryRecall"
 };
 static constexpr int regkey_defdik[eCKeys] = {
    DIK_LSHIFT,
@@ -90,7 +94,9 @@ static constexpr int regkey_defdik[eCKeys] = {
    DIK_MINUS,
    DIK_LALT,
    DIK_F10,
-   DIK_ESCAPE
+   DIK_ESCAPE,
+   DIK_C,
+   DIK_R
 };
 static constexpr int regkey_idc[eCKeys] = {
    IDC_LEFTFLIPPER,
@@ -112,9 +118,10 @@ static constexpr int regkey_idc[eCKeys] = {
    IDC_VOLUMEUP,
    IDC_VOLUMEDN,
    IDC_LOCKBAR,
-
    -1, //!! missing in key dialog!
-   -1
+   -1,
+   IDC_BALLHISTORYMENU,
+   IDC_BALLHISTORYRECALL,
 };
 
 #ifndef ENABLE_SDL

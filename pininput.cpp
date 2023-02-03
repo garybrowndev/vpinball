@@ -96,6 +96,8 @@ PinInput::PinInput()
    m_joydebugger = 0;
    m_joylockbar = 0;
    m_joymechtilt = 0;
+   m_joybhmenu = 0;
+   m_joybhrecall = 0;
 
    m_firedautostart = 0;
 
@@ -181,6 +183,8 @@ void PinInput::LoadSettings()
    m_joydebugballs = LoadValueIntWithDefault(regKey[RegName::Player], "JoyDebugKey"s, m_joydebugballs);
    m_joydebugger = LoadValueIntWithDefault(regKey[RegName::Player], "JoyDebuggerKey"s, m_joydebugger);
    m_joylockbar = LoadValueIntWithDefault(regKey[RegName::Player], "JoyLockbarKey"s, m_joylockbar);
+   m_joybhmenu = LoadValueIntWithDefault(regKey[RegName::Player], "BallHistoryMenu"s, m_joybhmenu);
+   m_joybhrecall = LoadValueIntWithDefault(regKey[RegName::Player], "BallHistoryRecall"s, m_joybhrecall);
    m_enableMouseInPlayer = LoadValueBoolWithDefault(regKey[RegName::Player], "EnableMouseInPlayer"s, m_enableMouseInPlayer);
    m_enableCameraModeFlyAround = LoadValueBoolWithDefault(regKey[RegName::Player], "EnableCameraModeFlyAround"s, m_enableCameraModeFlyAround);
    m_enable_nudge_filter = LoadValueBoolWithDefault(regKey[RegName::Player], "EnableNudgeFilter"s, m_enable_nudge_filter);
@@ -1242,6 +1246,8 @@ void PinInput::Joy(const unsigned int n, const int updown, const bool start)
    if (m_joydebugballs == n) FireKeyEvent(updown, g_pplayer->m_rgKeys[eDBGBalls]);
    if (m_joydebugger == n)   FireKeyEvent(updown, g_pplayer->m_rgKeys[eDebugger]);
    if (m_joylockbar == n)    FireKeyEvent(updown, g_pplayer->m_rgKeys[eLockbarKey]);
+   if (m_joybhmenu == n)     FireKeyEvent(updown, g_pplayer->m_rgKeys[eBallHistoryMenu]);
+   if (m_joybhrecall == n)   FireKeyEvent(updown, g_pplayer->m_rgKeys[eBallHistoryRecall]);
    if (m_joycustom1 == n)    FireKeyEvent(updown, m_joycustom1key);
    if (m_joycustom2 == n)    FireKeyEvent(updown, m_joycustom2key);
    if (m_joycustom3 == n)    FireKeyEvent(updown, m_joycustom3key);

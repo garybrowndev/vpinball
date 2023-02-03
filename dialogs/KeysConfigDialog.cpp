@@ -344,7 +344,7 @@ BOOL KeysConfigDialog::OnInitDialog()
     const float legacyNudgeStrength = LoadValueFloatWithDefault(regKey[RegName::Player], "LegacyNudgeStrength"s, 1.f);
     SetDlgItemInt(IDC_LEGACY_NUDGE_STRENGTH, quantizeUnsignedPercent(legacyNudgeStrength), FALSE);
 
-    for (unsigned int i = 0; i <= 30; ++i)
+    for (unsigned int i = 0; i <= 31; ++i)
     {
         HRESULT hr;
         int item,selected;
@@ -381,6 +381,7 @@ BOOL KeysConfigDialog::OnInitDialog()
             case 28:hr = LoadValue(regKey[RegName::Player], "JoyPMUp"s, selected); item = IDC_JOYPMUP; break;
             case 29:hr = LoadValue(regKey[RegName::Player], "JoyPMEnter"s, selected); item = IDC_JOYPMENTER; break;
             case 30:hr = LoadValue(regKey[RegName::Player], "JoyLockbarKey"s, selected); item = IDC_JOYLOCKBARCOMBO; break;
+            case 31:hr = LoadValue(regKey[RegName::Player], "BallHistoryMenu"s, selected); item = IDC_JOYBHMENUCOMBO; break;
         }
 
         if (hr != S_OK)
@@ -671,6 +672,14 @@ BOOL KeysConfigDialog::OnInitDialog()
     ::SetWindowLongPtr(hwndButton, GWLP_WNDPROC, (size_t)MyKeyButtonProc);
     ::SetWindowLongPtr(hwndButton, GWLP_USERDATA, (size_t)pksw);
 
+    hwndButton = GetDlgItem(IDC_BALLHISTORYMENUBUTTON).GetHwnd();
+    ::SetWindowLongPtr(hwndButton, GWLP_WNDPROC, (size_t)MyKeyButtonProc);
+    ::SetWindowLongPtr(hwndButton, GWLP_USERDATA, (size_t)pksw);
+
+    hwndButton = GetDlgItem(IDC_BALLHISTORYRECALLBUTTON).GetHwnd();
+    ::SetWindowLongPtr(hwndButton, GWLP_WNDPROC, (size_t)MyKeyButtonProc);
+    ::SetWindowLongPtr(hwndButton, GWLP_USERDATA, (size_t)pksw);
+
     int inputApi = LoadValueIntWithDefault(regKey[RegName::Player], "InputApi"s, 0);
     int inputApiIndex = inputApi;
     const HWND hwndInputApi = GetDlgItem(IDC_COMBO_INPUT_API).GetHwnd();
@@ -880,6 +889,16 @@ BOOL KeysConfigDialog::OnCommand(WPARAM wParam, LPARAM lParam)
                 StartTimer(IDC_JOYCUSTOM4);
                 break;
             }
+            case IDC_BALLHISTORYMENUBUTTON:
+            {
+                StartTimer(IDC_BALLHISTORYMENU);
+                break;
+            }
+            case IDC_BALLHISTORYRECALLBUTTON:
+            {
+                StartTimer(IDC_BALLHISTORYRECALL);
+                break;
+            }
             default:
                 return FALSE;
         }//switch
@@ -929,6 +948,7 @@ void KeysConfigDialog::OnOK()
     SetValue(IDC_PLUNGERAXIS, regKey[RegName::Player], "PlungerAxis"s);
     SetValue(IDC_LRAXISCOMBO, regKey[RegName::Player], "LRAxis"s);
     SetValue(IDC_UDAXISCOMBO, regKey[RegName::Player], "UDAxis"s);
+    SetValue(IDC_JOYBHMENUCOMBO, regKey[RegName::Player], "BallHistoryMenu"s);
 
     size_t selected;
     int newvalue;
