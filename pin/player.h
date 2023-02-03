@@ -302,6 +302,7 @@ public:
 
    enum BallStartModeType
    {
+      BallStartModeType_Accept,
       BallStartModeType_Existing,
       BallStartModeType_Custom,
       BallStartModeType_COUNT
@@ -580,7 +581,6 @@ private:
          MenuStateType_Trainer_SelectModeOptions,
          MenuStateType_Trainer_Results,
          MenuStateType_Trainer_SelectBallStartMode,
-         MenuStateType_Trainer_SelectExistingBallStart,
          MenuStateType_Trainer_SelectExistingBallStartLocation,
          MenuStateType_Trainer_SelectCustomBallStart,
          MenuStateType_Trainer_SelectCustomBallStartLocation,
@@ -702,7 +702,6 @@ private:
    static const char * NormalModeAutoControlVerticesPosition3DKeyName;
    static const char * TrainerModeSettingsSectionName;
    static const char * TrainerModeStateSectionName;
-   static const char * TrainerModeStartModeSectionName;
    static const char * TrainerModeTotalRunsKeyName;
    static const char * TrainerModeRunOrderModeKeyName;
    static const char * TrainerModeMaxSecondsPerRunKeyName;
@@ -742,8 +741,8 @@ private:
    bool ShouldDrawTrainerBallFailLocations(std::size_t index, int currentTimeMs);
    void DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
    void DrawAngleVelocityPreview(Player &player, TrainerOptions::BallStartOptionsRecord &bsor);
-   void DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angleStep, float velocityStep);
-   void DrawAngleVelocityPreviewHelperAdd(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angle, float velocity, float height);
+   void DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angleStep, float velocityStep, float radius);
+   void DrawAngleVelocityPreviewHelperAdd(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angle, float velocity, float radius);
    void CalculateAngleVelocityStep(TrainerOptions::BallStartOptionsRecord &bsor, float &angleStep, float &velocityStep);
    void UpdateBallState(Player &player, BallHistoryRecord &ballHistoryRecord);
    void ShowStatus(Player &player, int currentTimeMs);

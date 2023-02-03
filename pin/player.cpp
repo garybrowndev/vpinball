@@ -80,7 +80,7 @@ public:
 const float TrainerOptions::BallEndOptionsRecord::DistanceDisabled = -1.0f; // Stop mode is enabled
 
 TrainerOptions::BallStartOptionsRecord::BallStartOptionsRecord():
-   BallStartOptionsRecord(Vertex3Ds(0.0f, 0.0f, 0.0f), Vertex3Ds(0.0f, 0.0f, 0.0f), Vertex3Ds(0.0f, 0.0f, 0.0f), AngleMinimum, AngleMinimum, TotalAnglesMinimum, VelocityMinimum, VelocityMinimum, TotalVelocitiesMinimum)
+   BallStartOptionsRecord(Vertex3Ds(0.0f, 0.0f, 0.0f), Vertex3Ds(0.0f, 0.0f, 0.0f), Vertex3Ds(0.0f, 0.0f, 0.0f), AngleMinimum, AngleMinimum, 0, VelocityMinimum, VelocityMinimum, 0)
 {
 }
 
@@ -116,7 +116,7 @@ TrainerOptions::RunRecord::RunRecord() :
 
 TrainerOptions::TrainerOptions():
    m_ModeState(ModeStateType::ModeStateType_Config),
-   m_BallStartMode(BallStartModeType::BallStartModeType_Existing),
+   m_BallStartMode(BallStartModeType::BallStartModeType_Accept),
    m_BallStartAngleVelocityMode(BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_Drop),
    m_BallStartCompleteMode(BallStartCompleteModeType::BallStartCompleteModeType_Accept),
    m_BallEndLocationMode(BallEndLocationModeType::BallEndLocationModeType_Accept),
@@ -379,7 +379,6 @@ const char * BallHistory::NormalModeSettingsSectionName = "NormalModeSettings";
 const char * BallHistory::NormalModeAutoControlVerticesPosition3DKeyName = "Position3D";
 const char * BallHistory::TrainerModeSettingsSectionName = "TrainerModeSettings";
 const char * BallHistory::TrainerModeStateSectionName = "TrainerModeState";
-const char * BallHistory::TrainerModeStartModeSectionName = "TrainerModeStartMode";
 const char * BallHistory::TrainerModeTotalRunsKeyName = "TotalRuns";
 const char * BallHistory::TrainerModeRunOrderModeKeyName = "RunOrderMode";
 const char * BallHistory::TrainerModeMaxSecondsPerRunKeyName = "MaxSecondsPerRun";
@@ -573,23 +572,6 @@ void BallHistory::LoadSettings(Player &player)
          }
       }
 
-
-      if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeStartModeSectionName, tempStream) == true)
-      {
-         if (tempStream.str() == "Existing")
-         {
-            m_MenuOptions.m_TrainerOptions.m_BallStartMode = TrainerOptions::BallStartModeType::BallStartModeType_Existing;
-         }
-         else if (tempStream.str() == "Custom")
-         {
-            m_MenuOptions.m_TrainerOptions.m_BallStartMode = TrainerOptions::BallStartModeType::BallStartModeType_Custom;
-         }
-         else
-         {
-            assert(0);
-         }
-      }
-            
       if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeTotalRunsKeyName, tempStream) == true)
       {
          tempStream >> m_MenuOptions.m_TrainerOptions.m_TotalRuns;
@@ -772,20 +754,6 @@ void BallHistory::SaveSettings(Player &player)
             break;
       }
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeStateSectionName, tempStr.c_str());
-
-      switch (m_MenuOptions.m_TrainerOptions.m_BallStartMode)
-      {
-         case TrainerOptions::BallStartModeType::BallStartModeType_Existing:
-            tempStr = "Existing";
-            break;
-         case TrainerOptions::BallStartModeType::BallStartModeType_Custom:
-            tempStr = "Custom";
-            break;
-         default:
-            assert(0);
-            break;
-      }
-      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeStartModeSectionName, tempStr.c_str());
 
       tempStr = std::to_string(m_MenuOptions.m_TrainerOptions.m_TotalRuns);
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeTotalRunsKeyName, tempStr.c_str());
@@ -1496,11 +1464,14 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
 
          switch (m_MenuOptions.m_TrainerOptions.m_BallStartMode)
          {
+            case TrainerOptions::BallStartModeType::BallStartModeType_Accept:
+               dpr.ShowText("Ball Start Mode = Accept");
+               break;
             case TrainerOptions::BallStartModeType::BallStartModeType_Existing:
-               dpr.ShowText("Ball Start Mode = Existing");
+               dpr.ShowText("Ball Start Mode = Setup Existing");
                break;
             case TrainerOptions::BallStartModeType::BallStartModeType_Custom:
-               dpr.ShowText("Ball Start Mode = Custom");
+               dpr.ShowText("Ball Start Mode = Setup Custom");
                break;
             default:
                dpr.ShowText("Ball Start Mode = Unknown");
@@ -1831,10 +1802,12 @@ bool BallHistory::ShouldDrawTrainerBallStartLocations(std::size_t index, int cur
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartVelocityTotal:
          return index != m_MenuOptions.m_CurrentBallIndex || (currentTimeMs % 1000) >= 200;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStart:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallStartMode:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectExistingBallStartLocation:
          switch (m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode)
          {
             case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept:
-               break;
+               return (currentTimeMs % 1000) >= 200;
             case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Select:
                return index != m_MenuOptions.m_CurrentCompleteIndex || (currentTimeMs % 1000) >= 200;
             default:
@@ -1860,7 +1833,7 @@ bool BallHistory::ShouldDrawTrainerBallPassLocations(std::size_t index, int curr
          switch (m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode)
          {
             case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept:
-               break;
+               return (currentTimeMs % 1000) >= 200;
             case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select:
                return index != m_MenuOptions.m_CurrentCompleteIndex || (currentTimeMs % 1000) >= 200;
             default:
@@ -1886,7 +1859,7 @@ bool BallHistory::ShouldDrawTrainerBallFailLocations(std::size_t index, int curr
          switch (m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode)
          {
             case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept:
-               break;
+               return (currentTimeMs % 1000) >= 200;
             case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select:
                return index != m_MenuOptions.m_CurrentCompleteIndex || (currentTimeMs % 1000) >= 200;
             default:
@@ -1900,8 +1873,6 @@ bool BallHistory::ShouldDrawTrainerBallFailLocations(std::size_t index, int curr
 
 void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr, int currentTimeMs)
 {
-   // TODO GARY Instead of blinking, rotate the color from light to dark and back of the Pass/Fail color
-
    Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr;
    Matrix3 orientation;
    orientation.Identity();
@@ -1968,11 +1939,8 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
    }
 }
 
-void BallHistory::DrawAngleVelocityPreviewHelperAdd(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angle, float velocity, float height)
+void BallHistory::DrawAngleVelocityPreviewHelperAdd(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angle, float velocity, float radius)
 {
-   Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr;
-   float radius = (controlVBall ? controlVBall->m_d.m_radius : 25.0f) + DrawAngleVelocityRadiusExtraMinimum;
-
    float velocityRange = TrainerOptions::BallStartOptionsRecord::VelocityMaximum - TrainerOptions::BallStartOptionsRecord::VelocityMinimum;
    unsigned char red = (unsigned char)(TrainerOptions::BallStartOptionsRecord::VelocityMinimum + (0xFF / float(velocityRange)) * velocity);
    unsigned char blue = 0xFF - red;
@@ -1982,24 +1950,24 @@ void BallHistory::DrawAngleVelocityPreviewHelperAdd(std::vector<Vertex3DColor> &
    testVertices.emplace_back();
    testVertices.back().x = bsor.m_Pos.x + (std::sinf((angleBefore * float(M_PI)) / 180.0f) * (radius + (velocity * 2.0f)));
    testVertices.back().y = bsor.m_Pos.y + (std::cosf((angleBefore * float(M_PI)) / 180.0f) * -(radius + (velocity * 2.0f)));
-   testVertices.back().z = height;
+   testVertices.back().z = bsor.m_Pos.z + radius + DrawAngleVelocityHeightOffset;
    testVertices.back().color = color;
 
    float angleAfter = std::fabsf(std::fmodf(angle + (DrawAngleVelocityRadiusArc / 2.0f) + TrainerOptions::BallStartOptionsRecord::AngleMaximum, TrainerOptions::BallStartOptionsRecord::AngleMaximum));
    testVertices.emplace_back();
    testVertices.back().x = bsor.m_Pos.x + (std::sinf((angleAfter * float(M_PI)) / 180.0f) * (radius + (velocity * DrawAngleVelocityLengthMultiplier)));
    testVertices.back().y = bsor.m_Pos.y + (std::cosf((angleAfter * float(M_PI)) / 180.0f) * -(radius + (velocity * DrawAngleVelocityLengthMultiplier)));
-   testVertices.back().z = height;
+   testVertices.back().z = bsor.m_Pos.z + radius + DrawAngleVelocityHeightOffset;
    testVertices.back().color = color;
 
    testVertices.emplace_back();
    testVertices.back().x = bsor.m_Pos.x;
    testVertices.back().y = bsor.m_Pos.y;
-   testVertices.back().z = bsor.m_Pos.z;
+   testVertices.back().z = bsor.m_Pos.z + radius;
    testVertices.back().color = color;
 }
 
-void BallHistory::DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angleStep, float velocityStep)
+void BallHistory::DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angleStep, float velocityStep, float radius)
 {
    for (S32 angleIndex = 0; angleIndex < bsor.m_TotalAngles; angleIndex++)
    {
@@ -2008,25 +1976,27 @@ void BallHistory::DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &tes
       for (S32 velocityIndex = bsor.m_TotalVelocities - 1; velocityIndex >= 0; velocityIndex--)
       {
          float velocity = std::fmodf(bsor.m_VelocityStart + (velocityStep * velocityIndex), TrainerOptions::BallStartOptionsRecord::VelocityMaximum + 1);
-         height += DrawAngleVelocityHeightOffset;
-         DrawAngleVelocityPreviewHelperAdd(testVertices, bsor, angle, velocity, height);
+         DrawAngleVelocityPreviewHelperAdd(testVertices, bsor, angle, velocity, radius);
       }
    }
 }
 
 void BallHistory::DrawAngleVelocityPreview(Player &player, TrainerOptions::BallStartOptionsRecord &bsor)
 {
+   Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr;
+   float radius = (controlVBall ? controlVBall->m_d.m_radius : 25.0f) + DrawAngleVelocityRadiusExtraMinimum;
+
    std::vector<Vertex3DColor> testVertices;
    testVertices.emplace_back();
    testVertices.back().x = bsor.m_Pos.x;
    testVertices.back().y = bsor.m_Pos.y;
-   testVertices.back().z = bsor.m_Pos.z;
+   testVertices.back().z = bsor.m_Pos.z + radius;
 
    float angleStep = 0.0f;
    float velocityStep = 0.0f;
    CalculateAngleVelocityStep(bsor, angleStep, velocityStep);
 
-   DrawAngleVelocityPreviewHelper(testVertices, bsor, angleStep, velocityStep);
+   DrawAngleVelocityPreviewHelper(testVertices, bsor, angleStep, velocityStep, radius);
 
    VertexBuffer *testVerticesVB = nullptr;
    VertexBuffer::CreateVertexBuffer((unsigned int)testVertices.size(), 0, MY_D3DFVF_COLOR_VERTEX, &testVerticesVB, PRIMARY_DEVICE);
@@ -2653,10 +2623,12 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallStartMode:
          dpr.ShowMenuTextTitle("Ball Start Mode");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallStartMode == TrainerOptions::BallStartModeType::BallStartModeType_Accept,
+            "Accept");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallStartMode == TrainerOptions::BallStartModeType::BallStartModeType_Existing,
-            "Existing");
+            "Setup Existing");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallStartMode == TrainerOptions::BallStartModeType::BallStartModeType_Custom,
-            "Custom");
+            "Setup Custom");
 
          switch (menuAction)
          {
@@ -2673,65 +2645,46 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             case MenuOptionsRecord::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_BallStartMode)
                {
+                  case TrainerOptions::BallStartModeType::BallStartModeType_Accept:
+                     {
+                     std::size_t ballNotSetNumber = 0;
+                     for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
+                     {
+                        TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
+                        if (!ballNotSetNumber && bsor.m_Pos.IsZero())
+                        {
+                           ballNotSetNumber = bsorIndex + 1;
+                        }
+                     }
+
+                     if (ballNotSetNumber)
+                     {
+                        std::ostringstream strStream;
+                        strStream << "Ball " << ballNotSetNumber << " must be set";
+                        m_MenuOptions.m_MenuError = strStream.str();
+                     }
+                     else
+                     {
+                        m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_BallPassComplete;
+                        m_MenuOptions.m_CurrentBallIndex = 0;
+                        m_MenuOptions.m_CurrentAssociationIndex = 0;
+                        m_MenuOptions.m_CurrentCompleteIndex = 0;
+                        m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode = TrainerOptions::BallEndLocationModeType_Accept;
+                        m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode = TrainerOptions::BallEndAssociationModeType::BallEndAssociationModeType_Accept;
+                        m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode = TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept;
+                     }
+                     }
+                     break;
                   case TrainerOptions::BallStartModeType::BallStartModeType_Existing:
-                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectExistingBallStart;
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectExistingBallStartLocation;
+                     m_MenuOptions.m_TrainerOptions.m_BallStartMode = TrainerOptions::BallStartModeType::BallStartModeType_Accept;
                      break;
                   case TrainerOptions::BallStartModeType::BallStartModeType_Custom:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStart;
+                     m_MenuOptions.m_TrainerOptions.m_BallStartMode = TrainerOptions::BallStartModeType::BallStartModeType_Accept;
                      break;
                   default:
                      assert(0);
-                     break;
-               }
-               break;
-            default:
-               assert(0);
-               break;
-         }
-         break;
-      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectExistingBallStart:
-         // TODO GARY There is inconsistent and wierd behavior here
-         // I still don't like the fact that once you choose "existing" and you made a mistake
-         // there is no way to undo this, and settings all of the angle/velocity settings takes
-         // time is a pain, it will be annoying if those reset
-         // You can do this in a non-elegant way by not choosing "select" and saying "Accept",
-         // then going through rest of menus back to beginning and go and select "Custom" instead
-         // Potential Idea #1 = The "Accept" will say "go back/skip/don't set" or something similar if you have not
-         // selected an existing position yet, this will go back to the Start Mode selection menu
-         // Still need to know how to determine whether or not the user has selecting an existing position
-         
-         dpr.ShowMenuTextTitle("Existing Ball Start Location");
-         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode == TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept,
-            "Accept");
-         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode == TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Select,
-            "Select");
-
-         switch (menuAction)
-         {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
-               // do nothing
-               break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
-               ProcessMenuChangeValueDec<TrainerOptions::BallStartCompleteModeType>(m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode, 0, TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_COUNT - 1);
-               break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
-               ProcessMenuChangeValueInc<TrainerOptions::BallStartCompleteModeType>(m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode, 0, TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_COUNT - 1);
-               break;
-            case MenuOptionsRecord::MenuActionType_Enter:
-               switch (m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode)
-               {
-                  case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept:
-                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_BallPassComplete;
-                     m_MenuOptions.m_CurrentBallIndex = 0;
-                     m_MenuOptions.m_CurrentAssociationIndex = 0;
-                     m_MenuOptions.m_CurrentCompleteIndex = 0;
-                     m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode = TrainerOptions::BallEndLocationModeType_Accept;
-                     m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode = TrainerOptions::BallEndAssociationModeType::BallEndAssociationModeType_Accept;
-                     m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode = TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept;
-                     break;
-                  case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Select:
-                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectExistingBallStartLocation;
                      break;
                }
                break;
@@ -2759,8 +2712,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                dpr.ShowMenuText("Ball %zu Mom = %.2f,%.2f,%.2f (x,y,z)", ballHistoryStateIndex + 1, ballHistoryState.m_AngMom.x, ballHistoryState.m_AngMom.y, ballHistoryState.m_AngMom.z);
 
                TrainerOptions::BallStartOptionsRecord bsor(ballHistoryState.m_Pos, ballHistoryState.m_Vel, ballHistoryState.m_AngMom,
-                  TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum,
-                  TrainerOptions::BallStartOptionsRecord::VelocityMinimum,TrainerOptions::BallStartOptionsRecord::VelocityMinimum, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum);
+                  TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMinimum, 0,
+                  TrainerOptions::BallStartOptionsRecord::VelocityMinimum,TrainerOptions::BallStartOptionsRecord::VelocityMinimum, 0);
 
                if (m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize == m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size())
                {
@@ -2786,7 +2739,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                ControlNext();
                break;
             case MenuOptionsRecord::MenuActionType_Enter:
-               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectExistingBallStart;
+               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallStartMode;
                m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode = TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept;
                break;
             default:
@@ -2795,15 +2748,22 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStart:
+         {
          dpr.ShowMenuTextTitle("Custom Ball Start Location");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode == TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept,
             "Accept");
 
+
+         std::size_t ballNotSetNumber = 0;
          for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
          {
             TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
             dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode == TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Select && m_MenuOptions.m_CurrentCompleteIndex == bsorIndex,
                "Edit Ball %zu%s", bsorIndex + 1, bsor.m_Pos.IsZero() ? " (Not Set)" : "");
+            if (!ballNotSetNumber && bsor.m_Pos.IsZero())
+            {
+               ballNotSetNumber = bsorIndex + 1;
+            }
          }
 
          switch (m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode)
@@ -2866,16 +2826,15 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                switch (m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode)
                {
                   case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept:
-                     if (m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos.IsZero())
+                     if (ballNotSetNumber)
                      {
                         std::ostringstream strStream;
-                        strStream << "Ball #" << (m_MenuOptions.m_CurrentBallIndex + 1) << " must be set";
+                        strStream << "Ball " << ballNotSetNumber << " must be set";
                         m_MenuOptions.m_MenuError = strStream.str();
                      }
                      else
                      {
-                        m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_BallPassComplete;
-                        m_MenuOptions.m_CurrentBallIndex = 0;
+                        m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallStartMode;
                      }
                      break;
                   case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Select:
@@ -2891,6 +2850,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             default:
                assert(0);
                break;
+         }
          }
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartLocation:
@@ -2939,7 +2899,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                if (m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos.IsZero())
                {
                   std::ostringstream strStream;
-                  strStream << "Ball #" << (m_MenuOptions.m_CurrentBallIndex + 1) << " must be set";
+                  strStream << "Ball " << (m_MenuOptions.m_CurrentBallIndex + 1) << " must be set";
                   m_MenuOptions.m_MenuError = strStream.str();
                }
                else
@@ -3279,7 +3239,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                if (bpor.m_Pos.IsZero())
                {
                   std::ostringstream strStream;
-                  strStream << "Ball #" << (m_MenuOptions.m_CurrentBallIndex + 1) << " must be set";
+                  strStream << "Ball " << (m_MenuOptions.m_CurrentBallIndex + 1) << " must be set";
                   m_MenuOptions.m_MenuError = strStream.str();
                }
                else
@@ -3683,7 +3643,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                if (bfor.m_Pos.IsZero())
                {
                   std::ostringstream strStream;
-                  strStream << "Ball #" << (m_MenuOptions.m_CurrentBallIndex + 1) << " must be set";
+                  strStream << "Ball " << (m_MenuOptions.m_CurrentBallIndex + 1) << " must be set";
                   m_MenuOptions.m_MenuError = strStream.str();
                }
                else
@@ -4875,6 +4835,8 @@ void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr,
 
 void BallHistory::DrawFakeBallAtMousePosition(Player &player, float heightZ, float intersectionRadius, Texture &texture, DebugPrintRecord &dpr)
 {
+   // TODO GARY draw a line between where the ball at the mouse is and the ball that
+   // that will currently be reset to this position
    POINT mousePosition;
    if (GetCursorPos(&mousePosition) == TRUE)
    {
@@ -4892,8 +4854,6 @@ void BallHistory::DrawFakeBallAtMousePosition(Player &player, float heightZ, flo
             radius = controlVBall->m_d.m_radius;
          }
 
-         // TODO GARY Ball is drawn pure black, will want to choose colors for basic
-         // auto control, start, pass and fail locations to be consistent and nice looking
          player.DrawFakeBall(Vertex3Ds(vertex.x, vertex.y, heightZ), radius, orientation, &texture);
          DrawIntersectionCircle(player, vertex, radius, intersectionRadius, IntersectionCircleColor);
       }
