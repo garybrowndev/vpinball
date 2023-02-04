@@ -5030,28 +5030,26 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
    {
       if (input->dwData & 0x80)
       {
-         bool shiftDown = ::GetKeyState(VK_CONTROL) & 0x8000;
-         if (shiftDown)
-         {
-            m_ShowStatus = !m_ShowStatus;
-            return true;
-         }
-         else
-         {
-            // TODO GARY convert this to menu option
-            ToggleControl();
-            Process(player, currentTimeMs);
-            return true;
-         }
+         ToggleControl();
+         Process(player, currentTimeMs);
+         return true;
       }
    }
    if (input->dwOfs == (DWORD)g_pplayer->m_rgKeys[eBallHistoryRecall])
    {
       if (input->dwData & 0x80)
       {
-         ToggleRecall();
-         Process(player, currentTimeMs);
-         return true;
+         if (m_Control && m_MenuOptions.m_MenuState == MenuOptionsRecord::MenuStateType::MenuStateType_Root_SelectMode)
+         {
+            m_ShowStatus = !m_ShowStatus;
+            return true;
+         }
+         else
+         {
+            ToggleRecall();
+            Process(player, currentTimeMs);
+            return true;
+         }
       }
    }
    else if (m_Control && input->dwOfs == player.m_rgKeys[eLeftFlipperKey])
