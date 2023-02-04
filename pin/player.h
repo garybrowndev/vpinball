@@ -266,8 +266,6 @@ class NudgeFilterY : public NudgeFilter
 
 struct BallHistoryState
 {
-   BallHistoryState();
-   
    Vertex3Ds m_Pos;
    Vertex3Ds m_Vel;
    Vertex3Ds m_AngMom;
@@ -278,20 +276,22 @@ struct BallHistoryState
    Vertex3Ds m_OldPos[MAX_BALL_TRAIL_POS];
    unsigned int m_RingCounter_OldPos;
 
-   float m_Size;
+   float m_DrawRadius;
    Texture *m_Texture;
+
+   BallHistoryState();
 };
 
 struct BallHistoryRecord
 {
+   int m_TimeMs;
+   std::vector<BallHistoryState> m_BallHistoryStates;
+
    BallHistoryRecord();
    BallHistoryRecord(int timeMs);
    void Set(const Ball * controlVBall, BallHistoryState &bhr);
    void Set(std::vector<Ball*> &controlVBalls, int timeMs);
    void Insert(const Ball * controlVBall, int insertIndex);
-
-   int m_TimeMs;
-   std::vector<BallHistoryState> m_BallHistoryStates;
 };
 
 class TrainerOptions
@@ -495,6 +495,8 @@ public:
 
    static const std::size_t RecallControlIndexDisabled = -1;
    static const std::size_t AutoControlVerticesMax = 256;
+
+   static const float CreateAutoControlFindFactor;
 
    ModeStateType m_ModeState;
 
@@ -789,6 +791,9 @@ private:
 
    std::vector<std::string> Split(const char * str, char delimeter);
    void CenterMouse(Player &player);
+
+   void InvalidEnumValue(const char * enumName, const int enumValue);
+   void InvalidEnumValue(const char * enumName, const char * enumValue);
 };
 
 struct TimerOnOff

@@ -136,6 +136,8 @@ TrainerOptions::TrainerOptions():
 {
 }
 
+const float NormalOptions::CreateAutoControlFindFactor = 0.025f;
+
 NormalOptions::NormalOptions():
    m_ModeState(ModeStateType::ModeStateType_SelectCurrentBallHistory),
    m_SetupRecallBallHistoryMode(SetupRecallBallHistoryModeType::SetupRecallBallHistoryModeType_Select),
@@ -144,17 +146,17 @@ NormalOptions::NormalOptions():
 {
 }
 
-BallHistoryState::BallHistoryState()
+BallHistoryState::BallHistoryState() :
+   m_Pos(0.0f, 0.0f, 0.0f),
+   m_Vel(0.0f, 0.0f, 0.0f),
+   m_AngMom(0.0f, 0.0f, 0.0f),
+   m_LastEventPos(0.0f, 0.0f, 0.0f),
+   m_Orientation(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f),
+   m_RingCounter_OldPos(0),
+   m_DrawRadius(0.0f),
+   m_Texture(nullptr)
 {
-   m_Pos = { 0.0f, 0.0f, 0.0f };
-   m_Vel = { 0.0f, 0.0f, 0.0f };
-   m_AngMom = { 0.0f, 0.0f, 0.0f };
-   m_LastEventPos = { 0.0f, 0.0f, 0.0f };
-   ZeroMemory(&m_Orientation, sizeof(m_Orientation));
    ZeroMemory(&m_OldPos, sizeof(m_OldPos));
-   m_RingCounter_OldPos = 0;
-   m_Size = 0.0f;
-   m_Texture = nullptr;
 }
 
 BallHistoryRecord::BallHistoryRecord():
@@ -482,6 +484,20 @@ bool BallHistory::GetSettingsFileName(Player &player, std::string &fileName)
    return true;
 }
 
+void BallHistory::InvalidEnumValue(const char * enumName, const int enumValue)
+{
+   //std::stringstream errorMessage;
+   //errorMessage << "Invalid value '" << enumValue << "' for enum type " << enumName;
+   assert(0);
+}
+
+void BallHistory::InvalidEnumValue(const char * enumName, const char * enumValue)
+{
+   //std::stringstream errorMessage;
+   //errorMessage << "Invalid value '" << enumValue << "' for enum type " << enumName;
+   assert(0);
+}
+
 void BallHistory::CenterMouse(Player &player)
 {
    POINT p = {player.m_width / 2, player.m_height / 2};
@@ -568,7 +584,7 @@ void BallHistory::LoadSettings(Player &player)
          }
          else
          {
-            assert(0);
+            InvalidEnumValue("TrainerOptions::ModeStateType", tempStream.str().c_str());
          }
       }
 
@@ -599,7 +615,7 @@ void BallHistory::LoadSettings(Player &player)
          }
          else
          {
-            assert(0);
+            InvalidEnumValue("TrainerOptions::RunOrderModeType", tempStream.str().c_str());
          }
       }
 
@@ -750,7 +766,7 @@ void BallHistory::SaveSettings(Player &player)
             tempStr = "Exit";
             break;
          default:
-            assert(0);
+            InvalidEnumValue("TrainerOptions::ModeStateType", m_MenuOptions.m_TrainerOptions.m_ModeState);
             break;
       }
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeStateSectionName, tempStr.c_str());
@@ -773,8 +789,7 @@ void BallHistory::SaveSettings(Player &player)
             tempStr = "Random";
             break;
          default:
-            // TODO GARY Go through all asserts and figure out elegant way to show error instead of asserting
-            assert(0);
+            InvalidEnumValue("TrainerOptions::RunOrderModeType", m_MenuOptions.m_TrainerOptions.m_RunOrderMode);
             break;
       }
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeRunOrderModeKeyName, tempStr.c_str());
@@ -970,10 +985,15 @@ void BallHistory::InitBallsIncreased(Player &player)
       {
          std::size_t tempCurrentIndex = m_CurrentControlIndex;
          std::size_t tailIndex = GetTailIndex();
-         while (tempCurrentIndex != tailIndex)
+         while (true)
          {
             BallHistoryRecord &currentBhr = m_BallHistoryRecords[tempCurrentIndex];
             currentBhr.Insert(controlVBall, controlVBallsPreviousInsertIndex);
+
+            if (tempCurrentIndex == tailIndex)
+            {
+               break;
+            }
 
             if (tempCurrentIndex == 0)
             {
@@ -1013,10 +1033,15 @@ void BallHistory::InitBallsDecreased(Player &player)
       {
          std::size_t tempCurrentIndex = m_CurrentControlIndex;
          std::size_t tailIndex = GetTailIndex();
-         while (tempCurrentIndex != tailIndex)
+         while (true)
          {
             BallHistoryRecord &currentBhr = m_BallHistoryRecords[tempCurrentIndex];
             currentBhr.m_BallHistoryStates.erase(currentBhr.m_BallHistoryStates.begin() + controlVBallsPreviousIndex);
+
+            if (tempCurrentIndex == tailIndex)
+            {
+               break;
+            }
 
             if (tempCurrentIndex == 0)
             {
@@ -1490,7 +1515,7 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                dpr.ShowText("Run Order = Random");
                break;
             default:
-               assert(0);
+               InvalidEnumValue("TrainerOptions::RunOrderModeType", m_MenuOptions.m_TrainerOptions.m_RunOrderMode);
                break;
          }
 
@@ -1640,7 +1665,7 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
          dpr.ShowText("Mode = Disabled");
          break;
       default:
-         assert(0);
+         InvalidEnumValue("MenuOptionsRecord::ModeType", m_MenuOptions.m_ModeType);
          break;
    }
 }
@@ -1676,7 +1701,7 @@ void BallHistory::ShowPreviousRunRecord(Player &player, DebugPrintRecord &dpr)
             dpr.ShowMenuText("Fail (time elapsed)");
             break;
          default:
-            assert(0);
+            InvalidEnumValue("TrainerOptions::RunRecord::ResultType", previousRunRecord.m_Result);
             break;
       }
       dpr.ShowMenuText("%.2f seconds", float(previousRunRecord.m_TotalTimeMs) / 1000);
@@ -2194,17 +2219,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<MenuOptionsRecord::ModeType>(m_MenuOptions.m_ModeType, 0, MenuOptionsRecord::ModeType::ModeType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<MenuOptionsRecord::ModeType>(m_MenuOptions.m_ModeType, 0, MenuOptionsRecord::ModeType::ModeType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                switch (m_MenuOptions.m_ModeType)
                {
                   case MenuOptionsRecord::ModeType::ModeType_Normal:
@@ -2219,12 +2244,12 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      ToggleControl();
                      break;
                   default:
-                     assert(0);
+                     InvalidEnumValue("MenuOptionsRecord::ModeType", m_MenuOptions.m_ModeType);
                      break;
                }
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          break;
@@ -2234,24 +2259,26 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Select Current Ball History");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_NormalOptions.m_ModeState == NormalOptions::ModeStateType::ModeStateType_SelectRecallBallHistory,
             "Select Recall Ball History");
+         // TODO GARY change this to "Manage" auto control locations
          dpr.ShowMenuTextSelect(m_MenuOptions.m_NormalOptions.m_ModeState == NormalOptions::ModeStateType::ModeStateType_CreateAutoControlLocations,
             "Create Auto Control Locations");
+         // TODO GARY If hit "exit", set default value back to top option "Select Current ..."
          dpr.ShowMenuTextSelect(m_MenuOptions.m_NormalOptions.m_ModeState == NormalOptions::ModeStateType::ModeStateType_Exit,
             "Exit");
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<NormalOptions::ModeStateType>(m_MenuOptions.m_NormalOptions.m_ModeState, 0, NormalOptions::ModeStateType::ModeStateType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<NormalOptions::ModeStateType>(m_MenuOptions.m_NormalOptions.m_ModeState, 0, NormalOptions::ModeStateType::ModeStateType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                switch (m_MenuOptions.m_NormalOptions.m_ModeState)
                {
                   case NormalOptions::ModeStateType::ModeStateType_SelectCurrentBallHistory:
@@ -2268,12 +2295,12 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Root_SelectMode;
                      break;
                   default:
-                     assert(0);
+                     InvalidEnumValue("NormalOptions::ModeStateType", m_MenuOptions.m_NormalOptions.m_ModeState);
                      break;
                }
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          break;
@@ -2285,42 +2312,48 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                {
                std::size_t controlCount = 1;
                if ((currentTimeMs - m_MenuOptions.m_SkipControlUsedMs) < MenuOptionsRecord::SkipControlIntervalMs)
                {
                   controlCount = MenuOptionsRecord::SkipControlStepFactor;
-                  ::OutputDebugString("Here in control count\n");
                }
                for (std::size_t x = 0; x < controlCount; x++)
                {
                   switch (menuAction)
                   {
-                     case MenuOptionsRecord::MenuActionType_UpLeft:
+                     case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+                     case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
+                        // do nothing;
+                        break;
+                     case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                         ControlPrev();
                         break;
-                     case MenuOptionsRecord::MenuActionType_DownRight:
+                     case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                         ControlNext();
                         break;
+                     case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+                        // do nothing
+                        break;
                      default:
-                        assert(0);
+                        InvalidEnumValue("NormalOptions::ModeStateType", m_MenuOptions.m_NormalOptions.m_ModeState);
                         break;
                   }
                }
                m_MenuOptions.m_SkipControlUsedMs = currentTimeMs;
                }
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectModeOptions;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          break;
@@ -2333,17 +2366,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<NormalOptions::SetupRecallBallHistoryModeType>(m_MenuOptions.m_NormalOptions.m_SetupRecallBallHistoryMode, 0, NormalOptions::SetupRecallBallHistoryModeType::SetupRecallBallHistoryModeType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<NormalOptions::SetupRecallBallHistoryModeType>(m_MenuOptions.m_NormalOptions.m_SetupRecallBallHistoryMode, 0, NormalOptions::SetupRecallBallHistoryModeType::SetupRecallBallHistoryModeType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                switch (m_MenuOptions.m_NormalOptions.m_SetupRecallBallHistoryMode)
                {
                   case NormalOptions::SetupRecallBallHistoryModeType::SetupRecallBallHistoryModeType_Select:
@@ -2354,12 +2387,12 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectModeOptions;
                      break;
                   default:
-                     assert(0);
+                     InvalidEnumValue("NormalOptions::SetupRecallBallHistoryModeType", m_MenuOptions.m_NormalOptions.m_SetupRecallBallHistoryMode);
                      break;
                }
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          break;
@@ -2371,22 +2404,22 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ControlPrev();
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ControlNext();
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                m_MenuOptions.m_NormalOptions.m_RecallControlIndex = m_CurrentControlIndex;
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectModeOptions;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          break;
@@ -2423,17 +2456,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
                ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_NormalOptions.m_CreateZ, S32(heightMinimum), heightMaximum, currentTimeMs);
                break;
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                {
                bool removedExisting = false;
 
                for (std::vector<NormalOptions::AutoControlVertex>::iterator autoControlVerticesIt = m_MenuOptions.m_NormalOptions.m_AutoControlVertices.begin(); autoControlVerticesIt < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.end(); autoControlVerticesIt++)
                {
                   POINT screenPoint = Get2DPointFrom3D(player, autoControlVerticesIt->m_Pos3D);
-                  float checkRadius = std::min(player.m_width, player.m_height) * 0.025f; // TODO GARY Fix magic number which determines the size of location to click to remove auto control point
+                  float checkRadius = std::min(player.m_width, player.m_height) * NormalOptions::CreateAutoControlFindFactor;
                   if (DistancePixels(screenPoint, mousePosition2D) < checkRadius)
                   {
                      m_MenuOptions.m_NormalOptions.m_AutoControlVertices.erase(autoControlVerticesIt);
@@ -2447,17 +2480,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                }
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_NormalOptions.m_CreateZ, heightMinimum, heightMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_NormalOptions.m_CreateZ, heightMinimum, heightMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectModeOptions;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -2470,24 +2503,26 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Resume");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ModeState == TrainerOptions::ModeStateType::ModeStateType_Results,
             "Results");
+         // TODO GARY "Config" as first option
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ModeState == TrainerOptions::ModeStateType::ModeStateType_Config,
             "Config");
+         // TODO GARY If hit "exit", set default value back to top option "Config"
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ModeState == TrainerOptions::ModeStateType::ModeStateType_Exit,
             "Exit");
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<TrainerOptions::ModeStateType>(m_MenuOptions.m_TrainerOptions.m_ModeState, 0, TrainerOptions::ModeStateType::ModeStateType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<TrainerOptions::ModeStateType>(m_MenuOptions.m_TrainerOptions.m_ModeState, 0, TrainerOptions::ModeStateType::ModeStateType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_ModeState)
                {
                   case TrainerOptions::ModeStateType::ModeStateType_Start:
@@ -2544,12 +2579,12 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Root_SelectMode;
                      break;
                   default:
-                     assert(0);
+                     InvalidEnumValue("TrainerOptions::ModeStateType", m_MenuOptions.m_TrainerOptions.m_ModeState);
                      break;
                   }
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          break;
@@ -2583,7 +2618,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   totalFailsTimeElapsed++;
                   break;
                default:
-                  assert(0);
+                  InvalidEnumValue("TrainerOptions::RunRecord::ResultType", rr.m_Result);
                   break;
             }
          }
@@ -2605,17 +2640,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
-            case MenuOptionsRecord::MenuActionType_UpLeft:
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectModeOptions;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -2631,17 +2666,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<TrainerOptions::BallStartModeType>(m_MenuOptions.m_TrainerOptions.m_BallStartMode, 0, TrainerOptions::BallStartModeType::BallStartModeType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<TrainerOptions::BallStartModeType>(m_MenuOptions.m_TrainerOptions.m_BallStartMode, 0, TrainerOptions::BallStartModeType::BallStartModeType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_BallStartMode)
                {
                   case TrainerOptions::BallStartModeType::BallStartModeType_Accept:
@@ -2683,12 +2718,12 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      m_MenuOptions.m_TrainerOptions.m_BallStartMode = TrainerOptions::BallStartModeType::BallStartModeType_Accept;
                      break;
                   default:
-                     assert(0);
+                     InvalidEnumValue("TrainerOptions::BallStartModeType", m_MenuOptions.m_TrainerOptions.m_BallStartMode);
                      break;
                }
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          break;
@@ -2726,22 +2761,22 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ControlPrev();
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ControlNext();
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallStartMode;
                m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode = TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          break;
@@ -2750,7 +2785,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuTextTitle("Custom Ball Start Location");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode == TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept,
             "Accept");
-
 
          std::size_t ballNotSetNumber = 0;
          for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
@@ -2774,17 +2808,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                ShowBallStartOptionsRecord(player, dpr, m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentCompleteIndex]);
                break;
             default:
-               assert(0);
+               InvalidEnumValue("TrainerOptions::BallStartCompleteModeType", m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode);
                break;
          }
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                switch (m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode)
                {
                   case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept:
@@ -2803,7 +2837,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      break;
                }
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                switch (m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode)
                {
                   case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept:
@@ -2820,7 +2854,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      break;
                }
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode)
                {
                   case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept:
@@ -2846,7 +2880,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode = TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -2881,19 +2915,19 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
                ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum, currentTimeMs);
                break;
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                bsor.m_Pos = mousePosition3D;
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                if (m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos.IsZero())
                {
                   std::ostringstream strStream;
@@ -2918,7 +2952,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -2938,17 +2972,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<TrainerOptions::BallStartAngleVelocityModeType>(m_MenuOptions.m_TrainerOptions.m_BallStartAngleVelocityMode, 0, TrainerOptions::BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<TrainerOptions::BallStartAngleVelocityModeType>(m_MenuOptions.m_TrainerOptions.m_BallStartAngleVelocityMode, 0, TrainerOptions::BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_BallStartAngleVelocityMode)
                {
                   case TrainerOptions::BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_Drop:
@@ -2974,7 +3008,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -2991,22 +3025,22 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
                ProcessMenuChangeValueSkip<float>(bsor.m_AngleStart, TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1, currentTimeMs);
                break;
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<float>(bsor.m_AngleStart, TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<float>(bsor.m_AngleStart, TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartAngleFinish;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -3023,22 +3057,22 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
                ProcessMenuChangeValueSkip<float>(bsor.m_AngleFinish, TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1, currentTimeMs);
                break;
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<float>(bsor.m_AngleFinish, TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<float>(bsor.m_AngleFinish, TrainerOptions::BallStartOptionsRecord::AngleMinimum, TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartAngleTotal;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -3055,18 +3089,18 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
                ProcessMenuChangeValueSkip<S32>(bsor.m_TotalAngles, TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum, TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum, currentTimeMs);
                break;
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<S32>(bsor.m_TotalAngles, TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum, TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<S32>(bsor.m_TotalAngles, TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum, TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                if (bsor.m_TotalAngles == 0 || bsor.m_TotalAngles == 1)
                {
                   bsor.m_AngleFinish = bsor.m_AngleStart;
@@ -3074,7 +3108,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStart;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -3091,22 +3125,22 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
                ProcessMenuChangeValueSkip<float>(bsor.m_VelocityStart, TrainerOptions::BallStartOptionsRecord::VelocityMinimum, TrainerOptions::BallStartOptionsRecord::VelocityMaximum, currentTimeMs);
                break;
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<float>(bsor.m_VelocityStart, TrainerOptions::BallStartOptionsRecord::VelocityMinimum, TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<float>(bsor.m_VelocityStart, TrainerOptions::BallStartOptionsRecord::VelocityMinimum, TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartVelocityFinish;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -3123,22 +3157,22 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
                ProcessMenuChangeValueSkip<float>(bsor.m_VelocityFinish, TrainerOptions::BallStartOptionsRecord::VelocityMinimum, TrainerOptions::BallStartOptionsRecord::VelocityMaximum, currentTimeMs);
                break;
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<float>(bsor.m_VelocityFinish, TrainerOptions::BallStartOptionsRecord::VelocityMinimum, TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<float>(bsor.m_VelocityFinish, TrainerOptions::BallStartOptionsRecord::VelocityMinimum, TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartVelocityTotal;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -3155,18 +3189,18 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
                ProcessMenuChangeValueSkip<S32>(bsor.m_TotalVelocities, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMaximum, currentTimeMs);
                break;
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<S32>(bsor.m_TotalVelocities, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<S32>(bsor.m_TotalVelocities, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                if (bsor.m_TotalVelocities == 0 || bsor.m_TotalVelocities == 1)
                {
                   bsor.m_VelocityFinish = bsor.m_VelocityStart;
@@ -3174,7 +3208,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartAngleStart;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -3221,19 +3255,19 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
                ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum, currentTimeMs);
                break;
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                bpor.m_Pos = mousePosition3D;
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                if (bpor.m_Pos.IsZero())
                {
                   std::ostringstream strStream;
@@ -3246,7 +3280,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -3266,17 +3300,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<TrainerOptions::BallEndLocationModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode, 0, TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<TrainerOptions::BallEndLocationModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode, 0, TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode)
                {
                   case TrainerOptions::BallEndLocationModeType_Accept:
@@ -3303,7 +3337,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -3323,17 +3357,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode)
                {
                   case TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop:
@@ -3356,7 +3390,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -3375,22 +3409,22 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
                ProcessMenuChangeValueSkip<float>(bpor.m_Distance, TrainerOptions::BallEndOptionsRecord::DistanceMinimum, TrainerOptions::BallEndOptionsRecord::DistanceMaximum, currentTimeMs);
                break;
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<float>(bpor.m_Distance, TrainerOptions::BallEndOptionsRecord::DistanceMinimum, TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<float>(bpor.m_Distance, TrainerOptions::BallEndOptionsRecord::DistanceMinimum, TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassAssociations;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -3421,11 +3455,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode)
                {
                   case TrainerOptions::BallEndAssociationModeType::BallEndAssociationModeType_Accept:
@@ -3444,7 +3478,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      break;
                }
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode)
                {
                   case TrainerOptions::BallEndAssociationModeType::BallEndAssociationModeType_Accept:
@@ -3461,7 +3495,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      break;
                }
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
 
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode)
                {
@@ -3481,7 +3515,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -3512,17 +3546,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                break;
             default:
-               assert(0);
+               InvalidEnumValue("TrainerOptions::BallEndCompleteModeType", m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode);
                break;
          }
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode)
                {
                   case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept:
@@ -3541,7 +3575,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      break;
                }
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode)
                {
                   case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept:
@@ -3558,7 +3592,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      break;
                }
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode)
                {
                   case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept:
@@ -3570,6 +3604,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassLocation;
                      m_MenuOptions.m_CurrentBallIndex = m_MenuOptions.m_CurrentCompleteIndex;
                      break;
+                  // TODO GARY add default here and check for patterns in other places
                }
                m_MenuOptions.m_CurrentAssociationIndex = 0;
                m_MenuOptions.m_CurrentCompleteIndex = 0;
@@ -3578,7 +3613,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode = TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -3625,19 +3660,19 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
                ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum, currentTimeMs);
                break;
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                bfor.m_Pos = mousePosition3D;
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                if (bfor.m_Pos.IsZero())
                {
                   std::ostringstream strStream;
@@ -3648,6 +3683,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                {
                   m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailAccept;
                }
+               break;
+            default:
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -3667,17 +3705,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<TrainerOptions::BallEndLocationModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode, 0, TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<TrainerOptions::BallEndLocationModeType>(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode, 0, TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode)
                {
                   case TrainerOptions::BallEndLocationModeType_Accept:
@@ -3704,7 +3742,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -3724,17 +3762,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode)
                {
                   case TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop:
@@ -3757,7 +3795,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -3774,23 +3812,23 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
                ProcessMenuChangeValueSkip<float>(bfor.m_Distance, TrainerOptions::BallEndOptionsRecord::DistanceMinimum, TrainerOptions::BallEndOptionsRecord::DistanceMaximum, currentTimeMs);
                break;
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<float>(bfor.m_Distance, TrainerOptions::BallEndOptionsRecord::DistanceMinimum, TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<float>(bfor.m_Distance, TrainerOptions::BallEndOptionsRecord::DistanceMinimum, TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailAssociations;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -3821,11 +3859,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode)
                {
                   case TrainerOptions::BallEndAssociationModeType::BallEndAssociationModeType_Accept:
@@ -3844,7 +3882,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      break;
                }
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode)
                {
                   case TrainerOptions::BallEndAssociationModeType::BallEndAssociationModeType_Accept:
@@ -3861,7 +3899,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      break;
                }
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
 
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode)
                {
@@ -3881,7 +3919,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -3912,17 +3950,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                break;
             default:
-               assert(0);
+               InvalidEnumValue("TrainerOptions::BallEndCompleteModeType", m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode);
                break;
          }
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode)
                {
                   case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept:
@@ -3941,7 +3979,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      break;
                }
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode)
                {
                   case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept:
@@ -3958,7 +3996,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      break;
                }
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode)
                {
                   case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept:
@@ -3978,7 +4016,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode = TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          }
@@ -4015,23 +4053,23 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
                ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_TotalRuns, TrainerOptions::TotalRunsMinimum, TrainerOptions::TotalRunsMaximum, currentTimeMs);
                break;
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_TotalRuns, TrainerOptions::TotalRunsMinimum, TrainerOptions::TotalRunsMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_TotalRuns, TrainerOptions::TotalRunsMinimum, TrainerOptions::TotalRunsMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectRunOrderMode;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          break;
@@ -4045,21 +4083,21 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<TrainerOptions::RunOrderModeType>(m_MenuOptions.m_TrainerOptions.m_RunOrderMode, 0, TrainerOptions::RunOrderModeType::RunOrderModeType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<TrainerOptions::RunOrderModeType>(m_MenuOptions.m_TrainerOptions.m_RunOrderMode, 0, TrainerOptions::RunOrderModeType::RunOrderModeType_COUNT - 1);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectMaxSecondsPerRun;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          break;
@@ -4069,23 +4107,23 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
                ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun, TrainerOptions::MaxSecondsPerRunMinimum, TrainerOptions::MaxSecondsPerRunMaximum, currentTimeMs);
                break;
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun, TrainerOptions::MaxSecondsPerRunMinimum, TrainerOptions::MaxSecondsPerRunMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun, TrainerOptions::MaxSecondsPerRunMinimum, TrainerOptions::MaxSecondsPerRunMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectRunCountdownSeconds;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          break;
@@ -4095,23 +4133,23 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
                ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds, TrainerOptions::RunCountdownSecondsMinimum, TrainerOptions::RunCountdownSecondsMaximum, currentTimeMs);
                break;
-            case MenuOptionsRecord::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds, TrainerOptions::RunCountdownSecondsMinimum, TrainerOptions::RunCountdownSecondsMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds, TrainerOptions::RunCountdownSecondsMinimum, TrainerOptions::RunCountdownSecondsMaximum);
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectModeOptions;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          break;
@@ -4122,22 +4160,22 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          switch (menuAction)
          {
-            case MenuOptionsRecord::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType_Toggle:
-            case MenuOptionsRecord::MenuActionType_UpLeft:
-            case MenuOptionsRecord::MenuActionType_DownRight:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                // do nothing
                break;
-            case MenuOptionsRecord::MenuActionType_Enter:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Root_SelectMode;
                break;
             default:
-               assert(0);
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
          break;
       default:
-         assert(0);
+         InvalidEnumValue("MenuOptionsRecord::MenuStateType", m_MenuOptions.m_MenuState);
          break;
    }
 
@@ -4154,7 +4192,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          // do nothing
          break;
       default:
-         assert(0);
+         InvalidEnumValue("MenuOptionsRecord::ModeType", m_MenuOptions.m_ModeType);
          break;
    }
 }
@@ -4165,17 +4203,17 @@ void BallHistory::ProcessMode(Player &player, int currentTimeMs)
    {
       switch (m_MenuOptions.m_ModeType)
       {
-         case MenuOptionsRecord::ModeType_Normal:
+         case MenuOptionsRecord::ModeType::ModeType_Normal:
             ProcessModeNormal(player);
             break;
-         case MenuOptionsRecord::ModeType_Trainer:
+         case MenuOptionsRecord::ModeType::ModeType_Trainer:
             ProcessModeTrainer(player, currentTimeMs);
             break;
-         case MenuOptionsRecord::ModeType_Disabled:
+         case MenuOptionsRecord::ModeType::ModeType_Disabled:
             // do nothing
             break;
          default:
-            assert(0);
+            InvalidEnumValue("MenuOptionsRecord::ModeType", m_MenuOptions.m_ModeType);
             break;
       }
    }
@@ -4203,7 +4241,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       case TrainerOptions::ModeStateType::ModeStateType_Exit:
          return;
       default:
-         assert(0);
+         InvalidEnumValue("TrainerOptions::ModeStateType", m_MenuOptions.m_TrainerOptions.m_ModeState);
          break;
    }
 
@@ -4243,11 +4281,6 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
    DebugPrintRecord dpr(player);
    dpr.SetPositionPercent(0.50f, 1.00f);
    dpr.SetReverse();
-
-
-   // TODO GARY fix bug where you toggle control while on the "start" option (instead of
-   // hitting 'enter'), it looks like the runs get created but some vars are not set correctly
-   // correct behavior is do nothing
 
    if (m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs == 0)
    {
@@ -4357,7 +4390,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                }
                break;
             default:
-               assert(0);
+               InvalidEnumValue("TrainerOptions::RunOrderModeType", m_MenuOptions.m_TrainerOptions.m_RunOrderMode);
                break;
          }
       }
@@ -4642,7 +4675,7 @@ void BallHistory::ResetBallHistoryRenderSizes()
       for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < ballHistoryRecord.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
       {
          BallHistoryState &ballHistoryState = ballHistoryRecord.m_BallHistoryStates[ballHistoryStateIndex];
-         ballHistoryState.m_Size = 0.0f;
+         ballHistoryState.m_DrawRadius = 0.0f;
       }
    }
 }
@@ -4652,6 +4685,7 @@ void BallHistory::DrawBallHistory(Player &player)
    struct DrawBallHistoryRecord
    {
       float TotalDistancePixelsTraveled;
+      BallHistoryRecord * LastDrawnBallHistoryRecord;
       float TotalToRender;
       int StartTimeMs;
       int EndTimeMs;
@@ -4661,15 +4695,14 @@ void BallHistory::DrawBallHistory(Player &player)
    std::size_t tailIndex = GetTailIndex();
 
    std::size_t ballCount = m_BallHistoryRecords[m_CurrentControlIndex].m_BallHistoryStates.size();
-   std::vector<DrawBallHistoryRecord> drawBallHistoryRecords(ballCount, { 0.0f, 0.0f, 0, 0 });
-   bool allMaxDistanceTraveled = false;
+   std::vector<DrawBallHistoryRecord> drawBallHistoryRecords(ballCount, { 0.0f, nullptr, 0.0f, 0, 0 });
+   bool anyMaxDistanceTraveled = false;
    BallHistoryRecord *previousBhr = nullptr;
-   //std::vector<std::size_t> favoriteVertexIndexes;
 
    ResetBallHistoryRenderSizes();
 
    // get total of ball history records to draw and fill in size
-   while (tempCurrentIndex != tailIndex && !allMaxDistanceTraveled)
+   while (tempCurrentIndex != tailIndex && !anyMaxDistanceTraveled)
    {
       BallHistoryRecord &tempCurrentBhr = m_BallHistoryRecords[tempCurrentIndex];
       for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < tempCurrentBhr.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
@@ -4688,13 +4721,21 @@ void BallHistory::DrawBallHistory(Player &player)
                += DistancePixels(previousBhr->m_BallHistoryStates[ballHistoryStateIndex].m_Pos, ballHistoryState.m_Pos);
          }
 
-         float distanceToBall = DistancePixels(ballHistoryState.m_Pos, controlVBall->m_d.m_pos);
+         BallHistoryRecord *lastDrawnBhr = drawBallHistoryRecords[ballHistoryStateIndex].LastDrawnBallHistoryRecord;
+         Vertex3Ds &lastDrawnPos = lastDrawnBhr ? lastDrawnBhr->m_BallHistoryStates[ballHistoryStateIndex].m_Pos : m_BallHistoryRecords[m_CurrentControlIndex].m_BallHistoryStates[ballHistoryStateIndex].m_Pos;
+         float lastDrawnRadius = lastDrawnBhr ? lastDrawnBhr->m_BallHistoryStates[ballHistoryStateIndex].m_DrawRadius : m_BallHistoryRecords[m_CurrentControlIndex].m_BallHistoryStates[ballHistoryStateIndex].m_DrawRadius;
 
-         if (distanceToBall > (controlVBall->m_d.m_radius * 2.0f) && drawBallHistoryRecords[ballHistoryStateIndex].TotalDistancePixelsTraveled < ControlVerticesDistanceMax)
+         float ballRadius = m_ControlVBalls.size() ? m_ControlVBalls[0]->m_d.m_radius : 25.0f;
+         float currentDrawRadius = (((VelocityPixels(ballHistoryState.m_Vel) - 0) * (ballRadius * 1.75f - ballRadius * 0.25f)) / (m_MaxBallVelocityPixels - 0)) + ballRadius * 0.25f;
+
+         float distanceToLastDrawnBallHistory = DistancePixels(ballHistoryState.m_Pos, lastDrawnPos);
+
+         if (distanceToLastDrawnBallHistory > (lastDrawnRadius + currentDrawRadius) && drawBallHistoryRecords[ballHistoryStateIndex].TotalDistancePixelsTraveled < ControlVerticesDistanceMax)
          {
-            float controlVBallRadius = controlVBall->m_d.m_radius;
-            ballHistoryState.m_Size = (((VelocityPixels(ballHistoryState.m_Vel) - 0) * (controlVBallRadius * 1.75f - controlVBallRadius * 0.25f)) / (m_MaxBallVelocityPixels - 0)) + controlVBallRadius * 0.25f;
+            ballHistoryState.m_DrawRadius = currentDrawRadius;
+            drawBallHistoryRecords[ballHistoryStateIndex].LastDrawnBallHistoryRecord = &tempCurrentBhr;
             drawBallHistoryRecords[ballHistoryStateIndex].TotalToRender++;
+            DrawLine(player, ballHistoryState.m_Pos, lastDrawnPos, D3DCOLOR_ARGB(0x00, 0xFF, 0xFF, 0xFF));
          }
       }
 
@@ -4708,12 +4749,11 @@ void BallHistory::DrawBallHistory(Player &player)
       }
 
       previousBhr = &tempCurrentBhr;
-      allMaxDistanceTraveled = true;
       for each (const DrawBallHistoryRecord &dbhr in drawBallHistoryRecords)
       {
-         if (dbhr.TotalDistancePixelsTraveled <= ControlVerticesDistanceMax)
+         if (dbhr.TotalDistancePixelsTraveled >= ControlVerticesDistanceMax)
          {
-            allMaxDistanceTraveled = false;
+            anyMaxDistanceTraveled = true;
          }
       }
    }
@@ -4732,8 +4772,11 @@ void BallHistory::DrawBallHistory(Player &player)
       BallHistoryRecord &tempCurrentBhr = m_BallHistoryRecords[tempCurrentIndex];
       for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < tempCurrentBhr.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
       {
+         // TODO GARY change the logic here to be dependent on the index and not the time
+         // this should be just change the value that gets set End/Start Timems to something
+         // that is an every increasing basic index, that should work based on this logic
          BallHistoryState &ballHistoryState = tempCurrentBhr.m_BallHistoryStates[ballHistoryStateIndex];
-         if (ballHistoryState.m_Size > 0.0f)
+         if (ballHistoryState.m_DrawRadius > 0.0f)
          {
             if (tempCurrentIndex == m_CurrentControlIndex)
             {
@@ -4776,6 +4819,8 @@ void BallHistory::DrawBallHistory(Player &player)
       }
    }
 
+   DebugPrintRecord dpr(player);
+
    // draw the fake balls
    for (std::size_t ballHistoryRecordIndex = 0; ballHistoryRecordIndex < m_BallHistoryRecords.size(); ++ballHistoryRecordIndex)
    {
@@ -4783,9 +4828,9 @@ void BallHistory::DrawBallHistory(Player &player)
       for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < ballHistoryRecord.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
       {
          BallHistoryState &ballHistoryState = ballHistoryRecord.m_BallHistoryStates[ballHistoryStateIndex];
-         if (ballHistoryState.m_Size > 0.0f)
+         if (ballHistoryState.m_DrawRadius > 0.0f)
          {
-            player.DrawFakeBall(ballHistoryState.m_Pos, ballHistoryState.m_Size, ballHistoryState.m_Orientation, ballHistoryState.m_Texture);
+            player.DrawFakeBall(ballHistoryState.m_Pos, ballHistoryState.m_DrawRadius, ballHistoryState.m_Orientation, ballHistoryState.m_Texture);
          }
       }
    }
@@ -4793,18 +4838,21 @@ void BallHistory::DrawBallHistory(Player &player)
 
 void BallHistory::DrawLine(Player &player, const Vertex3Ds &posA, const Vertex3Ds &posB, D3DCOLOR color)
 {
-   std::vector<Vertex3DColor> testVertices;
-   testVertices.push_back({posA.x, posA.y, posA.z, color});
-   testVertices.push_back({posB.x, posB.y, posB.z, color});
+   if (!posA.IsZero() && !posB.IsZero())
+   {
+      std::vector<Vertex3DColor> testVertices;
+      testVertices.push_back({posA.x, posA.y, posA.z, color});
+      testVertices.push_back({posB.x, posB.y, posB.z, color});
 
-   VertexBuffer *testVerticesVB = nullptr;
-   VertexBuffer::CreateVertexBuffer((unsigned int)testVertices.size(), 0, MY_D3DFVF_COLOR_VERTEX, &testVerticesVB, PRIMARY_DEVICE);
-   void *buf;
-   testVerticesVB->lock(0, 0, &buf, VertexBuffer::WRITEONLY);
-   memcpy(buf, testVertices.data(), testVertices.size() * sizeof(testVertices[0]));
-   testVerticesVB->unlock();
+      VertexBuffer *testVerticesVB = nullptr;
+      VertexBuffer::CreateVertexBuffer((unsigned int)testVertices.size(), 0, MY_D3DFVF_COLOR_VERTEX, &testVerticesVB, PRIMARY_DEVICE);
+      void *buf;
+      testVerticesVB->lock(0, 0, &buf, VertexBuffer::WRITEONLY);
+      memcpy(buf, testVertices.data(), testVertices.size() * sizeof(testVertices[0]));
+      testVerticesVB->unlock();
 
-   player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::LINELIST, MY_D3DFVF_COLOR_VERTEX, testVerticesVB, 0, testVertices.size(), false);
+      player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::LINELIST, MY_D3DFVF_COLOR_VERTEX, testVerticesVB, 0, testVertices.size(), false);
+   }
 }
 
 void BallHistory::DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float ballRadius, float intersectionRadius, D3DCOLOR color)
@@ -4962,7 +5010,7 @@ void BallHistory::Process(Player &player, int currentTimeMs)
                UpdateBallState(player, currentControlBhr);
             }
 
-            ProcessMenu(player, MenuOptionsRecord::MenuActionType_None, currentTimeMs);
+            ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_None, currentTimeMs);
          }
          else
          {
@@ -5004,7 +5052,7 @@ void BallHistory::Process(Player &player, int currentTimeMs)
 
             UpdateBallState(player, currentBhr);
 
-            ProcessMenu(player, MenuOptionsRecord::MenuActionType_None, currentTimeMs);
+            ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_None, currentTimeMs);
          }
          else
          {
@@ -5019,7 +5067,7 @@ void BallHistory::Process(Player &player, int currentTimeMs)
          }
          break;
       default:
-         assert(0);
+         InvalidEnumValue("MenuOptionsRecord::ModeType", m_MenuOptions.m_ModeType);
          break;
     }
 }
@@ -5058,7 +5106,7 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
       {
          if (m_Control)
          {
-            ProcessMenu(player, MenuOptionsRecord::MenuActionType_UpLeft, currentTimeMs);
+            ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft, currentTimeMs);
 
             m_MenuOptions.m_SkipKeyPressed = true;
             m_MenuOptions.m_SkipKeyPressedMs = currentTimeMs;
@@ -5080,7 +5128,7 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
       {
          if (m_Control)
          {
-            ProcessMenu(player, MenuOptionsRecord::MenuActionType_DownRight, currentTimeMs);
+            ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_DownRight, currentTimeMs);
 
             m_MenuOptions.m_SkipKeyPressed = true;
             m_MenuOptions.m_SkipKeyPressedMs = currentTimeMs;
@@ -5103,7 +5151,7 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
          if (m_Control)
          {
             m_MenuOptions.m_MenuError.clear();
-            ProcessMenu(player, MenuOptionsRecord::MenuActionType_Enter, currentTimeMs);
+            ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_Enter, currentTimeMs);
             return true;
          }
       }
