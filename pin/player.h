@@ -299,10 +299,10 @@ class TrainerOptions
 public:
    enum ModeStateType
    {
+      ModeStateType_Config,
       ModeStateType_Start,
       ModeStateType_Resume,
       ModeStateType_Results,
-      ModeStateType_Config,
       ModeStateType_Exit,
       ModeStateType_COUNT
    };
@@ -475,7 +475,7 @@ public:
    {
       ModeStateType_SelectCurrentBallHistory,
       ModeStateType_SelectRecallBallHistory,
-      ModeStateType_CreateAutoControlLocations,
+      ModeStateType_ManageAutoControlLocations,
       ModeStateType_Exit,
       ModeStateType_COUNT
    };
@@ -496,7 +496,7 @@ public:
    static const std::size_t RecallControlIndexDisabled = -1;
    static const std::size_t AutoControlVerticesMax = 256;
 
-   static const float CreateAutoControlFindFactor;
+   static const float ManageAutoControlFindFactor;
 
    ModeStateType m_ModeState;
 
@@ -586,7 +586,7 @@ private:
          MenuStateType_Normal_SelectCurrentBallHistory,
          MenuStateType_Normal_SetupRecallBallHistory,
          MenuStateType_Normal_SelectRecallBallHistory,
-         MenuStateType_Normal_CreateAutoControlLocations,
+         MenuStateType_Normal_ManageAutoControlLocations,
          MenuStateType_Trainer_SelectModeOptions,
          MenuStateType_Trainer_Results,
          MenuStateType_Trainer_SelectBallStartMode,
