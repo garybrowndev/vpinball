@@ -4823,15 +4823,13 @@ void BallHistory::DrawBallHistory(Player &player)
 
    // fill in color and texture
    tempCurrentIndex = m_CurrentControlIndex;
+   std::size_t drawBallCount = 0;
 
    while (tempCurrentIndex != tailIndex)
    {
       BallHistoryRecord &tempCurrentBhr = m_BallHistoryRecords[tempCurrentIndex];
       for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < tempCurrentBhr.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
       {
-         // TODO GARY change the logic here to be dependent on the index and not the time
-         // this should be just change the value that gets set End/Start Timems to something
-         // that is an every increasing basic index, that should work based on this logic
          BallHistoryState &ballHistoryState = tempCurrentBhr.m_BallHistoryStates[ballHistoryStateIndex];
          if (ballHistoryState.m_DrawRadius > 0.0f)
          {
@@ -4841,25 +4839,27 @@ void BallHistory::DrawBallHistory(Player &player)
             }
             else
             {
-               unsigned char red = (unsigned char)(((tempCurrentBhr.m_TimeMs - drawBallHistoryRecords[ballHistoryStateIndex].StartTimeMs) * 0xFF)
-                  / (drawBallHistoryRecords[ballHistoryStateIndex].EndTimeMs - drawBallHistoryRecords[ballHistoryStateIndex].StartTimeMs));
-               unsigned char blue = (unsigned char)(0xFF
-                  - ((tempCurrentBhr.m_TimeMs - drawBallHistoryRecords[ballHistoryStateIndex].StartTimeMs) * 0xFF)
-                     / (drawBallHistoryRecords[ballHistoryStateIndex].EndTimeMs - drawBallHistoryRecords[ballHistoryStateIndex].StartTimeMs));
+               if (ballHistoryState.m_DrawRadius > 0.0f)
+               {
+                  unsigned char red = (unsigned char)(0xFF - drawBallCount * 0xFF / drawBallHistoryRecords[ballHistoryStateIndex].TotalToRender);
+                  unsigned char blue = (unsigned char)(drawBallCount * 0xFF / drawBallHistoryRecords[ballHistoryStateIndex].TotalToRender);
 
-               RGBQUAD color = { blue, 0x00, red, 0 };
-               U32 colorKey = *(U32 *)&color;
-               std::map<U32, Texture *>::iterator existingTexture = m_ControlHistoryBallTextures.find(colorKey);
-               if (existingTexture == m_ControlHistoryBallTextures.end())
-               {
-                  FIBITMAP *tempFib = FreeImage_AllocateEx(1, 1, 8, &color);
-                  BaseTexture *tempTex = BaseTexture::CreateFromFreeImage(tempFib, false);
-                  ballHistoryState.m_Texture = new Texture(tempTex);
-                  m_ControlHistoryBallTextures.emplace(colorKey, ballHistoryState.m_Texture);
-               }
-               else
-               {
-                  ballHistoryState.m_Texture = existingTexture->second;
+                  RGBQUAD color = { blue, 0x00, red, 0 };
+                  U32 colorKey = *(U32 *)&color;
+                  std::map<U32, Texture *>::iterator existingTexture = m_ControlHistoryBallTextures.find(colorKey);
+                  if (existingTexture == m_ControlHistoryBallTextures.end())
+                  {
+                     FIBITMAP *tempFib = FreeImage_AllocateEx(1, 1, 8, &color);
+                     BaseTexture *tempTex = BaseTexture::CreateFromFreeImage(tempFib, false);
+                     ballHistoryState.m_Texture = new Texture(tempTex);
+                     m_ControlHistoryBallTextures.emplace(colorKey, ballHistoryState.m_Texture);
+                  }
+                  else
+                  {
+                     ballHistoryState.m_Texture = existingTexture->second;
+                  }
+
+                  drawBallCount++;
                }
             }
          }
