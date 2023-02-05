@@ -331,7 +331,7 @@ public:
 
    enum BallEndLocationModeType
    {
-      BallEndLocationModeType_Accept,
+      BallEndLocationModeType_Config,
       BallEndLocationModeType_Delete,
       BallEndLocationModeType_COUNT
    };
@@ -600,18 +600,18 @@ private:
          MenuStateType_Trainer_SelectCustomBallStartVelocityStart,
          MenuStateType_Trainer_SelectCustomBallStartVelocityFinish,
          MenuStateType_Trainer_SelectCustomBallStartVelocityTotal,
-         MenuStateType_Trainer_SelectBallPassLocation,
+         MenuStateType_Trainer_BallPassComplete,
          MenuStateType_Trainer_SelectBallPassAccept,
          MenuStateType_Trainer_SelectBallPassFinishMode,
          MenuStateType_Trainer_SelectBallPassDistance,
+         MenuStateType_Trainer_SelectBallPassLocation,
          MenuStateType_Trainer_SelectBallPassAssociations,
-         MenuStateType_Trainer_BallPassComplete,
-         MenuStateType_Trainer_SelectBallFailLocation,
+         MenuStateType_Trainer_BallFailComplete,
          MenuStateType_Trainer_SelectBallFailAccept,
          MenuStateType_Trainer_SelectBallFailFinishMode,
          MenuStateType_Trainer_SelectBallFailDistance,
+         MenuStateType_Trainer_SelectBallFailLocation,
          MenuStateType_Trainer_SelectBallFailAssociations,
-         MenuStateType_Trainer_BallFailComplete,
          MenuStateType_Trainer_SelectTotalRuns,
          MenuStateType_Trainer_SelectRunOrderMode,
          MenuStateType_Trainer_SelectMaxSecondsPerRun,
@@ -711,7 +711,6 @@ private:
    static const char * NormalModeSettingsSectionName;
    static const char * NormalModeAutoControlVerticesPosition3DKeyName;
    static const char * TrainerModeSettingsSectionName;
-   static const char * TrainerModeStateSectionName;
    static const char * TrainerModeTotalRunsKeyName;
    static const char * TrainerModeRunOrderModeKeyName;
    static const char * TrainerModeMaxSecondsPerRunKeyName;
