@@ -485,19 +485,16 @@ bool BallHistory::GetSettingsFileName(Player &player, std::string &fileName)
 
 void BallHistory::InvalidEnumValue(const char * enumName, const int enumValue)
 {
-   //g_pvp->ProfileLog("Unknown NextPreviousByType");
-
-   //std::stringstream errorMessage;
-   //errorMessage << "Invalid value '" << enumValue << "' for enum type " << enumName;
-   assert(0);
+   std::stringstream errorMessage;
+   errorMessage << "Ball History: Invalid value '" << enumValue << "' for enum type " << enumName;
+   m_MenuOptions.m_MenuError = errorMessage.str();
 }
 
 void BallHistory::InvalidEnumValue(const char * enumName, const char * enumValue)
 {
-   //g_pvp->ProfileLog("Unknown NextPreviousByType");
-   //std::stringstream errorMessage;
-   //errorMessage << "Invalid value '" << enumValue << "' for enum type " << enumName;
-   assert(0);
+   std::stringstream errorMessage;
+   errorMessage << "Ball History: Invalid value '" << enumValue << "' for enum type " << enumName;
+   m_MenuOptions.m_MenuError = errorMessage.str();
 }
 
 void BallHistory::CenterMouse(Player &player)
@@ -1351,7 +1348,11 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
    dpr.SetPositionPercent(0.0f, 0.0f);
 
    dpr.ShowText("Ball History Status");
-
+   if (!m_MenuOptions.m_MenuError.empty())
+   {
+      dpr.ShowText("Error = %s", m_MenuOptions.m_MenuError.c_str());
+   }
+ 
    switch (m_MenuOptions.m_ModeType)
    {
       case MenuOptionsRecord::ModeType::ModeType_Normal:
@@ -1410,7 +1411,6 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
          break;
       case MenuOptionsRecord::ModeType::ModeType_Trainer:
          dpr.ShowText("Mode = Trainer");
-         dpr.ShowText("Error = %s", m_MenuOptions.m_MenuError.empty() ? "<no error>" : m_MenuOptions.m_MenuError.c_str());
          switch (m_MenuOptions.m_TrainerOptions.m_ModeState)
          {
             case TrainerOptions::ModeStateType::ModeStateType_Start:
@@ -2477,6 +2477,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                switch (m_MenuOptions.m_TrainerOptions.m_ModeState)
                {
                   case TrainerOptions::ModeStateType::ModeStateType_Start:
+                     m_MenuOptions.m_MenuError.clear();
                      if (m_ControlVBalls.size() != m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize)
                      {
                         std::ostringstream strStream;
@@ -2494,7 +2495,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                         m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results;
 
                         m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord = 0;
-
                         m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
                         for (std::size_t bporIndex = 0; bporIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); bporIndex++)
                         {
@@ -2647,6 +2647,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                         }
                      }
 
+                     m_MenuOptions.m_MenuError.clear();
                      if (ballNotSetNumber)
                      {
                         std::ostringstream strStream;
@@ -2820,6 +2821,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                switch (m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode)
                {
                   case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept:
+                     m_MenuOptions.m_MenuError.clear();
                      if (ballNotSetNumber)
                      {
                         std::ostringstream strStream;
@@ -2893,6 +2895,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+               m_MenuOptions.m_MenuError.clear();
                if (m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex].m_Pos.IsZero())
                {
                   std::ostringstream strStream;
@@ -3490,6 +3493,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+               m_MenuOptions.m_MenuError.clear();
                if (bpor.m_Pos.IsZero())
                {
                   std::ostringstream strStream;
@@ -3917,6 +3921,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMinimum, heightMaximum);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+               m_MenuOptions.m_MenuError.clear();
                if (bfor.m_Pos.IsZero())
                {
                   std::ostringstream strStream;
@@ -4258,23 +4263,23 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          break;
    }
 
-   std::ostringstream strStream;
+   std::string errorMessage;
    bool cancelRun = true;
    if (BallCountIncreased())
    {
-      strStream << "Trainer run cancelled - new ball created";
+      errorMessage = "Trainer run cancelled - new ball created";
    }
    else if (BallCountDecreased())
    {
-      strStream << "Trainer run cancelled - existing ball destroyed";
+      errorMessage = "Trainer run cancelled - existing ball destroyed";
    }
    else if (BallChanged())
    {
-      strStream << "Trainer run cancelled - existing ball changed";
+      errorMessage = "Trainer run cancelled - existing ball changed";
    }
    else if (m_ControlVBalls.size() == 0)
    {
-      strStream << "Trainer run cancelled - no available balls";
+      errorMessage = "Trainer run cancelled - no available balls";
    }
    else
    {
@@ -4283,7 +4288,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
 
    if (cancelRun)
    {
-      m_MenuOptions.m_MenuError = strStream.str();
+      m_MenuOptions.m_MenuError = errorMessage;
 
       ToggleControl();
       m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results;
@@ -5152,7 +5157,6 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
       {
          if (m_Control)
          {
-            m_MenuOptions.m_MenuError.clear();
             ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_Enter, currentTimeMs);
             return true;
          }
