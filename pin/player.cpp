@@ -2538,6 +2538,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      }
                      else
                      {                        
+                        // TODO GARY when starting a training run, something needs to be done about the previous/current
+                        // ball history up to that point, if the start point is far from the existing natrual position
+                        // of the ball, it will draw a long line to the start point when you are in ball history mode
+                        // for the first run of the trainer as counting down, this looks dumb
                         ToggleControl();
 
                         m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results;
@@ -4744,15 +4748,13 @@ void BallHistory::DrawBallHistory(Player &player)
       float TotalDistancePixelsTraveled;
       BallHistoryRecord * LastDrawnBallHistoryRecord;
       float TotalToRender;
-      int StartTimeMs;
-      int EndTimeMs;
    };
 
    std::size_t tempCurrentIndex = m_CurrentControlIndex;
    std::size_t tailIndex = GetTailIndex();
 
    std::size_t ballCount = m_BallHistoryRecords[m_CurrentControlIndex].m_BallHistoryStates.size();
-   std::vector<DrawBallHistoryRecord> drawBallHistoryRecords(ballCount, { 0.0f, nullptr, 0.0f, 0, 0 });
+   std::vector<DrawBallHistoryRecord> drawBallHistoryRecords(ballCount, { 0.0f, nullptr, 0.0f });
    bool anyMaxDistanceTraveled = false;
    BallHistoryRecord *previousBhr = nullptr;
 
@@ -4766,11 +4768,6 @@ void BallHistory::DrawBallHistory(Player &player)
       {
          BallHistoryState &ballHistoryState = tempCurrentBhr.m_BallHistoryStates[ballHistoryStateIndex];
          Ball *controlVBall = m_ControlVBalls[ballHistoryStateIndex];
-
-         if (tempCurrentIndex == m_CurrentControlIndex)
-         {
-            drawBallHistoryRecords[ballHistoryStateIndex].EndTimeMs = tempCurrentBhr.m_TimeMs;
-         }
 
          if (previousBhr)
          {
@@ -4813,12 +4810,6 @@ void BallHistory::DrawBallHistory(Player &player)
             anyMaxDistanceTraveled = true;
          }
       }
-   }
-
-   BallHistoryRecord &tempCurrentBhr = m_BallHistoryRecords[tempCurrentIndex];
-   for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < tempCurrentBhr.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
-   {
-      drawBallHistoryRecords[ballHistoryStateIndex].StartTimeMs = tempCurrentBhr.m_TimeMs;
    }
 
    // fill in color and texture
