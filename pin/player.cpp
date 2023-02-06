@@ -2530,10 +2530,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      }
                      else
                      {                        
-                        // TODO GARY when starting a training run, something needs to be done about the previous/current
-                        // ball history up to that point, if the start point is far from the existing natrual position
-                        // of the ball, it will draw a long line to the start point when you are in ball history mode
-                        // for the first run of the trainer as counting down, this looks dumb
                         ToggleControl();
 
                         m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results;
@@ -4349,6 +4345,8 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
 
    if (m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs == 0)
    {
+      Init(player, currentTimeMs, false);
+
       if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord == 0)
       {
          m_MenuOptions.m_TrainerOptions.m_RunRecords.clear();
