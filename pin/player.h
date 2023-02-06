@@ -532,6 +532,28 @@ private:
       eDistancePixels
    };
 
+   struct ProfilerRecord
+   {
+      struct ProfilerScope
+      {
+         U64 &m_ProfilerUsec;
+         U64 m_TempUsec;
+         ProfilerScope(U64 &usec);
+         ~ProfilerScope();
+      };
+
+      U64 m_ProcessUsec;
+      U64 m_ShowStatusUsec;
+      U64 m_ProcessMenuUsec;
+      U64 m_DrawBallHistoryUsec;
+      U64 m_ProcessModeNormalUsec;
+      U64 m_ProcessModeTrainerUsec;
+      U64 m_DrawTrainerBallsUsec;
+
+      ProfilerRecord();
+      void SetZero();
+   };
+
    struct DebugPrintRecord
    {
       Player &m_Player;
@@ -667,6 +689,8 @@ private:
    std::vector<Ball*> m_ControlVBalls;
    std::vector<Ball*> m_ControlVBallsPrevious;
 
+   ProfilerRecord m_ProfilerRecord;
+
    bool m_ShowStatus;
    bool m_Control;
    bool m_WasControlled;
@@ -746,10 +770,10 @@ private:
    void DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float ballRadius, float intersectionRadius, D3DCOLOR color);
    void DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
    void DrawFakeBallAtMousePosition(Player &player, float heightZ, float intersectionRadius, Texture &texture, const Vertex3Ds * lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr);
-   bool ShouldDrawTrainerBallStartLocations(std::size_t index, int currentTimeMs);
-   bool ShouldDrawTrainerBallPassLocations(std::size_t index, int currentTimeMs);
-   bool ShouldDrawTrainerBallFailLocations(std::size_t index, int currentTimeMs);
-   void DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
+   bool ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs);
+   bool ShouldDrawTrainerBallPasses(std::size_t index, int currentTimeMs);
+   bool ShouldDrawTrainerBallFails(std::size_t index, int currentTimeMs);
+   void DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
    void DrawAngleVelocityPreview(Player &player, TrainerOptions::BallStartOptionsRecord &bsor);
    void DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angleStep, float velocityStep, float radius);
    void DrawAngleVelocityPreviewHelperAdd(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angle, float velocity, float radius);

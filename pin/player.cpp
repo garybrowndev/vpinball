@@ -197,6 +197,33 @@ void BallHistoryRecord::Insert(const Ball * controlVBall, int insertIndex)
    Set(controlVBall, m_BallHistoryStates[insertIndex]);
 }
 
+BallHistory::ProfilerRecord::ProfilerScope::ProfilerScope(U64 &profilerUsec):
+   m_ProfilerUsec(profilerUsec)
+{
+   m_TempUsec = usec();
+}
+
+BallHistory::ProfilerRecord::ProfilerScope::~ProfilerScope()
+{
+   m_ProfilerUsec = usec() - m_TempUsec;
+}
+
+BallHistory::ProfilerRecord::ProfilerRecord()
+{
+   SetZero();
+}
+
+void BallHistory::ProfilerRecord::SetZero()
+{
+   m_ProcessUsec = 0;
+   m_ShowStatusUsec = 0;
+   m_ProcessMenuUsec = 0;
+   m_DrawBallHistoryUsec = 0;
+   m_ProcessModeNormalUsec = 0;
+   m_ProcessModeTrainerUsec = 0;
+   m_DrawTrainerBallsUsec = 0;
+}
+
 BallHistory::DebugPrintRecord::DebugPrintRecord(Player &player):
    m_Player(player)
 {
@@ -1339,6 +1366,9 @@ void BallHistory::ToggleRecall()
 
 void BallHistory::ShowStatus(Player &player, int currentTimeMs)
 {
+   ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_ShowStatusUsec);
+   U64 showStatusUsec = usec();
+
    if (!m_ShowStatus)
    {
       return;
@@ -1348,6 +1378,17 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
    dpr.SetPositionPercent(0.0f, 0.0f);
 
    dpr.ShowText("Ball History Status");
+
+   dpr.ShowText("Process = %.2fms", m_ProfilerRecord.m_ProcessUsec / 1000.0f);
+   dpr.ShowText("  Show Status = %.2fms", m_ProfilerRecord.m_ShowStatusUsec / 1000.0f);
+   dpr.ShowText("  Process Menu = %.2fms", m_ProfilerRecord.m_ProcessMenuUsec / 1000.0f);
+   dpr.ShowText("  Draw Ball History = %.2fms", m_ProfilerRecord.m_DrawBallHistoryUsec / 1000.0f);
+   dpr.ShowText("  Process Mode Normal = %.2fms", m_ProfilerRecord.m_ProcessModeNormalUsec / 1000.0f);
+   dpr.ShowText("  Process Mode Trainer = %.2fms", m_ProfilerRecord.m_ProcessModeTrainerUsec / 1000.0f);
+   dpr.ShowText("  Draw Trainer Ball(s) = %.2fms", m_ProfilerRecord.m_DrawTrainerBallsUsec / 1000.0f);
+
+   m_ProfilerRecord.SetZero();
+
    if (!m_MenuOptions.m_MenuError.empty())
    {
       dpr.ShowText("Error = %s", m_MenuOptions.m_MenuError.c_str());
@@ -1763,7 +1804,7 @@ void BallHistory::ShowBallEndOptionsRecord(Player &player, DebugPrintRecord &dpr
    }
 }
 
-bool BallHistory::ShouldDrawTrainerBallStartLocations(std::size_t index, int currentTimeMs)
+bool BallHistory::ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs)
 {
    switch (m_MenuOptions.m_MenuState)
    {
@@ -1795,7 +1836,7 @@ bool BallHistory::ShouldDrawTrainerBallStartLocations(std::size_t index, int cur
    return true;
 }
 
-bool BallHistory::ShouldDrawTrainerBallPassLocations(std::size_t index, int currentTimeMs)
+bool BallHistory::ShouldDrawTrainerBallPasses(std::size_t index, int currentTimeMs)
 {
    switch (m_MenuOptions.m_MenuState)
    {
@@ -1823,7 +1864,7 @@ bool BallHistory::ShouldDrawTrainerBallPassLocations(std::size_t index, int curr
    return true;
 }
 
-bool BallHistory::ShouldDrawTrainerBallFailLocations(std::size_t index, int currentTimeMs)
+bool BallHistory::ShouldDrawTrainerBallFails(std::size_t index, int currentTimeMs)
 {
    switch (m_MenuOptions.m_MenuState)
    {
@@ -1851,8 +1892,9 @@ bool BallHistory::ShouldDrawTrainerBallFailLocations(std::size_t index, int curr
    return true;
 }
 
-void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr, int currentTimeMs)
+void BallHistory::DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int currentTimeMs)
 {
+   ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_DrawTrainerBallsUsec);
    Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr;
    Matrix3 orientation;
    orientation.Identity();
@@ -1866,7 +1908,7 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
 
    for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
    {
-      if (ShouldDrawTrainerBallStartLocations(bsorIndex, currentTimeMs))
+      if (ShouldDrawTrainerBallStarts(bsorIndex, currentTimeMs))
       {
          TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
          if (!bsor.m_Pos.IsZero())
@@ -1882,7 +1924,7 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
 
    for (std::size_t bporIndex = 0; bporIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); bporIndex++)
    {
-      if (ShouldDrawTrainerBallPassLocations(bporIndex, currentTimeMs))
+      if (ShouldDrawTrainerBallPasses(bporIndex, currentTimeMs))
       {
          TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[bporIndex];
          if (!bpor.m_Pos.IsZero())
@@ -1901,7 +1943,7 @@ void BallHistory::DrawTrainerBallLocations(Player &player, DebugPrintRecord &dpr
 
    for (std::size_t bforIndex = 0; bforIndex < m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size(); bforIndex++)
    {
-      if (ShouldDrawTrainerBallFailLocations(bforIndex, currentTimeMs))
+      if (ShouldDrawTrainerBallFails(bforIndex, currentTimeMs))
       {
          TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[bforIndex];
          if (!bfor.m_Pos.IsZero())
@@ -2150,6 +2192,8 @@ template <class T> void BallHistory::ProcessMenuChangeValueSkip(T &value, S32 mi
 // in my defense, this is menu/ui handling and a huge switch statement, which is kinda like many functions
 void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs)
 {
+   ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_ProcessMenuUsec);
+
    DebugPrintRecord dpr(player);
    dpr.SetPositionPercent(0.50f, 0.50f);
 
@@ -4198,13 +4242,14 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
    }
 
    DrawBallHistory(player);
+
    switch (m_MenuOptions.m_ModeType)
    {
       case MenuOptionsRecord::ModeType::ModeType_Normal:
          DrawAutoControlVertices(player, dpr, currentTimeMs);
          break;
       case MenuOptionsRecord::ModeType::ModeType_Trainer:
-         DrawTrainerBallLocations(player, dpr, currentTimeMs);
+         DrawTrainerBalls(player, dpr, currentTimeMs);
          break;
       case MenuOptionsRecord::ModeType::ModeType_Disabled:
          // do nothing
@@ -4239,6 +4284,7 @@ void BallHistory::ProcessMode(Player &player, int currentTimeMs)
 
 void BallHistory::ProcessModeNormal(Player &player)
 {
+   ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_ProcessModeNormalUsec);
    if (BallInsideAutoControlVertex(m_ControlVBalls))
    {
       SetControl(true);
@@ -4249,6 +4295,7 @@ void BallHistory::ProcessModeNormal(Player &player)
 
 void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
 {
+   ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_ProcessModeTrainerUsec);
    switch (m_MenuOptions.m_TrainerOptions.m_ModeState)
    {
       case TrainerOptions::ModeStateType::ModeStateType_Start:
@@ -4702,6 +4749,8 @@ void BallHistory::ResetBallHistoryRenderSizes()
 
 void BallHistory::DrawBallHistory(Player &player)
 {
+   ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_DrawBallHistoryUsec);
+
    struct DrawBallHistoryRecord
    {
       float TotalDistancePixelsTraveled;
@@ -4975,6 +5024,8 @@ void BallHistory::InitControlVBalls(Player &player)
 
 void BallHistory::Process(Player &player, int currentTimeMs)
 {
+   ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_ProcessUsec);
+
    InitControlVBalls(player);
 
    ShowStatus(player, currentTimeMs);
@@ -5053,6 +5104,8 @@ void BallHistory::Process(Player &player, int currentTimeMs)
          }
          break;
       case MenuOptionsRecord::ModeType::ModeType_Disabled:
+         ProcessMode(player, currentTimeMs);
+
          if (m_Control)
          {
             m_WasControlled = true;
@@ -5076,7 +5129,7 @@ void BallHistory::Process(Player &player, int currentTimeMs)
       default:
          InvalidEnumValue("MenuOptionsRecord::ModeType", m_MenuOptions.m_ModeType);
          break;
-    }
+   }
 }
 
 bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, int currentTimeMs)
@@ -10059,7 +10112,6 @@ void Player::Render()
    //if ( !cameraMode )
    if (m_minphyslooptime == 0) // (vsync) latency reduction code not active? -> Do Physics Updates here
       UpdatePhysics();
-
    m_BallHistory.Process(*this, (int)(timeforframe / 1000));
 
    m_overall_frames++;
