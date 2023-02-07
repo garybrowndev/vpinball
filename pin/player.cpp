@@ -77,7 +77,7 @@ public:
 #include "simpleini/SimpleIni.h"
 
 
-const float TrainerOptions::BallEndOptionsRecord::DistanceDisabled = -1.0f; // Stop mode is enabled
+const float TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled = -1.0f; // Stop mode is enabled
 
 TrainerOptions::BallStartOptionsRecord::BallStartOptionsRecord():
    BallStartOptionsRecord(Vertex3Ds(0.0f, 0.0f, 0.0f), Vertex3Ds(0.0f, 0.0f, 0.0f), Vertex3Ds(0.0f, 0.0f, 0.0f), AngleMinimum, AngleMinimum, 0, VelocityMinimum, VelocityMinimum, 0)
@@ -102,9 +102,9 @@ TrainerOptions::BallEndOptionsRecord::BallEndOptionsRecord():
 {
 }
 
-TrainerOptions::BallEndOptionsRecord::BallEndOptionsRecord(Vertex3Ds &pos, float distance):
+TrainerOptions::BallEndOptionsRecord::BallEndOptionsRecord(Vertex3Ds &pos, float radiusPercent):
    m_Pos(pos),
-   m_Distance(distance)
+   m_RadiusPercent(radiusPercent)
 {
 }
 
@@ -290,8 +290,8 @@ void BallHistory::DebugPrintRecord::ShowTextTitle(const char * format, ...)
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
-   std::string tempStr = "*****" + std::string(m_StrBuffer) + "*****";
-   m_Player.DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), false);
+   std::string tempStr = "-----" + std::string(m_StrBuffer) + "-----";
+   m_Player.DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuText(const char * format, ...)
@@ -421,10 +421,10 @@ const char * BallHistory::TrainerModeBallStartVelocityStartKeyName = "StartVeloc
 const char * BallHistory::TrainerModeBallStartVelocityFinishKeyName = "StartVelocityFinish";
 const char * BallHistory::TrainerModeBallStartTotalVelocitiesKeyName = "StartVelocities";
 const char * BallHistory::TrainerModeBallPassPosition3DKeyName = "PassPosition3D";
-const char * BallHistory::TrainerModeBallPassDistanceKeyName = "PassDistance";
+const char * BallHistory::TrainerModeBallPassRadiusPercentKeyName = "PassRadiusPercent";
 const char * BallHistory::TrainerModeBallPassAssociationsKeyName = "PassAssociations";
 const char * BallHistory::TrainerModeBallFailPosition3DKeyName = "FailPosition3D";
-const char * BallHistory::TrainerModeBallFailDistanceKeyName = "FailDistance";
+const char * BallHistory::TrainerModeBallFailRadiusPercentKeyName = "FailRadiusPercent";
 const char * BallHistory::TrainerModeBallFailAssociationsKeyName = "FailAssociations";
 
 BallHistory::BallHistory() :
@@ -664,20 +664,20 @@ void BallHistory::LoadSettings(Player &player)
       }
 
       std::istringstream ballPassOptionsPos3D;
-      std::istringstream ballPassOptionsDistance;
+      std::istringstream ballPassOptionsRadiusPercent;
       std::istringstream ballPassOptionsAssociations;
       if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallPassPosition3DKeyName, ballPassOptionsPos3D) == true &&
-         LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallPassDistanceKeyName, ballPassOptionsDistance) == true &&
+         LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallPassRadiusPercentKeyName, ballPassOptionsRadiusPercent) == true &&
          LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallPassAssociationsKeyName, ballPassOptionsAssociations) == true)
       {
          while (ballPassOptionsPos3D.peek() != EOF &&
-            ballPassOptionsDistance.peek() != EOF &&
+            ballPassOptionsRadiusPercent.peek() != EOF &&
             ballPassOptionsAssociations.peek() != EOF)
          {
             m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.push_back(TrainerOptions::BallEndOptionsRecord());
             TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.back();
             ballPassOptionsPos3D >> bpor.m_Pos.x >> delimeter >> bpor.m_Pos.y >> delimeter >> bpor.m_Pos.z >> delimeter;
-            ballPassOptionsDistance >> bpor.m_Distance >> delimeter;
+            ballPassOptionsRadiusPercent >> bpor.m_RadiusPercent >> delimeter;
             std::size_t associatedBallStartIndexesSize;
             ballPassOptionsAssociations >> associatedBallStartIndexesSize >> delimeter;
             for (std::size_t absiIndex = 0; absiIndex < associatedBallStartIndexesSize; absiIndex++)
@@ -690,20 +690,20 @@ void BallHistory::LoadSettings(Player &player)
       }
 
       std::istringstream ballFailOptionsPos3D;
-      std::istringstream ballFailOptionsDistance;
+      std::istringstream ballFailOptionsRadiusPercent;
       std::istringstream ballFailOptionsAssociations;
       if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallFailPosition3DKeyName, ballFailOptionsPos3D) == true &&
-         LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallFailDistanceKeyName, ballFailOptionsDistance) == true &&
+         LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallFailRadiusPercentKeyName, ballFailOptionsRadiusPercent) == true &&
          LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallFailAssociationsKeyName, ballFailOptionsAssociations) == true)
       {
          while (ballFailOptionsPos3D.peek() != EOF &&
-            ballFailOptionsDistance.peek() != EOF &&
+            ballFailOptionsRadiusPercent.peek() != EOF &&
             ballFailOptionsAssociations.peek() != EOF)
          {
             m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.push_back(TrainerOptions::BallEndOptionsRecord());
             TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.back();
             ballFailOptionsPos3D >> bfor.m_Pos.x >> delimeter >> bfor.m_Pos.y >> delimeter >> bfor.m_Pos.z >> delimeter;
-            ballFailOptionsDistance >> bfor.m_Distance >> delimeter;
+            ballFailOptionsRadiusPercent >> bfor.m_RadiusPercent >> delimeter;
             std::size_t associatedBallStartIndexesSize;
             ballFailOptionsAssociations >> associatedBallStartIndexesSize >> delimeter;
             for (std::size_t absiIndex = 0; absiIndex < associatedBallStartIndexesSize; absiIndex++)
@@ -810,12 +810,12 @@ void BallHistory::SaveSettings(Player &player)
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallStartTotalVelocitiesKeyName, tempStr.c_str());
 
       std::ostringstream ballPassOptionsPos3D;
-      std::ostringstream ballPassOptionsDistance;
+      std::ostringstream ballPassOptionsRadiusPercent;
       std::ostringstream ballPassOptionsAssociations;
       for each (const TrainerOptions::BallEndOptionsRecord &bpor in m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords)
       {
          ballPassOptionsPos3D << bpor.m_Pos.x << SettingsValueDelimeter << bpor.m_Pos.y << SettingsValueDelimeter << bpor.m_Pos.z << SettingsValueDelimeter;
-         ballPassOptionsDistance << bpor.m_Distance << SettingsValueDelimeter;
+         ballPassOptionsRadiusPercent << bpor.m_RadiusPercent << SettingsValueDelimeter;
          ballPassOptionsAssociations << bpor.m_AssociatedBallStartIndexes.size() << SettingsValueDelimeter;
          for each (const std::size_t &index in bpor.m_AssociatedBallStartIndexes)
          {
@@ -824,19 +824,19 @@ void BallHistory::SaveSettings(Player &player)
       }
       tempStr = ballPassOptionsPos3D.str();
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallPassPosition3DKeyName, tempStr.c_str());
-      tempStr = ballPassOptionsDistance.str();
-      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallPassDistanceKeyName, tempStr.c_str());
+      tempStr = ballPassOptionsRadiusPercent.str();
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallPassRadiusPercentKeyName, tempStr.c_str());
       tempStr = ballPassOptionsAssociations.str();
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallPassAssociationsKeyName, tempStr.c_str());
 
       std::ostringstream ballFailOptionsPos2D;
       std::ostringstream ballFailOptionsPos3D;
-      std::ostringstream ballFailOptionsDistance;
+      std::ostringstream ballFailOptionsRadiusPercent;
       std::ostringstream ballFailOptionsAssociations;
       for each (const TrainerOptions::BallEndOptionsRecord &bfor in m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords)
       {
          ballFailOptionsPos3D << bfor.m_Pos.x << SettingsValueDelimeter << bfor.m_Pos.y << SettingsValueDelimeter << bfor.m_Pos.z << SettingsValueDelimeter;
-         ballFailOptionsDistance << bfor.m_Distance << SettingsValueDelimeter;
+         ballFailOptionsRadiusPercent << bfor.m_RadiusPercent << SettingsValueDelimeter;
          ballFailOptionsAssociations << bfor.m_AssociatedBallStartIndexes.size() << SettingsValueDelimeter;
          for each (const std::size_t &index in bfor.m_AssociatedBallStartIndexes)
          {
@@ -846,8 +846,8 @@ void BallHistory::SaveSettings(Player &player)
 
       tempStr = ballFailOptionsPos3D.str();
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallFailPosition3DKeyName, tempStr.c_str());
-      tempStr = ballFailOptionsDistance.str();
-      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallFailDistanceKeyName, tempStr.c_str());
+      tempStr = ballFailOptionsRadiusPercent.str();
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallFailRadiusPercentKeyName, tempStr.c_str());
       tempStr = ballFailOptionsAssociations.str();
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallFailAssociationsKeyName, tempStr.c_str());
    }
@@ -1547,13 +1547,17 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                dpr.ShowText("Ball Pass %zu", bporIndex + 1);
                dpr.ShowText("  Position = %.2f,%.2f,%.2f (x,y,z)", bpor.m_Pos.x, bpor.m_Pos.y, bpor.m_Pos.z);
 
-               if (bpor.m_Distance == TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
+               if (bpor.m_RadiusPercent == 0.0f)
                {
-                  dpr.ShowText("  Distance = <disabled/stop mode>");
+                  dpr.ShowMenuText("  Finish Mode = <Not Set>");
+               }
+               else if (bpor.m_RadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
+               {
+                  dpr.ShowText("  Finish Mode = Stop");
                }
                else
                {
-                  dpr.ShowText("  Distance = %.2f", bpor.m_Distance);
+                  dpr.ShowText("  Finish Mode = Distance %.0f%%", bpor.m_RadiusPercent);
                }
 
                for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
@@ -1606,13 +1610,17 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                dpr.ShowText("Ball Fail %zu", bforIndex + 1);
                dpr.ShowText("  Position = %.2f,%.2f,%.2f (x,y,z)", bfor.m_Pos.x, bfor.m_Pos.y, bfor.m_Pos.z);
 
-               if (bfor.m_Distance == TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
+               if (bfor.m_RadiusPercent == 0.0f)
                {
-                  dpr.ShowText("  Distance = <disabled/stop mode>");
+                  dpr.ShowMenuText("  Finish Mode = <Not Set>");
+               }
+               else if (bfor.m_RadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
+               {
+                  dpr.ShowText("  Finish Mode = Stop");
                }
                else
                {
-                  dpr.ShowText("  Distance = %.2f", bfor.m_Distance);
+                  dpr.ShowText("  Finish Mode = Distance %.0f%%", bfor.m_RadiusPercent);
                   for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
                   {
                      Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
@@ -1758,20 +1766,24 @@ void BallHistory::ShowBallEndOptionsRecord(Player &player, DebugPrintRecord &dpr
 {
    dpr.ShowMenuText("Position = %.2f,%.2f,%.2f (x,y,z)", beor.m_Pos.x, beor.m_Pos.y, beor.m_Pos.z);
 
-   if (beor.m_Distance == TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
+   if (beor.m_RadiusPercent == 0.0f)
    {
-      dpr.ShowMenuText("Distance = <disabled/stop mode>");
+      dpr.ShowMenuText("Finish Mode = <Not Set>");
+   }
+   else if (beor.m_RadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
+   {
+      dpr.ShowMenuText("Finish Mode = Stop");
    }
    else
    {
-      dpr.ShowMenuText("Distance = %.2f", beor.m_Distance);
+      dpr.ShowMenuText("Finish Mode = Distance %.0f%%", beor.m_RadiusPercent);
    }
 
-   for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
+   for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
    {
-      Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
-      float distance = DistancePixels(beor.m_Pos, controlVBall.m_d.m_pos);
-      dpr.ShowMenuText("Distance Ball %zu = %.2f", controlVBallIndex + 1, distance);
+      TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
+      float distance = DistancePixels(beor.m_Pos, bsor.m_Pos);
+      dpr.ShowMenuText("Distance To Start %zu = %.2f", bsorIndex + 1, distance);
    }
 
    if (beor.m_AssociatedBallStartIndexes.size() == 0)
@@ -1930,9 +1942,9 @@ void BallHistory::DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int cu
          if (!bpor.m_Pos.IsZero())
          {
             player.DrawFakeBall(bpor.m_Pos, radius, orientation, m_TrainerBallPassTexture);
-            if (bpor.m_Distance != TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
+            if (bpor.m_RadiusPercent != TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
             {
-               DrawIntersectionCircle(player, bpor.m_Pos, radius, bpor.m_Distance, IntersectionCircleColor);
+               DrawIntersectionCircle(player, bpor.m_Pos, radius, radius * bpor.m_RadiusPercent / 100.0f, IntersectionCircleColor);
             }
             POINT screenPoint = Get2DPointFrom3D(player, bpor.m_Pos);
             dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
@@ -1949,9 +1961,9 @@ void BallHistory::DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int cu
          if (!bfor.m_Pos.IsZero())
          {
             player.DrawFakeBall(bfor.m_Pos, radius, orientation, m_TrainerBallFailTexture);
-            if (bfor.m_Distance != TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
+            if (bfor.m_RadiusPercent != TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
             {
-               DrawIntersectionCircle(player, bfor.m_Pos, radius, bfor.m_Distance, IntersectionCircleColor);
+               DrawIntersectionCircle(player, bfor.m_Pos, radius, radius * bfor.m_RadiusPercent / 100.0f, IntersectionCircleColor);
             }
             POINT screenPoint = Get2DPointFrom3D(player, bfor.m_Pos);
             dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
@@ -2446,6 +2458,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          S32 heightMinimum = S32(player.m_ptable->m_tableheight + radius);
          S32 heightMaximum = S32(player.m_ptable->m_glassheight - radius);
          m_MenuOptions.m_NormalOptions.m_CreateZ = std::max(std::min(S32(m_MenuOptions.m_NormalOptions.m_CreateZ), heightMaximum), heightMinimum);
+         dpr.ShowMenuText("");
          dpr.ShowMenuText("Ball Height");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_NormalOptions.m_CreateZ, heightMaximum);
 
@@ -2588,7 +2601,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
          ShowPreviousRunRecord(player, dpr);
          
-         dpr.ShowTextTitle("%s", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord == m_MenuOptions.m_TrainerOptions.m_RunRecords.size() ? "Final Run Results" : "Current Run Results");
+         dpr.ShowText("%s:", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord == m_MenuOptions.m_TrainerOptions.m_RunRecords.size() ? "Final Run Results" : "Current Run Results");
 
          std::size_t totalPasses = 0;
          std::size_t totalFailsLocation = 0;
@@ -2912,6 +2925,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          S32 heightMinimum = S32(player.m_ptable->m_tableheight + radius);
          S32 heightMaximum = S32(player.m_ptable->m_glassheight - radius);
          m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ = std::max(std::min(S32(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), heightMaximum), heightMinimum);
+         dpr.ShowMenuText("");
          dpr.ShowMenuText("Ball Height");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMaximum);
 
@@ -3244,6 +3258,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                if (m_MenuOptions.m_CurrentCompleteIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size())
                {
                   dpr.ShowMenuText("");
+                  dpr.ShowTextTitle("Current Config");
                   ShowBallEndOptionsRecord(player, dpr, m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentCompleteIndex]);
                }
                break;
@@ -3351,6 +3366,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Delete");
 
          dpr.ShowMenuText("");
+         dpr.ShowTextTitle("Current Config");
          ShowBallEndOptionsRecord(player, dpr, bpor);
 
          switch (menuAction)
@@ -3370,11 +3386,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                {
                   case TrainerOptions::BallEndLocationModeType_Config:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassFinishMode;
-                     if (bpor.m_Distance == 0.0f)
+                     if (bpor.m_RadiusPercent == 0.0f)
                      {
                         // do nothing
                      }
-                     else if (bpor.m_Distance == TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
+                     else if (bpor.m_RadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
                      {
                         m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode = TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop;
                      }
@@ -3409,6 +3425,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Distance");
 
          dpr.ShowMenuText("");
+         dpr.ShowTextTitle("Current Config");
          ShowBallEndOptionsRecord(player, dpr, bpor);
 
          switch (menuAction)
@@ -3429,17 +3446,20 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   case TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop:
                      CenterMouse(player);
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassLocation;
-                     bpor.m_Distance = TrainerOptions::BallEndOptionsRecord::DistanceDisabled;
+                     bpor.m_RadiusPercent = TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled;
                      break;
                   case TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Distance:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassDistance;
                      if (m_ControlVBalls.size())
                      {
-                        bpor.m_Distance = m_ControlVBalls[0]->m_d.m_radius * 2;
+                        if (bpor.m_RadiusPercent == 0.0f)
+                        {
+                           bpor.m_RadiusPercent = 100.0f;
+                        }
                      }
                      else
                      {
-                        bpor.m_Distance = TrainerOptions::BallEndOptionsRecord::DistanceDisabled;
+                        bpor.m_RadiusPercent = TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled;
                      }
                      break;
                   default:
@@ -3457,26 +3477,25 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
          TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
          
-         //TODO GARY distance should be a percentage of the radius of the ball
-
-         dpr.ShowMenuTextTitle("Ball Pass Distance");
-         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallEndOptionsRecord::DistanceMinimum, static_cast<S32>(bpor.m_Distance), TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
+         dpr.ShowMenuTextTitle("Ball Pass Distance (% of radius)");
+         dpr.ShowMenuText("(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, static_cast<S32>(bpor.m_RadiusPercent), TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
 
          dpr.ShowMenuText("");
+         dpr.ShowTextTitle("Current Config");
          ShowBallEndOptionsRecord(player, dpr, bpor);
 
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType::MenuActionType_None:
-               ProcessMenuChangeValueSkip<float>(bpor.m_Distance, TrainerOptions::BallEndOptionsRecord::DistanceMinimum, TrainerOptions::BallEndOptionsRecord::DistanceMaximum, currentTimeMs);
+               ProcessMenuChangeValueSkip<float>(bpor.m_RadiusPercent, TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum, currentTimeMs);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
-               ProcessMenuChangeValueDec<float>(bpor.m_Distance, TrainerOptions::BallEndOptionsRecord::DistanceMinimum, TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
+               ProcessMenuChangeValueDec<float>(bpor.m_RadiusPercent, TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
-               ProcessMenuChangeValueInc<float>(bpor.m_Distance, TrainerOptions::BallEndOptionsRecord::DistanceMinimum, TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
+               ProcessMenuChangeValueInc<float>(bpor.m_RadiusPercent, TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                CenterMouse(player);
@@ -3490,11 +3509,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassLocation:
          {
+         TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
+
          dpr.ShowMenuTextTitle("Ball Pass %zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuText("Mouse move/click sets location");
          dpr.ShowMenuText("Plungers accepts location");
-
-         TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
          if (GetCursorPos(&mousePosition2D) == TRUE)
          {
@@ -3502,6 +3521,13 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             {
                mousePosition3D = g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ));
                dpr.ShowMenuText("Position = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
+
+               for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
+               {
+                  TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
+                  float distance = DistancePixels(mousePosition3D, bsor.m_Pos);
+                  dpr.ShowMenuText("Distance to Start %zu = %.2f", bsorIndex + 1, distance);
+               }
             }
          }
 
@@ -3509,13 +3535,15 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          S32 heightMinimum = S32(player.m_ptable->m_tableheight + radius);
          S32 heightMaximum = S32(player.m_ptable->m_glassheight - radius);
          m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ = std::max(std::min(S32(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), heightMaximum), heightMinimum);
+         dpr.ShowMenuText("");
          dpr.ShowMenuText("Ball Height");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMaximum);
 
-         float intersectionRadius = bpor.m_Distance != TrainerOptions::BallEndOptionsRecord::DistanceDisabled ? bpor.m_Distance : 0.0f;
+         float intersectionRadius = bpor.m_RadiusPercent != TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled ? (radius * bpor.m_RadiusPercent / 100.0f) : 0.0f;
          DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), intersectionRadius, *m_TrainerBallPassTexture, &bpor.m_Pos, D3DCOLOR_ARGB(0x00, 0x00, 0xFF, 0x00), dpr);
 
          dpr.ShowMenuText("");
+         dpr.ShowTextTitle("Current Config");
          ShowBallEndOptionsRecord(player, dpr, bpor);
 
          switch (menuAction)
@@ -3573,6 +3601,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
 
          dpr.ShowMenuText("");
+         dpr.ShowTextTitle("Current Config");
          ShowBallEndOptionsRecord(player, dpr, bpor);
 
          switch (menuAction)
@@ -3673,6 +3702,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                if (m_MenuOptions.m_CurrentCompleteIndex < m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size())
                {
                   dpr.ShowMenuText("");
+                  dpr.ShowTextTitle("Current Config");
                   ShowBallEndOptionsRecord(player, dpr, m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentCompleteIndex]);
                }
                break;
@@ -3780,6 +3810,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Delete");
 
          dpr.ShowMenuText("");
+         dpr.ShowTextTitle("Current Config");
          ShowBallEndOptionsRecord(player, dpr, bfor);
 
          switch (menuAction)
@@ -3799,11 +3830,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                {
                   case TrainerOptions::BallEndLocationModeType_Config:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailFinishMode;
-                     if (bfor.m_Distance == 0.0f)
+                     if (bfor.m_RadiusPercent == 0.0f)
                      {
                         // do nothing
                      }
-                     else if (bfor.m_Distance == TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
+                     else if (bfor.m_RadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
                      {
                         m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode = TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop;
                      }
@@ -3838,6 +3869,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Distance");
 
          dpr.ShowMenuText("");
+         dpr.ShowTextTitle("Current Config");
          ShowBallEndOptionsRecord(player, dpr, bfor);
 
          switch (menuAction)
@@ -3858,17 +3890,20 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   case TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop:
                      CenterMouse(player);
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailLocation;
-                     bfor.m_Distance = TrainerOptions::BallEndOptionsRecord::DistanceDisabled;
+                     bfor.m_RadiusPercent = TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled;
                      break;
                   case TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Distance:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailDistance;
                      if (m_ControlVBalls.size())
                      {
-                        bfor.m_Distance = m_ControlVBalls[0]->m_d.m_radius * 2;
+                        if (bfor.m_RadiusPercent == 0.0f)
+                        {
+                           bfor.m_RadiusPercent = 100.0f;
+                        }
                      }
                      else
                      {
-                        bfor.m_Distance = TrainerOptions::BallEndOptionsRecord::DistanceDisabled;
+                        bfor.m_RadiusPercent = TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled;
                      }
                      break;
                   default:
@@ -3887,24 +3922,25 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
          
          dpr.ShowMenuTextTitle("Ball Fail Distance");
-         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallEndOptionsRecord::DistanceMinimum, static_cast<S32>(bfor.m_Distance), TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
+         dpr.ShowMenuText("(minimum)%d%% <-- %d%%--> %d%%(maximum)", TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, static_cast<S32>(bfor.m_RadiusPercent), TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
 
          dpr.ShowMenuText("");
+         dpr.ShowTextTitle("Current Config");
          ShowBallEndOptionsRecord(player, dpr, bfor);
 
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType::MenuActionType_None:
-               ProcessMenuChangeValueSkip<float>(bfor.m_Distance, TrainerOptions::BallEndOptionsRecord::DistanceMinimum, TrainerOptions::BallEndOptionsRecord::DistanceMaximum, currentTimeMs);
+               ProcessMenuChangeValueSkip<float>(bfor.m_RadiusPercent, TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum, currentTimeMs);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
-               ProcessMenuChangeValueDec<float>(bfor.m_Distance, TrainerOptions::BallEndOptionsRecord::DistanceMinimum, TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
+               ProcessMenuChangeValueDec<float>(bfor.m_RadiusPercent, TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
-               ProcessMenuChangeValueInc<float>(bfor.m_Distance, TrainerOptions::BallEndOptionsRecord::DistanceMinimum, TrainerOptions::BallEndOptionsRecord::DistanceMaximum);
+               ProcessMenuChangeValueInc<float>(bfor.m_RadiusPercent, TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                CenterMouse(player);
@@ -3918,11 +3954,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailLocation:
          {
+         TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
+
          dpr.ShowMenuTextTitle("Ball Fail %zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuText("Mouse move/click sets location");
          dpr.ShowMenuText("Plungers accepts location");
-
-         TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
          if (GetCursorPos(&mousePosition2D) == TRUE)
          {
@@ -3930,6 +3966,13 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             {
                mousePosition3D = g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ));
                dpr.ShowMenuText("Position = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
+
+               for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
+               {
+                  TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
+                  float distance = DistancePixels(mousePosition3D, bsor.m_Pos);
+                  dpr.ShowMenuText("Distance to Start %zu = %.2f", bsorIndex + 1, distance);
+               }
             }
          }
 
@@ -3937,13 +3980,15 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          S32 heightMinimum = S32(player.m_ptable->m_tableheight + radius);
          S32 heightMaximum = S32(player.m_ptable->m_glassheight - radius);
          m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ = std::max(std::min(S32(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), heightMaximum), heightMinimum);
+         dpr.ShowMenuText("");
          dpr.ShowMenuText("Ball Height");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ, heightMaximum);
 
-         float intersectionRadius = bfor.m_Distance != TrainerOptions::BallEndOptionsRecord::DistanceDisabled ? bfor.m_Distance : 0.0f;
+         float intersectionRadius = bfor.m_RadiusPercent != TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled ? (radius * bfor.m_RadiusPercent / 100.0f) : 0.0f;
          DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), intersectionRadius, *m_TrainerBallFailTexture, &bfor.m_Pos, D3DCOLOR_ARGB(0x00, 0xFF, 0x00, 0x00), dpr);
 
          dpr.ShowMenuText("");
+         dpr.ShowTextTitle("Current Config");
          ShowBallEndOptionsRecord(player, dpr, bfor);
 
          switch (menuAction)
@@ -4001,6 +4046,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
 
          dpr.ShowMenuText("");
+         dpr.ShowTextTitle("Current Config");
          ShowBallEndOptionsRecord(player, dpr, bfor);
 
          switch (menuAction)
@@ -4237,7 +4283,20 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          break;
    }
 
-   DrawBallHistory(player);
+   switch (m_MenuOptions.m_MenuState)
+   {
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectModeOptions:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectCurrentBallHistory:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SetupRecallBallHistory:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectRecallBallHistory:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_ManageAutoControlLocations:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectExistingBallStartLocation:
+         DrawBallHistory(player);
+         break;
+      default:
+         // do nothing;
+         break;
+   }
 
    switch (m_MenuOptions.m_ModeType)
    {
@@ -4531,7 +4590,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          {
             TrainerOptions::BallEndOptionsRecord &passBeor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[passBeorIndex];
             float distance = DistancePixels(passBeor.m_Pos, controlVBall.m_d.m_pos);
-            if (passBeor.m_Distance == TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
+            if (passBeor.m_RadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
             {
                int &stopBallMs = std::get<0>(passBeor.m_StopBallsTracker[controlVBallIndex]);
                Vertex3Ds &stopBallPos = std::get<1>(passBeor.m_StopBallsTracker[controlVBallIndex]);
@@ -4563,7 +4622,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                   stopBallPos.SetZero();
                }
             }
-            else if (distance < passBeor.m_Distance)
+            else if (distance < (controlVBall.m_d.m_radius * passBeor.m_RadiusPercent / 100.0f))
             {
                startToPassLocationIndexes.push_back(std::tuple<std::size_t, std::size_t>(controlVBallIndex, passBeorIndex));
                currentPass = true;
@@ -4597,7 +4656,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          {
             TrainerOptions::BallEndOptionsRecord &failBeor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[failBeorIndex];
             float distance = DistancePixels(failBeor.m_Pos, controlVBall.m_d.m_pos);
-            if (failBeor.m_Distance == TrainerOptions::BallEndOptionsRecord::DistanceDisabled)
+            if (failBeor.m_RadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
             {
                int &stopBallMs = std::get<0>(failBeor.m_StopBallsTracker[controlVBallIndex]);
                Vertex3Ds &stopBallPos = std::get<1>(failBeor.m_StopBallsTracker[controlVBallIndex]);
@@ -4628,7 +4687,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                   stopBallPos.SetZero();
                }
             }
-            else if (distance < failBeor.m_Distance)
+            else if (distance < (controlVBall.m_d.m_radius * failBeor.m_RadiusPercent  / 100.0f))
             {
                currentFail = true;
                startToFailLocationIndexes.push_back(std::tuple<std::size_t, std::size_t>(controlVBallIndex, failBeorIndex));
@@ -4913,7 +4972,7 @@ void BallHistory::DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float b
 {
    static const std::size_t NumTriangles = 36;
 
-   float heightZ = intersectionRadius > ballRadius ? pos.z : pos.z + ballRadius;
+   float heightZ = intersectionRadius >= ballRadius ? pos.z : pos.z + ballRadius;
 
    std::vector<Vertex3DColor> testVertices;
    testVertices.push_back({pos.x, pos.y, heightZ, color});

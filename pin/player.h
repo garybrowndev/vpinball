@@ -396,18 +396,18 @@ public:
 
    struct BallEndOptionsRecord
    {
-      static const S32 DistanceMinimum = 1;
-      static const S32 DistanceMaximum = 100;
-      static const float DistanceDisabled;
+      static const S32 RadiusPercentMinimum = 1;
+      static const S32 RadiusPercentMaximum = 300;
+      static const float RadiusPercentDisabled;
 
       Vertex3Ds m_Pos;
-      float m_Distance;
+      float m_RadiusPercent;
       std::set<std::size_t> m_AssociatedBallStartIndexes;
 
       std::vector<std::tuple<int, Vertex3Ds>> m_StopBallsTracker;
 
       BallEndOptionsRecord();
-      BallEndOptionsRecord(Vertex3Ds &pos, float distance);
+      BallEndOptionsRecord(Vertex3Ds &pos, float radiusPercent);
    };
 
    struct RunRecord
@@ -749,10 +749,10 @@ private:
    static const char * TrainerModeBallStartVelocityFinishKeyName;
    static const char * TrainerModeBallStartTotalVelocitiesKeyName;
    static const char * TrainerModeBallPassPosition3DKeyName;
-   static const char * TrainerModeBallPassDistanceKeyName;
+   static const char * TrainerModeBallPassRadiusPercentKeyName;
    static const char * TrainerModeBallPassAssociationsKeyName;
    static const char * TrainerModeBallFailPosition3DKeyName;
-   static const char * TrainerModeBallFailDistanceKeyName;
+   static const char * TrainerModeBallFailRadiusPercentKeyName;
    static const char * TrainerModeBallFailAssociationsKeyName;
    std::string m_SettingsFilePath;
 
