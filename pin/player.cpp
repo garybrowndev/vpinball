@@ -229,6 +229,8 @@ BallHistory::DebugPrintRecord::DebugPrintRecord(Player &player):
 {
    InitTextXY();
    SetPosition(0, 0);
+
+   //TODO GARY consider changing size of font relative to screen resolution
 }
 
 void BallHistory::DebugPrintRecord::InitTextXY()
@@ -243,11 +245,11 @@ void BallHistory::DebugPrintRecord::SetPosition(float x, float y)
    // input x/y are relative to the table oritentation
    if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 270.0f)
    {
-      m_Player.SetDebugOutputPosition(y, m_Player.m_height - x - DBG_SPRITE_SIZE);
+      m_Player.SetDebugOutputPosition(x, y - DBG_SPRITE_SIZE);
    }
    else if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 90.0f)
    {
-      m_Player.SetDebugOutputPosition((m_Player.m_width - DBG_SPRITE_SIZE) - y, x);
+      m_Player.SetDebugOutputPosition(x - DBG_SPRITE_SIZE, y);
    }
    else
    {
@@ -1171,20 +1173,6 @@ POINT BallHistory::Get2DPointFrom3D(Player &player, const Vertex3Ds& vertex)
       LONG((transformedVertex.x + 1.0f) * 0.5f * player.m_screenwidth),
       LONG((-transformedVertex.y + 1.0f) * 0.5f * player.m_screenheight)
    };
-
-   // Correct for table BG rotation
-   if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 270.0f)
-   {
-      LONG tempX = screenPoint.x;
-      screenPoint.x = player.m_height - screenPoint.y;
-      screenPoint.y = tempX;
-   }
-   else if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 90.0f)
-   {
-      LONG tempX = screenPoint.x;
-      screenPoint.x = screenPoint.y;
-      screenPoint.y = player.m_width - tempX;
-   }
 
    return screenPoint;
 }
@@ -2442,7 +2430,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          for (std::size_t autoControlVerticesIndex = 0; autoControlVerticesIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); ++autoControlVerticesIndex)
          {
             NormalOptions::AutoControlVertex &autoControlVertex = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[autoControlVerticesIndex];
-            dpr.ShowMenuText("Point %zu %.2f,%.2f,%.2f,%s (3x,3y,3z,active)", autoControlVerticesIndex + 1, autoControlVertex.m_Pos3D.x, autoControlVertex.m_Pos3D.y, autoControlVertex.m_Pos3D.z, autoControlVertex.Active ? "true" : "false");
+            POINT screenPoint = Get2DPointFrom3D(player, autoControlVertex.m_Pos3D);
+            dpr.ShowMenuText("Point %zu %.2f,%.2f,%.2f,%ld,%ld,%s (3x,3y,3z,2x,2y,active)", autoControlVerticesIndex + 1, autoControlVertex.m_Pos3D.x, autoControlVertex.m_Pos3D.y, autoControlVertex.m_Pos3D.z, screenPoint.x, screenPoint.y, autoControlVertex.Active ? "true" : "false");
          }
 
          if (GetCursorPos(&mousePosition2D) == TRUE)
