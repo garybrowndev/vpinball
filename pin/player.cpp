@@ -3325,7 +3325,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select:
                      if (m_MenuOptions.m_CurrentCompleteIndex == m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size())
                      {
-                        m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassFinishMode;
+                        CenterMouse(player);
+                        m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassLocation;
                         m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.push_back(TrainerOptions::BallEndOptionsRecord());
                         for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
                         {
@@ -3385,7 +3386,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode)
                {
                   case TrainerOptions::BallEndLocationModeType_Config:
-                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassFinishMode;
+                     CenterMouse(player);
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassLocation;
                      if (bpor.m_RadiusPercent == 0.0f)
                      {
                         // do nothing
@@ -3407,99 +3409,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      InvalidEnumValue("TrainerOptions::BallEndLocationModeType", m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode);
                      break;
                }
-               break;
-            default:
-               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
-               break;
-         }
-         }
-         break;
-      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassFinishMode:
-         {
-         TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
-
-         dpr.ShowMenuTextTitle("Ball Pass %zu Finish Mode", m_MenuOptions.m_CurrentBallIndex + 1);
-         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode == TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop,
-            "Stop");
-         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode == TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Distance,
-            "Distance");
-
-         dpr.ShowMenuText("");
-         dpr.ShowTextTitle("Current Config");
-         ShowBallEndOptionsRecord(player, dpr, bpor);
-
-         switch (menuAction)
-         {
-            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
-               // do nothing
-               break;
-            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
-               ProcessMenuChangeValueDec<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
-               break;
-            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
-               ProcessMenuChangeValueInc<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
-               break;
-            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
-               switch (m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode)
-               {
-                  case TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop:
-                     CenterMouse(player);
-                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassLocation;
-                     bpor.m_RadiusPercent = TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled;
-                     break;
-                  case TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Distance:
-                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassDistance;
-                     if (m_ControlVBalls.size())
-                     {
-                        if (bpor.m_RadiusPercent == 0.0f)
-                        {
-                           bpor.m_RadiusPercent = 100.0f;
-                        }
-                     }
-                     else
-                     {
-                        bpor.m_RadiusPercent = TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled;
-                     }
-                     break;
-                  default:
-                     InvalidEnumValue("TrainerOptions::BallEndFinishModeType", m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode);
-                     break;
-               }
-               break;
-            default:
-               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
-               break;
-         }
-         }
-         break;
-      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassDistance:
-         {
-         TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
-         
-         dpr.ShowMenuTextTitle("Ball Pass Distance (% of radius)");
-         dpr.ShowMenuText("(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, static_cast<S32>(bpor.m_RadiusPercent), TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
-
-         dpr.ShowMenuText("");
-         dpr.ShowTextTitle("Current Config");
-         ShowBallEndOptionsRecord(player, dpr, bpor);
-
-         switch (menuAction)
-         {
-            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
-               ProcessMenuChangeValueSkip<float>(bpor.m_RadiusPercent, TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum, currentTimeMs);
-               break;
-            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
-               break;
-            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
-               ProcessMenuChangeValueDec<float>(bpor.m_RadiusPercent, TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
-               break;
-            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
-               ProcessMenuChangeValueInc<float>(bpor.m_RadiusPercent, TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
-               break;
-            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
-               CenterMouse(player);
-               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassLocation;
                break;
             default:
                InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
@@ -3570,8 +3479,99 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                else
                {
-                  m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassAssociations;
+                  m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassFinishMode;
                }
+               break;
+            default:
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
+               break;
+         }
+         }
+         break;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassFinishMode:
+         {
+         TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
+
+         dpr.ShowMenuTextTitle("Ball Pass %zu Finish Mode", m_MenuOptions.m_CurrentBallIndex + 1);
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode == TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop,
+            "Stop");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode == TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Distance,
+            "Distance");
+
+         dpr.ShowMenuText("");
+         dpr.ShowTextTitle("Current Config");
+         ShowBallEndOptionsRecord(player, dpr, bpor);
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
+               ProcessMenuChangeValueDec<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
+               ProcessMenuChangeValueInc<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+               switch (m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode)
+               {
+                  case TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassAssociations;
+                     bpor.m_RadiusPercent = TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled;
+                     break;
+                  case TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Distance:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassDistance;
+                     if (m_ControlVBalls.size())
+                     {
+                        if (bpor.m_RadiusPercent == 0.0f)
+                        {
+                           bpor.m_RadiusPercent = 100.0f;
+                        }
+                     }
+                     else
+                     {
+                        bpor.m_RadiusPercent = TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled;
+                     }
+                     break;
+                  default:
+                     InvalidEnumValue("TrainerOptions::BallEndFinishModeType", m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode);
+                     break;
+               }
+               break;
+            default:
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
+               break;
+         }
+         }
+         break;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassDistance:
+         {
+         TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
+         
+         dpr.ShowMenuTextTitle("Ball Pass Distance (%% of radius)");
+         dpr.ShowMenuText("(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, static_cast<S32>(bpor.m_RadiusPercent), TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
+
+         dpr.ShowMenuText("");
+         dpr.ShowTextTitle("Current Config");
+         ShowBallEndOptionsRecord(player, dpr, bpor);
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+               ProcessMenuChangeValueSkip<float>(bpor.m_RadiusPercent, TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum, currentTimeMs);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
+               ProcessMenuChangeValueDec<float>(bpor.m_RadiusPercent, TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
+               ProcessMenuChangeValueInc<float>(bpor.m_RadiusPercent, TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassAssociations;
                break;
             default:
                InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
@@ -3769,7 +3769,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select:
                      if (m_MenuOptions.m_CurrentCompleteIndex == m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size())
                      {
-                        m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailFinishMode;
+                        CenterMouse(player);
+                        m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailLocation;
                         m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.push_back(TrainerOptions::BallEndOptionsRecord());
                         for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
                         {
@@ -3829,7 +3830,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                switch (m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode)
                {
                   case TrainerOptions::BallEndLocationModeType_Config:
-                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailFinishMode;
+                     CenterMouse(player);
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailLocation;
                      if (bfor.m_RadiusPercent == 0.0f)
                      {
                         // do nothing
@@ -3851,100 +3853,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      InvalidEnumValue("TrainerOptions::BallEndLocationModeType", m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode);
                      break;
                }
-               break;
-            default:
-               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
-               break;
-         }
-         }
-         break;
-       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailFinishMode:
-         {
-         TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
-
-         dpr.ShowMenuTextTitle("Ball Fail %zu Finish Mode", m_MenuOptions.m_CurrentBallIndex + 1);
-         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode == TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop,
-            "Stop");
-         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode == TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Distance,
-            "Distance");
-
-         dpr.ShowMenuText("");
-         dpr.ShowTextTitle("Current Config");
-         ShowBallEndOptionsRecord(player, dpr, bfor);
-
-         switch (menuAction)
-         {
-            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
-            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
-               // do nothing
-               break;
-            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
-               ProcessMenuChangeValueDec<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
-               break;
-            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
-               ProcessMenuChangeValueInc<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
-               break;
-            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
-               switch (m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode)
-               {
-                  case TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop:
-                     CenterMouse(player);
-                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailLocation;
-                     bfor.m_RadiusPercent = TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled;
-                     break;
-                  case TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Distance:
-                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailDistance;
-                     if (m_ControlVBalls.size())
-                     {
-                        if (bfor.m_RadiusPercent == 0.0f)
-                        {
-                           bfor.m_RadiusPercent = 100.0f;
-                        }
-                     }
-                     else
-                     {
-                        bfor.m_RadiusPercent = TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled;
-                     }
-                     break;
-                  default:
-                     InvalidEnumValue("TrainerOptions::BallEndFinishModeType", m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode);
-                     break;
-               }
-               break;
-            default:
-               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
-               break;
-         }
-         }
-         break;
-      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailDistance:
-         {
-         TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
-         
-         dpr.ShowMenuTextTitle("Ball Fail Distance");
-         dpr.ShowMenuText("(minimum)%d%% <-- %d%%--> %d%%(maximum)", TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, static_cast<S32>(bfor.m_RadiusPercent), TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
-
-         dpr.ShowMenuText("");
-         dpr.ShowTextTitle("Current Config");
-         ShowBallEndOptionsRecord(player, dpr, bfor);
-
-         switch (menuAction)
-         {
-            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
-               ProcessMenuChangeValueSkip<float>(bfor.m_RadiusPercent, TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum, currentTimeMs);
-               break;
-            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
-               // do nothing
-               break;
-            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
-               ProcessMenuChangeValueDec<float>(bfor.m_RadiusPercent, TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
-               break;
-            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
-               ProcessMenuChangeValueInc<float>(bfor.m_RadiusPercent, TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
-               break;
-            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
-               CenterMouse(player);
-               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailLocation;
                break;
             default:
                InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
@@ -4015,8 +3923,100 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                else
                {
-                  m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailAssociations;
+                  m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailFinishMode;
                }
+               break;
+            default:
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
+               break;
+         }
+         }
+         break;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailFinishMode:
+         {
+         TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
+
+         dpr.ShowMenuTextTitle("Ball Fail %zu Finish Mode", m_MenuOptions.m_CurrentBallIndex + 1);
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode == TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop,
+            "Stop");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode == TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Distance,
+            "Distance");
+
+         dpr.ShowMenuText("");
+         dpr.ShowTextTitle("Current Config");
+         ShowBallEndOptionsRecord(player, dpr, bfor);
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
+               ProcessMenuChangeValueDec<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
+               ProcessMenuChangeValueInc<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+               switch (m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode)
+               {
+                  case TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailAssociations;
+                     bfor.m_RadiusPercent = TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled;
+                     break;
+                  case TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Distance:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailDistance;
+                     if (m_ControlVBalls.size())
+                     {
+                        if (bfor.m_RadiusPercent == 0.0f)
+                        {
+                           bfor.m_RadiusPercent = 100.0f;
+                        }
+                     }
+                     else
+                     {
+                        bfor.m_RadiusPercent = TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled;
+                     }
+                     break;
+                  default:
+                     InvalidEnumValue("TrainerOptions::BallEndFinishModeType", m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode);
+                     break;
+               }
+               break;
+            default:
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
+               break;
+         }
+         }
+         break;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailDistance:
+         {
+         TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
+         
+         dpr.ShowMenuTextTitle("Ball Fail Distance (%% of radius)");
+         dpr.ShowMenuText("(minimum)%d%% <-- %d%%--> %d%%(maximum)", TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, static_cast<S32>(bfor.m_RadiusPercent), TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
+
+         dpr.ShowMenuText("");
+         dpr.ShowTextTitle("Current Config");
+         ShowBallEndOptionsRecord(player, dpr, bfor);
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+               ProcessMenuChangeValueSkip<float>(bfor.m_RadiusPercent, TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum, currentTimeMs);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
+               ProcessMenuChangeValueDec<float>(bfor.m_RadiusPercent, TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
+               ProcessMenuChangeValueInc<float>(bfor.m_RadiusPercent, TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailAssociations;
                break;
             default:
                InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
