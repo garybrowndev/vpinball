@@ -2360,6 +2360,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Manage Auto Control Locations");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_NormalOptions.m_ModeState == NormalOptions::ModeStateType::ModeStateType_Exit,
             "Exit");
+         // TODO GARY add option to clear all all auto control vertices
 
          switch (menuAction)
          {
@@ -2459,6 +2460,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Select");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_NormalOptions.m_SetupRecallBallHistoryMode == NormalOptions::SetupRecallBallHistoryModeType::SetupRecallBallHistoryModeType_Disable,
             "Disable");
+         // TODO GARY better names for "Select" and "Disable"
+         // Proposal "Setup/Config" and "Clear/Reset"
 
          switch (menuAction)
          {
@@ -2604,6 +2607,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Results");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ModeState == TrainerOptions::ModeStateType::ModeStateType_Exit,
             "Exit");
+         // TODO GARY add option to use 0 scatter for consitent playback
+         // in defs.h, use this function instead
+         // __forceinline float rand_mt_m11() { return 0.0f; } // [-1..1)
 
          switch (menuAction)
          {
@@ -5057,6 +5063,7 @@ void BallHistory::DrawLine(Player &player, const Vertex3Ds &posA, const Vertex3D
 
 void BallHistory::DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float ballRadius, float intersectionRadius, D3DCOLOR color)
 {
+   // TODO GARY circle is black (instead blue) on VPM for some reason, figure out why this is
    static const std::size_t NumTriangles = 36;
 
    float heightZ = intersectionRadius >= ballRadius ? pos.z : pos.z + ballRadius;
