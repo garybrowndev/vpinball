@@ -2292,7 +2292,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 {
    ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_ProcessMenuUsec);
 
-   DebugPrintRecord dpr(player);
+   DebugPrintRecord dpr(player, m_DebugFontRecord);
    dpr.SetPositionPercent(0.50f, 0.50f);
 
    if (!m_MenuOptions.m_MenuError.empty())
