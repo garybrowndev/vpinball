@@ -319,11 +319,11 @@ void BallHistory::DebugPrintRecord::SetPositionPercent(float x, float y)
    // input x/y are relative to the table oritentation
    if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 270.0f)
    {
-      SetPosition(y * m_Player.m_width, x * m_Player.m_height);
+      SetPosition(y * m_Player.m_width, m_Player.m_height - (x * m_Player.m_height));
    }
    else if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 90.0f)
    {
-      SetPosition(m_Player.m_width - y * m_Player.m_width, x * m_Player.m_height);
+      SetPosition(m_Player.m_width - (y * m_Player.m_width), x * m_Player.m_height);
    }
    else
    {
@@ -1268,8 +1268,8 @@ POINT BallHistory::Get2DPointFrom3D(Player &player, const Vertex3Ds& vertex)
    // Calculate the screen space (x, y) coordinate
    POINT screenPoint = 
    {
-      LONG((transformedVertex.x + 1.0f) * 0.5f * player.m_screenwidth),
-      LONG((-transformedVertex.y + 1.0f) * 0.5f * player.m_screenheight)
+      LONG((transformedVertex.x + 1.0f) * 0.5f * player.m_width),
+      LONG((-transformedVertex.y + 1.0f) * 0.5f * player.m_height)
    };
 
    return screenPoint;
