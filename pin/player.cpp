@@ -224,20 +224,77 @@ void BallHistory::ProfilerRecord::SetZero()
    m_DrawTrainerBallsUsec = 0;
 }
 
-BallHistory::DebugPrintRecord::DebugPrintRecord(Player &player):
-   m_Player(player)
+BallHistory::DebugFontRecord::DebugFontRecord() :
+   m_Font(nullptr),
+   m_FontSprite(nullptr)
+{
+}
+
+BallHistory::DebugFontRecord::~DebugFontRecord()
+{
+}
+
+void BallHistory::DebugFontRecord::Init(Player &player)
+{
+   int fontSize = int(30 * (1 + ((player.m_width - 1920) / float(1920))));
+   fontSize = int(std::round(fontSize / 6.0) * 6);
+
+   IDirect3DDevice9 * coreDevice = player.m_pin3d.m_pd3dPrimaryDevice->GetCoreDevice();
+
+   const HRESULT hr = D3DXCreateFont(
+      coreDevice,                   //device
+      fontSize,                     //font height
+      0,                            //font width
+      FW_BOLD,                      //font weight
+      1,                            //mip levels
+      fFalse,                       //italic
+      DEFAULT_CHARSET,              //charset
+      OUT_DEFAULT_PRECIS,           //output precision
+      DEFAULT_QUALITY,              //quality
+      DEFAULT_PITCH | FF_DONTCARE,  //pitch and family
+      "Arial",                      //font name
+      &m_Font                     //font pointer
+   );
+
+   if (FAILED(hr))
+   {
+      ShowError("Unable to create debug font via D3DXCreateFont!");
+      m_Font = nullptr;
+   }
+
+   if (FAILED(D3DXCreateSprite(player.m_pin3d.m_pd3dPrimaryDevice->GetCoreDevice(), &m_FontSprite)))
+   {
+      ShowError("D3DXCreateSprite failed!");
+   }
+}
+
+void BallHistory::DebugFontRecord::UnInit()
+{
+   if (m_FontSprite)
+   {
+      m_FontSprite->Release();
+      m_FontSprite = nullptr;
+   }
+   if (m_Font)
+   {
+      m_Font->Release();
+      m_Font = nullptr;
+   }
+}
+
+BallHistory::DebugPrintRecord::DebugPrintRecord(Player &player, DebugFontRecord &debugFontRecord):
+   m_Player(player),
+   m_DebugFontRecord(debugFontRecord)
 {
    InitTextXY();
-   SetPosition(0, 0);
-
-   //TODO GARY consider changing size of font relative to screen resolution
+   SetPosition(0.0f, 0.0f);
 }
 
 void BallHistory::DebugPrintRecord::InitTextXY()
 {
    m_TextX = 10;
    m_TextY = -10,
-   m_TextYStep = 20;
+   m_TextYStep = int(24 * (1 + ((m_Player.m_width - 1920) / float(1920))));
 }
 
 void BallHistory::DebugPrintRecord::SetPosition(float x, float y)
@@ -245,15 +302,15 @@ void BallHistory::DebugPrintRecord::SetPosition(float x, float y)
    // input x/y are relative to the table oritentation
    if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 270.0f)
    {
-      m_Player.SetDebugOutputPosition(x, y - DBG_SPRITE_SIZE);
+      SetDebugOutputPosition(x, y - DBG_SPRITE_SIZE);
    }
    else if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 90.0f)
    {
-      m_Player.SetDebugOutputPosition(x - DBG_SPRITE_SIZE, y);
+      SetDebugOutputPosition(x - DBG_SPRITE_SIZE, y);
    }
    else
    {
-      m_Player.SetDebugOutputPosition(x, y);
+      SetDebugOutputPosition(x, y);
    }
 }
 
@@ -262,15 +319,15 @@ void BallHistory::DebugPrintRecord::SetPositionPercent(float x, float y)
    // input x/y are relative to the table oritentation
    if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 270.0f)
    {
-      m_Player.SetDebugOutputPosition(y * m_Player.m_width, m_Player.m_height - x * m_Player.m_height - DBG_SPRITE_SIZE);
+      SetPosition(y * m_Player.m_width, x * m_Player.m_height);
    }
    else if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 90.0f)
    {
-      m_Player.SetDebugOutputPosition((m_Player.m_width - DBG_SPRITE_SIZE) - (y * m_Player.m_width), x * m_Player.m_height);
+      SetPosition(m_Player.m_width - y * m_Player.m_width, x * m_Player.m_height);
    }
    else
    {
-      m_Player.SetDebugOutputPosition(x * m_Player.m_width, y * m_Player.m_height);
+      SetPosition(x * m_Player.m_width, y * m_Player.m_height);
    }
 }
 
@@ -284,7 +341,7 @@ void BallHistory::DebugPrintRecord::ShowText(const char * format, ...)
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
-   m_Player.DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, false);
+   DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, false);
 }
 
 void BallHistory::DebugPrintRecord::ShowTextTitle(const char * format, ...)
@@ -293,7 +350,7 @@ void BallHistory::DebugPrintRecord::ShowTextTitle(const char * format, ...)
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
    std::string tempStr = "-----" + std::string(m_StrBuffer) + "-----";
-   m_Player.DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true);
+   DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuText(const char * format, ...)
@@ -301,7 +358,7 @@ void BallHistory::DebugPrintRecord::ShowMenuText(const char * format, ...)
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
-   m_Player.DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, true);
+   DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, true);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuTextPos(int x, int y, const char * format, ...)
@@ -309,7 +366,7 @@ void BallHistory::DebugPrintRecord::ShowMenuTextPos(int x, int y, const char * f
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
-   m_Player.DebugPrint(x, y, m_StrBuffer, true);
+   DebugPrint(x, y, m_StrBuffer, true);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuTextTitle(const char * format, ...)
@@ -318,7 +375,7 @@ void BallHistory::DebugPrintRecord::ShowMenuTextTitle(const char * format, ...)
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
    std::string tempStr = "*****" + std::string(m_StrBuffer) + "*****";
-   m_Player.DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true);
+   DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuTextError(const char * format, ...)
@@ -327,7 +384,7 @@ void BallHistory::DebugPrintRecord::ShowMenuTextError(const char * format, ...)
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
    std::string tempStr = "!!!!! ERROR:" + std::string(m_StrBuffer) + "!!!!!";
-   m_Player.DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true);
+   DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuTextSelect(bool selected, const char * format, ...)
@@ -338,14 +395,53 @@ void BallHistory::DebugPrintRecord::ShowMenuTextSelect(bool selected, const char
    if (selected)
    {
       std::string tempStr = "-->" + std::string(m_StrBuffer) + "<--";
-      m_Player.DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true);
+      DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true);
    }
    else
    {
-      m_Player.DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, true);
+      DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, true);
    }
 }
 
+void BallHistory::DebugPrintRecord::SetDebugOutputPosition(const float x, const float y)
+{
+   const D3DXVECTOR2 spritePos(x,y);
+   const D3DXVECTOR2 spriteCenter(DBG_SPRITE_SIZE/2, DBG_SPRITE_SIZE/2);
+
+   const float angle = ANGTORAD(m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set]);
+   D3DXMATRIX mat;
+   D3DXMatrixTransformation2D(&mat, nullptr, 0.0, nullptr, &spriteCenter, angle, &spritePos);
+   m_DebugFontRecord.m_FontSprite->SetTransform(&mat);
+
+   InitTextXY();
+}
+
+void BallHistory::DebugPrintRecord::DebugPrint(int x, int y, LPCSTR text, bool center)
+{
+   if (m_DebugFontRecord.m_Font)
+   {
+      int xx = x;
+      m_DebugFontRecord.m_FontSprite->Begin(D3DXSPRITE_ALPHABLEND | D3DXSPRITE_SORT_TEXTURE);
+      RECT fontRect;
+      SetRect(&fontRect, x, y, 0, 0);
+      m_DebugFontRecord.m_Font->DrawText(m_DebugFontRecord.m_FontSprite, text, -1, &fontRect, DT_CALCRECT, 0xFFFFFFFF);
+      if (center)
+      xx = x - (fontRect.right - fontRect.left) / 2;
+      SetRect(&fontRect, xx, y, 0, 0);
+
+      for(unsigned int i = 0; i < 4; ++i)
+      {
+         constexpr int offset = 1;
+         RECT shadowRect;
+         SetRect( &shadowRect, xx + ((i == 0) ? -offset : (i == 1) ? offset : 0), y + ((i == 2) ? -offset : (i == 3) ? offset : 0), 0, 0 );
+         m_DebugFontRecord.m_Font->DrawText(m_DebugFontRecord.m_FontSprite, text, -1, &shadowRect, DT_NOCLIP, 0xFF000000);
+      }
+
+      m_DebugFontRecord.m_Font->DrawText(m_DebugFontRecord.m_FontSprite, text, -1, &fontRect, DT_NOCLIP, 0xFFFFFFFF);
+
+      m_DebugFontRecord.m_FontSprite->End();
+   }
+}
 
 
 BallHistory::Vertex3DColor::Vertex3DColor() :
@@ -859,6 +955,7 @@ void BallHistory::SaveSettings(Player &player)
 
 void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
 {
+   m_DebugFontRecord.Init(player);
    SetControl(false);
    m_WasControlled = false;
    m_WasRecalled = false;
@@ -1047,6 +1144,7 @@ void BallHistory::InitBallsDecreased(Player &player)
 void BallHistory::UnInit(Player &player)
 {
    SaveSettings(player);
+   m_DebugFontRecord.UnInit();
    delete m_AutoControlBallTexture;
    for each (std::pair<U32, Texture *> const &controlHistoryBallTexture in m_ControlHistoryBallTextures)
    {
@@ -1362,8 +1460,8 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
       return;
    }
 
-   DebugPrintRecord dpr(player);
-   dpr.SetPositionPercent(0.0f, 0.0f);
+   DebugPrintRecord dpr(player, m_DebugFontRecord);
+   dpr.SetPositionPercent(0.00f, 0.00f);
 
    dpr.ShowText("Ball History Status");
 
@@ -1916,7 +2014,7 @@ void BallHistory::DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int cu
             player.DrawFakeBall(bsor.m_Pos, radius, orientation, m_TrainerBallStartTexture);
             DrawAngleVelocityPreview(player, bsor);
             POINT screenPoint = Get2DPointFrom3D(player, bsor.m_Pos);
-            player.SetDebugOutputPosition(float(screenPoint.x), float(screenPoint.y));
+            dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
             dpr.ShowMenuTextPos(0, 0, "S-%zu", bsorIndex + 1);
          }
       }
@@ -4387,7 +4485,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       return;
    }
 
-   DebugPrintRecord dpr(player);
+   DebugPrintRecord dpr(player, m_DebugFontRecord);
    dpr.SetPositionPercent(0.50f, 1.00f);
    dpr.SetReverse();
 
@@ -4921,7 +5019,7 @@ void BallHistory::DrawBallHistory(Player &player)
       }
    }
 
-   DebugPrintRecord dpr(player);
+   DebugPrintRecord dpr(player, m_DebugFontRecord);
 
    // draw the fake balls
    for (std::size_t ballHistoryRecordIndex = 0; ballHistoryRecordIndex < m_BallHistoryRecords.size(); ++ballHistoryRecordIndex)

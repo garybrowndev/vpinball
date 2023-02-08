@@ -554,15 +554,28 @@ private:
       void SetZero();
    };
 
+   struct DebugFontRecord
+   {
+      ID3DXFont * m_Font;
+      LPD3DXSPRITE m_FontSprite;
+
+      DebugFontRecord();
+      virtual ~DebugFontRecord();
+      void Init(Player &player);
+      void UnInit();
+   };
+
    struct DebugPrintRecord
    {
       Player &m_Player;
+      DebugFontRecord m_DebugFontRecord;
+
       int m_TextX;
       int m_TextY;
       int m_TextYStep;
       char m_StrBuffer[1024];
       
-      DebugPrintRecord(Player &player);
+      DebugPrintRecord(Player &player, DebugFontRecord &debugFontRecord);
       void InitTextXY();
       void SetPosition(float x, float y);
       void SetPositionPercent(float x, float y);
@@ -574,6 +587,8 @@ private:
       void ShowMenuTextTitle(const char * format, ...);
       void ShowMenuTextError(const char * format, ...);
       void ShowMenuTextSelect(bool selected, const char * format, ...);
+      void SetDebugOutputPosition(const float x, const float y);
+      void DebugPrint(int x, int y, LPCSTR text, bool center);
    };
 
    struct Vertex3DColor
@@ -690,6 +705,8 @@ private:
    std::vector<Ball*> m_ControlVBallsPrevious;
 
    ProfilerRecord m_ProfilerRecord;
+
+   DebugFontRecord m_DebugFontRecord;
 
    bool m_ShowStatus;
    bool m_Control;
