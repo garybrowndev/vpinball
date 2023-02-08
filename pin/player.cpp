@@ -4497,6 +4497,10 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
 
    if (m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs == 0)
    {
+      // TODO GARY do not do this here because it prevents choosing existing ball history
+      // when setting up trainer run start ball location. Instead, this should only occur
+      // on the first time the use hits Start to allow choosing position when going into
+      // trainer mode
       Init(player, currentTimeMs, false);
 
       if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord == 0)
