@@ -394,6 +394,8 @@ void BallHistory::DebugPrintRecord::ShowMenuTextSelect(bool selected, const char
    vsprintf_s(m_StrBuffer, format, formatArgs);
    if (selected)
    {
+      // TODO GARY Consider making the selected menu item a different color
+      // or different font size (bold maybe)
       std::string tempStr = "-->" + std::string(m_StrBuffer) + "<--";
       DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true);
    }
@@ -2638,39 +2640,20 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      }
                      else
                      {                        
-                        ToggleControl();
-
                         m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results;
+
+                        ToggleControl();
 
                         m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord = 0;
                         m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
-                        for (std::size_t bporIndex = 0; bporIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); bporIndex++)
-                        {
-                           TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[bporIndex];
-                           bpor.m_StopBallsTracker.resize(m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize, std::make_tuple<int, Vertex3Ds>(0, {0.0f, 0.0f, 0.0f}));
-                        }
-                        for (std::size_t bforIndex = 0; bforIndex < m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size(); bforIndex++)
-                        {
-                           TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[bforIndex];
-                           bfor.m_StopBallsTracker.resize(m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize, std::make_tuple<int, Vertex3Ds>(0, {0.0f, 0.0f, 0.0f}));
-                        }
                      }
                      break;
                   case TrainerOptions::ModeStateType::ModeStateType_Resume:
-                     ToggleControl();
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results;
 
+                     ToggleControl();
+
                      m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
-                     for (std::size_t bporIndex = 0; bporIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); bporIndex++)
-                     {
-                        TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[bporIndex];
-                        bpor.m_StopBallsTracker.resize(m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize, std::make_tuple<int, Vertex3Ds>(0, {0.0f, 0.0f, 0.0f}));
-                     }
-                     for (std::size_t bforIndex = 0; bforIndex < m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size(); bforIndex++)
-                     {
-                        TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[bforIndex];
-                        bfor.m_StopBallsTracker.resize(m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize, std::make_tuple<int, Vertex3Ds>(0, {0.0f, 0.0f, 0.0f}));
-                     }
                      break;
                   case TrainerOptions::ModeStateType::ModeStateType_Results:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results;
@@ -2695,6 +2678,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results:
          {
          ShowPreviousRunRecord(player, dpr);
+
+         // TODO GARY fix the "nan" numbers not working
+         
+         // TODO GARY consider putting this in the top right and not at center, center
+         // or maybe at the bottom center
          
          dpr.ShowText("%s:", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord == m_MenuOptions.m_TrainerOptions.m_RunRecords.size() ? "Final Run Results" : "Current Run Results");
 
@@ -4448,18 +4436,13 @@ void BallHistory::ProcessModeNormal(Player &player)
 void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
 {
    ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_ProcessModeTrainerUsec);
-   switch (m_MenuOptions.m_TrainerOptions.m_ModeState)
+   switch (m_MenuOptions.m_MenuState)
    {
-      case TrainerOptions::ModeStateType::ModeStateType_Start:
-      case TrainerOptions::ModeStateType::ModeStateType_Resume:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results:
          break;
-      case TrainerOptions::ModeStateType::ModeStateType_Results:
-      case TrainerOptions::ModeStateType::ModeStateType_Config:
-      case TrainerOptions::ModeStateType::ModeStateType_Exit:
-         return;
       default:
-         InvalidEnumValue("TrainerOptions::ModeStateType", m_MenuOptions.m_TrainerOptions.m_ModeState);
-         break;
+         // everything else
+         return;
    }
 
    std::string errorMessage;
@@ -4615,6 +4598,17 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       }
 
       m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = currentTimeMs;
+
+      for (std::size_t bporIndex = 0; bporIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); bporIndex++)
+      {
+         TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[bporIndex];
+         bpor.m_StopBallsTracker.resize(m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize, std::make_tuple<int, Vertex3Ds>(0, {0.0f, 0.0f, 0.0f}));
+      }
+      for (std::size_t bforIndex = 0; bforIndex < m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size(); bforIndex++)
+      {
+         TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[bforIndex];
+         bfor.m_StopBallsTracker.resize(m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize, std::make_tuple<int, Vertex3Ds>(0, {0.0f, 0.0f, 0.0f}));
+      }
    }
 
    if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord == m_MenuOptions.m_TrainerOptions.m_RunRecords.size())
@@ -4716,11 +4710,6 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                else
                {
                   stopBallMs = 0;
-                  // TODO GARY fix crash here, steps to reproduce
-                  // Start table
-                  // Let balls get created and settle
-                  // Go to menu and put selection on "Start"
-                  // Hit control (to continue sim), crash will happen
                   stopBallPos.SetZero();
                }
             }
@@ -4913,8 +4902,6 @@ void BallHistory::ResetBallHistoryRenderSizes()
 
 void BallHistory::DrawBallHistory(Player &player)
 {
-   // TODO GARY fix memory leak, monitor the working set while in the normal mode
-   // to have the ball history drawn to reproduce the problem
    ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_DrawBallHistoryUsec);
 
    struct DrawBallHistoryRecord
@@ -5060,6 +5047,9 @@ void BallHistory::DrawBallHistory(Player &player)
 
 void BallHistory::DrawLine(Player &player, const Vertex3Ds &posA, const Vertex3Ds &posB, D3DCOLOR color)
 {
+   // TODO GARY lines are flickering, i think it has something to do with
+   // releasing the buffer, maybe try keeping it around, but have to handle
+   // the memory lifetime
    if (!posA.IsZero() && !posB.IsZero())
    {
       std::vector<Vertex3DColor> testVertices;
