@@ -4387,7 +4387,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectRecallBallHistory:
       case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_ManageAutoControlLocations:
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectExistingBallStartLocation:
-         // this is too restrictive
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results:
          DrawBallHistory(player);
          break;
       default:
@@ -4501,12 +4501,6 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
 
    if (m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs == 0)
    {
-      // TODO GARY do not do this here because it prevents choosing existing ball history
-      // when setting up trainer run start ball location. Instead, this should only occur
-      // on the first time the use hits Start to allow choosing position when going into
-      // trainer mode
-      Init(player, currentTimeMs, false);
-
       if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord == 0)
       {
          m_MenuOptions.m_TrainerOptions.m_RunRecords.clear();
@@ -4655,6 +4649,8 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
    {
       if (m_MenuOptions.m_TrainerOptions.m_SetupBallStarts)
       {
+         Init(player, currentTimeMs, false);
+
          bool anyVelocityAngularMomentumSet = false;
          for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
          {
@@ -4720,6 +4716,11 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                else
                {
                   stopBallMs = 0;
+                  // TODO GARY fix crash here, steps to reproduce
+                  // Start table
+                  // Let balls get created and settle
+                  // Go to menu and put selection on "Start"
+                  // Hit control (to continue sim), crash will happen
                   stopBallPos.SetZero();
                }
             }
@@ -4854,6 +4855,11 @@ bool BallHistory::BallChanged()
 
 bool BallHistory::BallInsideAutoControlVertex(std::vector<Ball *> &controlVBalls)
 {
+   // TODO GARY Put exception here to skip the check (like you hit C after hitting a
+   // control point) for when NEW balls are created. For example, if ball is created
+   // for the first time the table is created it hits a control point which is annoying
+   // the very first time a ball comes into existance and it is right next to a auto
+   // control point, the auto control should NOT go off
    if (controlVBalls.size())
    {
       for each (const Ball *controlVBall in controlVBalls)
