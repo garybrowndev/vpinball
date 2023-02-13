@@ -2126,6 +2126,8 @@ void BallHistory::DrawAngleVelocityPreview(Player &player, TrainerOptions::BallS
    testVerticesVB->unlock();
 
    player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::TRIANGLEFAN, MY_D3DFVF_COLOR_VERTEX, testVerticesVB, 0, testVertices.size(), false);
+
+   SAFE_BUFFER_RELEASE(testVerticesVB);
 }
 
 void BallHistory::CalculateAngleVelocityStep(TrainerOptions::BallStartOptionsRecord &bsor, float &angleStep, float &velocityStep)
@@ -4378,12 +4380,14 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
    switch (m_MenuOptions.m_MenuState)
    {
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Root_SelectMode:
       case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectModeOptions:
       case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectCurrentBallHistory:
       case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SetupRecallBallHistory:
       case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectRecallBallHistory:
       case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_ManageAutoControlLocations:
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectExistingBallStartLocation:
+         // this is too restrictive
          DrawBallHistory(player);
          break;
       default:
@@ -4903,6 +4907,8 @@ void BallHistory::ResetBallHistoryRenderSizes()
 
 void BallHistory::DrawBallHistory(Player &player)
 {
+   // TODO GARY fix memory leak, monitor the working set while in the normal mode
+   // to have the ball history drawn to reproduce the problem
    ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_DrawBallHistoryUsec);
 
    struct DrawBallHistoryRecord
@@ -5062,6 +5068,8 @@ void BallHistory::DrawLine(Player &player, const Vertex3Ds &posA, const Vertex3D
       testVerticesVB->unlock();
 
       player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::LINELIST, MY_D3DFVF_COLOR_VERTEX, testVerticesVB, 0, testVertices.size(), false);
+
+      SAFE_BUFFER_RELEASE(testVerticesVB);
    }
 }
 
@@ -5099,6 +5107,8 @@ void BallHistory::DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float b
    testVerticesVB->unlock();
 
    player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::TRIANGLEFAN, MY_D3DFVF_COLOR_VERTEX, testVerticesVB, 0, testVertices.size(), false);
+
+   SAFE_BUFFER_RELEASE(testVerticesVB);
 }
 
 void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs)
