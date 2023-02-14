@@ -556,7 +556,10 @@ private:
 
    struct DebugFontRecord
    {
-      ID3DXFont * m_Font;
+      static const char * FontTypeFace;
+      ID3DXFont * m_TitleFont;
+      ID3DXFont * m_NormalFont;
+      ID3DXFont * m_SelectFont;
       LPD3DXSPRITE m_FontSprite;
 
       DebugFontRecord();
@@ -567,6 +570,10 @@ private:
 
    struct DebugPrintRecord
    {
+      static D3DCOLOR NormalMenuColor;
+      static D3DCOLOR SelectedMenuColor;
+      static D3DCOLOR ErrorMenuColor;
+
       Player &m_Player;
       DebugFontRecord m_DebugFontRecord;
 
@@ -588,7 +595,7 @@ private:
       void ShowMenuTextError(const char * format, ...);
       void ShowMenuTextSelect(bool selected, const char * format, ...);
       void SetDebugOutputPosition(const float x, const float y);
-      void DebugPrint(int x, int y, LPCSTR text, bool center);
+      void DebugPrint(int x, int y, LPCSTR text, bool center, D3DCOLOR color, ID3DXFont * font);
    };
 
    struct Vertex3DColor

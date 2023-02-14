@@ -224,8 +224,13 @@ void BallHistory::ProfilerRecord::SetZero()
    m_DrawTrainerBallsUsec = 0;
 }
 
+
+const char * BallHistory::DebugFontRecord::FontTypeFace = "Lucida Sans Typewriter";
+
 BallHistory::DebugFontRecord::DebugFontRecord() :
-   m_Font(nullptr),
+   m_TitleFont(nullptr),
+   m_NormalFont(nullptr),
+   m_SelectFont(nullptr),
    m_FontSprite(nullptr)
 {
 }
@@ -241,27 +246,69 @@ void BallHistory::DebugFontRecord::Init(Player &player)
 
    IDirect3DDevice9 * coreDevice = player.m_pin3d.m_pd3dPrimaryDevice->GetCoreDevice();
 
-   const HRESULT hr = D3DXCreateFont(
-      coreDevice,                   //device
-      fontSize,                     //font height
-      0,                            //font width
-      FW_BOLD,                      //font weight
-      1,                            //mip levels
-      fFalse,                       //italic
-      DEFAULT_CHARSET,              //charset
-      OUT_DEFAULT_PRECIS,           //output precision
-      DEFAULT_QUALITY,              //quality
-      DEFAULT_PITCH | FF_DONTCARE,  //pitch and family
-      "Arial",                      //font name
-      &m_Font                     //font pointer
+   HRESULT hr = D3DXCreateFont(
+      coreDevice,                  //device
+      fontSize,                    //font height
+      20,                          //font width
+      FW_HEAVY,                    //font weight
+      1,                           //mip levels
+      fFalse,                      //italic
+      DEFAULT_CHARSET,             //charset
+      OUT_DEFAULT_PRECIS,          //output precision
+      DEFAULT_QUALITY,             //quality
+      DEFAULT_PITCH | FF_DONTCARE, //pitch and family
+      FontTypeFace,                //font name
+      &m_TitleFont                 //font pointer
    );
 
    if (FAILED(hr))
    {
       ShowError("Unable to create debug font via D3DXCreateFont!");
-      m_Font = nullptr;
+      m_TitleFont = nullptr;
+   }
+   
+   hr = D3DXCreateFont(
+      coreDevice,                  //device
+      fontSize,                    //font height
+      15,                          //font width
+      FW_MEDIUM,                   //font weight
+      1,                           //mip levels
+      fFalse,                      //italic
+      DEFAULT_CHARSET,             //charset
+      OUT_DEFAULT_PRECIS,          //output precision
+      DEFAULT_QUALITY,             //quality
+      DEFAULT_PITCH | FF_DONTCARE, //pitch and family
+      FontTypeFace,                //font name
+      &m_NormalFont                //font pointer
+   );
+
+   if (FAILED(hr))
+   {
+      ShowError("Unable to create debug font via D3DXCreateFont!");
+      m_NormalFont = nullptr;
    }
 
+   hr = D3DXCreateFont(
+      coreDevice,                  //device
+      fontSize,                    //font height
+      15,                          //font width
+      FW_BOLD,                     //font weight
+      1,                           //mip levels
+      fFalse,                      //italic
+      DEFAULT_CHARSET,             //charset
+      OUT_DEFAULT_PRECIS,          //output precision
+      DEFAULT_QUALITY,             //quality
+      DEFAULT_PITCH | FF_DONTCARE, //pitch and family
+      FontTypeFace,                //font name
+      &m_SelectFont                //font pointer
+   );
+
+   if (FAILED(hr))
+   {
+      ShowError("Unable to create debug font via D3DXCreateFont!");
+      m_SelectFont = nullptr;
+   }
+   
    if (FAILED(D3DXCreateSprite(player.m_pin3d.m_pd3dPrimaryDevice->GetCoreDevice(), &m_FontSprite)))
    {
       ShowError("D3DXCreateSprite failed!");
@@ -275,12 +322,21 @@ void BallHistory::DebugFontRecord::UnInit()
       m_FontSprite->Release();
       m_FontSprite = nullptr;
    }
-   if (m_Font)
+   if (m_NormalFont)
    {
-      m_Font->Release();
-      m_Font = nullptr;
+      m_NormalFont->Release();
+      m_NormalFont = nullptr;
+   }
+   if (m_TitleFont)
+   {
+      m_TitleFont->Release();
+      m_TitleFont = nullptr;
    }
 }
+
+D3DCOLOR BallHistory::DebugPrintRecord::NormalMenuColor = D3DCOLOR_ARGB(0xFF, 0xD3, 0xD3, 0xD3);
+D3DCOLOR BallHistory::DebugPrintRecord::SelectedMenuColor = D3DCOLOR_ARGB(0xFF, 0x1E, 0x90, 0xFF); // dodger blue
+D3DCOLOR BallHistory::DebugPrintRecord::ErrorMenuColor = D3DCOLOR_ARGB(0xFF, 0xFF, 0xCC, 0xCB);
 
 BallHistory::DebugPrintRecord::DebugPrintRecord(Player &player, DebugFontRecord &debugFontRecord):
    m_Player(player),
@@ -341,7 +397,7 @@ void BallHistory::DebugPrintRecord::ShowText(const char * format, ...)
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
-   DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, false);
+   DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, false, NormalMenuColor, m_DebugFontRecord.m_NormalFont);
 }
 
 void BallHistory::DebugPrintRecord::ShowTextTitle(const char * format, ...)
@@ -350,7 +406,7 @@ void BallHistory::DebugPrintRecord::ShowTextTitle(const char * format, ...)
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
    std::string tempStr = "-----" + std::string(m_StrBuffer) + "-----";
-   DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true);
+   DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true, NormalMenuColor, m_DebugFontRecord.m_NormalFont);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuText(const char * format, ...)
@@ -358,7 +414,7 @@ void BallHistory::DebugPrintRecord::ShowMenuText(const char * format, ...)
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
-   DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, true);
+   DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, true, NormalMenuColor, m_DebugFontRecord.m_NormalFont);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuTextPos(int x, int y, const char * format, ...)
@@ -366,7 +422,7 @@ void BallHistory::DebugPrintRecord::ShowMenuTextPos(int x, int y, const char * f
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
-   DebugPrint(x, y, m_StrBuffer, true);
+   DebugPrint(x, y, m_StrBuffer, true, NormalMenuColor, m_DebugFontRecord.m_NormalFont);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuTextTitle(const char * format, ...)
@@ -375,7 +431,7 @@ void BallHistory::DebugPrintRecord::ShowMenuTextTitle(const char * format, ...)
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
    std::string tempStr = "*****" + std::string(m_StrBuffer) + "*****";
-   DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true);
+   DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true, NormalMenuColor, m_DebugFontRecord.m_TitleFont);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuTextError(const char * format, ...)
@@ -384,7 +440,7 @@ void BallHistory::DebugPrintRecord::ShowMenuTextError(const char * format, ...)
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
    std::string tempStr = "!!!!! ERROR:" + std::string(m_StrBuffer) + "!!!!!";
-   DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true);
+   DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true, ErrorMenuColor, m_DebugFontRecord.m_NormalFont);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuTextSelect(bool selected, const char * format, ...)
@@ -394,14 +450,12 @@ void BallHistory::DebugPrintRecord::ShowMenuTextSelect(bool selected, const char
    vsprintf_s(m_StrBuffer, format, formatArgs);
    if (selected)
    {
-      // TODO GARY Consider making the selected menu item a different color
-      // or different font size (bold maybe)
       std::string tempStr = "-->" + std::string(m_StrBuffer) + "<--";
-      DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true);
+      DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true, SelectedMenuColor, m_DebugFontRecord.m_SelectFont);
    }
    else
    {
-      DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, true);
+      DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, true, NormalMenuColor, m_DebugFontRecord.m_NormalFont);
    }
 }
 
@@ -418,15 +472,15 @@ void BallHistory::DebugPrintRecord::SetDebugOutputPosition(const float x, const 
    InitTextXY();
 }
 
-void BallHistory::DebugPrintRecord::DebugPrint(int x, int y, LPCSTR text, bool center)
+void BallHistory::DebugPrintRecord::DebugPrint(int x, int y, LPCSTR text, bool center, D3DCOLOR color, ID3DXFont * font)
 {
-   if (m_DebugFontRecord.m_Font)
+   if (font)
    {
       int xx = x;
       m_DebugFontRecord.m_FontSprite->Begin(D3DXSPRITE_ALPHABLEND | D3DXSPRITE_SORT_TEXTURE);
       RECT fontRect;
       SetRect(&fontRect, x, y, 0, 0);
-      m_DebugFontRecord.m_Font->DrawText(m_DebugFontRecord.m_FontSprite, text, -1, &fontRect, DT_CALCRECT, 0xFFFFFFFF);
+      font->DrawText(m_DebugFontRecord.m_FontSprite, text, -1, &fontRect, DT_CALCRECT, 0xFFFFFFFF);
       if (center)
       xx = x - (fontRect.right - fontRect.left) / 2;
       SetRect(&fontRect, xx, y, 0, 0);
@@ -436,10 +490,10 @@ void BallHistory::DebugPrintRecord::DebugPrint(int x, int y, LPCSTR text, bool c
          constexpr int offset = 1;
          RECT shadowRect;
          SetRect( &shadowRect, xx + ((i == 0) ? -offset : (i == 1) ? offset : 0), y + ((i == 2) ? -offset : (i == 3) ? offset : 0), 0, 0 );
-         m_DebugFontRecord.m_Font->DrawText(m_DebugFontRecord.m_FontSprite, text, -1, &shadowRect, DT_NOCLIP, 0xFF000000);
+         font->DrawText(m_DebugFontRecord.m_FontSprite, text, -1, &shadowRect, DT_NOCLIP, 0xFF000000);
       }
 
-      m_DebugFontRecord.m_Font->DrawText(m_DebugFontRecord.m_FontSprite, text, -1, &fontRect, DT_NOCLIP, 0xFFFFFFFF);
+      font->DrawText(m_DebugFontRecord.m_FontSprite, text, -1, &fontRect, DT_NOCLIP, color);
 
       m_DebugFontRecord.m_FontSprite->End();
    }
@@ -1927,13 +1981,11 @@ bool BallHistory::ShouldDrawTrainerBallStarts(std::size_t index, int currentTime
             case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Select:
                return index != m_MenuOptions.m_CurrentCompleteIndex || (currentTimeMs % 1000) >= 200;
             default:
-               break;
+               return true;
          }
       default:
-         // do nothing
-         break;
+         return true;
    }
-   return true;
 }
 
 bool BallHistory::ShouldDrawTrainerBallPasses(std::size_t index, int currentTimeMs)
@@ -1954,14 +2006,11 @@ bool BallHistory::ShouldDrawTrainerBallPasses(std::size_t index, int currentTime
             case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select:
                return index != m_MenuOptions.m_CurrentCompleteIndex || (currentTimeMs % 1000) >= 200;
             default:
-               // do nothing
-               break;
+               return true;
          }
       default:
-         // do nothing
-         break;
+         return true;
    }
-   return true;
 }
 
 bool BallHistory::ShouldDrawTrainerBallFails(std::size_t index, int currentTimeMs)
@@ -1982,14 +2031,11 @@ bool BallHistory::ShouldDrawTrainerBallFails(std::size_t index, int currentTimeM
             case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select:
                return index != m_MenuOptions.m_CurrentCompleteIndex || (currentTimeMs % 1000) >= 200;
             default:
-               // do nothing
-               break;
+               return true;
          }
       default:
-         // do nothing
-         break;
+         return true;
    }
-   return true;
 }
 
 void BallHistory::DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int currentTimeMs)
