@@ -2513,6 +2513,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          // TODO GARY better names for "Select" and "Disable"
          // Proposal "Setup/Config" and "Clear/Reset"
 
+         // TODO GARY show the position of the recall ball in text below like
+         // other balls are shown
+
+         // TODO GARY blink text over the recall position like other positions
+
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType::MenuActionType_None:
@@ -2725,8 +2730,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
          ShowPreviousRunRecord(player, dpr);
 
-         // TODO GARY fix the "nan" numbers not working
-         
          // TODO GARY consider putting this in the top right and not at center, center
          // or maybe at the bottom center
          
@@ -2764,12 +2767,43 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowText("%zu = Pass", totalPasses);
          dpr.ShowText("%zu = Fail (location)", totalFailsLocation);
          dpr.ShowText("%zu = Fail (time elapsed)", totalFailsTimeElapsed);
-         dpr.ShowText("%.2f%% = Pass Percentage", float(totalPasses) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
-         dpr.ShowText("%.2f%% = Fail (location) Percentage", float(totalFailsLocation) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
-         dpr.ShowText("%.2f%% = Fail (time elapsed)", float(totalFailsTimeElapsed) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
-         dpr.ShowText("%.2f (%.2f) = Average Pass Elapsed Seconds (stddev)", float(totalPassMs) / totalPasses / 1000, 0.0f);
-         dpr.ShowText("%.2f (%.2f) = Average Fail (location) Elapsed Seconds (stddev)", float(totalFailLocationMs) / totalFailsLocation / 1000, 0.0f);
-         dpr.ShowText("%.2f (%.2f) = Average Run Seconds (stddev)", float(totalRunsMs) / m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord / 1000, 0.0f);
+         std::size_t runRecordsSize = m_MenuOptions.m_TrainerOptions.m_RunRecords.size();
+         if (runRecordsSize)
+         {
+            dpr.ShowText("%.2f%% = Pass Percentage", float(totalPasses) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
+            dpr.ShowText("%.2f%% = Fail (location) Percentage", float(totalFailsLocation) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
+            dpr.ShowText("%.2f%% = Fail (time elapsed)", float(totalFailsTimeElapsed) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
+         }
+         else
+         {
+            dpr.ShowText("<n/a> = Pass Percentage");
+            dpr.ShowText("<n/a> = Fail (location) Percentage");
+            dpr.ShowText("<n/a> = Fail (time elapsed)");
+         }
+         if (totalPasses)
+         {
+            dpr.ShowText("%.2f (%.2f) = Average Pass Elapsed Seconds (stddev)", float(totalPassMs) / totalPasses / 1000, 0.0f);
+         }
+         else
+         {
+            dpr.ShowText("<n/a> (<n/a>) = Average Pass Elapsed Seconds (stddev)");
+         }
+         if (totalFailsLocation)
+         {
+            dpr.ShowText("%.2f (%.2f) = Average Fail (location) Elapsed Seconds (stddev)", float(totalFailLocationMs) / totalFailsLocation / 1000, 0.0f);
+         }
+         else
+         {
+            dpr.ShowText("<n/a> (<n/a>) = Average Fail (location) Elapsed Seconds (stddev)");
+         }
+         if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord)
+         {
+            dpr.ShowText("%.2f (%.2f) = Average Run Seconds (stddev)", float(totalRunsMs) / m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord / 1000, 0.0f);
+         }
+         else
+         {
+            dpr.ShowText("<n/a> (<n/a>) = Average Run Seconds (stddev)");
+         }
 
          dpr.InitTextXY();
          dpr.SetPositionPercent(0.50f, 1.00f);
