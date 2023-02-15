@@ -476,6 +476,7 @@ public:
       ModeStateType_SelectCurrentBallHistory,
       ModeStateType_SelectRecallBallHistory,
       ModeStateType_ManageAutoControlLocations,
+      ModeStateType_ClearAutoControlLocations,
       ModeStateType_Exit,
       ModeStateType_COUNT
    };
@@ -485,6 +486,13 @@ public:
       SetupRecallBallHistoryModeType_Select,
       SetupRecallBallHistoryModeType_Disable,
       SetupRecallBallHistoryModeType_COUNT
+   };
+
+   enum ClearAutoControlLocationsModeType
+   {
+      ClearAutoControlLocationsModeType_Clear,
+      ClearAutoControlLocationsModeType_GoBack,
+      ClearAutoControlLocationsModeType_COUNT
    };
 
    struct AutoControlVertex
@@ -502,6 +510,8 @@ public:
 
    SetupRecallBallHistoryModeType m_SetupRecallBallHistoryMode;
    std::size_t m_RecallControlIndex;
+
+   ClearAutoControlLocationsModeType m_ClearAutoControlLocationsMode;
 
    S32 m_CreateZ;
 
@@ -631,6 +641,7 @@ private:
          MenuStateType_Normal_SetupRecallBallHistory,
          MenuStateType_Normal_SelectRecallBallHistory,
          MenuStateType_Normal_ManageAutoControlLocations,
+         MenuStateType_Normal_ClearAutoControlLocations,
          MenuStateType_Trainer_SelectModeOptions,
          MenuStateType_Trainer_Results,
          MenuStateType_Trainer_SelectBallStartMode,

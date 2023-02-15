@@ -141,6 +141,7 @@ const float NormalOptions::ManageAutoControlFindFactor = 0.025f;
 NormalOptions::NormalOptions():
    m_ModeState(ModeStateType::ModeStateType_SelectCurrentBallHistory),
    m_SetupRecallBallHistoryMode(SetupRecallBallHistoryModeType::SetupRecallBallHistoryModeType_Select),
+   m_ClearAutoControlLocationsMode(ClearAutoControlLocationsModeType::ClearAutoControlLocationsModeType_GoBack),
    m_RecallControlIndex(RecallControlIndexDisabled),
    m_CreateZ(0)
 {
@@ -1826,14 +1827,21 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
 
 void BallHistory::ShowAutoControlVertices(Player &player, DebugPrintRecord &dpr)
 {
-   for (std::size_t autoControlVerticesIndex = 0; autoControlVerticesIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); ++autoControlVerticesIndex)
+   if (m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size())
    {
-      NormalOptions::AutoControlVertex &autoControlVertex = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[autoControlVerticesIndex];
-      POINT screenPoint = Get2DPointFrom3D(player, autoControlVertex.m_Pos);
-      dpr.ShowMenuText("Point %zu %.2f,%.2f,%.2f,%ld,%ld,%s (3x,3y,3z,2x,2y,active)",
-         autoControlVerticesIndex + 1,
-         autoControlVertex.m_Pos.x, autoControlVertex.m_Pos.y, autoControlVertex.m_Pos.z, screenPoint.x, screenPoint.y,
-         autoControlVertex.Active ? "true" : "false");
+      for (std::size_t autoControlVerticesIndex = 0; autoControlVerticesIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); ++autoControlVerticesIndex)
+      {
+         NormalOptions::AutoControlVertex &autoControlVertex = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[autoControlVerticesIndex];
+         POINT screenPoint = Get2DPointFrom3D(player, autoControlVertex.m_Pos);
+         dpr.ShowMenuText("Point %zu %.2f,%.2f,%.2f,%ld,%ld,%s (3x,3y,3z,2x,2y,active)",
+            autoControlVerticesIndex + 1,
+            autoControlVertex.m_Pos.x, autoControlVertex.m_Pos.y, autoControlVertex.m_Pos.z, screenPoint.x, screenPoint.y,
+            autoControlVertex.Active ? "true" : "false");
+      }
+   }
+   else
+   {
+      dpr.ShowMenuText("No auto control locations");
    }
 }
 
@@ -2434,9 +2442,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Select Recall Ball History");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_NormalOptions.m_ModeState == NormalOptions::ModeStateType::ModeStateType_ManageAutoControlLocations,
             "Manage Auto Control Locations");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_NormalOptions.m_ModeState == NormalOptions::ModeStateType::ModeStateType_ClearAutoControlLocations,
+            "Clear Auto Control Locations");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_NormalOptions.m_ModeState == NormalOptions::ModeStateType::ModeStateType_Exit,
             "Exit");
-         // TODO GARY add option to clear all all auto control vertices
 
          dpr.ShowMenuText("");
          dpr.ShowTextTitle("Current Config");
@@ -2466,6 +2475,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   case NormalOptions::ModeStateType::ModeStateType_ManageAutoControlLocations:
                      CenterMouse(player);
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_ManageAutoControlLocations;
+                     break;
+                  case NormalOptions::ModeStateType::ModeStateType_ClearAutoControlLocations:
+                     m_MenuOptions.m_NormalOptions.m_ClearAutoControlLocationsMode = NormalOptions::ClearAutoControlLocationsModeType::ClearAutoControlLocationsModeType_GoBack;
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_ClearAutoControlLocations;
                      break;
                   case NormalOptions::ModeStateType::ModeStateType_Exit:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Root_SelectMode;
@@ -2686,6 +2699,51 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectModeOptions;
+               break;
+            default:
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
+               break;
+         }
+         }
+         break;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Normal_ClearAutoControlLocations:
+         {
+         dpr.ShowMenuTextTitle("Clear Auto Control Locations");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_NormalOptions.m_ClearAutoControlLocationsMode == NormalOptions::ClearAutoControlLocationsModeType::ClearAutoControlLocationsModeType_Clear,
+            "Clear");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_NormalOptions.m_ClearAutoControlLocationsMode == NormalOptions::ClearAutoControlLocationsModeType::ClearAutoControlLocationsModeType_GoBack,
+            "Go Back");
+
+         dpr.ShowMenuText("");
+         dpr.ShowTextTitle("Current Config");
+         ShowAutoControlVertices(player, dpr);
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
+               ProcessMenuChangeValueDec<NormalOptions::ClearAutoControlLocationsModeType>(m_MenuOptions.m_NormalOptions.m_ClearAutoControlLocationsMode, 0, NormalOptions::ClearAutoControlLocationsModeType::ClearAutoControlLocationsModeType_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
+               ProcessMenuChangeValueInc<NormalOptions::ClearAutoControlLocationsModeType>(m_MenuOptions.m_NormalOptions.m_ClearAutoControlLocationsMode, 0, NormalOptions::ClearAutoControlLocationsModeType::ClearAutoControlLocationsModeType_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+               switch (m_MenuOptions.m_NormalOptions.m_ClearAutoControlLocationsMode)
+               {
+                  case NormalOptions::ClearAutoControlLocationsModeType::ClearAutoControlLocationsModeType_Clear:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectModeOptions;
+                     m_MenuOptions.m_NormalOptions.m_AutoControlVertices.clear();
+                     break;
+                  case NormalOptions::ClearAutoControlLocationsModeType::ClearAutoControlLocationsModeType_GoBack:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_SelectModeOptions;
+                     break;
+                  default:
+                     InvalidEnumValue("NormalOptions::ClearAutoControlLocationsModeType", m_MenuOptions.m_NormalOptions.m_ClearAutoControlLocationsMode);
+                     break;
+               }
                break;
             default:
                InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
