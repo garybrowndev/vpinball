@@ -1568,7 +1568,10 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
          for (std::size_t autoControlVerticesIndex = 0; autoControlVerticesIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); ++autoControlVerticesIndex)
          {
             NormalOptions::AutoControlVertex &autoControlVertex = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[autoControlVerticesIndex];
-            dpr.ShowText("  Auto Control Point %zu %.2f,%.2f,%.2f,%s (3x,3y,3z,active)", autoControlVerticesIndex + 1, autoControlVertex.m_Pos.x, autoControlVertex.m_Pos.y, autoControlVertex.m_Pos.z, autoControlVertex.Active ? "true" : "false");
+            dpr.ShowText("  Auto Control Point %zu %.2f,%.2f,%.2f,%s (3x,3y,3z,active)",
+               autoControlVerticesIndex + 1,
+               autoControlVertex.m_Pos.x, autoControlVertex.m_Pos.y, autoControlVertex.m_Pos.z,
+               autoControlVertex.Active ? "true" : "false");
          }
 
          if (m_MenuOptions.m_NormalOptions.m_RecallControlIndex == NormalOptions::RecallControlIndexDisabled)
@@ -1821,7 +1824,20 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
    }
 }
 
-void BallHistory::ShowPreviousRunRecord(Player &player, DebugPrintRecord &dpr)
+void BallHistory::ShowAutoControlVertices(Player &player, DebugPrintRecord &dpr)
+{
+   for (std::size_t autoControlVerticesIndex = 0; autoControlVerticesIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); ++autoControlVerticesIndex)
+   {
+      NormalOptions::AutoControlVertex &autoControlVertex = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[autoControlVerticesIndex];
+      POINT screenPoint = Get2DPointFrom3D(player, autoControlVertex.m_Pos);
+      dpr.ShowMenuText("Point %zu %.2f,%.2f,%.2f,%ld,%ld,%s (3x,3y,3z,2x,2y,active)",
+         autoControlVerticesIndex + 1,
+         autoControlVertex.m_Pos.x, autoControlVertex.m_Pos.y, autoControlVertex.m_Pos.z, screenPoint.x, screenPoint.y,
+         autoControlVertex.Active ? "true" : "false");
+   }
+}
+
+void BallHistory::ShowPreviousRunRecord(DebugPrintRecord &dpr)
 {
    if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord > 0)
    {
@@ -1859,7 +1875,7 @@ void BallHistory::ShowPreviousRunRecord(Player &player, DebugPrintRecord &dpr)
    }
 }
 
-void BallHistory::ShowCurrentRunRecord(Player &player, DebugPrintRecord &dpr, int currentTimeMs)
+void BallHistory::ShowCurrentRunRecord(DebugPrintRecord &dpr, int currentTimeMs)
 {
    DWORD runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
 
@@ -1905,7 +1921,7 @@ void BallHistory::ShowCurrentRunRecord(Player &player, DebugPrintRecord &dpr, in
 }
 
 
-void BallHistory::ShowBallStartOptionsRecord(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallStartOptionsRecord &bsor)
+void BallHistory::ShowBallStartOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallStartOptionsRecord &bsor)
 {
    dpr.ShowMenuText("Position = %.2f,%.2f,%.2f (x,y,z)", bsor.m_Pos.x, bsor.m_Pos.y, bsor.m_Pos.z);
    dpr.ShowMenuText("Velocity = %.2f,%.2f,%.2f (x,y,z)", bsor.m_Vel.x, bsor.m_Vel.y, bsor.m_Vel.z);
@@ -1914,7 +1930,7 @@ void BallHistory::ShowBallStartOptionsRecord(Player &player, DebugPrintRecord &d
    dpr.ShowMenuText("AngleOps = %.2f,%.2f,%u (start,finish,total)", bsor.m_AngleStart, bsor.m_AngleFinish, bsor.m_TotalAngles);
 }
 
-void BallHistory::ShowBallEndOptionsRecord(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallEndOptionsRecord &beor)
+void BallHistory::ShowBallEndOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallEndOptionsRecord &beor)
 {
    dpr.ShowMenuText("Position = %.2f,%.2f,%.2f (x,y,z)", beor.m_Pos.x, beor.m_Pos.y, beor.m_Pos.z);
 
@@ -2422,6 +2438,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Exit");
          // TODO GARY add option to clear all all auto control vertices
 
+         dpr.ShowMenuText("");
+         dpr.ShowTextTitle("Current Config");
+         ShowAutoControlVertices(player, dpr);
+
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType::MenuActionType_None:
@@ -2466,6 +2486,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("Flippers navigate backward/forward");
          dpr.ShowMenuText("Menu key continues simulation");
          dpr.ShowMenuText("Plunger returns to previous menu");
+
+         dpr.ShowMenuText("");
+         dpr.ShowTextTitle("Current Config");
+         ShowAutoControlVertices(player, dpr);
 
          switch (menuAction)
          {
@@ -2521,6 +2545,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuTextSelect(m_MenuOptions.m_NormalOptions.m_SetupRecallBallHistoryMode == NormalOptions::SetupRecallBallHistoryModeType::SetupRecallBallHistoryModeType_Disable,
             "Disable");
 
+         dpr.ShowMenuText("");
+         dpr.ShowTextTitle("Current Config");
+         ShowAutoControlVertices(player, dpr);
+
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType::MenuActionType_None:
@@ -2559,6 +2587,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("Menu key continues simulation");
          dpr.ShowMenuText("Plunger accepts and returns to previous menu");
 
+         dpr.ShowMenuText("");
+         dpr.ShowTextTitle("Current Config");
+         ShowAutoControlVertices(player, dpr);
+
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType::MenuActionType_None:
@@ -2594,19 +2626,15 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          //  - Placing a new trainer ball pass location
          //  - Placing a new trainer ball fail location
 
-         for (std::size_t autoControlVerticesIndex = 0; autoControlVerticesIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); ++autoControlVerticesIndex)
-         {
-            NormalOptions::AutoControlVertex &autoControlVertex = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[autoControlVerticesIndex];
-            POINT screenPoint = Get2DPointFrom3D(player, autoControlVertex.m_Pos);
-            dpr.ShowMenuText("Point %zu %.2f,%.2f,%.2f,%ld,%ld,%s (3x,3y,3z,2x,2y,active)", autoControlVerticesIndex + 1, autoControlVertex.m_Pos.x, autoControlVertex.m_Pos.y, autoControlVertex.m_Pos.z, screenPoint.x, screenPoint.y, autoControlVertex.Active ? "true" : "false");
-         }
-
          if (GetCursorPos(&mousePosition2D) == TRUE)
          {
             if (ScreenToClient(player.m_pininput.m_hwnd, &mousePosition2D) == TRUE)
             {
                mousePosition3D = g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D, float(m_MenuOptions.m_NormalOptions.m_CreateZ));
-               dpr.ShowMenuText("Point N %.2f,%.2f,%.2f,%ld,%ld (3x,3y,3z,2x,2y)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z, mousePosition2D.x, mousePosition2D.y);
+               dpr.ShowMenuText("Point %zu %.2f,%.2f,%.2f,%ld,%ld (3x,3y,3z,2x,2y)",
+                  m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size() + 1,
+                  mousePosition3D.x, mousePosition3D.y, mousePosition3D.z,
+                  mousePosition2D.x, mousePosition2D.y);
             }
          }
 
@@ -2617,6 +2645,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("");
          dpr.ShowMenuText("Ball Height");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_NormalOptions.m_CreateZ, heightMaximum);
+
+         dpr.ShowMenuText("");
+         dpr.ShowTextTitle("Current Config");
+         ShowAutoControlVertices(player, dpr);
 
          DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_NormalOptions.m_CreateZ), 0.0f, *m_AutoControlBallTexture, nullptr, 0, dpr);
 
@@ -2739,7 +2771,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results:
          {
-         ShowPreviousRunRecord(player, dpr);
+         ShowPreviousRunRecord(dpr);
 
          // TODO GARY consider putting this in the top right and not at center, center
          // or maybe at the bottom center
@@ -2819,7 +2851,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.InitTextXY();
          dpr.SetPositionPercent(0.50f, 1.00f);
          dpr.SetReverse();
-         ShowCurrentRunRecord(player, dpr, currentTimeMs);
+         ShowCurrentRunRecord(dpr, currentTimeMs);
 
          switch (menuAction)
          {
@@ -2989,7 +3021,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                break;
             case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Select:
                dpr.ShowMenuText("");
-               ShowBallStartOptionsRecord(player, dpr, m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentCompleteIndex]);
+               ShowBallStartOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentCompleteIndex]);
                break;
             default:
                InvalidEnumValue("TrainerOptions::BallStartCompleteModeType", m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode);
@@ -3106,7 +3138,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ), 0.0f, *m_TrainerBallStartTexture, &bsor.m_Pos, D3DCOLOR_ARGB(0x00, 0x00, 0x00, 0xFF), dpr);
 
          dpr.ShowText("");
-         ShowBallStartOptionsRecord(player, dpr, bsor);
+         ShowBallStartOptionsRecord(dpr, bsor);
 
          switch (menuAction)
          {
@@ -3164,7 +3196,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Custom");
 
          dpr.ShowText("");
-         ShowBallStartOptionsRecord(player, dpr, bsor);
+         ShowBallStartOptionsRecord(dpr, bsor);
 
          switch (menuAction)
          {
@@ -3218,7 +3250,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::VelocityMinimum, static_cast<S32>(bsor.m_VelocityStart), TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
 
          dpr.ShowText("");
-         ShowBallStartOptionsRecord(player, dpr, bsor);
+         ShowBallStartOptionsRecord(dpr, bsor);
 
          switch (menuAction)
          {
@@ -3250,7 +3282,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::VelocityMinimum, static_cast<S32>(bsor.m_VelocityFinish), TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
 
          dpr.ShowText("");
-         ShowBallStartOptionsRecord(player, dpr, bsor);
+         ShowBallStartOptionsRecord(dpr, bsor);
 
          switch (menuAction)
          {
@@ -3282,7 +3314,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum, static_cast<S32>(bsor.m_TotalVelocities), TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMaximum);
 
          dpr.ShowText("");
-         ShowBallStartOptionsRecord(player, dpr, bsor);
+         ShowBallStartOptionsRecord(dpr, bsor);
 
          switch (menuAction)
          {
@@ -3318,7 +3350,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::AngleMinimum, static_cast<S32>(bsor.m_AngleStart), TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1);
 
          dpr.ShowMenuText("");
-         ShowBallStartOptionsRecord(player, dpr, bsor);
+         ShowBallStartOptionsRecord(dpr, bsor);
 
          switch (menuAction)
          {
@@ -3350,7 +3382,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::AngleMinimum, static_cast<S32>(bsor.m_AngleFinish), TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1);
 
          dpr.ShowText("");
-         ShowBallStartOptionsRecord(player, dpr, bsor);
+         ShowBallStartOptionsRecord(dpr, bsor);
 
          switch (menuAction)
          {
@@ -3382,7 +3414,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum, static_cast<S32>(bsor.m_TotalAngles), TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum);
 
          dpr.ShowText("");
-         ShowBallStartOptionsRecord(player, dpr, bsor);
+         ShowBallStartOptionsRecord(dpr, bsor);
 
          switch (menuAction)
          {
@@ -3433,7 +3465,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                {
                   dpr.ShowMenuText("");
                   dpr.ShowTextTitle("Current Config");
-                  ShowBallEndOptionsRecord(player, dpr, m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentCompleteIndex]);
+                  ShowBallEndOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentCompleteIndex]);
                }
                break;
             default:
@@ -3542,7 +3574,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuText("");
          dpr.ShowTextTitle("Current Config");
-         ShowBallEndOptionsRecord(player, dpr, bpor);
+         ShowBallEndOptionsRecord(dpr, bpor);
 
          switch (menuAction)
          {
@@ -3627,7 +3659,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuText("");
          dpr.ShowTextTitle("Current Config");
-         ShowBallEndOptionsRecord(player, dpr, bpor);
+         ShowBallEndOptionsRecord(dpr, bpor);
 
          switch (menuAction)
          {
@@ -3674,7 +3706,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuText("");
          dpr.ShowTextTitle("Current Config");
-         ShowBallEndOptionsRecord(player, dpr, bpor);
+         ShowBallEndOptionsRecord(dpr, bpor);
 
          switch (menuAction)
          {
@@ -3729,7 +3761,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuText("");
          dpr.ShowTextTitle("Current Config");
-         ShowBallEndOptionsRecord(player, dpr, bpor);
+         ShowBallEndOptionsRecord(dpr, bpor);
 
          switch (menuAction)
          {
@@ -3776,7 +3808,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuText("");
          dpr.ShowTextTitle("Current Config");
-         ShowBallEndOptionsRecord(player, dpr, bpor);
+         ShowBallEndOptionsRecord(dpr, bpor);
 
          switch (menuAction)
          {
@@ -3877,7 +3909,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                {
                   dpr.ShowMenuText("");
                   dpr.ShowTextTitle("Current Config");
-                  ShowBallEndOptionsRecord(player, dpr, m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentCompleteIndex]);
+                  ShowBallEndOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentCompleteIndex]);
                }
                break;
             default:
@@ -3986,7 +4018,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuText("");
          dpr.ShowTextTitle("Current Config");
-         ShowBallEndOptionsRecord(player, dpr, bfor);
+         ShowBallEndOptionsRecord(dpr, bfor);
 
          switch (menuAction)
          {
@@ -4071,7 +4103,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuText("");
          dpr.ShowTextTitle("Current Config");
-         ShowBallEndOptionsRecord(player, dpr, bfor);
+         ShowBallEndOptionsRecord(dpr, bfor);
 
          switch (menuAction)
          {
@@ -4118,7 +4150,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuText("");
          dpr.ShowTextTitle("Current Config");
-         ShowBallEndOptionsRecord(player, dpr, bfor);
+         ShowBallEndOptionsRecord(dpr, bfor);
 
          switch (menuAction)
          {
@@ -4173,7 +4205,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuText("");
          dpr.ShowTextTitle("Current Config");
-         ShowBallEndOptionsRecord(player, dpr, bfor);
+         ShowBallEndOptionsRecord(dpr, bfor);
 
          switch (menuAction)
          {
@@ -4221,7 +4253,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuText("");
          dpr.ShowTextTitle("Current Config");
-         ShowBallEndOptionsRecord(player, dpr, bfor);
+         ShowBallEndOptionsRecord(dpr, bfor);
 
          switch (menuAction)
          {
@@ -4725,7 +4757,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       {
          // countdown before run starts
          dpr.ShowMenuTextTitle("Run %zu (of %zu) starts in %.2f seconds", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_RunRecords.size(), ((m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000) - runElapsedTimeMs) / 1000.0f);
-         ShowPreviousRunRecord(player, dpr);
+         ShowPreviousRunRecord(dpr);
       }
 
       player.m_ptable->m_useTrailForBalls = 0;
@@ -4761,7 +4793,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          }
       }
 
-      ShowCurrentRunRecord(player, dpr, currentTimeMs);
+      ShowCurrentRunRecord(dpr, currentTimeMs);
       bool allPass = true;
       std::vector<std::tuple<std::size_t, std::size_t>> startToPassLocationIndexes;
       for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
@@ -4901,7 +4933,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
    }
 }
 
-void BallHistory::UpdateBallState(Player &player, BallHistoryRecord &ballHistoryRecord)
+void BallHistory::UpdateBallState(BallHistoryRecord &ballHistoryRecord)
 {
    for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
    {
@@ -5321,12 +5353,12 @@ void BallHistory::Process(Player &player, int currentTimeMs)
 
             if (m_BallHistoryRecordsSize == 0)
             {
-               UpdateBallState(player, currentBhr);
+               UpdateBallState(currentBhr);
             }
             else
             {
                BallHistoryRecord &currentControlBhr = Get(m_CurrentControlIndex);
-               UpdateBallState(player, currentControlBhr);
+               UpdateBallState(currentControlBhr);
             }
 
             ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_None, currentTimeMs);
@@ -5340,12 +5372,12 @@ void BallHistory::Process(Player &player, int currentTimeMs)
 
                if (m_BallHistoryRecordsSize == 0)
                {
-                  UpdateBallState(player, currentBhr);
+                  UpdateBallState(currentBhr);
                }
                else
                {
                   BallHistoryRecord &currentControlBhr = Get(m_CurrentControlIndex);
-                  UpdateBallState(player, currentControlBhr);
+                  UpdateBallState(currentControlBhr);
                }
 
                if (m_CurrentControlIndex > m_BallHistoryRecordsHeadIndex)
@@ -5371,7 +5403,7 @@ void BallHistory::Process(Player &player, int currentTimeMs)
          {
             m_WasControlled = true;
 
-            UpdateBallState(player, currentBhr);
+            UpdateBallState(currentBhr);
 
             ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_None, currentTimeMs);
          }
@@ -5381,7 +5413,7 @@ void BallHistory::Process(Player &player, int currentTimeMs)
             {
                m_WasControlled = false;
 
-               UpdateBallState(player, currentBhr);
+               UpdateBallState(currentBhr);
 
                Init(player, currentTimeMs, false);
             }

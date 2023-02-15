@@ -803,12 +803,13 @@ private:
    void DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angleStep, float velocityStep, float radius);
    void DrawAngleVelocityPreviewHelperAdd(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angle, float velocity, float radius);
    void CalculateAngleVelocityStep(TrainerOptions::BallStartOptionsRecord &bsor, float &angleStep, float &velocityStep);
-   void UpdateBallState(Player &player, BallHistoryRecord &ballHistoryRecord);
+   void UpdateBallState(BallHistoryRecord &ballHistoryRecord);
    void ShowStatus(Player &player, int currentTimeMs);
-   void ShowPreviousRunRecord(Player &player, DebugPrintRecord &dpr);
-   void ShowCurrentRunRecord(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
-   void ShowBallStartOptionsRecord(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallStartOptionsRecord &bsor);
-   void ShowBallEndOptionsRecord(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallEndOptionsRecord &beor);
+   void ShowAutoControlVertices(Player &player, DebugPrintRecord &dpr);
+   void ShowPreviousRunRecord(DebugPrintRecord &dpr);
+   void ShowCurrentRunRecord(DebugPrintRecord &dpr, int currentTimeMs);
+   void ShowBallStartOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallStartOptionsRecord &bsor);
+   void ShowBallEndOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallEndOptionsRecord &beor);
    void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs);
    void ProcessMode(Player &player, int currentTimeMs);
    void ProcessModeNormal(Player &player);
