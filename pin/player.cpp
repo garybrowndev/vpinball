@@ -593,6 +593,7 @@ BallHistory::BallHistory() :
    m_BallHistoryRecordsSize(0),
    m_MaxBallVelocityPixels(0.0f),
    m_AutoControlBallTexture(nullptr),
+   m_RecallBallTexture(nullptr),
    m_TrainerBallStartTexture(nullptr),
    m_TrainerBallPassTexture(nullptr),
    m_TrainerBallFailTexture(nullptr),
@@ -732,7 +733,7 @@ void BallHistory::LoadSettings(Player &player)
          {
             m_MenuOptions.m_NormalOptions.m_AutoControlVertices.push_back({ {0.0f, 0.0f, 0.0f}, false });
             NormalOptions::AutoControlVertex &acv = m_MenuOptions.m_NormalOptions.m_AutoControlVertices.back();
-            autoControlVerticesPosition3D >> acv.m_Pos3D.x >> delimeter >> acv.m_Pos3D.y >> delimeter >> acv.m_Pos3D.z >> delimeter;
+            autoControlVerticesPosition3D >> acv.m_Pos.x >> delimeter >> acv.m_Pos.y >> delimeter >> acv.m_Pos.z >> delimeter;
          }
       }
    }
@@ -890,7 +891,7 @@ void BallHistory::SaveSettings(Player &player)
       std::ostringstream autoControlVerticesPosition3D;
       for each (const NormalOptions::AutoControlVertex &acv in m_MenuOptions.m_NormalOptions.m_AutoControlVertices)
       {
-         autoControlVerticesPosition3D << acv.m_Pos3D.x << SettingsValueDelimeter << acv.m_Pos3D.y << SettingsValueDelimeter << acv.m_Pos3D.z << SettingsValueDelimeter;
+         autoControlVerticesPosition3D << acv.m_Pos.x << SettingsValueDelimeter << acv.m_Pos.y << SettingsValueDelimeter << acv.m_Pos.z << SettingsValueDelimeter;
       }
 
       tempStr = autoControlVerticesPosition3D.str();
@@ -1037,6 +1038,14 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
       FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
       BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false);
       m_AutoControlBallTexture = new Texture(ballTex);
+   }
+
+   if (!m_RecallBallTexture)
+   {
+      RGBQUAD color = { 0xFF, 0x00, 0x00, 0x00 };
+      FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
+      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false);
+      m_RecallBallTexture = new Texture(ballTex);
    }
 
    if (!m_TrainerBallStartTexture)
@@ -1202,6 +1211,7 @@ void BallHistory::UnInit(Player &player)
    SaveSettings(player);
    m_DebugFontRecord.UnInit();
    delete m_AutoControlBallTexture;
+   delete m_RecallBallTexture;
    for each (std::pair<U32, Texture *> const &controlHistoryBallTexture in m_ControlHistoryBallTextures)
    {
       delete controlHistoryBallTexture.second;
@@ -1558,7 +1568,7 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
          for (std::size_t autoControlVerticesIndex = 0; autoControlVerticesIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); ++autoControlVerticesIndex)
          {
             NormalOptions::AutoControlVertex &autoControlVertex = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[autoControlVerticesIndex];
-            dpr.ShowText("  Auto Control Point %zu %.2f,%.2f,%.2f,%s (3x,3y,3z,active)", autoControlVerticesIndex + 1, autoControlVertex.m_Pos3D.x, autoControlVertex.m_Pos3D.y, autoControlVertex.m_Pos3D.z, autoControlVertex.Active ? "true" : "false");
+            dpr.ShowText("  Auto Control Point %zu %.2f,%.2f,%.2f,%s (3x,3y,3z,active)", autoControlVerticesIndex + 1, autoControlVertex.m_Pos.x, autoControlVertex.m_Pos.y, autoControlVertex.m_Pos.z, autoControlVertex.Active ? "true" : "false");
          }
 
          if (m_MenuOptions.m_NormalOptions.m_RecallControlIndex == NormalOptions::RecallControlIndexDisabled)
@@ -2510,13 +2520,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Select");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_NormalOptions.m_SetupRecallBallHistoryMode == NormalOptions::SetupRecallBallHistoryModeType::SetupRecallBallHistoryModeType_Disable,
             "Disable");
-         // TODO GARY better names for "Select" and "Disable"
-         // Proposal "Setup/Config" and "Clear/Reset"
-
-         // TODO GARY show the position of the recall ball in text below like
-         // other balls are shown
-
-         // TODO GARY blink text over the recall position like other positions
 
          switch (menuAction)
          {
@@ -2594,8 +2597,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          for (std::size_t autoControlVerticesIndex = 0; autoControlVerticesIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); ++autoControlVerticesIndex)
          {
             NormalOptions::AutoControlVertex &autoControlVertex = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[autoControlVerticesIndex];
-            POINT screenPoint = Get2DPointFrom3D(player, autoControlVertex.m_Pos3D);
-            dpr.ShowMenuText("Point %zu %.2f,%.2f,%.2f,%ld,%ld,%s (3x,3y,3z,2x,2y,active)", autoControlVerticesIndex + 1, autoControlVertex.m_Pos3D.x, autoControlVertex.m_Pos3D.y, autoControlVertex.m_Pos3D.z, screenPoint.x, screenPoint.y, autoControlVertex.Active ? "true" : "false");
+            POINT screenPoint = Get2DPointFrom3D(player, autoControlVertex.m_Pos);
+            dpr.ShowMenuText("Point %zu %.2f,%.2f,%.2f,%ld,%ld,%s (3x,3y,3z,2x,2y,active)", autoControlVerticesIndex + 1, autoControlVertex.m_Pos.x, autoControlVertex.m_Pos.y, autoControlVertex.m_Pos.z, screenPoint.x, screenPoint.y, autoControlVertex.Active ? "true" : "false");
          }
 
          if (GetCursorPos(&mousePosition2D) == TRUE)
@@ -2628,7 +2631,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
                for (std::vector<NormalOptions::AutoControlVertex>::iterator autoControlVerticesIt = m_MenuOptions.m_NormalOptions.m_AutoControlVertices.begin(); autoControlVerticesIt < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.end(); autoControlVerticesIt++)
                {
-                  POINT screenPoint = Get2DPointFrom3D(player, autoControlVerticesIt->m_Pos3D);
+                  POINT screenPoint = Get2DPointFrom3D(player, autoControlVerticesIt->m_Pos);
                   float checkRadius = std::min(player.m_width, player.m_height) * NormalOptions::ManageAutoControlFindFactor;
                   if (DistancePixels(screenPoint, mousePosition2D) < checkRadius)
                   {
@@ -4941,7 +4944,7 @@ bool BallHistory::BallInsideAutoControlVertex(std::vector<Ball *> &controlVBalls
             NormalOptions::AutoControlVertex &autoControlVertex = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[autoControlVertexIndex];
             if (autoControlVertex.Active)
             {
-               if (DistancePixels(autoControlVertex.m_Pos3D, controlVBall->m_d.m_pos) < (controlVBall->m_d.m_radius * 1.5f))
+               if (DistancePixels(autoControlVertex.m_Pos, controlVBall->m_d.m_pos) < (controlVBall->m_d.m_radius * 1.5f))
                {
                   autoControlVertex.Active = false;
                   return true;
@@ -4958,7 +4961,7 @@ bool BallHistory::BallInsideAutoControlVertex(std::vector<Ball *> &controlVBalls
             autoControlVertex.Active = true;
             for each (const Ball *ball in controlVBalls)
             {
-               if (DistancePixels(autoControlVertex.m_Pos3D, ball->m_d.m_pos) < (ball->m_d.m_radius * 3.5f))
+               if (DistancePixels(autoControlVertex.m_Pos, ball->m_d.m_pos) < (ball->m_d.m_radius * 3.5f))
                {
                   autoControlVertex.Active = false;
                   break;
@@ -5111,8 +5114,6 @@ void BallHistory::DrawBallHistory(Player &player)
       }
    }
 
-   DebugPrintRecord dpr(player, m_DebugFontRecord);
-
    // draw the fake balls
    for (std::size_t ballHistoryRecordIndex = 0; ballHistoryRecordIndex < m_BallHistoryRecords.size(); ++ballHistoryRecordIndex)
    {
@@ -5207,10 +5208,26 @@ void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr,
       for (std::size_t acvIndex = 0; acvIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); acvIndex++)
       {
          NormalOptions::AutoControlVertex &acv = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[acvIndex];
-         player.DrawFakeBall(acv.m_Pos3D, radius, orientation, m_AutoControlBallTexture);
-         POINT screenPoint = Get2DPointFrom3D(player, acv.m_Pos3D);
+         player.DrawFakeBall(acv.m_Pos, radius, orientation, m_AutoControlBallTexture);
+         POINT screenPoint = Get2DPointFrom3D(player, acv.m_Pos);
          dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
          dpr.ShowMenuTextPos(0, 0, "%zu", acvIndex + 1);
+      }
+
+      if (m_MenuOptions.m_NormalOptions.m_RecallControlIndex != NormalOptions::RecallControlIndexDisabled)
+      {
+         BallHistoryRecord &recallBallHistoryRecord = m_BallHistoryRecords[m_MenuOptions.m_NormalOptions.m_RecallControlIndex];
+         for (std::size_t recallBallHistoryStateIndex = 0; recallBallHistoryStateIndex < recallBallHistoryRecord.m_BallHistoryStates.size(); ++recallBallHistoryStateIndex)
+         {
+            // TODO GARY Currently the recall ball blinks but is behind the draw history ball
+            // figure out a why balls are drawn on top of others, Recall should blink on top
+            BallHistoryState &ballHistoryState = recallBallHistoryRecord.m_BallHistoryStates[recallBallHistoryStateIndex];
+            player.DrawFakeBall(ballHistoryState.m_Pos, radius, orientation, m_RecallBallTexture);
+            POINT screenPoint = Get2DPointFrom3D(player, ballHistoryState.m_Pos);
+            DebugPrintRecord dpr(player, m_DebugFontRecord);
+            dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
+            dpr.ShowMenuTextPos(0, 0, "RCL");
+         }
       }
    }
 }

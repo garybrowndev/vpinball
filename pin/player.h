@@ -489,7 +489,7 @@ public:
 
    struct AutoControlVertex
    {
-      Vertex3Ds m_Pos3D;
+      Vertex3Ds m_Pos;
       bool Active;
    };
 
@@ -575,7 +575,7 @@ private:
       static D3DCOLOR ErrorMenuColor;
 
       Player &m_Player;
-      DebugFontRecord m_DebugFontRecord;
+      DebugFontRecord &m_DebugFontRecord;
 
       int m_TextX;
       int m_TextY;
@@ -731,6 +731,7 @@ private:
    float m_MaxBallVelocityPixels;
 
    Texture * m_AutoControlBallTexture;
+   Texture * m_RecallBallTexture;
    Texture * m_TrainerBallStartTexture;
    Texture * m_TrainerBallPassTexture;
    Texture * m_TrainerBallFailTexture;
