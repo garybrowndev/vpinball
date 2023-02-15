@@ -730,7 +730,7 @@ void BallHistory::LoadSettings(Player &player)
       {
          while (autoControlVerticesPosition3D.peek() != EOF)
          {
-            m_MenuOptions.m_NormalOptions.m_AutoControlVertices.push_back({ {0.0f, 0.0f, 0.0f}, true });
+            m_MenuOptions.m_NormalOptions.m_AutoControlVertices.push_back({ {0.0f, 0.0f, 0.0f}, false });
             NormalOptions::AutoControlVertex &acv = m_MenuOptions.m_NormalOptions.m_AutoControlVertices.back();
             autoControlVerticesPosition3D >> acv.m_Pos3D.x >> delimeter >> acv.m_Pos3D.y >> delimeter >> acv.m_Pos3D.z >> delimeter;
          }
@@ -2583,6 +2583,14 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("Mouse move/click manages location");
          dpr.ShowMenuText("Plunger returns to previous menu");
 
+         // TODO GARY draw text indicator on elements which will cause the ball to go into 
+         // a frozen state, like troughs, kickers, saucers, scoops, etc
+         // Draw the indicators when you are in the following modes
+         //  - Adding a new auto control point
+         //  - Placing a new trainer ball start location
+         //  - Placing a new trainer ball pass location
+         //  - Placing a new trainer ball fail location
+
          for (std::size_t autoControlVerticesIndex = 0; autoControlVerticesIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); ++autoControlVerticesIndex)
          {
             NormalOptions::AutoControlVertex &autoControlVertex = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[autoControlVerticesIndex];
@@ -2631,7 +2639,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                if (!removedExisting && m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size() < NormalOptions::AutoControlVerticesMax)
                {
-                  m_MenuOptions.m_NormalOptions.m_AutoControlVertices.push_back({ mousePosition3D, true });
+                  m_MenuOptions.m_NormalOptions.m_AutoControlVertices.push_back({ mousePosition3D, false });
                }
                }
                break;
@@ -4924,11 +4932,6 @@ bool BallHistory::BallChanged()
 
 bool BallHistory::BallInsideAutoControlVertex(std::vector<Ball *> &controlVBalls)
 {
-   // TODO GARY Put exception here to skip the check (like you hit C after hitting a
-   // control point) for when NEW balls are created. For example, if ball is created
-   // for the first time the table is created it hits a control point which is annoying
-   // the very first time a ball comes into existance and it is right next to a auto
-   // control point, the auto control should NOT go off
    if (controlVBalls.size())
    {
       for each (const Ball *controlVBall in controlVBalls)
