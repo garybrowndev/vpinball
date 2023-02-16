@@ -388,7 +388,7 @@ void BallHistory::DebugPrintRecord::SetPositionPercent(float x, float y)
    }
 }
 
-void BallHistory::DebugPrintRecord::SetReverse()
+void BallHistory::DebugPrintRecord::ToggleReverse()
 {
    m_TextYStep *= -1;
 }
@@ -2829,11 +2829,13 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results:
          {
-         ShowPreviousRunRecord(dpr);
+         // TODO GARY if you start a table and do nothing other than go into control menu, 
+         // select Trainer Mode, Results and then toggle out of control menu
+         // Simply being on the results view causes this and it should not work this way
 
-         // TODO GARY consider putting this in the top right and not at center, center
-         // or maybe at the bottom center
-         
+         ShowPreviousRunRecord(dpr);
+         dpr.m_TextX -= 150;
+         dpr.ShowText("");
          dpr.ShowText("%s:", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord == m_MenuOptions.m_TrainerOptions.m_RunRecords.size() ? "Final Run Results" : "Current Run Results");
 
          std::size_t totalPasses = 0;
@@ -2865,50 +2867,71 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             }
          }
 
-         dpr.ShowText("%zu = Pass", totalPasses);
-         dpr.ShowText("%zu = Fail (location)", totalFailsLocation);
-         dpr.ShowText("%zu = Fail (time elapsed)", totalFailsTimeElapsed);
          std::size_t runRecordsSize = m_MenuOptions.m_TrainerOptions.m_RunRecords.size();
+         dpr.ShowText("%5zu = Pass%s", totalPasses, totalPasses == 1 ? "" : "es");
          if (runRecordsSize)
          {
-            dpr.ShowText("%.2f%% = Pass Percentage", float(totalPasses) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
-            dpr.ShowText("%.2f%% = Fail (location) Percentage", float(totalFailsLocation) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
-            dpr.ShowText("%.2f%% = Fail (time elapsed)", float(totalFailsTimeElapsed) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
+            dpr.ShowText("%4.1f%% = Pass Percent", float(totalPasses) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
          }
          else
          {
-            dpr.ShowText("<n/a> = Pass Percentage");
-            dpr.ShowText("<n/a> = Fail (location) Percentage");
-            dpr.ShowText("<n/a> = Fail (time elapsed)");
+            dpr.ShowText("<n/a> = Pass Percent");
          }
          if (totalPasses)
          {
-            dpr.ShowText("%.2f (%.2f) = Average Pass Elapsed Seconds (stddev)", float(totalPassMs) / totalPasses / 1000, 0.0f);
+            dpr.ShowText("%5.2f = Pass Time Average", float(totalPassMs) / totalPasses / 1000);
+            dpr.ShowText("%5.2f = Pass Time StdDev", 0.0f);
          }
          else
          {
-            dpr.ShowText("<n/a> (<n/a>) = Average Pass Elapsed Seconds (stddev)");
+            dpr.ShowText("<n/a> = Pass Time Average");
+            dpr.ShowText("<n/a> = Pass Time StdDev");
+         }
+
+         dpr.ShowText("%5zu = Fail%s (LOCATION)", totalFailsLocation, totalFailsLocation == 1 ? "" : "s");
+         if (runRecordsSize)
+         {
+            dpr.ShowText("%4.1f%% = Fail Percent", float(totalFailsLocation) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
+         }
+         else
+         {
+            dpr.ShowText("<n/a> = Fail Percent");
          }
          if (totalFailsLocation)
          {
-            dpr.ShowText("%.2f (%.2f) = Average Fail (location) Elapsed Seconds (stddev)", float(totalFailLocationMs) / totalFailsLocation / 1000, 0.0f);
+            dpr.ShowText("%5.2f = Fail Time Average", float(totalFailLocationMs) / totalFailsLocation / 1000);
+            dpr.ShowText("%5.2f = Fail Time StdDev", 0.0f);
          }
          else
          {
-            dpr.ShowText("<n/a> (<n/a>) = Average Fail (location) Elapsed Seconds (stddev)");
+            dpr.ShowText("<n/a> = Fail Time Average");
+            dpr.ShowText("<n/a> = Fail Time StdDev");
          }
+
+         dpr.ShowText("%5zu = Fail%s (TIME)", totalFailsTimeElapsed, totalFailsTimeElapsed == 1 ? "" : "s");
+         if (runRecordsSize)
+         {
+            dpr.ShowText("%4.1f%% = Fail Percent", float(totalFailsTimeElapsed) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
+         }
+         else
+         {
+            dpr.ShowText("<n/a> = Fail Percent");
+         }
+
          if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord)
          {
-            dpr.ShowText("%.2f (%.2f) = Average Run Seconds (stddev)", float(totalRunsMs) / m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord / 1000, 0.0f);
+            dpr.ShowText("%5.2f = Run Time Average", float(totalRunsMs) / m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord / 1000);
+            dpr.ShowText("%5.2f = Run Time StdDev", 0.0f);
          }
          else
          {
-            dpr.ShowText("<n/a> (<n/a>) = Average Run Seconds (stddev)");
+            dpr.ShowText("<n/a> = Run Time Average");
+            dpr.ShowText("<n/a> = Run Time StdDev");
          }
 
          dpr.InitTextXY();
          dpr.SetPositionPercent(0.50f, 1.00f);
-         dpr.SetReverse();
+         dpr.ToggleReverse();
          ShowCurrentRunRecord(dpr, currentTimeMs);
 
          switch (menuAction)
@@ -4661,7 +4684,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
 
    DebugPrintRecord dpr(player, m_DebugFontRecord);
    dpr.SetPositionPercent(0.50f, 1.00f);
-   dpr.SetReverse();
+   dpr.ToggleReverse();
 
    if (m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs == 0)
    {
