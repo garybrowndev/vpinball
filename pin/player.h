@@ -827,6 +827,7 @@ private:
    bool ShouldDrawTrainerBallFails(std::size_t index, int currentTimeMs);
    bool ShouldDrawActiveKickerBalls(int currentTimeMs);
    void DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
+   void DrawActiveBallKickers(Player &player, float radius, Matrix3 &orientation, DebugPrintRecord &dpr);
    void DrawAngleVelocityPreview(Player &player, TrainerOptions::BallStartOptionsRecord &bsor);
    void DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angleStep, float velocityStep, float radius);
    void DrawAngleVelocityPreviewHelperAdd(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angle, float velocity, float radius);

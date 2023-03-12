@@ -2159,6 +2159,23 @@ bool BallHistory::ShouldDrawActiveKickerBalls(int currentTimeMs)
    }
 }
 
+void BallHistory::DrawActiveBallKickers(Player &player, float radius, Matrix3 &orientation, DebugPrintRecord &dpr)
+{
+   for (std::size_t tableKickerIndex = 0; tableKickerIndex < m_ActiveBallKickers.size(); tableKickerIndex++)
+   {
+      if (Kicker * kicker = m_ActiveBallKickers[tableKickerIndex])
+      {
+         Vertex3Ds kickerPosition = GetKickerPosition(*kicker);
+         POINT screenPoint = Get2DPointFrom3D(player, kickerPosition);
+         DebugPrintRecord dpr(player, m_DebugFontRecord);
+         dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
+         dpr.ShowMenuTextPos(0, 0, "K-%zu", tableKickerIndex + 1);
+
+         player.DrawFakeBall(kickerPosition, radius, orientation, m_ActiveBallKickerTexture);
+      }
+   }
+}
+
 void BallHistory::DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int currentTimeMs)
 {
    ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_DrawTrainerBallsUsec);
@@ -2229,19 +2246,7 @@ void BallHistory::DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int cu
 
    if (ShouldDrawActiveKickerBalls(currentTimeMs))
    {
-      for (std::size_t tableKickerIndex = 0; tableKickerIndex < m_ActiveBallKickers.size(); tableKickerIndex++)
-      {
-         if (Kicker * kicker = m_ActiveBallKickers[tableKickerIndex])
-         {
-            Vertex3Ds kickerPosition = GetKickerPosition(*kicker);
-            POINT screenPoint = Get2DPointFrom3D(player, kickerPosition);
-            DebugPrintRecord dpr(player, m_DebugFontRecord);
-            dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
-            dpr.ShowMenuTextPos(0, 0, "K-%zu", tableKickerIndex + 1);
-
-            player.DrawFakeBall(kickerPosition, radius, orientation, m_ActiveBallKickerTexture);
-         }
-      }
+      DrawActiveBallKickers(player, radius, orientation, dpr);
    }
 }
 
@@ -2734,14 +2739,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuTextTitle("Manage Auto Control Locations");
          dpr.ShowMenuText("Mouse move/click manages location");
          dpr.ShowMenuText("Plunger returns to previous menu");
-
-         // TODO GARY draw text indicator on elements which will cause the ball to go into 
-         // a frozen state, like troughs, kickers, saucers, scoops, etc
-         // Draw the indicators when you are in the following modes
-         //  - Adding a new auto control point
-         //  - Placing a new trainer ball start location
-         //  - Placing a new trainer ball pass location
-         //  - Placing a new trainer ball fail location
 
          if (GetCursorPos(&mousePosition2D) == TRUE)
          {
@@ -5519,18 +5516,18 @@ void BallHistory::DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float b
 
 void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs)
 {
+   Matrix3 orientation;
+   orientation.Identity();
+   float radius = 25.0f;
+
+   if (Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr)
+   {
+      orientation = controlVBall->m_orientation;
+      radius = controlVBall->m_d.m_radius;
+   }
+
    if ((currentTimeMs % 1000) >= 200)
    {
-      Matrix3 orientation;
-      orientation.Identity();
-      float radius = 25.0f;
-
-      if (Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr)
-      {
-         orientation = controlVBall->m_orientation;
-         radius = controlVBall->m_d.m_radius;
-      }
-
       for (std::size_t acvIndex = 0; acvIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); acvIndex++)
       {
          NormalOptions::AutoControlVertex &acv = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[acvIndex];
@@ -5556,6 +5553,8 @@ void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr,
          }
       }
    }
+
+   DrawActiveBallKickers(player, radius, orientation, dpr);
 }
 
 void BallHistory::DrawFakeBallAtMousePosition(Player &player, float heightZ, float intersectionRadius, Texture &texture, const Vertex3Ds * lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr)
