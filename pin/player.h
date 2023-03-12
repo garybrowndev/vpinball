@@ -357,6 +357,13 @@ public:
       BallEndCompleteModeType_COUNT
    };
 
+   enum BallKickerBehaviorModeType
+   {
+      BallKickerBehaviorModeType_Reset,
+      BallKickerBehaviorModeType_Fail,
+      BallKickerBehaviorModeType_COUNT
+   };
+
    enum RunOrderModeType
    {
       RunOrderModeType_InOrder,
@@ -416,7 +423,8 @@ public:
       {
          ResultType_Passed,
          ResultType_FailedLocation,
-         ResultType_FailedTimeElapsed
+         ResultType_FailedTimeElapsed,
+         ResultType_FailedKicker
       };
 
       std::vector<Vertex3Ds> m_StartPositions;
@@ -439,13 +447,14 @@ public:
    BallEndFinishModeType m_BallFailFinishMode;
    BallEndAssociationModeType m_BallEndAssociationMode;
    BallEndCompleteModeType m_BallEndCompleteMode;
-   RunOrderModeType m_RunOrderMode; // Applies to Custom mode
+   BallKickerBehaviorModeType m_BallKickerBehaviorMode;
+   RunOrderModeType m_RunOrderMode;
 
    S32 m_CreateBallEndZ;
 
    static const S32 TotalRunsMinimum = 1;
    static const S32 TotalRunsMaximum = 100;
-   S32 m_TotalRuns; // Applies to Existing mode
+   S32 m_TotalRuns;
 
    static const S32 MaxSecondsPerRunMinimum = 1;
    static const S32 MaxSecondsPerRunMaximum = 30;
@@ -669,6 +678,7 @@ private:
          MenuStateType_Trainer_SelectBallFailAssociations,
          MenuStateType_Trainer_SelectTotalRuns,
          MenuStateType_Trainer_SelectRunOrderMode,
+         MenuStateType_Trainer_SelectBallKickerBehaviorMode,
          MenuStateType_Trainer_SelectMaxSecondsPerRun,
          MenuStateType_Trainer_SelectRunCountdownSeconds,
          MenuStateType_Disabled_Disabled,
@@ -722,6 +732,8 @@ private:
    std::vector<Ball*> m_ControlVBalls;
    std::vector<Ball*> m_ControlVBallsPrevious;
 
+   std::vector<Kicker*> m_ActiveBallKickers;
+
    ProfilerRecord m_ProfilerRecord;
 
    DebugFontRecord m_DebugFontRecord;
@@ -746,11 +758,14 @@ private:
    Texture * m_TrainerBallStartTexture;
    Texture * m_TrainerBallPassTexture;
    Texture * m_TrainerBallFailTexture;
+   Texture * m_ActiveBallKickerTexture;
    std::map<U32, Texture*> m_ControlHistoryBallTextures;
 
    int m_UseTrailsForBallsInitialValue;
 
    MenuOptionsRecord m_MenuOptions;
+
+   std::string m_SettingsFilePath;
 
    static const float DrawAngleVelocityRadiusExtraMinimum;
    static const float DrawAngleVelocityRadiusArc;
@@ -773,6 +788,7 @@ private:
    static const char * TrainerModeSettingsSectionName;
    static const char * TrainerModeTotalRunsKeyName;
    static const char * TrainerModeRunOrderModeKeyName;
+   static const char * TrainerModeBallKickerBehaviorModeKeyName;
    static const char * TrainerModeMaxSecondsPerRunKeyName;
    static const char * TrainerModeRunCountdownSecondsKeyName;
    static const char * TrainerModeBallStartPositionKeyName;
@@ -790,7 +806,6 @@ private:
    static const char * TrainerModeBallFailPosition3DKeyName;
    static const char * TrainerModeBallFailRadiusPercentKeyName;
    static const char * TrainerModeBallFailAssociationsKeyName;
-   std::string m_SettingsFilePath;
 
    bool GetSettingsFileName(Player &player, std::string &fileName);
    void LoadSettings(Player &player);
@@ -798,6 +813,7 @@ private:
    void InitBallsDecreased(Player &player);
    void InitBallsIncreased(Player &player);
    void InitControlVBalls(Player &player);
+   void InitActiveBallKickers(Player &player);
    void ControlNext();
    void ControlPrev();
    void ResetBallHistoryRenderSizes();
@@ -809,6 +825,7 @@ private:
    bool ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallPasses(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallFails(std::size_t index, int currentTimeMs);
+   bool ShouldDrawActiveKickerBalls(int currentTimeMs);
    void DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
    void DrawAngleVelocityPreview(Player &player, TrainerOptions::BallStartOptionsRecord &bsor);
    void DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angleStep, float velocityStep, float radius);
@@ -840,6 +857,7 @@ private:
    float DistancePixels(const Vertex3Ds &pos1, const Vertex3Ds &pos2);
    float VelocityPixels(Vertex3Ds &vel);
    POINT Get2DPointFrom3D(Player &player, const Vertex3Ds& vertex);
+   Vertex3Ds GetKickerPosition(Kicker &kicker);
    bool ControlNextMove();
    bool ControlPrevMove();
 

@@ -125,6 +125,7 @@ TrainerOptions::TrainerOptions():
    m_BallEndAssociationMode(BallEndAssociationModeType::BallEndAssociationModeType_Accept),
    m_BallEndCompleteMode(BallEndCompleteModeType::BallEndCompleteModeType_Accept),
    m_RunOrderMode(RunOrderModeType::RunOrderModeType_InOrder),
+   m_BallKickerBehaviorMode(BallKickerBehaviorModeType::BallKickerBehaviorModeType_Reset),
    m_CreateBallEndZ(0),
    m_TotalRuns(5),
    m_MaxSecondsPerRun(15),
@@ -564,6 +565,7 @@ const char * BallHistory::NormalModeAutoControlVerticesPosition3DKeyName = "Posi
 const char * BallHistory::TrainerModeSettingsSectionName = "TrainerModeSettings";
 const char * BallHistory::TrainerModeTotalRunsKeyName = "TotalRuns";
 const char * BallHistory::TrainerModeRunOrderModeKeyName = "RunOrderMode";
+const char * BallHistory::TrainerModeBallKickerBehaviorModeKeyName = "BallKickerBehaviorMode";
 const char * BallHistory::TrainerModeMaxSecondsPerRunKeyName = "MaxSecondsPerRun";
 const char * BallHistory::TrainerModeRunCountdownSecondsKeyName = "RunCountdownSeconds";
 const char * BallHistory::TrainerModeBallStartPositionKeyName = "StartPosition";
@@ -598,6 +600,7 @@ BallHistory::BallHistory() :
    m_TrainerBallStartTexture(nullptr),
    m_TrainerBallPassTexture(nullptr),
    m_TrainerBallFailTexture(nullptr),
+   m_ActiveBallKickerTexture(nullptr),
    m_UseTrailsForBallsInitialValue(0)
 {
 }
@@ -772,6 +775,22 @@ void BallHistory::LoadSettings(Player &player)
          }
       }
 
+      if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallKickerBehaviorModeKeyName, tempStream) == true)
+      {
+         if (tempStream.str() == "Reset")
+         {
+            m_MenuOptions.m_TrainerOptions.m_BallKickerBehaviorMode = TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_Reset;
+         }
+         else if (tempStream.str() == "Fail")
+         {
+            m_MenuOptions.m_TrainerOptions.m_BallKickerBehaviorMode = TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_Fail;
+         }
+         else
+         {
+            InvalidEnumValue("TrainerOptions::BallKickerBehaviorModeType", tempStream.str().c_str());
+         }
+      }
+
       std::istringstream ballStartOptionsPos;
       std::istringstream ballStartOptionsVel;
       std::istringstream ballStartOptionsAngMom;
@@ -924,6 +943,20 @@ void BallHistory::SaveSettings(Player &player)
       }
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeRunOrderModeKeyName, tempStr.c_str());
 
+      switch (m_MenuOptions.m_TrainerOptions.m_BallKickerBehaviorMode)
+      {
+         case TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_Reset:
+            tempStr = "Reset";
+            break;
+         case TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_Fail:
+            tempStr = "Fail";
+            break;
+         default:
+            InvalidEnumValue("TrainerOptions::BallKickerBehaviorModeType", m_MenuOptions.m_TrainerOptions.m_BallKickerBehaviorMode);
+            break;
+      }
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallKickerBehaviorModeKeyName, tempStr.c_str());
+
       std::ostringstream ballStartOptionsPos;
       std::ostringstream ballStartOptionsVel;
       std::ostringstream ballStartOptionsAngMom;
@@ -1035,7 +1068,7 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
 
    if (!m_AutoControlBallTexture)
    {
-      RGBQUAD color = { 0x00, 0x00, 0x00, 0x00 };
+      RGBQUAD color = { 0x00, 0x00, 0x00, 0x00 }; // black
       FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
       BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false);
       m_AutoControlBallTexture = new Texture(ballTex);
@@ -1043,7 +1076,7 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
 
    if (!m_RecallBallTexture)
    {
-      RGBQUAD color = { 0xFF, 0x00, 0x00, 0x00 };
+      RGBQUAD color = { 0xFF, 0x00, 0x00, 0x00 }; // blue
       FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
       BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false);
       m_RecallBallTexture = new Texture(ballTex);
@@ -1051,7 +1084,7 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
 
    if (!m_TrainerBallStartTexture)
    {
-      RGBQUAD color = { 0xFF, 0x00, 0x00, 0x00 };
+      RGBQUAD color = { 0xFF, 0x00, 0x00, 0x00 }; // blue
       FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
       BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false);
       m_TrainerBallStartTexture = new Texture(ballTex);
@@ -1059,7 +1092,7 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
 
    if (!m_TrainerBallPassTexture)
    {
-      RGBQUAD color = { 0x00, 0xFF, 0x00, 0x00 };
+      RGBQUAD color = { 0x00, 0xFF, 0x00, 0x00 }; // green
       FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
       BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false);
       m_TrainerBallPassTexture = new Texture(ballTex);
@@ -1067,12 +1100,20 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
 
    if (!m_TrainerBallFailTexture)
    {
-      RGBQUAD color = { 0x00, 0x00, 0xFF, 0x00 };
+      RGBQUAD color = { 0x00, 0x00, 0xFF, 0x00 }; // red
       FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
       BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false);
       m_TrainerBallFailTexture = new Texture(ballTex);
    }
 
+   if (!m_ActiveBallKickerTexture)
+   {
+      RGBQUAD color = { 0xFF, 0xFF, 0xFF, 0x00 }; // white
+      FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
+      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false);
+      m_ActiveBallKickerTexture = new Texture(ballTex);
+   }
+  
    if (m_SettingsFilePath.empty() == true)
    {
       char nameBuffer[MAX_PATH];
@@ -1096,6 +1137,23 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
    {
       LoadSettings(player);
    }
+}
+
+void BallHistory::UnInit(Player &player)
+{
+   SaveSettings(player);
+   m_ActiveBallKickers.clear();
+   m_DebugFontRecord.UnInit();
+   delete m_AutoControlBallTexture;
+   delete m_RecallBallTexture;
+   for each (std::pair<U32, Texture *> const &controlHistoryBallTexture in m_ControlHistoryBallTextures)
+   {
+      delete controlHistoryBallTexture.second;
+   }
+   delete m_TrainerBallStartTexture;
+   delete m_TrainerBallPassTexture;
+   delete m_TrainerBallFailTexture;
+   delete m_ActiveBallKickerTexture;
 }
 
 void BallHistory::InitBallsIncreased(Player &player)
@@ -1205,21 +1263,6 @@ void BallHistory::InitBallsDecreased(Player &player)
    {
       m_ControlVBallsPrevious.push_back(m_ControlVBalls[controlVBallIndex]);
    }
-}
-
-void BallHistory::UnInit(Player &player)
-{
-   SaveSettings(player);
-   m_DebugFontRecord.UnInit();
-   delete m_AutoControlBallTexture;
-   delete m_RecallBallTexture;
-   for each (std::pair<U32, Texture *> const &controlHistoryBallTexture in m_ControlHistoryBallTextures)
-   {
-      delete controlHistoryBallTexture.second;
-   }
-   delete m_TrainerBallStartTexture;
-   delete m_TrainerBallPassTexture;
-   delete m_TrainerBallFailTexture;
 }
 
 void BallHistory::Add(std::vector<Ball*> &controlVBalls, int currentTimeMs)
@@ -1340,6 +1383,21 @@ POINT BallHistory::Get2DPointFrom3D(Player &player, const Vertex3Ds& vertex)
    };
 
    return screenPoint;
+}
+
+Vertex3Ds BallHistory::GetKickerPosition(Kicker &kicker)
+{
+   Vertex3Ds kickerPosition(0.0f, 0.0f, 0.0f);
+   if (KickerHitCircle * kickerHitCircle = kicker.GetKickerHitCircle())
+   {
+      kickerPosition = 
+      {
+         kickerHitCircle->m_hitBBox.left + (kickerHitCircle->m_hitBBox.right - kickerHitCircle->m_hitBBox.left) / 2.0f,
+         kickerHitCircle->m_hitBBox.bottom + (kickerHitCircle->m_hitBBox.top - kickerHitCircle->m_hitBBox.bottom) / 2.0f,
+         kickerHitCircle->m_hitBBox.zlow + (kickerHitCircle->m_hitBBox.zhigh - kickerHitCircle->m_hitBBox.zlow) / 2.0f
+      };
+   }
+   return kickerPosition;
 }
 
 bool BallHistory::ControlNextMove()
@@ -1666,6 +1724,19 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                break;
          }
 
+         switch (m_MenuOptions.m_TrainerOptions.m_BallKickerBehaviorMode)
+         {
+            case TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_Reset:
+               dpr.ShowText("Ball Kicker Behavior = Reset");
+               break;
+            case TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_Fail:
+               dpr.ShowText("Ball Kicker Behavior = Fail");
+               break;
+            default:
+               dpr.ShowText("Ball Kicker Behavior = **UNKNOWN**");
+               break;
+         }
+
          if (m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size() == 0)
          {
             dpr.ShowText("Ball Start (None)");
@@ -1815,6 +1886,8 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                }
             }
          }
+
+         // TODO GARY add display of kicker locations here
          break;
       case MenuOptionsRecord::ModeType::ModeType_Disabled:
          dpr.ShowText("Mode = Disabled");
@@ -1874,6 +1947,9 @@ void BallHistory::ShowPreviousRunRecord(DebugPrintRecord &dpr)
             break;
          case TrainerOptions::RunRecord::ResultType::ResultType_FailedTimeElapsed:
             dpr.ShowMenuText("Fail (time elapsed)");
+            break;
+         case TrainerOptions::RunRecord::ResultType::ResultType_FailedKicker:
+            dpr.ShowMenuText("Fail (kicker)");
             break;
          default:
             InvalidEnumValue("TrainerOptions::RunRecord::ResultType", previousRunRecord.m_Result);
@@ -2061,12 +2137,23 @@ bool BallHistory::ShouldDrawTrainerBallFails(std::size_t index, int currentTimeM
          switch (m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode)
          {
             case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept:
-               return (currentTimeMs % 1000) >= 200;
+               return (currentTimeMs % 1000) >= 200; // TODO GARY Abstract this magic number out to somewhere
             case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select:
                return index != m_MenuOptions.m_CurrentCompleteIndex || (currentTimeMs % 1000) >= 200;
             default:
                return true;
          }
+      default:
+         return true;
+   }
+}
+
+bool BallHistory::ShouldDrawActiveKickerBalls(int currentTimeMs)
+{
+   switch (m_MenuOptions.m_MenuState)
+   {
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallKickerBehaviorMode:
+         return (currentTimeMs % 1000) >= 200;
       default:
          return true;
    }
@@ -2136,6 +2223,23 @@ void BallHistory::DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int cu
             POINT screenPoint = Get2DPointFrom3D(player, bfor.m_Pos);
             dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
             dpr.ShowMenuTextPos(0, 0, "F-%zu", bforIndex + 1);
+         }
+      }
+   }
+
+   if (ShouldDrawActiveKickerBalls(currentTimeMs))
+   {
+      for (std::size_t tableKickerIndex = 0; tableKickerIndex < m_ActiveBallKickers.size(); tableKickerIndex++)
+      {
+         if (Kicker * kicker = m_ActiveBallKickers[tableKickerIndex])
+         {
+            Vertex3Ds kickerPosition = GetKickerPosition(*kicker);
+            POINT screenPoint = Get2DPointFrom3D(player, kickerPosition);
+            DebugPrintRecord dpr(player, m_DebugFontRecord);
+            dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
+            dpr.ShowMenuTextPos(0, 0, "K-%zu", tableKickerIndex + 1);
+
+            player.DrawFakeBall(kickerPosition, radius, orientation, m_ActiveBallKickerTexture);
          }
       }
    }
@@ -2841,6 +2945,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          std::size_t totalPasses = 0;
          std::size_t totalFailsLocation = 0;
          std::size_t totalFailsTimeElapsed = 0;
+         std::size_t totalFailsKicker = 0;
          DWORD totalPassMs = 0;
          DWORD totalFailLocationMs = 0;
          DWORD totalRunsMs = 0;
@@ -2860,6 +2965,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   break;
                case TrainerOptions::RunRecord::ResultType::ResultType_FailedTimeElapsed:
                   totalFailsTimeElapsed++;
+                  break;
+               case TrainerOptions::RunRecord::ResultType::ResultType_FailedKicker:
+                  totalFailsKicker++;
                   break;
                default:
                   InvalidEnumValue("TrainerOptions::RunRecord::ResultType", rr.m_Result);
@@ -2912,6 +3020,16 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          if (runRecordsSize)
          {
             dpr.ShowText("%4.1f%% = Fail Percent", float(totalFailsTimeElapsed) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
+         }
+         else
+         {
+            dpr.ShowText("<n/a> = Fail Percent");
+         }
+
+         dpr.ShowText("%5zu = Fail%s (KICKER)", totalFailsKicker, totalFailsKicker == 1 ? "" : "s");
+         if (runRecordsSize)
+         {
+            dpr.ShowText("%4.1f%% = Fail Percent", float(totalFailsKicker) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
          }
          else
          {
@@ -4457,14 +4575,33 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_TotalRuns, TrainerOptions::TotalRunsMinimum, TrainerOptions::TotalRunsMaximum);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
-               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectRunOrderMode;
+               {
+               bool anyCustom = false;
+               for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
+               {
+                  TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
+                  if (bsor.m_TotalAngles > 0 || bsor.m_TotalVelocities > 0)
+                  {
+                     anyCustom = true;
+                     break;
+                  }
+               }
+               if (anyCustom)
+               {
+                  m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectRunOrderMode;
+               }
+               else
+               {
+                  m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallKickerBehaviorMode;
+               }
+               }
                break;
             default:
                InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
                break;
          }
-         break;
          }
+         break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectRunOrderMode:
          dpr.ShowMenuTextTitle("Run Order Mode");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_RunOrderMode == TrainerOptions::RunOrderModeType::RunOrderModeType_InOrder,
@@ -4483,6 +4620,33 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<TrainerOptions::RunOrderModeType>(m_MenuOptions.m_TrainerOptions.m_RunOrderMode, 0, TrainerOptions::RunOrderModeType::RunOrderModeType_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallKickerBehaviorMode;
+               break;
+            default:
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
+               break;
+         }
+         break;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallKickerBehaviorMode:
+         dpr.ShowMenuTextTitle("Ball Kicker Behavior Mode");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallKickerBehaviorMode == TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_Reset,
+            "Reset");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_BallKickerBehaviorMode == TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_Fail,
+            "Fail");
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
+               ProcessMenuChangeValueDec<TrainerOptions::BallKickerBehaviorModeType>(m_MenuOptions.m_TrainerOptions.m_BallKickerBehaviorMode, 0, TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
+               ProcessMenuChangeValueInc<TrainerOptions::BallKickerBehaviorModeType>(m_MenuOptions.m_TrainerOptions.m_BallKickerBehaviorMode, 0, TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectMaxSecondsPerRun;
@@ -4839,12 +5003,17 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          // countdown before run starts
          dpr.ShowMenuTextTitle("Run %zu (of %zu) starts in %.2f seconds", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_RunRecords.size(), ((m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000) - runElapsedTimeMs) / 1000.0f);
          ShowPreviousRunRecord(dpr);
+         if (!m_MenuOptions.m_MenuError.empty())
+         {
+            dpr.ShowMenuTextError("%s", m_MenuOptions.m_MenuError.c_str());
+         }
       }
 
       player.m_ptable->m_useTrailForBalls = 0;
    }
    else if (runElapsedTimeMs < ((m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000) + (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * 1000)))
    {
+      m_MenuOptions.m_MenuError.clear();
       if (m_MenuOptions.m_TrainerOptions.m_SetupBallStarts)
       {
          Init(player, currentTimeMs, false);
@@ -5002,6 +5171,50 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
          m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
          m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+      }
+
+      bool oneKicker = false;
+      dpr.SetPositionPercent(0.50f, 0.25f);
+      for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
+      {
+         Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
+         for (std::size_t activeBallKickerIndex = 0; activeBallKickerIndex < m_ActiveBallKickers.size(); activeBallKickerIndex++)
+         {
+            Vertex3Ds kickerPosition = GetKickerPosition(*m_ActiveBallKickers[activeBallKickerIndex]);
+            float distance = DistancePixels(kickerPosition, controlVBall.m_d.m_pos);
+            dpr.ShowMenuText("%.2f", distance);
+
+            if (distance < (controlVBall.m_d.m_radius * 2.0f))
+            {
+               oneKicker = true;
+               break;
+            }
+         }
+         if (oneKicker == true)
+         {
+            break;
+         }
+      }
+      if (oneKicker == true)
+      {
+         switch (m_MenuOptions.m_TrainerOptions.m_BallKickerBehaviorMode)
+         {
+            case TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_Reset:
+               m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
+               m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+               m_MenuOptions.m_MenuError = "Trainer run reset - ball hit active kicker";
+               break;
+            case TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_Fail:
+               currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_FailedKicker;
+               currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000);
+               m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
+               m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+               m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+               break;
+            default:
+               InvalidEnumValue("TrainerOptions::BallKickerBehaviorModeType", m_MenuOptions.m_ModeType);
+               break;
+         }
       }
    }
    else
@@ -5396,11 +5609,46 @@ void BallHistory::InitControlVBalls(Player &player)
    m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize = m_ControlVBalls.size();
 }
 
+void BallHistory::InitActiveBallKickers(Player &player)
+{
+   m_ActiveBallKickers.clear();
+   for (std::size_t editIndex = 0; editIndex < player.m_ptable->m_vedit.size(); editIndex++)
+   {
+      IEditable * const pe = player.m_ptable->m_vedit[editIndex];
+      if (pe && pe->GetItemType() == ItemTypeEnum::eItemKicker)
+      {
+         if (Kicker * kicker = dynamic_cast<Kicker*>(pe))
+         {
+            KickerHitCircle * kickerHitCircle = kicker->GetKickerHitCircle();
+            if (kickerHitCircle)
+            {
+               switch (m_MenuOptions.m_MenuState)
+               {
+                  case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results:
+                     kickerHitCircle->m_collideDisableCollide = true;
+                     break;
+                  default:
+                     kickerHitCircle->m_collideDisableCollide = false;
+                     break;
+               }
+
+               if (kicker->m_d.m_enabled && !kicker->m_d.m_fallThrough && kickerHitCircle->m_enabled)
+               {
+                  m_ActiveBallKickers.push_back(kicker);
+               }
+            }
+         }
+      }
+   }
+}
+
 void BallHistory::Process(Player &player, int currentTimeMs)
 {
    ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_ProcessUsec);
 
    InitControlVBalls(player);
+
+   InitActiveBallKickers(player);
 
    ShowStatus(player, currentTimeMs);
 

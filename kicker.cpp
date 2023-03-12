@@ -598,6 +598,11 @@ void Kicker::PutCenter(const Vertex2D& pv)
    m_d.m_vCenter = pv;
 }
 
+KickerHitCircle * Kicker::GetKickerHitCircle()
+{
+   return m_phitkickercircle;
+}
+
 
 HRESULT Kicker::SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool backupForPlay)
 {
@@ -1135,6 +1140,14 @@ STDMETHODIMP Kicker::get_LastCapturedBall(IBall **pVal)
 float KickerHitCircle::HitTest(const BallS& ball, const float dtime, CollisionEvent& coll) const
 {
    return HitTestBasicRadius(ball, dtime, coll, false, false, false); //any face, not-lateral, non-rigid
+}
+
+void KickerHitCircle::Collide(const CollisionEvent& coll)
+{
+   if (!m_collideDisableCollide)
+   {
+      DoCollide(coll.m_ball, coll.m_hitnormal, coll.m_hitflag, false);
+   }
 }
 
 //

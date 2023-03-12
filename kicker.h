@@ -75,6 +75,7 @@ public:
    // Multi-object manipulation
    Vertex2D GetCenter() const final;
    void PutCenter(const Vertex2D& pv) final;
+   KickerHitCircle * GetKickerHitCircle();
 
    void PreRenderStatic(RenderDevice* pd3dDevice) final;
    void SetDefaultPhysics(bool fromMouseClick) final;
@@ -159,11 +160,12 @@ public:
       m_pball = nullptr;
       m_lastCapturedBall = nullptr;
       m_pkicker = nullptr;
+      m_collideDisableCollide = false;
    }
 
    float HitTest(const BallS& ball, const float dtime, CollisionEvent& coll) const final;
    int GetType() const final { return eTrigger; }
-   void Collide(const CollisionEvent& coll) final { DoCollide(coll.m_ball, coll.m_hitnormal, coll.m_hitflag, false); }
+   void Collide(const CollisionEvent& coll) final;
 
    void DoChangeBallVelocity(Ball * const pball, const Vertex3Ds& hitnormal) const;
    void DoCollide(Ball * const pball, const Vertex3Ds& hitnormal, const bool hitflag, const bool newBall);
@@ -171,6 +173,7 @@ public:
    Kicker *m_pkicker;
    Ball *m_pball;  // The ball inside this kicker
    Ball *m_lastCapturedBall; // same as m_pball but this one won't be nulled only overwritten from another captured ball
+   bool m_collideDisableCollide;
 };
 
 #endif // !defined(AFX_KICKER_H__3A9F3FC4_605A_43AD_A430_830279CFE059__INCLUDED_)
