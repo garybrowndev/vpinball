@@ -549,6 +549,8 @@ const float BallHistory::DrawAngleVelocityRadiusArc = 6.0f;
 const float BallHistory::DrawAngleVelocityLengthMultiplier = 2.0f;
 const float BallHistory::DrawAngleVelocityHeightOffset = 2.0f;
 
+const int BallHistory::DrawBallBlinkMs = 200;
+
 const D3DCOLOR BallHistory::IntersectionCircleColor = D3DCOLOR_ARGB(0x00, 0x00, 0x00, 0xFF);
 
 const char * BallHistory::SettingsFileExtension = "ini";
@@ -2107,16 +2109,16 @@ bool BallHistory::ShouldDrawTrainerBallStarts(std::size_t index, int currentTime
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartVelocityStart:
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartVelocityFinish:
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartVelocityTotal:
-         return index != m_MenuOptions.m_CurrentBallIndex || (currentTimeMs % 1000) >= 200;
+         return index != m_MenuOptions.m_CurrentBallIndex || (currentTimeMs % 1000) >= DrawBallBlinkMs;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStart:
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallStartMode:
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectExistingBallStartLocation:
          switch (m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode)
          {
             case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Accept:
-               return (currentTimeMs % 1000) >= 200;
+               return (currentTimeMs % 1000) >= DrawBallBlinkMs;
             case TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Select:
-               return index != m_MenuOptions.m_CurrentCompleteIndex || (currentTimeMs % 1000) >= 200;
+               return index != m_MenuOptions.m_CurrentCompleteIndex || (currentTimeMs % 1000) >= DrawBallBlinkMs;
             default:
                return true;
          }
@@ -2134,14 +2136,14 @@ bool BallHistory::ShouldDrawTrainerBallPasses(std::size_t index, int currentTime
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassFinishMode:
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassDistance:
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassAssociations:
-         return index != m_MenuOptions.m_CurrentBallIndex || (currentTimeMs % 1000) >= 200;
+         return index != m_MenuOptions.m_CurrentBallIndex || (currentTimeMs % 1000) >= DrawBallBlinkMs;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_BallPassComplete:
          switch (m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode)
          {
             case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept:
-               return (currentTimeMs % 1000) >= 200;
+               return (currentTimeMs % 1000) >= DrawBallBlinkMs;
             case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select:
-               return index != m_MenuOptions.m_CurrentCompleteIndex || (currentTimeMs % 1000) >= 200;
+               return index != m_MenuOptions.m_CurrentCompleteIndex || (currentTimeMs % 1000) >= DrawBallBlinkMs;
             default:
                return true;
          }
@@ -2159,14 +2161,14 @@ bool BallHistory::ShouldDrawTrainerBallFails(std::size_t index, int currentTimeM
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailFinishMode:
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailDistance:
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailAssociations:
-         return index != m_MenuOptions.m_CurrentBallIndex || (currentTimeMs % 1000) >= 200;
+         return index != m_MenuOptions.m_CurrentBallIndex || (currentTimeMs % 1000) >= DrawBallBlinkMs;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_BallFailComplete:
          switch (m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode)
          {
             case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Accept:
-               return (currentTimeMs % 1000) >= 200; // TODO GARY Abstract this magic number out to somewhere
+               return (currentTimeMs % 1000) >= DrawBallBlinkMs; // TODO GARY Abstract this magic number out to somewhere
             case TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select:
-               return index != m_MenuOptions.m_CurrentCompleteIndex || (currentTimeMs % 1000) >= 200;
+               return index != m_MenuOptions.m_CurrentCompleteIndex || (currentTimeMs % 1000) >= DrawBallBlinkMs;
             default:
                return true;
          }
@@ -2180,7 +2182,7 @@ bool BallHistory::ShouldDrawActiveBallKickers(int currentTimeMs)
    switch (m_MenuOptions.m_MenuState)
    {
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallKickerBehaviorMode:
-         return (currentTimeMs % 1000) >= 200;
+         return (currentTimeMs % 1000) >= DrawBallBlinkMs;
       default:
          return true;
    }
@@ -5556,7 +5558,7 @@ void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr,
       radius = controlVBall->m_d.m_radius;
    }
 
-   if ((currentTimeMs % 1000) >= 200)
+   if ((currentTimeMs % 1000) >= DrawBallBlinkMs)
    {
       for (std::size_t acvIndex = 0; acvIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); acvIndex++)
       {

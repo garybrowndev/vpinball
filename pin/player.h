@@ -772,6 +772,8 @@ private:
    static const float DrawAngleVelocityLengthMultiplier;
    static const float DrawAngleVelocityHeightOffset;
 
+   static const int DrawBallBlinkMs;
+
    static const D3DCOLOR IntersectionCircleColor;
 
    static const char * SettingsFileExtension;
