@@ -825,7 +825,7 @@ private:
    bool ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallPasses(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallFails(std::size_t index, int currentTimeMs);
-   bool ShouldDrawActiveKickerBalls(int currentTimeMs);
+   bool ShouldDrawActiveBallKickers(int currentTimeMs);
    void DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
    void DrawActiveBallKickers(Player &player, float radius, Matrix3 &orientation, DebugPrintRecord &dpr);
    void DrawAngleVelocityPreview(Player &player, TrainerOptions::BallStartOptionsRecord &bsor);

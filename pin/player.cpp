@@ -1663,6 +1663,21 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
          dpr.ShowText("BallHistoryControlStepPixels = %.2f", m_BallHistoryControlStepPixels);
          dpr.ShowText("BallHistoryRecordsSize = %zu", m_BallHistoryRecordsSize);
          dpr.ShowText("BallHistoryRecordsHeadIndex = %zu", m_BallHistoryRecordsHeadIndex);
+
+         dpr.ShowText("ActiveBallKickers Count = %zu", m_ActiveBallKickers.size());
+         for (std::size_t activeBallKickerIndex = 0; activeBallKickerIndex < m_ActiveBallKickers.size(); activeBallKickerIndex++)
+         {
+            if (Kicker * kicker = m_ActiveBallKickers[activeBallKickerIndex])
+            {
+               Vertex3Ds kickerPosition = GetKickerPosition(*kicker);
+               dpr.ShowText("  Active Ball Kicker %zu %.2f,%.2f,%.2f (3x,3y,3z)",
+                  activeBallKickerIndex + 1,
+                  kickerPosition.x,
+                  kickerPosition.y,
+                  kickerPosition.z);
+            }
+         }
+
          break;
       case MenuOptionsRecord::ModeType::ModeType_Trainer:
          dpr.ShowText("Mode = Trainer");
@@ -1887,7 +1902,19 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
             }
          }
 
-         // TODO GARY add display of kicker locations here
+         dpr.ShowText("ActiveBallKickers Count = %zu", m_ActiveBallKickers.size());
+         for (std::size_t activeBallKickerIndex = 0; activeBallKickerIndex < m_ActiveBallKickers.size(); activeBallKickerIndex++)
+         {
+            if (Kicker * kicker = m_ActiveBallKickers[activeBallKickerIndex])
+            {
+               Vertex3Ds kickerPosition = GetKickerPosition(*kicker);
+               dpr.ShowText("  Active Ball Kicker %zu %.2f,%.2f,%.2f (3x,3y,3z)",
+                  activeBallKickerIndex + 1,
+                  kickerPosition.x,
+                  kickerPosition.y,
+                  kickerPosition.z);
+            }
+         }
          break;
       case MenuOptionsRecord::ModeType::ModeType_Disabled:
          dpr.ShowText("Mode = Disabled");
@@ -2148,7 +2175,7 @@ bool BallHistory::ShouldDrawTrainerBallFails(std::size_t index, int currentTimeM
    }
 }
 
-bool BallHistory::ShouldDrawActiveKickerBalls(int currentTimeMs)
+bool BallHistory::ShouldDrawActiveBallKickers(int currentTimeMs)
 {
    switch (m_MenuOptions.m_MenuState)
    {
@@ -2161,15 +2188,15 @@ bool BallHistory::ShouldDrawActiveKickerBalls(int currentTimeMs)
 
 void BallHistory::DrawActiveBallKickers(Player &player, float radius, Matrix3 &orientation, DebugPrintRecord &dpr)
 {
-   for (std::size_t tableKickerIndex = 0; tableKickerIndex < m_ActiveBallKickers.size(); tableKickerIndex++)
+   for (std::size_t activeBallKickerIndex = 0; activeBallKickerIndex < m_ActiveBallKickers.size(); activeBallKickerIndex++)
    {
-      if (Kicker * kicker = m_ActiveBallKickers[tableKickerIndex])
+      if (Kicker * kicker = m_ActiveBallKickers[activeBallKickerIndex])
       {
          Vertex3Ds kickerPosition = GetKickerPosition(*kicker);
          POINT screenPoint = Get2DPointFrom3D(player, kickerPosition);
          DebugPrintRecord dpr(player, m_DebugFontRecord);
          dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
-         dpr.ShowMenuTextPos(0, 0, "K-%zu", tableKickerIndex + 1);
+         dpr.ShowMenuTextPos(0, 0, "K-%zu", activeBallKickerIndex + 1);
 
          player.DrawFakeBall(kickerPosition, radius, orientation, m_ActiveBallKickerTexture);
       }
@@ -2244,7 +2271,7 @@ void BallHistory::DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int cu
       }
    }
 
-   if (ShouldDrawActiveKickerBalls(currentTimeMs))
+   if (ShouldDrawActiveBallKickers(currentTimeMs))
    {
       DrawActiveBallKickers(player, radius, orientation, dpr);
    }
@@ -5181,6 +5208,9 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
             float distance = DistancePixels(kickerPosition, controlVBall.m_d.m_pos);
             dpr.ShowMenuText("%.2f", distance);
 
+            // TODO GARY this calculation is not correct, the distance should be
+            // the radius of the ball plus the radius of the kick circle OR, 
+            // center of 3drect/box to edge like radius of a box
             if (distance < (controlVBall.m_d.m_radius * 2.0f))
             {
                oneKicker = true;
