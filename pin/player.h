@@ -307,6 +307,21 @@ public:
       ModeStateType_COUNT
    };
 
+   enum ConfigModeStateType
+   {
+      ConfigModeStateType_Wizard,
+      ConfigModeStateType_BallStart,
+      ConfigModeStateType_BallPass,
+      ConfigModeStateType_BallFail,
+      ConfigModeStateType_TotalRuns,
+      ConfigModeStateType_RunOrder,
+      ConfigModeStateType_BallKickerBehavior,
+      ConfigModeStateType_MaxSecondsPerRun,
+      ConfigModeStateType_RunCountdownSeconds,
+      ConfigModeStateType_Exit,
+      ConfigModeStateType_COUNT
+   };
+
    enum BallStartModeType
    {
       BallStartModeType_Accept,
@@ -439,6 +454,7 @@ public:
    };
 
    ModeStateType m_ModeState;
+   ConfigModeStateType m_ConfigModeState;
    BallStartModeType m_BallStartMode;
    BallStartAngleVelocityModeType m_BallStartAngleVelocityMode;
    BallStartCompleteModeType m_BallStartCompleteMode;
@@ -652,6 +668,7 @@ private:
          MenuStateType_Normal_ManageAutoControlLocations,
          MenuStateType_Normal_ClearAutoControlLocations,
          MenuStateType_Trainer_SelectModeOptions,
+         MenuStateType_Trainer_SelectConfigModeOptions,
          MenuStateType_Trainer_Results,
          MenuStateType_Trainer_SelectBallStartMode,
          MenuStateType_Trainer_SelectExistingBallStartLocation,
