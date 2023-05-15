@@ -737,6 +737,8 @@ private:
       MenuOptionsRecord();
    };
 
+   static const std::size_t OneSecondMs;
+
    static const std::size_t BallHistorySizeDefault;
    static const NextPreviousByType NextPreviousByDefault;
    static const std::size_t BallHistoryControlStepMsDefault;
