@@ -303,7 +303,7 @@ public:
       ModeStateType_Start,
       ModeStateType_Resume,
       ModeStateType_Results,
-      ModeStateType_Exit,
+      ModeStateType_GoBack,
       ModeStateType_COUNT
    };
 
@@ -318,7 +318,7 @@ public:
       ConfigModeStateType_BallKickerBehavior,
       ConfigModeStateType_MaxSecondsPerRun,
       ConfigModeStateType_RunCountdownSeconds,
-      ConfigModeStateType_Exit,
+      ConfigModeStateType_GoBack,
       ConfigModeStateType_COUNT
    };
 
@@ -502,7 +502,7 @@ public:
       ModeStateType_SelectRecallBallHistory,
       ModeStateType_ManageAutoControlLocations,
       ModeStateType_ClearAutoControlLocations,
-      ModeStateType_Exit,
+      ModeStateType_GoBack,
       ModeStateType_COUNT
    };
 

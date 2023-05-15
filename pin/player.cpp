@@ -1700,8 +1700,8 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
             case TrainerOptions::ModeStateType::ModeStateType_Config:
                dpr.ShowText("Mode State = Config");
                break;
-            case TrainerOptions::ModeStateType::ModeStateType_Exit:
-               dpr.ShowText("Mode State = Exit");
+            case TrainerOptions::ModeStateType::ModeStateType_GoBack:
+               dpr.ShowText("Mode State = Go Back");
                break;
             default:
                dpr.ShowText("Mode State = **UNKNOWN**");
@@ -1737,8 +1737,8 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_RunCountdownSeconds:
                dpr.ShowText("Config Mode State = Run Countdown Seconds");
                break;
-            case TrainerOptions::ConfigModeStateType::ConfigModeStateType_Exit:
-               dpr.ShowText("Config Mode State = Exit");
+            case TrainerOptions::ConfigModeStateType::ConfigModeStateType_GoBack:
+               dpr.ShowText("Config Mode State = Go Back");
                break;
             default:
                dpr.ShowText("Config Mode State = **UNKNOWN**");
@@ -2659,9 +2659,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Manage Auto Control Locations");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_NormalOptions.m_ModeState == NormalOptions::ModeStateType::ModeStateType_ClearAutoControlLocations,
             "Clear Auto Control Locations");
-         // TODO GARY rename "exit" to "go back"
-         dpr.ShowMenuTextSelect(m_MenuOptions.m_NormalOptions.m_ModeState == NormalOptions::ModeStateType::ModeStateType_Exit,
-            "Exit");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_NormalOptions.m_ModeState == NormalOptions::ModeStateType::ModeStateType_GoBack,
+            "Go Back");
 
          dpr.ShowMenuText("");
          dpr.ShowTextTitle("Current Config");
@@ -2696,7 +2695,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      m_MenuOptions.m_NormalOptions.m_ClearAutoControlLocationsMode = NormalOptions::ClearAutoControlLocationsModeType::ClearAutoControlLocationsModeType_GoBack;
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Normal_ClearAutoControlLocations;
                      break;
-                  case NormalOptions::ModeStateType::ModeStateType_Exit:
+                  case NormalOptions::ModeStateType::ModeStateType_GoBack:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Root_SelectMode;
                      m_MenuOptions.m_NormalOptions.m_ModeState = NormalOptions::ModeStateType::ModeStateType_SelectCurrentBallHistory;
                      break;
@@ -2969,8 +2968,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Resume");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ModeState == TrainerOptions::ModeStateType::ModeStateType_Results,
             "Results");
-         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ModeState == TrainerOptions::ModeStateType::ModeStateType_Exit,
-            "Exit");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ModeState == TrainerOptions::ModeStateType::ModeStateType_GoBack,
+            "Go Back");
          // TODO GARY add option to use 0 scatter for consistent playback
          // in defs.h, use this function instead
          // __forceinline float rand_mt_m11() { return 0.0f; } // [-1..1)
@@ -3021,7 +3020,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   case TrainerOptions::ModeStateType::ModeStateType_Config:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectConfigModeOptions;
                      break;
-                  case TrainerOptions::ModeStateType::ModeStateType_Exit:
+                  case TrainerOptions::ModeStateType::ModeStateType_GoBack:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Root_SelectMode;
                      m_MenuOptions.m_TrainerOptions.m_ModeState = TrainerOptions::ModeStateType::ModeStateType_Config;
                      break;
@@ -3056,8 +3055,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Max Seconds Per Run");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ConfigModeState == TrainerOptions::ConfigModeStateType::ConfigModeStateType_RunCountdownSeconds,
             "Run Countdown Seconds");
-         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ConfigModeState == TrainerOptions::ConfigModeStateType::ConfigModeStateType_Exit,
-            "Exit");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ConfigModeState == TrainerOptions::ConfigModeStateType::ConfigModeStateType_GoBack,
+            "Go Back");
 
          dpr.ShowMenuText("");
          switch (m_MenuOptions.m_TrainerOptions.m_ConfigModeState)
@@ -3145,7 +3144,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_RunCountdownSeconds:
                dpr.ShowMenuText("Run Countdown Seconds = %d", m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds);
                break;
-            case TrainerOptions::ConfigModeStateType::ConfigModeStateType_Exit:
+            case TrainerOptions::ConfigModeStateType::ConfigModeStateType_GoBack:
                break;
             default:
                InvalidEnumValue("TrainerOptions::ConfigModeStateType", m_MenuOptions.m_TrainerOptions.m_ConfigModeState);
@@ -3194,7 +3193,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   case TrainerOptions::ConfigModeStateType::ConfigModeStateType_RunCountdownSeconds:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectRunCountdownSeconds;
                      break;
-                  case TrainerOptions::ConfigModeStateType::ConfigModeStateType_Exit:
+                  case TrainerOptions::ConfigModeStateType::ConfigModeStateType_GoBack:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectModeOptions;
                      break;
                   default:
