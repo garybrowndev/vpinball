@@ -1170,10 +1170,8 @@ void BallHistory::UnInit(Player &player)
 
 void BallHistory::InitBallsIncreased(Player &player)
 {
-   for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
+   for each (auto controlVBall in m_ControlVBalls)
    {
-      const Ball *controlVBall = m_ControlVBalls[controlVBallIndex];
-
       std::size_t controlVBallsPreviousIndex = 0;
       std::size_t controlVBallsPreviousInsertIndex = m_ControlVBallsPrevious.size();
       for (; controlVBallsPreviousIndex < m_ControlVBallsPrevious.size(); ++controlVBallsPreviousIndex)
@@ -1217,9 +1215,9 @@ void BallHistory::InitBallsIncreased(Player &player)
    }
 
    m_ControlVBallsPrevious.clear();
-   for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
+   for each (auto controlVBall in m_ControlVBalls)
    {
-      m_ControlVBallsPrevious.push_back(m_ControlVBalls[controlVBallIndex]);
+      m_ControlVBallsPrevious.push_back(controlVBall);
    }
 }
 
@@ -1271,9 +1269,9 @@ void BallHistory::InitBallsDecreased(Player &player)
    }
 
    m_ControlVBallsPrevious.clear();
-   for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
+   for each (auto controlVBall in m_ControlVBalls)
    {
-      m_ControlVBallsPrevious.push_back(m_ControlVBalls[controlVBallIndex]);
+      m_ControlVBallsPrevious.push_back(controlVBall);
    }
 }
 
@@ -3070,7 +3068,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_Wizard:
                wizard = true;
-               // fall through
+               // yes, i want no 'break' and i want 'fall through'
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_BallStart:
                for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
                {
@@ -3085,7 +3083,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   break;
                }
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_BallPass:
-               // TODO GARY convert this and all types like it to "for each" pattern where possible
                for (std::size_t beorIndex = 0; beorIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); beorIndex++)
                {
                   if (wizard)
@@ -5845,12 +5842,10 @@ void BallHistory::DrawBallHistory(Player &player)
    }
 
    // draw the fake balls
-   for (std::size_t ballHistoryRecordIndex = 0; ballHistoryRecordIndex < m_BallHistoryRecords.size(); ++ballHistoryRecordIndex)
+   for each (auto &ballHistoryRecord in m_BallHistoryRecords)
    {
-      BallHistoryRecord &ballHistoryRecord = m_BallHistoryRecords[ballHistoryRecordIndex];
-      for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < ballHistoryRecord.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
+      for each (auto &ballHistoryState in ballHistoryRecord.m_BallHistoryStates)
       {
-         BallHistoryState &ballHistoryState = ballHistoryRecord.m_BallHistoryStates[ballHistoryStateIndex];
          if (ballHistoryState.m_DrawRadius > 0.0f)
          {
             player.DrawFakeBall(ballHistoryState.m_Pos, ballHistoryState.m_DrawRadius, ballHistoryState.m_Orientation, ballHistoryState.m_Texture);
@@ -5947,13 +5942,12 @@ void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr,
       if (m_MenuOptions.m_NormalOptions.m_RecallControlIndex != NormalOptions::RecallControlIndexDisabled)
       {
          BallHistoryRecord &recallBallHistoryRecord = m_BallHistoryRecords[m_MenuOptions.m_NormalOptions.m_RecallControlIndex];
-         for (std::size_t recallBallHistoryStateIndex = 0; recallBallHistoryStateIndex < recallBallHistoryRecord.m_BallHistoryStates.size(); ++recallBallHistoryStateIndex)
+         for each (auto &recallBallHistoryState in recallBallHistoryRecord.m_BallHistoryStates)
          {
             // TODO GARY Currently the recall ball blinks but is behind the draw history ball
             // figure out a why balls are drawn on top of others, Recall should blink on top
-            BallHistoryState &ballHistoryState = recallBallHistoryRecord.m_BallHistoryStates[recallBallHistoryStateIndex];
-            player.DrawFakeBall(ballHistoryState.m_Pos, radius, orientation, m_RecallBallTexture);
-            POINT screenPoint = Get2DPointFrom3D(player, ballHistoryState.m_Pos);
+            player.DrawFakeBall(recallBallHistoryState.m_Pos, radius, orientation, m_RecallBallTexture);
+            POINT screenPoint = Get2DPointFrom3D(player, recallBallHistoryState.m_Pos);
             DebugPrintRecord dpr(player, m_DebugFontRecord);
             dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
             dpr.ShowMenuTextPos(0, 0, "RCL");
@@ -6018,12 +6012,11 @@ void BallHistory::InitControlVBalls(Player &player)
 void BallHistory::InitActiveBallKickers(Player &player)
 {
    m_ActiveBallKickers.clear();
-   for (std::size_t editIndex = 0; editIndex < player.m_ptable->m_vedit.size(); editIndex++)
+   for each (auto vedit in player.m_ptable->m_vedit)
    {
-      IEditable * const pe = player.m_ptable->m_vedit[editIndex];
-      if (pe && pe->GetItemType() == ItemTypeEnum::eItemKicker)
+      if (vedit && vedit->GetItemType() == ItemTypeEnum::eItemKicker)
       {
-         if (Kicker * kicker = dynamic_cast<Kicker*>(pe))
+         if (Kicker * kicker = dynamic_cast<Kicker*>(vedit))
          {
             KickerHitCircle * kickerHitCircle = kicker->GetKickerHitCircle();
             if (kickerHitCircle)
@@ -11854,7 +11847,7 @@ void Player::DrawBalls()
 }
 
 
-void Player::DrawFakeBall(Vertex3Ds &m_pos, float radius, Matrix3 m_orientation, Texture *ballColor)
+void Player::DrawFakeBall(const Vertex3Ds &m_pos, float radius, Matrix3 m_orientation, Texture *ballColor)
 {
    m_pin3d.m_pd3dPrimaryDevice->SetRenderStateDepthBias(0.0f);
    m_pin3d.m_pd3dPrimaryDevice->SetRenderState(RenderDevice::BLENDOP, RenderDevice::BLENDOP_ADD);
