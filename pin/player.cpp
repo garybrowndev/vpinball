@@ -3065,30 +3065,52 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Go Back");
 
          dpr.ShowMenuText("");
+         bool wizard = false;
          switch (m_MenuOptions.m_TrainerOptions.m_ConfigModeState)
          {
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_Wizard:
-               // TODO GARY show summary of all settings here
-               break;
+               wizard = true;
+               // fall through
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_BallStart:
                for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
                {
+                  if (wizard)
+                  {
+                     dpr.ShowMenuText("Ball Start %zu", bsorIndex + 1);
+                  }
                   ShowBallStartOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex]);
                }
-               break;
+               if (!wizard)
+               {
+                  break;
+               }
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_BallPass:
                // TODO GARY convert this and all types like it to "for each" pattern where possible
                for (std::size_t beorIndex = 0; beorIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); beorIndex++)
                {
+                  if (wizard)
+                  {
+                     dpr.ShowMenuText("Ball Pass %zu", beorIndex + 1);
+                  }
                   ShowBallEndOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[beorIndex]);
                }
-               break;
+               if (!wizard)
+               {
+                  break;
+               }
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_BallFail:
                for (std::size_t beorIndex = 0; beorIndex < m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size(); beorIndex++)
                {
+                  if (wizard)
+                  {
+                     dpr.ShowMenuText("Ball Fail %zu", beorIndex + 1);
+                  }
                   ShowBallEndOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[beorIndex]);
                }
-               break;
+               if (!wizard)
+               {
+                  break;
+               }
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_TotalRuns:
                {
                bool anyCustom = false;
@@ -3115,7 +3137,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   dpr.ShowMenuText("Total Permutations = %d", m_MenuOptions.m_TrainerOptions.m_TotalRuns);
                }
                }
-               break;
+               if (!wizard)
+               {
+                  break;
+               }
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_RunOrder:
                switch (m_MenuOptions.m_TrainerOptions.m_RunOrderMode)
                {
@@ -3129,7 +3154,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      dpr.ShowMenuText("Run Order = **UNKNOWN**");
                      break;
                }
-               break;
+               if (!wizard)
+               {
+                  break;
+               }
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_BallKickerBehavior:
                switch (m_MenuOptions.m_TrainerOptions.m_BallKickerBehaviorMode)
                {
@@ -3143,13 +3171,22 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      dpr.ShowMenuText("Ball Kicker Behavior = **UNKNOWN**");
                      break;
                }
-               break;
+               if (!wizard)
+               {
+                  break;
+               }
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_MaxSecondsPerRun:
                dpr.ShowMenuText("Maximum Seconds Per Run = %d", m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun);
-               break;
+               if (!wizard)
+               {
+                  break;
+               }
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_RunCountdownSeconds:
                dpr.ShowMenuText("Run Countdown Seconds = %d", m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds);
-               break;
+               if (!wizard)
+               {
+                  break;
+               }
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_GoBack:
                break;
             default:
