@@ -3111,7 +3111,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_TotalRuns:
                {
                bool anyCustom = false;
-               std::size_t totalPermutations = 1;
+               std::size_t totalPermutations = m_MenuOptions.m_TrainerOptions.m_TotalRuns;
                for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
                {
                   TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
@@ -3127,11 +3127,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   }
                }
 
-               // TODO GARY calculate permutations here too
                dpr.ShowMenuText("Total Runs = %d", m_MenuOptions.m_TrainerOptions.m_TotalRuns);
                if (anyCustom)
                {
-                  dpr.ShowMenuText("Total Permutations = %d", m_MenuOptions.m_TrainerOptions.m_TotalRuns);
+                  dpr.ShowMenuText("Total Permutations = %d", totalPermutations);
                }
                }
                if (!wizard)
@@ -4883,7 +4882,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectTotalRuns:
          {
          bool anyCustom = false;
-         std::size_t totalPermutations = 1;
+         std::size_t totalPermutations = m_MenuOptions.m_TrainerOptions.m_TotalRuns;
          for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
          {
             TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
