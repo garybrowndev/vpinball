@@ -5384,7 +5384,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
 
    TrainerOptions::RunRecord &currentRunRecord = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord];
    S32 runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
-   if (runElapsedTimeMs == 0 || runElapsedTimeMs < (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs))
+   if (runElapsedTimeMs == 0 || runElapsedTimeMs < (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * S32(OneSecondMs)))
    {
       for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
       {
@@ -5406,7 +5406,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
 
       player.m_ptable->m_useTrailForBalls = 0;
    }
-   else if (runElapsedTimeMs < ((m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs) + (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * OneSecondMs)))
+   else if (runElapsedTimeMs < ((m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * S32(OneSecondMs)) + (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * S32(OneSecondMs))))
    {
       m_MenuOptions.m_MenuError.clear();
       if (m_MenuOptions.m_TrainerOptions.m_SetupBallStarts)
@@ -5441,14 +5441,18 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       ShowCurrentRunRecord(dpr, currentTimeMs);
       bool allPass = true;
       std::vector<std::tuple<std::size_t, std::size_t>> startToPassLocationIndexes;
-      for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
+
+      for (std::size_t passBeorIndex = 0; passBeorIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); passBeorIndex++)
       {
-         bool currentPass = false;
-         Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
-         for (std::size_t passBeorIndex = 0; passBeorIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); passBeorIndex++)
+         TrainerOptions::BallEndOptionsRecord &passBeor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[passBeorIndex];
+         bool currentPassBeorResult = false;
+
+         for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
          {
-            TrainerOptions::BallEndOptionsRecord &passBeor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[passBeorIndex];
+            Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
+
             float distance = DistancePixels(passBeor.m_Pos, controlVBall.m_d.m_pos);
+            dpr.ShowMenuText("%zu = %.2f", controlVBallIndex, distance);
             if (passBeor.m_RadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
             {
                int &stopBallMs = std::get<0>(passBeor.m_StopBallsTracker[controlVBallIndex]);
@@ -5464,7 +5468,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                   {
                      if ((currentTimeMs - stopBallMs) > 200)
                      {
-                        currentPass = true;
+                        currentPassBeorResult = true;
                         startToPassLocationIndexes.push_back(std::tuple<std::size_t, std::size_t>(controlVBallIndex, passBeorIndex));
                         break;
                      }
@@ -5484,12 +5488,12 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
             else if (distance < (controlVBall.m_d.m_radius * passBeor.m_RadiusPercent / 100.0f))
             {
                startToPassLocationIndexes.push_back(std::tuple<std::size_t, std::size_t>(controlVBallIndex, passBeorIndex));
-               currentPass = true;
+               currentPassBeorResult = true;
                break;
             }
          }
 
-         if (currentPass == false)
+         if (currentPassBeorResult == false)
          {
             allPass = false;
             break;
@@ -6013,25 +6017,23 @@ void BallHistory::InitActiveBallKickers(Player &player)
    {
       if (vedit && vedit->GetItemType() == ItemTypeEnum::eItemKicker)
       {
-         if (Kicker * kicker = dynamic_cast<Kicker*>(vedit))
+         Kicker * kicker = static_cast<Kicker*>(vedit);
+         KickerHitCircle * kickerHitCircle = kicker->GetKickerHitCircle();
+         if (kickerHitCircle)
          {
-            KickerHitCircle * kickerHitCircle = kicker->GetKickerHitCircle();
-            if (kickerHitCircle)
+            switch (m_MenuOptions.m_MenuState)
             {
-               switch (m_MenuOptions.m_MenuState)
-               {
-                  case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results:
-                     kickerHitCircle->m_collideDisableCollide = true;
-                     break;
-                  default:
-                     kickerHitCircle->m_collideDisableCollide = false;
-                     break;
-               }
+               case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results:
+                  kickerHitCircle->m_collideDisableCollide = true;
+                  break;
+               default:
+                  kickerHitCircle->m_collideDisableCollide = false;
+                  break;
+            }
 
-               if (kicker->m_d.m_enabled && !kicker->m_d.m_fallThrough && kickerHitCircle->m_enabled)
-               {
-                  m_ActiveBallKickers.push_back(kicker);
-               }
+            if (kicker->m_d.m_enabled && !kicker->m_d.m_fallThrough && kickerHitCircle->m_enabled)
+            {
+               m_ActiveBallKickers.push_back(kicker);
             }
          }
       }
