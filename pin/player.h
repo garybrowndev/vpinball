@@ -414,6 +414,7 @@ public:
       BallStartOptionsRecord(Vertex3Ds &pos, Vertex3Ds &vel, Vertex3Ds &angMom,
          float angleStart, float angleFinish, S32 totalAngles,
          float velocityStart, float velocityFinish, S32 totalVelocities);
+      bool IsZero();
    };
 
    struct BallEndOptionsRecord

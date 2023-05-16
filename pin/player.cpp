@@ -97,6 +97,13 @@ TrainerOptions::BallStartOptionsRecord::BallStartOptionsRecord(Vertex3Ds &pos, V
 {
 }
 
+bool TrainerOptions::BallStartOptionsRecord::IsZero()
+{
+   return m_Pos.IsZero() && m_Vel.IsZero() && m_AngMom.IsZero() &&
+      m_AngleStart == 0.0f && m_AngleFinish == 0.0f && m_TotalAngles == 0 &&
+      m_VelocityStart == 0.0f && m_VelocityFinish == 0.0f && m_TotalVelocities == 0;
+}
+
 TrainerOptions::BallEndOptionsRecord::BallEndOptionsRecord():
    BallEndOptionsRecord(Vertex3Ds(0.0f, 0.0f, 0.0f), 0.0f)
 {
@@ -1682,7 +1689,6 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                   kickerPosition.z);
             }
          }
-
          break;
       case MenuOptionsRecord::ModeType::ModeType_Trainer:
          dpr.ShowText("Mode = Trainer");
@@ -2592,7 +2598,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
    ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_ProcessMenuUsec);
 
    DebugPrintRecord dpr(player, m_DebugFontRecord);
-   dpr.SetPositionPercent(0.50f, 0.50f);
+   dpr.SetPositionPercent(0.50f, 0.25f);
 
    if (!m_MenuOptions.m_MenuError.empty())
    {
@@ -5182,26 +5188,16 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
    }
 
    std::string errorMessage;
-   bool cancelRun = true;
-   if (BallCountIncreased())
+   bool cancelRun = false;
+
+   for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
    {
-      errorMessage = "Trainer run cancelled - new ball created";
-   }
-   else if (BallCountDecreased())
-   {
-      errorMessage = "Trainer run cancelled - existing ball destroyed";
-   }
-   else if (BallChanged())
-   {
-      errorMessage = "Trainer run cancelled - existing ball changed";
-   }
-   else if (m_ControlVBalls.size() == 0)
-   {
-      errorMessage = "Trainer run cancelled - no available balls";
-   }
-   else
-   {
-      cancelRun = false;
+      TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
+      if (bsor.IsZero())
+      {
+         errorMessage = "Trainer run cancelled - ball start " + std::to_string(bsorIndex + 1) + " must be set";
+         cancelRun = true;
+      }
    }
 
    if (cancelRun)
@@ -5550,8 +5546,8 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          {
             Vertex3Ds kickerPosition = GetKickerPosition(*m_ActiveBallKickers[activeBallKickerIndex]);
             float distance = DistancePixels(kickerPosition, controlVBall.m_d.m_pos);
-            dpr.ShowMenuText("%.2f", distance);
-
+            
+            //dpr.ShowMenuText("%.2f", distance);
             // TODO GARY this calculation is not correct, the distance should be
             // the radius of the ball plus the radius of the kick circle OR, 
             // center of 3drect/box to edge like radius of a box
