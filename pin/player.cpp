@@ -137,7 +137,7 @@ TrainerOptions::TrainerOptions():
    m_CreateBallEndZ(0),
    m_TotalRuns(5),
    m_MaxSecondsPerRun(15),
-   m_RunCountdownSeconds(3),
+   m_CountdownSecondsBeforeRun(3),
    m_BallStartOptionsRecordsSize(0),
    m_CurrentRunRecord(0),
    m_RunStartTimeMs(0),
@@ -579,7 +579,7 @@ const char * BallHistory::TrainerModeTotalRunsKeyName = "TotalRuns";
 const char * BallHistory::TrainerModeRunOrderModeKeyName = "RunOrderMode";
 const char * BallHistory::TrainerModeBallKickerBehaviorModeKeyName = "BallKickerBehaviorMode";
 const char * BallHistory::TrainerModeMaxSecondsPerRunKeyName = "MaxSecondsPerRun";
-const char * BallHistory::TrainerModeRunCountdownSecondsKeyName = "RunCountdownSeconds";
+const char * BallHistory::TrainerModeCountdownSecondsBeforeRunKeyName = "CountdownSecondsBeforeRun";
 const char * BallHistory::TrainerModeBallStartPositionKeyName = "StartPosition";
 const char * BallHistory::TrainerModeBallStartVelocityKeyName = "StartVelocity";
 const char * BallHistory::TrainerModeBallStartAngularMomentumKeyName = "StartAngularMomentum";
@@ -766,9 +766,9 @@ void BallHistory::LoadSettings(Player &player)
          tempStream >> m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun;
       }
 
-      if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeRunCountdownSecondsKeyName, tempStream) == true)
+      if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeCountdownSecondsBeforeRunKeyName, tempStream) == true)
       {
-         tempStream >> m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds;
+         tempStream >> m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun;
       }
 
       if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeRunOrderModeKeyName, tempStream) == true)
@@ -938,8 +938,8 @@ void BallHistory::SaveSettings(Player &player)
       tempStr = std::to_string(m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun);
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeMaxSecondsPerRunKeyName, tempStr.c_str());
 
-      tempStr = std::to_string(m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds);
-      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeRunCountdownSecondsKeyName, tempStr.c_str());
+      tempStr = std::to_string(m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun);
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeCountdownSecondsBeforeRunKeyName, tempStr.c_str());
 
       switch (m_MenuOptions.m_TrainerOptions.m_RunOrderMode)
       {
@@ -1738,8 +1738,8 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_MaxSecondsPerRun:
                dpr.ShowText("Config Mode State = Max Seconds Per Run");
                break;
-            case TrainerOptions::ConfigModeStateType::ConfigModeStateType_RunCountdownSeconds:
-               dpr.ShowText("Config Mode State = Run Countdown Seconds");
+            case TrainerOptions::ConfigModeStateType::ConfigModeStateType_CountdownSecondsBeforeRun:
+               dpr.ShowText("Config Mode State = Countdown Seconds Before Run");
                break;
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_GoBack:
                dpr.ShowText("Config Mode State = Go Back");
@@ -1771,7 +1771,7 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
 
          dpr.ShowText("Total Runs = %d", m_MenuOptions.m_TrainerOptions.m_TotalRuns);
          dpr.ShowText("Maximum Seconds Per Run = %d", m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun);
-         dpr.ShowText("Run Countdown Seconds = %d", m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds);
+         dpr.ShowText("Countdown Seconds Before Run = %d", m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun);
 
          switch (m_MenuOptions.m_TrainerOptions.m_RunOrderMode)
          {
@@ -2051,11 +2051,11 @@ void BallHistory::ShowCurrentRunRecord(DebugPrintRecord &dpr, int currentTimeMs)
 
    if (m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs > 0)
    {
-      dpr.ShowMenuText("%.2f seconds remaining for current run", ((m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * 1000) - runElapsedTimeMs + (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000)) / 1000.0f);
+      dpr.ShowMenuText("%.2f seconds remaining for current run", ((m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * OneSecondMs) - runElapsedTimeMs + (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs)) / 1000.0f);
    }
    else
    {
-      dpr.ShowMenuText("<n/a> seconds remaining for current run", ((m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * 1000) - runElapsedTimeMs + (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000)) / 1000.0f);
+      dpr.ShowMenuText("<n/a> seconds remaining for current run", ((m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * OneSecondMs) - runElapsedTimeMs + (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs)) / 1000.0f);
    }
 
    DWORD totalRunsMs = 0;
@@ -3057,8 +3057,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Ball Kicker Behavior");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ConfigModeState == TrainerOptions::ConfigModeStateType::ConfigModeStateType_MaxSecondsPerRun,
             "Max Seconds Per Run");
-         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ConfigModeState == TrainerOptions::ConfigModeStateType::ConfigModeStateType_RunCountdownSeconds,
-            "Run Countdown Seconds");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ConfigModeState == TrainerOptions::ConfigModeStateType::ConfigModeStateType_CountdownSecondsBeforeRun,
+            "Countdown Seconds Before Run");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ConfigModeState == TrainerOptions::ConfigModeStateType::ConfigModeStateType_GoBack,
             "Go Back");
 
@@ -3177,8 +3177,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                {
                   break;
                }
-            case TrainerOptions::ConfigModeStateType::ConfigModeStateType_RunCountdownSeconds:
-               dpr.ShowMenuText("Run Countdown Seconds = %d", m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds);
+            case TrainerOptions::ConfigModeStateType::ConfigModeStateType_CountdownSecondsBeforeRun:
+               dpr.ShowMenuText("Countdown Seconds Before Run = %d", m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun);
                if (!wizard)
                {
                   break;
@@ -3229,8 +3229,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   case TrainerOptions::ConfigModeStateType::ConfigModeStateType_MaxSecondsPerRun:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectMaxSecondsPerRun;
                      break;
-                  case TrainerOptions::ConfigModeStateType::ConfigModeStateType_RunCountdownSeconds:
-                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectRunCountdownSeconds;
+                  case TrainerOptions::ConfigModeStateType::ConfigModeStateType_CountdownSecondsBeforeRun:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCountdownSecondsBeforeRun;
                      break;
                   case TrainerOptions::ConfigModeStateType::ConfigModeStateType_GoBack:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectModeOptions;
@@ -5061,7 +5061,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                switch (m_MenuOptions.m_TrainerOptions.m_ConfigModeState)
                {
                   case TrainerOptions::ConfigModeStateType::ConfigModeStateType_Wizard:
-                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectRunCountdownSeconds;
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCountdownSecondsBeforeRun;
                      break;
                   case TrainerOptions::ConfigModeStateType::ConfigModeStateType_MaxSecondsPerRun:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectConfigModeOptions;
@@ -5076,25 +5076,23 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                break;
          }
          break;
-      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectRunCountdownSeconds:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCountdownSecondsBeforeRun:
          dpr.ShowMenuTextTitle("Countdown Seconds Before Run");
-         // TODO GARY rename m_RunCountdownSeconds and all related pattern to "CountdownSecondsBeforeRun"
-         // to have a more consistent naming scheme like Max Seconds Per Run
-         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::RunCountdownSecondsMinimum, m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds, TrainerOptions::RunCountdownSecondsMaximum);
+         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::CountdownSecondsBeforeRunMinimum, m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun, TrainerOptions::CountdownSecondsBeforeRunMaximum);
 
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType::MenuActionType_None:
-               ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds, TrainerOptions::RunCountdownSecondsMinimum, TrainerOptions::RunCountdownSecondsMaximum, currentTimeMs);
+               ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun, TrainerOptions::CountdownSecondsBeforeRunMinimum, TrainerOptions::CountdownSecondsBeforeRunMaximum, currentTimeMs);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
-               ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds, TrainerOptions::RunCountdownSecondsMinimum, TrainerOptions::RunCountdownSecondsMaximum);
+               ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun, TrainerOptions::CountdownSecondsBeforeRunMinimum, TrainerOptions::CountdownSecondsBeforeRunMaximum);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
-               ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds, TrainerOptions::RunCountdownSecondsMinimum, TrainerOptions::RunCountdownSecondsMaximum);
+               ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun, TrainerOptions::CountdownSecondsBeforeRunMinimum, TrainerOptions::CountdownSecondsBeforeRunMaximum);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                switch (m_MenuOptions.m_TrainerOptions.m_ConfigModeState)
@@ -5102,7 +5100,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   case TrainerOptions::ConfigModeStateType::ConfigModeStateType_Wizard:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectConfigModeOptions;
                      break;
-                  case TrainerOptions::ConfigModeStateType::ConfigModeStateType_RunCountdownSeconds:
+                  case TrainerOptions::ConfigModeStateType::ConfigModeStateType_CountdownSecondsBeforeRun:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectConfigModeOptions;
                      break;
                   default:
@@ -5386,7 +5384,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
 
    TrainerOptions::RunRecord &currentRunRecord = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord];
    S32 runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
-   if (runElapsedTimeMs == 0 || runElapsedTimeMs < (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000))
+   if (runElapsedTimeMs == 0 || runElapsedTimeMs < (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs))
    {
       for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
       {
@@ -5395,10 +5393,10 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          m_ControlVBalls[controlVBallIndex]->m_angularmomentum.SetZero();
       }
 
-      if (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds > 0)
+      if (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun > 0)
       {
          // countdown before run starts
-         dpr.ShowMenuTextTitle("Run %zu (of %zu) starts in %.2f seconds", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_RunRecords.size(), ((m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000) - runElapsedTimeMs) / 1000.0f);
+         dpr.ShowMenuTextTitle("Run %zu (of %zu) starts in %.2f seconds", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_RunRecords.size(), ((m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs) - runElapsedTimeMs) / 1000.0f);
          ShowPreviousRunRecord(dpr);
          if (!m_MenuOptions.m_MenuError.empty())
          {
@@ -5408,7 +5406,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
 
       player.m_ptable->m_useTrailForBalls = 0;
    }
-   else if (runElapsedTimeMs < ((m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000) + (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * 1000)))
+   else if (runElapsedTimeMs < ((m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs) + (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * OneSecondMs)))
    {
       m_MenuOptions.m_MenuError.clear();
       if (m_MenuOptions.m_TrainerOptions.m_SetupBallStarts)
@@ -5500,7 +5498,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       if (allPass == true)
       {
          currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_Passed;
-         currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000);
+         currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
          currentRunRecord.m_StartToPassLocationIndexes = startToPassLocationIndexes;
          m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
          m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
@@ -5563,7 +5561,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       if (oneFail == true)
       {
          currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_FailedLocation;
-         currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000);
+         currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
          currentRunRecord.m_StartToFailLocationIndexes = startToFailLocationIndexes;
          m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
          m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
@@ -5606,7 +5604,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                break;
             case TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_Fail:
                currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_FailedKicker;
-               currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000);
+               currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
                m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
                m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
                m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
@@ -5620,7 +5618,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
    else
    {
       currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_FailedTimeElapsed;
-      currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_RunCountdownSeconds * 1000);
+      currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
       m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
       m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
       m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;

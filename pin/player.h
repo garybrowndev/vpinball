@@ -317,7 +317,7 @@ public:
       ConfigModeStateType_RunOrder,
       ConfigModeStateType_BallKickerBehavior,
       ConfigModeStateType_MaxSecondsPerRun,
-      ConfigModeStateType_RunCountdownSeconds,
+      ConfigModeStateType_CountdownSecondsBeforeRun,
       ConfigModeStateType_GoBack,
       ConfigModeStateType_COUNT
    };
@@ -477,9 +477,9 @@ public:
    static const S32 MaxSecondsPerRunMaximum = 30;
    S32 m_MaxSecondsPerRun;
 
-   static const S32 RunCountdownSecondsMinimum = 0;
-   static const S32 RunCountdownSecondsMaximum = 5;
-   S32 m_RunCountdownSeconds;
+   static const S32 CountdownSecondsBeforeRunMinimum = 0;
+   static const S32 CountdownSecondsBeforeRunMaximum = 5;
+   S32 m_CountdownSecondsBeforeRun;
    
    std::vector<BallStartOptionsRecord> m_BallStartOptionsRecords;
    std::size_t m_BallStartOptionsRecordsSize;
@@ -698,7 +698,7 @@ private:
          MenuStateType_Trainer_SelectRunOrderMode,
          MenuStateType_Trainer_SelectBallKickerBehaviorMode,
          MenuStateType_Trainer_SelectMaxSecondsPerRun,
-         MenuStateType_Trainer_SelectRunCountdownSeconds,
+         MenuStateType_Trainer_SelectCountdownSecondsBeforeRun,
          MenuStateType_Disabled_Disabled,
          MenuStateType_COUNT
       };
@@ -812,7 +812,7 @@ private:
    static const char * TrainerModeRunOrderModeKeyName;
    static const char * TrainerModeBallKickerBehaviorModeKeyName;
    static const char * TrainerModeMaxSecondsPerRunKeyName;
-   static const char * TrainerModeRunCountdownSecondsKeyName;
+   static const char * TrainerModeCountdownSecondsBeforeRunKeyName;
    static const char * TrainerModeBallStartPositionKeyName;
    static const char * TrainerModeBallStartVelocityKeyName;
    static const char * TrainerModeBallStartAngularMomentumKeyName;
