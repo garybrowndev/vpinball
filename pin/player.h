@@ -411,7 +411,7 @@ public:
       S32 m_TotalVelocities;
 
       BallStartOptionsRecord();
-      BallStartOptionsRecord(Vertex3Ds &pos, Vertex3Ds &vel, Vertex3Ds &angMom,
+      BallStartOptionsRecord(const Vertex3Ds &pos, const Vertex3Ds &vel, const Vertex3Ds &angMom,
          float angleStart, float angleFinish, S32 totalAngles,
          float velocityStart, float velocityFinish, S32 totalVelocities);
       bool IsZero();
@@ -878,7 +878,7 @@ private:
 
    float DistancePixels(POINT &p1, POINT &p2);
    float DistancePixels(const Vertex3Ds &pos1, const Vertex3Ds &pos2);
-   float VelocityPixels(Vertex3Ds &vel);
+   float VelocityPixels(const Vertex3Ds &vel);
    POINT Get2DPointFrom3D(Player &player, const Vertex3Ds& vertex);
    Vertex3Ds GetKickerPosition(Kicker &kicker);
    bool ControlNextMove();

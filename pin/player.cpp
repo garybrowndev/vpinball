@@ -84,7 +84,7 @@ TrainerOptions::BallStartOptionsRecord::BallStartOptionsRecord():
 {
 }
 
-TrainerOptions::BallStartOptionsRecord::BallStartOptionsRecord(Vertex3Ds &pos, Vertex3Ds &vel, Vertex3Ds &angMom, float angleStart, float angleFinish, S32 totalAngles, float velocityStart, float velocityFinish, S32 totalVelocities):
+TrainerOptions::BallStartOptionsRecord::BallStartOptionsRecord(const Vertex3Ds &pos, const Vertex3Ds &vel, const Vertex3Ds &angMom, float angleStart, float angleFinish, S32 totalAngles, float velocityStart, float velocityFinish, S32 totalVelocities):
    m_Pos(pos),
    m_Vel(vel),
    m_AngMom(angMom),
@@ -254,20 +254,22 @@ void BallHistory::DebugFontRecord::Init(Player &player)
    int fontSize = int(30 * (1 + ((player.m_width - 1920) / float(1920))));
    fontSize = int(std::round(fontSize / 6.0) * 6);
 
+   fontSize = 18; // TODO GARY remove hard coded
+
    IDirect3DDevice9 * coreDevice = player.m_pin3d.m_pd3dPrimaryDevice->GetCoreDevice();
 
    HRESULT hr = D3DXCreateFont(
       coreDevice,                  //device
-      fontSize,                    //font height
-      20,                          //font width
-      FW_HEAVY,                    //font weight
-      1,                           //mip levels
-      fFalse,                      //italic
-      DEFAULT_CHARSET,             //charset
-      OUT_DEFAULT_PRECIS,          //output precision
-      DEFAULT_QUALITY,             //quality
-      DEFAULT_PITCH | FF_DONTCARE, //pitch and family
-      FontTypeFace,                //font name
+      fontSize,                              //font height
+      0,                                     //font width
+      FW_BOLD,                               //font weight
+      1,                                     //mip levels
+      fFalse,                                //italic
+      DEFAULT_CHARSET,                       //charset
+      OUT_DEFAULT_PRECIS,                    //output precision
+      DEFAULT_QUALITY,                       //quality
+      DEFAULT_PITCH | FF_DONTCARE,           //pitch and family
+      "Arial",                               //font name
       &m_TitleFont                 //font pointer
    );
 
@@ -279,16 +281,16 @@ void BallHistory::DebugFontRecord::Init(Player &player)
    
    hr = D3DXCreateFont(
       coreDevice,                  //device
-      fontSize,                    //font height
-      15,                          //font width
-      FW_MEDIUM,                   //font weight
-      1,                           //mip levels
-      fFalse,                      //italic
-      DEFAULT_CHARSET,             //charset
-      OUT_DEFAULT_PRECIS,          //output precision
-      DEFAULT_QUALITY,             //quality
-      DEFAULT_PITCH | FF_DONTCARE, //pitch and family
-      FontTypeFace,                //font name
+      fontSize,                              //font height
+      0,                                     //font width
+      FW_BOLD,                               //font weight
+      1,                                     //mip levels
+      fFalse,                                //italic
+      DEFAULT_CHARSET,                       //charset
+      OUT_DEFAULT_PRECIS,                    //output precision
+      DEFAULT_QUALITY,                       //quality
+      DEFAULT_PITCH | FF_DONTCARE,           //pitch and family
+      "Arial",                               //font name
       &m_NormalFont                //font pointer
    );
 
@@ -300,16 +302,16 @@ void BallHistory::DebugFontRecord::Init(Player &player)
 
    hr = D3DXCreateFont(
       coreDevice,                  //device
-      fontSize,                    //font height
-      15,                          //font width
-      FW_BOLD,                     //font weight
-      1,                           //mip levels
-      fFalse,                      //italic
-      DEFAULT_CHARSET,             //charset
-      OUT_DEFAULT_PRECIS,          //output precision
-      DEFAULT_QUALITY,             //quality
-      DEFAULT_PITCH | FF_DONTCARE, //pitch and family
-      FontTypeFace,                //font name
+      fontSize,                              //font height
+      0,                                     //font width
+      FW_BOLD,                               //font weight
+      1,                                     //mip levels
+      fFalse,                                //italic
+      DEFAULT_CHARSET,                       //charset
+      OUT_DEFAULT_PRECIS,                    //output precision
+      DEFAULT_QUALITY,                       //quality
+      DEFAULT_PITCH | FF_DONTCARE,           //pitch and family
+      "Arial",                               //font name
       &m_SelectFont                //font pointer
    );
 
@@ -361,6 +363,7 @@ void BallHistory::DebugPrintRecord::InitTextXY()
    m_TextX = 10;
    m_TextY = -10,
    m_TextYStep = int(24 * (1 + ((m_Player.m_width - 1920) / float(1920))));
+   m_TextYStep = 14; // TODO GARY remove hard coded value
 }
 
 void BallHistory::DebugPrintRecord::SetPosition(float x, float y)
@@ -1363,7 +1366,7 @@ float BallHistory::DistancePixels(const Vertex3Ds &pos1, const Vertex3Ds &pos2)
    return sqrtf(powf((pos1.x - pos2.x), 2) + powf((pos1.y - pos2.y), 2) + powf((pos1.z - pos2.z), 2));
 }
 
-float BallHistory::VelocityPixels(Vertex3Ds &vel)
+float BallHistory::VelocityPixels(const Vertex3Ds &vel)
 {
    return sqrtf(powf(vel.x, 2) + powf(vel.y, 2) + powf(vel.z, 2));
 }
@@ -1816,11 +1819,14 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                {
                   dpr.ShowText("Ball Start %zu (frozen)", bsorIndex + 1);
                }
-               dpr.ShowText("  Position = %.2f,%.2f,%.2f (x,y,z)", bsor.m_Pos.x, bsor.m_Pos.y, bsor.m_Pos.z);
-               dpr.ShowText("  Velocity = %.2f,%.2f,%.2f (x,y,z)", bsor.m_Vel.x, bsor.m_Vel.y, bsor.m_Vel.z);
-               dpr.ShowText("  Momentum = %.2f,%.2f,%.2f (x,y,z)", bsor.m_AngMom.x, bsor.m_AngMom.y, bsor.m_AngMom.z);
-               dpr.ShowText("  VelocOps = %.2f,%.2f,%u (start,finish,total)", bsor.m_VelocityStart, bsor.m_VelocityFinish, bsor.m_TotalVelocities);
-               dpr.ShowText("  AngleOps = %.2f,%.2f,%u (start,finish,total)", bsor.m_AngleStart, bsor.m_AngleFinish, bsor.m_TotalAngles);
+
+               dpr.ShowText("  Pos|Vel|Mom = %.2f,%.2f,%.2f|%.2f,%.2f,%.2f|%.2f,%.2f,%.2f|(x,y,z)",
+                  bsor.m_Pos.x, bsor.m_Pos.y, bsor.m_Pos.z,
+                  bsor.m_Vel.x, bsor.m_Vel.y, bsor.m_Vel.z,
+                  bsor.m_AngMom.x, bsor.m_AngMom.y, bsor.m_AngMom.z);
+               dpr.ShowText("  VelocOps|AngleOps = %.2f,%.2f,%u|%.2f,%.2f,%u|(start,finish,total)",
+                  bsor.m_VelocityStart, bsor.m_VelocityFinish, bsor.m_TotalVelocities,
+                  bsor.m_AngleStart, bsor.m_AngleFinish, bsor.m_TotalAngles);
             }
          }
 
@@ -5452,7 +5458,6 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
             Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
 
             float distance = DistancePixels(passBeor.m_Pos, controlVBall.m_d.m_pos);
-            dpr.ShowMenuText("%zu = %.2f", controlVBallIndex, distance);
             if (passBeor.m_RadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
             {
                int &stopBallMs = std::get<0>(passBeor.m_StopBallsTracker[controlVBallIndex]);
