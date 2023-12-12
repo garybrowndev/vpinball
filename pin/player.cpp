@@ -980,15 +980,15 @@ void BallHistory::SaveSettings(Player &player)
       std::ostringstream ballStartOptionsTotalVelocities;
       for each (const TrainerOptions::BallStartOptionsRecord &bsor in m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords)
       {
-      ballStartOptionsPos << bsor.m_Pos.x << SettingsValueDelimeter << bsor.m_Pos.y << SettingsValueDelimeter << bsor.m_Pos.z << SettingsValueDelimeter;
-      ballStartOptionsVel << bsor.m_Vel.x << SettingsValueDelimeter << bsor.m_Vel.y << SettingsValueDelimeter << bsor.m_Vel.z << SettingsValueDelimeter;
-      ballStartOptionsAngMom << bsor.m_AngMom.x << SettingsValueDelimeter << bsor.m_AngMom.y << SettingsValueDelimeter << bsor.m_AngMom.z << SettingsValueDelimeter;
-      ballStartOptionsAngleStart << bsor.m_AngleStart << SettingsValueDelimeter;
-      ballStartOptionsAngleFinish << bsor.m_AngleFinish << SettingsValueDelimeter;
-      ballStartOptionsTotalAngles << bsor.m_TotalAngles << SettingsValueDelimeter;
-      ballStartOptionsVelocityStart << bsor.m_VelocityStart << SettingsValueDelimeter;
-      ballStartOptionsVelocityFinish << bsor.m_VelocityFinish << SettingsValueDelimeter;
-      ballStartOptionsTotalVelocities << bsor.m_TotalVelocities << SettingsValueDelimeter;
+         ballStartOptionsPos << bsor.m_Pos.x << SettingsValueDelimeter << bsor.m_Pos.y << SettingsValueDelimeter << bsor.m_Pos.z << SettingsValueDelimeter;
+         ballStartOptionsVel << bsor.m_Vel.x << SettingsValueDelimeter << bsor.m_Vel.y << SettingsValueDelimeter << bsor.m_Vel.z << SettingsValueDelimeter;
+         ballStartOptionsAngMom << bsor.m_AngMom.x << SettingsValueDelimeter << bsor.m_AngMom.y << SettingsValueDelimeter << bsor.m_AngMom.z << SettingsValueDelimeter;
+         ballStartOptionsAngleStart << bsor.m_AngleStart << SettingsValueDelimeter;
+         ballStartOptionsAngleFinish << bsor.m_AngleFinish << SettingsValueDelimeter;
+         ballStartOptionsTotalAngles << bsor.m_TotalAngles << SettingsValueDelimeter;
+         ballStartOptionsVelocityStart << bsor.m_VelocityStart << SettingsValueDelimeter;
+         ballStartOptionsVelocityFinish << bsor.m_VelocityFinish << SettingsValueDelimeter;
+         ballStartOptionsTotalVelocities << bsor.m_TotalVelocities << SettingsValueDelimeter;
       }
 
       tempStr = ballStartOptionsPos.str();
@@ -1861,7 +1861,7 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
 
                if (bpor.m_AssociatedBallStartIndexes.size() == 0)
                {
-                  dpr.ShowMenuText("**None - Ball End Ignored**");
+                  dpr.ShowMenuText("  Association(s) = **None - Ball End Ignored**");
                }
                else
                {
@@ -1923,7 +1923,7 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
 
                if (bfor.m_AssociatedBallStartIndexes.size() == 0)
                {
-                  dpr.ShowMenuText("**None - Ball End Ignored**");
+                  dpr.ShowMenuText("  Association(s) = **None - Ball End Ignored**");
                }
                else
                {
@@ -2117,7 +2117,7 @@ void BallHistory::ShowBallEndOptionsRecord(DebugPrintRecord &dpr, TrainerOptions
 
    if (beor.m_AssociatedBallStartIndexes.size() == 0)
    {
-      dpr.ShowMenuText("**None - Ball End Ignored**");
+      dpr.ShowMenuText("  Association(s) = **None - Ball End Ignored**");
    }
    else
    {
@@ -4348,9 +4348,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuText("");
          dpr.ShowTextTitle("Current Config");
-
          ShowBallEndOptionsRecord(dpr, bpor);
-         
+
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType::MenuActionType_None:
@@ -5516,60 +5515,65 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
       }
 
-      bool oneFail = false;
+      bool anyFail = false;
       std::vector<std::tuple<std::size_t, std::size_t>> startToFailLocationIndexes;
-      for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
+      for (std::size_t failBeorIndex = 0; failBeorIndex < m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size(); failBeorIndex++)
       {
-         bool currentFail = false;
-         Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
-         for (std::size_t failBeorIndex = 0; failBeorIndex < m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size(); failBeorIndex++)
-         {
-            TrainerOptions::BallEndOptionsRecord &failBeor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[failBeorIndex];
-            float distance = DistancePixels(failBeor.m_Pos, controlVBall.m_d.m_pos);
-            if (failBeor.m_RadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
-            {
-               int &stopBallMs = std::get<0>(failBeor.m_StopBallsTracker[controlVBallIndex]);
-               Vertex3Ds &stopBallPos = std::get<1>(failBeor.m_StopBallsTracker[controlVBallIndex]);
-               if (distance < controlVBall.m_d.m_radius)
-               {
-                  if (stopBallMs == 0)
-                  {
-                     stopBallMs = currentTimeMs;
-                  }
+         TrainerOptions::BallEndOptionsRecord &failBeor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[failBeorIndex];
 
-                  if ((controlVBall.m_d.m_pos - stopBallPos).Length() < 1.0f)
+         for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
+         {
+            Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
+
+            if (failBeor.m_AssociatedBallStartIndexes.find(controlVBallIndex) != failBeor.m_AssociatedBallStartIndexes.end())
+            {
+
+               float distance = DistancePixels(failBeor.m_Pos, controlVBall.m_d.m_pos);
+               if (failBeor.m_RadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
+               {
+                  int &stopBallMs = std::get<0>(failBeor.m_StopBallsTracker[controlVBallIndex]);
+                  Vertex3Ds &stopBallPos = std::get<1>(failBeor.m_StopBallsTracker[controlVBallIndex]);
+                  if (distance < controlVBall.m_d.m_radius)
                   {
-                     if ((currentTimeMs - stopBallMs) > 200)
+                     if (stopBallMs == 0)
                      {
-                        currentFail = true;
-                        startToFailLocationIndexes.push_back(std::tuple<std::size_t, std::size_t>(controlVBallIndex, failBeorIndex));
+                        stopBallMs = currentTimeMs;
+                     }
+
+                     if ((controlVBall.m_d.m_pos - stopBallPos).Length() < 1.0f)
+                     {
+                        if ((currentTimeMs - stopBallMs) > 200)
+                        {
+                           startToFailLocationIndexes.push_back(std::tuple<std::size_t, std::size_t>(controlVBallIndex, failBeorIndex));
+                           anyFail = true;
+                        }
+                     }
+                     else
+                     {
+                        stopBallMs = currentTimeMs;
+                        stopBallPos = controlVBall.m_d.m_pos;
                      }
                   }
                   else
                   {
-                     stopBallMs = currentTimeMs;
-                     stopBallPos = controlVBall.m_d.m_pos;
+                     stopBallMs = 0;
+                     stopBallPos.SetZero();
                   }
                }
-               else
+               else if (distance < (controlVBall.m_d.m_radius * failBeor.m_RadiusPercent  / 100.0f))
                {
-                  stopBallMs = 0;
-                  stopBallPos.SetZero();
+                  startToFailLocationIndexes.push_back(std::tuple<std::size_t, std::size_t>(controlVBallIndex, failBeorIndex));
+                  anyFail = true;
                }
             }
-            else if (distance < (controlVBall.m_d.m_radius * failBeor.m_RadiusPercent  / 100.0f))
-            {
-               currentFail = true;
-               startToFailLocationIndexes.push_back(std::tuple<std::size_t, std::size_t>(controlVBallIndex, failBeorIndex));
-            }
          }
-         if (currentFail == true)
+
+         if (anyFail == true)
          {
-            oneFail = true;
             break;
          }
       }
-      if (oneFail == true)
+      if (anyFail == true)
       {
          currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_FailedLocation;
          currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
