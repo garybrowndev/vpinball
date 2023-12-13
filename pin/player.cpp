@@ -236,12 +236,16 @@ void BallHistory::ProfilerRecord::SetZero()
 
 
 const char * BallHistory::DebugFontRecord::FontTypeFace = "Lucida Sans Typewriter";
+const int BallHistory::DebugFontRecord::FontHeightDefault = 24;
+const int BallHistory::DebugFontRecord::FontHeightMax = 64;
+const float BallHistory::DebugFontRecord::PlayerTextWidthRatio = 5.5f;
 
 BallHistory::DebugFontRecord::DebugFontRecord() :
    m_TitleFont(nullptr),
    m_NormalFont(nullptr),
    m_SelectFont(nullptr),
-   m_FontSprite(nullptr)
+   m_FontSprite(nullptr),
+   m_FontHeight(0)
 {
 }
 
@@ -251,25 +255,60 @@ BallHistory::DebugFontRecord::~DebugFontRecord()
 
 void BallHistory::DebugFontRecord::Init(Player &player)
 {
-   int fontSize = int(30 * (1 + ((player.m_width - 1920) / float(1920))));
-   fontSize = int(std::round(fontSize / 6.0) * 6);
-
-   fontSize = 18; // TODO GARY remove hard coded
-
    IDirect3DDevice9 * coreDevice = player.m_pin3d.m_pd3dPrimaryDevice->GetCoreDevice();
+
+   m_FontHeight = 1;
+   for (; m_FontHeight < FontHeightMax; m_FontHeight++)
+   {
+      ID3DXFont * tempFont = nullptr;
+      HRESULT hr = D3DXCreateFont(
+         coreDevice,                  //device
+         m_FontHeight,                    //font height
+         0,                           //font width
+         FW_BOLD,                     //font weight
+         1,                           //mip levels
+         fFalse,                      //italic
+         DEFAULT_CHARSET,             //charset
+         OUT_DEFAULT_PRECIS,          //output precision
+         DEFAULT_QUALITY,             //quality
+         DEFAULT_PITCH | FF_DONTCARE, //pitch and family
+         "Arial",                     //font name
+         &tempFont                    //font pointer
+      );
+
+      if (FAILED(hr))
+      {
+         ShowError("Unable to create debug font via D3DXCreateFont!");
+         m_FontHeight = FontHeightDefault;
+         break;
+      }
+      else
+      {
+         SIZE size = { 0 };
+         RECT fontRect = { 0 };
+         tempFont->DrawText(m_FontSprite, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", -1, &fontRect, DT_CALCRECT, 0xFFFFFFFF);
+         tempFont->Release();
+
+         float playerWidthToTextWidthRatio = player.m_width / float(fontRect.right - fontRect.left);
+         if (playerWidthToTextWidthRatio < PlayerTextWidthRatio)
+         {
+            break;
+         }
+      }
+   }
 
    HRESULT hr = D3DXCreateFont(
       coreDevice,                  //device
-      fontSize,                              //font height
-      0,                                     //font width
-      FW_BOLD,                               //font weight
-      1,                                     //mip levels
-      fFalse,                                //italic
-      DEFAULT_CHARSET,                       //charset
-      OUT_DEFAULT_PRECIS,                    //output precision
-      DEFAULT_QUALITY,                       //quality
-      DEFAULT_PITCH | FF_DONTCARE,           //pitch and family
-      "Arial",                               //font name
+      m_FontHeight,                    //font height
+      0,                           //font width
+      FW_BOLD,                     //font weight
+      1,                           //mip levels
+      fFalse,                      //italic
+      DEFAULT_CHARSET,             //charset
+      OUT_DEFAULT_PRECIS,          //output precision
+      DEFAULT_QUALITY,             //quality
+      DEFAULT_PITCH | FF_DONTCARE, //pitch and family
+      "Arial",                     //font name
       &m_TitleFont                 //font pointer
    );
 
@@ -281,16 +320,16 @@ void BallHistory::DebugFontRecord::Init(Player &player)
    
    hr = D3DXCreateFont(
       coreDevice,                  //device
-      fontSize,                              //font height
-      0,                                     //font width
-      FW_BOLD,                               //font weight
-      1,                                     //mip levels
-      fFalse,                                //italic
-      DEFAULT_CHARSET,                       //charset
-      OUT_DEFAULT_PRECIS,                    //output precision
-      DEFAULT_QUALITY,                       //quality
-      DEFAULT_PITCH | FF_DONTCARE,           //pitch and family
-      "Arial",                               //font name
+      m_FontHeight,                    //font height
+      0,                           //font width
+      FW_BOLD,                     //font weight
+      1,                           //mip levels
+      fFalse,                      //italic
+      DEFAULT_CHARSET,             //charset
+      OUT_DEFAULT_PRECIS,          //output precision
+      DEFAULT_QUALITY,             //quality
+      DEFAULT_PITCH | FF_DONTCARE, //pitch and family
+      "Arial",                     //font name
       &m_NormalFont                //font pointer
    );
 
@@ -302,16 +341,16 @@ void BallHistory::DebugFontRecord::Init(Player &player)
 
    hr = D3DXCreateFont(
       coreDevice,                  //device
-      fontSize,                              //font height
-      0,                                     //font width
-      FW_BOLD,                               //font weight
-      1,                                     //mip levels
-      fFalse,                                //italic
-      DEFAULT_CHARSET,                       //charset
-      OUT_DEFAULT_PRECIS,                    //output precision
-      DEFAULT_QUALITY,                       //quality
-      DEFAULT_PITCH | FF_DONTCARE,           //pitch and family
-      "Arial",                               //font name
+      m_FontHeight,                    //font height
+      0,                           //font width
+      FW_BOLD,                     //font weight
+      1,                           //mip levels
+      fFalse,                      //italic
+      DEFAULT_CHARSET,             //charset
+      OUT_DEFAULT_PRECIS,          //output precision
+      DEFAULT_QUALITY,             //quality
+      DEFAULT_PITCH | FF_DONTCARE, //pitch and family
+      "Arial",                     //font name
       &m_SelectFont                //font pointer
    );
 
@@ -346,9 +385,10 @@ void BallHistory::DebugFontRecord::UnInit()
    }
 }
 
-D3DCOLOR BallHistory::DebugPrintRecord::NormalMenuColor = D3DCOLOR_ARGB(0xFF, 0xD3, 0xD3, 0xD3);
-D3DCOLOR BallHistory::DebugPrintRecord::SelectedMenuColor = D3DCOLOR_ARGB(0xFF, 0x1E, 0x90, 0xFF); // dodger blue
-D3DCOLOR BallHistory::DebugPrintRecord::ErrorMenuColor = D3DCOLOR_ARGB(0xFF, 0xFF, 0xCC, 0xCB);
+const D3DCOLOR BallHistory::DebugPrintRecord::NormalMenuColor = D3DCOLOR_ARGB(0xFF, 0xD3, 0xD3, 0xD3);
+const D3DCOLOR BallHistory::DebugPrintRecord::SelectedMenuColor = D3DCOLOR_ARGB(0xFF, 0x1E, 0x90, 0xFF); // dodger blue
+const D3DCOLOR BallHistory::DebugPrintRecord::ErrorMenuColor = D3DCOLOR_ARGB(0xFF, 0xFF, 0xCC, 0xCB);
+const float BallHistory::DebugPrintRecord::TextYStepPercent = 0.8f;
 
 BallHistory::DebugPrintRecord::DebugPrintRecord(Player &player, DebugFontRecord &debugFontRecord):
    m_Player(player),
@@ -361,9 +401,8 @@ BallHistory::DebugPrintRecord::DebugPrintRecord(Player &player, DebugFontRecord 
 void BallHistory::DebugPrintRecord::InitTextXY()
 {
    m_TextX = 10;
-   m_TextY = -10,
-   m_TextYStep = int(24 * (1 + ((m_Player.m_width - 1920) / float(1920))));
-   m_TextYStep = 14; // TODO GARY remove hard coded value
+   m_TextY = -10;
+   m_TextYStep = int(m_DebugFontRecord.m_FontHeight * TextYStepPercent);
 }
 
 void BallHistory::DebugPrintRecord::SetPosition(float x, float y)
@@ -495,7 +534,9 @@ void BallHistory::DebugPrintRecord::DebugPrint(int x, int y, LPCSTR text, bool c
       SetRect(&fontRect, x, y, 0, 0);
       font->DrawText(m_DebugFontRecord.m_FontSprite, text, -1, &fontRect, DT_CALCRECT, 0xFFFFFFFF);
       if (center)
-      xx = x - (fontRect.right - fontRect.left) / 2;
+      {
+         xx = x - (fontRect.right - fontRect.left) / 2;
+      }
       SetRect(&fontRect, xx, y, 0, 0);
 
       for(unsigned int i = 0; i < 4; ++i)

@@ -593,10 +593,15 @@ private:
    struct DebugFontRecord
    {
       static const char * FontTypeFace;
+      static const int FontHeightDefault;
+      static const int FontHeightMax;
+      static const float PlayerTextWidthRatio;
+
       ID3DXFont * m_TitleFont;
       ID3DXFont * m_NormalFont;
       ID3DXFont * m_SelectFont;
       LPD3DXSPRITE m_FontSprite;
+      INT m_FontHeight;
 
       DebugFontRecord();
       virtual ~DebugFontRecord();
@@ -606,9 +611,10 @@ private:
 
    struct DebugPrintRecord
    {
-      static D3DCOLOR NormalMenuColor;
-      static D3DCOLOR SelectedMenuColor;
-      static D3DCOLOR ErrorMenuColor;
+      static const D3DCOLOR NormalMenuColor;
+      static const D3DCOLOR SelectedMenuColor;
+      static const D3DCOLOR ErrorMenuColor;
+      static const float TextYStepPercent;
 
       Player &m_Player;
       DebugFontRecord &m_DebugFontRecord;
