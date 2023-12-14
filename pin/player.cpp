@@ -263,7 +263,7 @@ void BallHistory::DebugFontRecord::Init(Player &player)
       ID3DXFont * tempFont = nullptr;
       HRESULT hr = D3DXCreateFont(
          coreDevice,                  //device
-         m_FontHeight,                    //font height
+         m_FontHeight,                //font height
          0,                           //font width
          FW_BOLD,                     //font weight
          1,                           //mip levels
