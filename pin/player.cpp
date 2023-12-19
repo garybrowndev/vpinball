@@ -1568,6 +1568,7 @@ void BallHistory::SetControl(bool control)
       m_Control = control;
       if (m_Control)
       {
+         g_pplayer->m_ptable->StopAllSounds();
          g_pplayer->PauseMusic();
          g_pplayer->m_noTimeCorrect = true;
          m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
