@@ -597,10 +597,8 @@ private:
       static const int FontHeightMax;
       static const float PlayerTextWidthRatio;
 
-      ID3DXFont * m_TitleFont;
-      ID3DXFont * m_NormalFont;
-      ID3DXFont * m_SelectFont;
-      LPD3DXSPRITE m_FontSprite;
+      LPD3DXSPRITE m_Sprite;
+      ID3DXFont * m_Font;
       INT m_FontHeight;
 
       DebugFontRecord();
@@ -629,7 +627,9 @@ private:
       void SetPosition(float x, float y);
       void SetPositionPercent(float x, float y);
       void ToggleReverse();
+      int GetTextWidth(const char * format, ...);
       void ShowText(const char * format, ...);
+      void ShowTextPos(int x, int y, const char * format, ...);
       void ShowTextTitle(const char * format, ...);
       void ShowMenuText(const char * format, ...);
       void ShowMenuTextPos(int x, int y, const char * format, ...);
