@@ -121,10 +121,10 @@ TrainerOptions::RunRecord::RunRecord() :
 {
 }
 
-const float TrainerOptions::WarningSoundSeconds = 4.0f;
+const float TrainerOptions::TimeLowSoundSeconds = 4.0f;
 
 TrainerOptions::TrainerOptions():
-   m_ModeState(ModeStateType::ModeStateType_Config),
+   m_ModeState(ModeStateType::ModeStateType_Start),
    m_ConfigModeState(ConfigModeStateType::ConfigModeStateType_Wizard),
    m_BallStartMode(BallStartModeType::BallStartModeType_Accept),
    m_BallStartAngleVelocityMode(BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_Drop),
@@ -1612,7 +1612,7 @@ void BallHistory::ResetTrainerRunStartTime()
 {
    m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
    m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
-   m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun;
+   m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = std::max(0, m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun - 1);
    m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
 }
 
@@ -1629,7 +1629,7 @@ void BallHistory::SetControl(bool control)
          g_pplayer->m_noTimeCorrect = true;
          m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
          m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
-         m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun;
+         m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = std::max(0, m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun - 1);
          m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
       }
       else
@@ -3162,7 +3162,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
                         m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord = 0;
                         m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
-                        m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun;
+                        m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = std::max(0, m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun - 1);
                         m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
                      }
                      break;
@@ -3172,7 +3172,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      ToggleControl();
 
                      m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
-                     m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun;
+                     m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = std::max(0, m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun - 1);
                      m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
                      break;
                   case TrainerOptions::ModeStateType::ModeStateType_Results:
@@ -5644,16 +5644,11 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          float secondsBeforeStart = ((m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs) - runElapsedTimeMs) / 1000.0f;
          if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsCountdownEnabled)
          {
-            if (secondsBeforeStart < TrainerOptions::WarningSoundSeconds && secondsBeforeStart < m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed)
+            if (secondsBeforeStart < TrainerOptions::CountdownSoundSeconds && secondsBeforeStart < m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed)
             {
-               if (secondsBeforeStart < 1.0f)
-               {
-                  PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_COUNTDOWN_GO, true);
-               }
-               else
-               {
-                  PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_COUNTDOWN_READYSET, true);
-               }
+               std::string outputDebug = "TickCount = " + std::to_string(::GetTickCount()) + "\n";
+               ::OutputDebugString(outputDebug.c_str());
+               PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_COUNTDOWN_READYSET, true);
                m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = int(secondsBeforeStart);
             }
          }
@@ -5669,6 +5664,12 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
    }
    else if (runElapsedTimeMs < ((m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * S32(OneSecondMs)) + (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * S32(OneSecondMs))))
    {
+      if (m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed == 0)
+      {
+         PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_COUNTDOWN_GO, true);
+         m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = -1;
+      }
+
       m_MenuOptions.m_MenuError.clear();
       if (m_MenuOptions.m_TrainerOptions.m_SetupBallStarts)
       {
@@ -5700,27 +5701,28 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       }
 
       float remainingRunTime = ((m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * OneSecondMs) - runElapsedTimeMs + (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs)) / 1000.0f;
-      if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled && remainingRunTime < TrainerOptions::WarningSoundSeconds && !m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying)
+      if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled && remainingRunTime < TrainerOptions::TimeLowSoundSeconds && !m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying)
       {
          PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_TIME_LOW, true);
          m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = true;
       }
 
       ShowCurrentRunRecord(dpr, currentTimeMs);
+
       bool allPass = true;
       std::vector<std::tuple<std::size_t, std::size_t>> startToPassLocationIndexes;
-
-      for (std::size_t passBeorIndex = 0; passBeorIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); passBeorIndex++)
+      for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
       {
-         TrainerOptions::BallEndOptionsRecord &passBeor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[passBeorIndex];
-         bool currentPassBeorResult = false;
+         Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
+         bool controlVBallAssociated = false;
+         bool anyPassBeor = false;
 
-         for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
+         for (std::size_t passBeorIndex = 0; passBeorIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); passBeorIndex++)
          {
-            Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
-
+            TrainerOptions::BallEndOptionsRecord &passBeor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[passBeorIndex];
             if (passBeor.m_AssociatedBallStartIndexes.find(controlVBallIndex) != passBeor.m_AssociatedBallStartIndexes.end())
             {
+               controlVBallAssociated = true;
                float distance = DistancePixels(passBeor.m_Pos, controlVBall.m_d.m_pos);
                if (passBeor.m_RadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
                {
@@ -5738,7 +5740,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                         if ((currentTimeMs - stopBallMs) > 200)
                         {
                            startToPassLocationIndexes.push_back(std::tuple<std::size_t, std::size_t>(controlVBallIndex, passBeorIndex));
-                           currentPassBeorResult = true;
+                           anyPassBeor = true;
                            break;
                         }
                      }
@@ -5757,13 +5759,13 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                else if (distance < (controlVBall.m_d.m_radius * passBeor.m_RadiusPercent / 100.0f))
                {
                   startToPassLocationIndexes.push_back(std::tuple<std::size_t, std::size_t>(controlVBallIndex, passBeorIndex));
-                  currentPassBeorResult = true;
+                  anyPassBeor = true;
                   break;
                }
             }
          }
 
-         if (currentPassBeorResult == false)
+         if (controlVBallAssociated && !anyPassBeor)
          {
             allPass = false;
             break;
@@ -5777,7 +5779,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          currentRunRecord.m_StartToPassLocationIndexes = startToPassLocationIndexes;
          m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
          m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
-         m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun;
+         m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = std::max(0, m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun - 1);
          m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
          m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
          if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled)
@@ -5798,7 +5800,6 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
 
             if (failBeor.m_AssociatedBallStartIndexes.find(controlVBallIndex) != failBeor.m_AssociatedBallStartIndexes.end())
             {
-
                float distance = DistancePixels(failBeor.m_Pos, controlVBall.m_d.m_pos);
                if (failBeor.m_RadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
                {
@@ -5851,7 +5852,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          currentRunRecord.m_StartToFailLocationIndexes = startToFailLocationIndexes;
          m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
          m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
-         m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun;
+         m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = std::max(0, m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun - 1);
          m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
          m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
          if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
@@ -5891,7 +5892,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
             case TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_Reset:
                m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
                m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
-               m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun;
+               m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = std::max(0, m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun - 1);
                m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
                m_MenuOptions.m_MenuError = "Trainer run reset - ball hit active kicker";
                break;
@@ -5900,7 +5901,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
                m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
                m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
-               m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun;
+               m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = std::max(0, m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun - 1);
                m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
                m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
                if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
@@ -5920,7 +5921,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
       m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
       m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
-      m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun;
+      m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = std::max(0, m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun - 1);
       m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
       m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
       if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)

@@ -507,7 +507,8 @@ public:
    int m_RunStartTimeMs;
 
    int m_CountdownSoundPlayed;
-   static const float WarningSoundSeconds;
+   static const int TrainerOptions::CountdownSoundSeconds = 3;
+   static const float TimeLowSoundSeconds;
    bool m_TimeLowSoundPlaying;
 
    bool m_SetupBallStarts;
