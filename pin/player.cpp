@@ -3413,6 +3413,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      break;
                   case TrainerOptions::ConfigModeStateType::ConfigModeStateType_GoBack:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectModeOptions;
+                     m_MenuOptions.m_TrainerOptions.m_ModeState = TrainerOptions::ModeStateType::ModeStateType_Start;
                      break;
                   default:
                      InvalidEnumValue("TrainerOptions::ConfigModeStateType", m_MenuOptions.m_TrainerOptions.m_ConfigModeState);
@@ -5325,6 +5326,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      {
                         case TrainerOptions::ConfigModeStateType::ConfigModeStateType_Wizard:
                            m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectConfigModeOptions;
+                           m_MenuOptions.m_TrainerOptions.m_ConfigModeState = TrainerOptions::ConfigModeStateType::ConfigModeStateType_GoBack;
                            break;
                         case TrainerOptions::ConfigModeStateType::ConfigModeStateType_SoundEffects:
                            m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectConfigModeOptions;
