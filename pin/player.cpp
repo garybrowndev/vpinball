@@ -121,6 +121,8 @@ TrainerOptions::RunRecord::RunRecord() :
 {
 }
 
+const float TrainerOptions::WarningSoundSeconds = 4.0f;
+
 TrainerOptions::TrainerOptions():
    m_ModeState(ModeStateType::ModeStateType_Config),
    m_ConfigModeState(ConfigModeStateType::ConfigModeStateType_Wizard),
@@ -133,7 +135,12 @@ TrainerOptions::TrainerOptions():
    m_BallEndAssociationMode(BallEndAssociationModeType::BallEndAssociationModeType_Accept),
    m_BallEndCompleteMode(BallEndCompleteModeType::BallEndCompleteModeType_Accept),
    m_RunOrderMode(RunOrderModeType::RunOrderModeType_InOrder),
+   m_SoundEffectsMode(SoundEffectsModeType::SoundEffectsModeType_Accept),
    m_BallKickerBehaviorMode(BallKickerBehaviorModeType::BallKickerBehaviorModeType_Reset),
+   m_SoundEffectsPassEnabled(true),
+   m_SoundEffectsFailEnabled(true),
+   m_SoundEffectsTimeLowEnabled(true),
+   m_SoundEffectsCountdownEnabled(true),
    m_CreateBallEndZ(0),
    m_TotalRuns(5),
    m_MaxSecondsPerRun(15),
@@ -141,6 +148,8 @@ TrainerOptions::TrainerOptions():
    m_BallStartOptionsRecordsSize(0),
    m_CurrentRunRecord(0),
    m_RunStartTimeMs(0),
+   m_CountdownSoundPlayed(0),
+   m_TimeLowSoundPlaying(false),
    m_SetupBallStarts(true)
 {
 }
@@ -594,6 +603,10 @@ const char * BallHistory::TrainerModeRunOrderModeKeyName = "RunOrderMode";
 const char * BallHistory::TrainerModeBallKickerBehaviorModeKeyName = "BallKickerBehaviorMode";
 const char * BallHistory::TrainerModeMaxSecondsPerRunKeyName = "MaxSecondsPerRun";
 const char * BallHistory::TrainerModeCountdownSecondsBeforeRunKeyName = "CountdownSecondsBeforeRun";
+const char * BallHistory::TrainerModeSoundEffectsPassEnabledKeyName = "SoundEffectsPassEnabled";
+const char * BallHistory::TrainerModeSoundEffectsFailEnabledKeyName = "SoundEffectsFailEnabled";
+const char * BallHistory::TrainerModeSoundEffectsTimeLowEnabledKeyName = "SoundEffectsTimeLowEnabled";
+const char * BallHistory::TrainerModeSoundEffectsCountdownEnabledKeyName = "SoundEffectsCountdownEnabled";
 const char * BallHistory::TrainerModeBallStartPositionKeyName = "StartPosition";
 const char * BallHistory::TrainerModeBallStartVelocityKeyName = "StartVelocity";
 const char * BallHistory::TrainerModeBallStartAngularMomentumKeyName = "StartAngularMomentum";
@@ -817,6 +830,23 @@ void BallHistory::LoadSettings(Player &player)
          }
       }
 
+      if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeSoundEffectsPassEnabledKeyName, tempStream) == true)
+      {
+         tempStream >> m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled;
+      }
+      if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeSoundEffectsFailEnabledKeyName, tempStream) == true)
+      {
+         tempStream >> m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled;
+      }
+      if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeSoundEffectsTimeLowEnabledKeyName, tempStream) == true)
+      {
+         tempStream >> m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled;
+      }
+      if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeSoundEffectsCountdownEnabledKeyName, tempStream) == true)
+      {
+         tempStream >> m_MenuOptions.m_TrainerOptions.m_SoundEffectsCountdownEnabled;
+      }
+
       std::istringstream ballStartOptionsPos;
       std::istringstream ballStartOptionsVel;
       std::istringstream ballStartOptionsAngMom;
@@ -980,6 +1010,15 @@ void BallHistory::SaveSettings(Player &player)
       }
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallKickerBehaviorModeKeyName, tempStr.c_str());
 
+      tempStr = std::to_string(m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled);
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeSoundEffectsPassEnabledKeyName, tempStr.c_str());
+      tempStr = std::to_string(m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled);
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeSoundEffectsFailEnabledKeyName, tempStr.c_str());
+      tempStr = std::to_string(m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled);
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeSoundEffectsTimeLowEnabledKeyName, tempStr.c_str());
+      tempStr = std::to_string(m_MenuOptions.m_TrainerOptions.m_SoundEffectsCountdownEnabled);
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeSoundEffectsCountdownEnabledKeyName, tempStr.c_str());
+
       std::ostringstream ballStartOptionsPos;
       std::ostringstream ballStartOptionsVel;
       std::ostringstream ballStartOptionsAngMom;
@@ -989,8 +1028,11 @@ void BallHistory::SaveSettings(Player &player)
       std::ostringstream ballStartOptionsVelocityStart;
       std::ostringstream ballStartOptionsVelocityFinish;
       std::ostringstream ballStartOptionsTotalVelocities;
-      for each (const TrainerOptions::BallStartOptionsRecord &bsor in m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords)
+      
+      for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
       {
+         TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
+
          ballStartOptionsPos << bsor.m_Pos.x << SettingsValueDelimeter << bsor.m_Pos.y << SettingsValueDelimeter << bsor.m_Pos.z << SettingsValueDelimeter;
          ballStartOptionsVel << bsor.m_Vel.x << SettingsValueDelimeter << bsor.m_Vel.y << SettingsValueDelimeter << bsor.m_Vel.z << SettingsValueDelimeter;
          ballStartOptionsAngMom << bsor.m_AngMom.x << SettingsValueDelimeter << bsor.m_AngMom.y << SettingsValueDelimeter << bsor.m_AngMom.z << SettingsValueDelimeter;
@@ -1559,6 +1601,8 @@ void BallHistory::ResetTrainerRunStartTime()
 {
    m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
    m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+   m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun;
+   m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
 }
 
 void BallHistory::SetControl(bool control)
@@ -1568,11 +1612,14 @@ void BallHistory::SetControl(bool control)
       m_Control = control;
       if (m_Control)
       {
+         ::PlaySound(NULL, NULL, 0);
          g_pplayer->m_ptable->StopAllSounds();
          g_pplayer->PauseMusic();
          g_pplayer->m_noTimeCorrect = true;
          m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
          m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+         m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun;
+         m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
       }
       else
       {
@@ -1748,10 +1795,13 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                dpr.ShowText("Config Mode State = Ball Kicker Behavior");
                break;
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_MaxSecondsPerRun:
-               dpr.ShowText("Config Mode State = Max Seconds Per Run");
+               dpr.ShowText("Config Mode State = Time Per Run");
                break;
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_CountdownSecondsBeforeRun:
-               dpr.ShowText("Config Mode State = Countdown Seconds Before Run");
+               dpr.ShowText("Config Mode State = Countdown Before Run");
+               break;
+            case TrainerOptions::ConfigModeStateType::ConfigModeStateType_SoundEffects:
+               dpr.ShowText("Config Mode State = Sound Effects");
                break;
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_GoBack:
                dpr.ShowText("Config Mode State = Go Back");
@@ -1763,6 +1813,8 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
 
          dpr.ShowText("Current Run Record = %zu", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1);
          dpr.ShowText("Run Start Time (ms) = %d", m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs);
+         dpr.ShowText("Countdown Sound Played = %d", m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed);
+         dpr.ShowText("Time Low Sound Playing = %s", m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying ? "true" : "false");
          dpr.ShowText("Current Time (ms) = %d", currentTimeMs);
 
          switch (m_MenuOptions.m_TrainerOptions.m_BallStartMode)
@@ -1782,8 +1834,8 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
          }
 
          dpr.ShowText("Total Runs = %d", m_MenuOptions.m_TrainerOptions.m_TotalRuns);
-         dpr.ShowText("Maximum Seconds Per Run = %d", m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun);
-         dpr.ShowText("Countdown Seconds Before Run = %d", m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun);
+         dpr.ShowText("Time Per Run = %d (seconds)", m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun);
+         dpr.ShowText("Countdown Before Run = %d (seconds)", m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun);
 
          switch (m_MenuOptions.m_TrainerOptions.m_RunOrderMode)
          {
@@ -1810,6 +1862,13 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                dpr.ShowText("Ball Kicker Behavior = **UNKNOWN**");
                break;
          }
+
+         dpr.ShowText("Countdown Before Run = %d (seconds)", m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun);
+
+         dpr.ShowText("Sound Effects Pass = (%s)", m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled ? "X" : "O");
+         dpr.ShowText("Sound Effects Fail = (%s)", m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled ? "X" : "O");
+         dpr.ShowText("Sound Effects Time Low = (%s)", m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled ? "X" : "O");
+         dpr.ShowText("Sound Effects Countdown = (%s)", m_MenuOptions.m_TrainerOptions.m_SoundEffectsCountdownEnabled ? "X" : "O");
 
          if (m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size() == 0)
          {
@@ -2070,7 +2129,7 @@ void BallHistory::ShowCurrentRunRecord(DebugPrintRecord &dpr, int currentTimeMs)
    }
    else
    {
-      dpr.ShowMenuText("<n/a> seconds remaining for current run", ((m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * OneSecondMs) - runElapsedTimeMs + (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs)) / 1000.0f);
+      dpr.ShowMenuText("<n/a> seconds remaining for current run");
    }
 
    DWORD totalRunsMs = 0;
@@ -3092,6 +3151,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
                         m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord = 0;
                         m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+                        m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun;
+                        m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
                      }
                      break;
                   case TrainerOptions::ModeStateType::ModeStateType_Resume:
@@ -3100,6 +3161,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      ToggleControl();
 
                      m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+                     m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun;
+                     m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
                      break;
                   case TrainerOptions::ModeStateType::ModeStateType_Results:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results;
@@ -3139,9 +3202,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ConfigModeState == TrainerOptions::ConfigModeStateType::ConfigModeStateType_BallKickerBehavior,
             "Ball Kicker Behavior");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ConfigModeState == TrainerOptions::ConfigModeStateType::ConfigModeStateType_MaxSecondsPerRun,
-            "Max Seconds Per Run");
+            "Time Per Run");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ConfigModeState == TrainerOptions::ConfigModeStateType::ConfigModeStateType_CountdownSecondsBeforeRun,
-            "Countdown Seconds Before Run");
+            "Countdown Before Run");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ConfigModeState == TrainerOptions::ConfigModeStateType::ConfigModeStateType_SoundEffects,
+            "Sound Effects");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ConfigModeState == TrainerOptions::ConfigModeStateType::ConfigModeStateType_GoBack,
             "Go Back");
 
@@ -3263,15 +3328,24 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   break;
                }
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_MaxSecondsPerRun:
-               dpr.ShowMenuText("Maximum Seconds Per Run = %d", m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun);
+               dpr.ShowMenuText("Time Per Run = %d (seconds)", m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun);
                if (!wizard)
                {
                   break;
                }
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_CountdownSecondsBeforeRun:
-               dpr.ShowMenuText("Countdown Seconds Before Run = %d", m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun);
+               dpr.ShowMenuText("Countdown Before Run = %d (seconds)", m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun);
                if (!wizard)
                {
+                  break;
+               }
+            case TrainerOptions::ConfigModeStateType::ConfigModeStateType_SoundEffects:
+               if (!wizard)
+               {
+                  dpr.ShowMenuText("(%s) Pass", m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled ? "X" : "O");
+                  dpr.ShowMenuText("(%s) Fail", m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled ? "X" : "O");
+                  dpr.ShowMenuText("(%s) Time Low", m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled ? "X" : "O");
+                  dpr.ShowMenuText("(%s) Countdown", m_MenuOptions.m_TrainerOptions.m_SoundEffectsCountdownEnabled ? "X" : "O");
                   break;
                }
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_GoBack:
@@ -3322,6 +3396,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      break;
                   case TrainerOptions::ConfigModeStateType::ConfigModeStateType_CountdownSecondsBeforeRun:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCountdownSecondsBeforeRun;
+                     break;
+                  case TrainerOptions::ConfigModeStateType::ConfigModeStateType_SoundEffects:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectSoundEffects;
                      break;
                   case TrainerOptions::ConfigModeStateType::ConfigModeStateType_GoBack:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectModeOptions;
@@ -5131,7 +5208,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectMaxSecondsPerRun:
-         dpr.ShowMenuTextTitle("Maximum Seconds Per Run");
+         dpr.ShowMenuTextTitle("Time Per Run (Seconds)");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::MaxSecondsPerRunMinimum, m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun, TrainerOptions::MaxSecondsPerRunMaximum);
 
          switch (menuAction)
@@ -5168,7 +5245,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCountdownSecondsBeforeRun:
-         dpr.ShowMenuTextTitle("Countdown Seconds Before Run");
+         dpr.ShowMenuTextTitle("Countdown Before Run (Seconds)");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::CountdownSecondsBeforeRunMinimum, m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun, TrainerOptions::CountdownSecondsBeforeRunMaximum);
 
          switch (menuAction)
@@ -5189,7 +5266,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                switch (m_MenuOptions.m_TrainerOptions.m_ConfigModeState)
                {
                   case TrainerOptions::ConfigModeStateType::ConfigModeStateType_Wizard:
-                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectConfigModeOptions;
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectSoundEffects;
                      break;
                   case TrainerOptions::ConfigModeStateType::ConfigModeStateType_CountdownSecondsBeforeRun:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectConfigModeOptions;
@@ -5204,7 +5281,71 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                break;
          }
          break;
-      case MenuOptionsRecord::MenuStateType::MenuStateType_Disabled_Disabled:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectSoundEffects:
+         dpr.ShowMenuTextTitle("Sound Effects");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode == TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_Accept,
+            "Accept");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode == TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_Pass,
+            "(%s) Pass", m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled ? "X" : "O");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode == TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_Fail,
+            "(%s) Fail", m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled ? "X" : "O");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode == TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_TimeLow,
+            "(%s) Time Low", m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled ? "X" : "O");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode == TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_Countdown,
+            "(%s) Countdown", m_MenuOptions.m_TrainerOptions.m_SoundEffectsCountdownEnabled ? "X" : "O");
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
+               ProcessMenuChangeValueDec<TrainerOptions::SoundEffectsModeType>(m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode, 0, TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
+               ProcessMenuChangeValueInc<TrainerOptions::SoundEffectsModeType>(m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode, 0, TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+               switch (m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode)
+               {
+                  case TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_Accept:
+                     switch (m_MenuOptions.m_TrainerOptions.m_ConfigModeState)
+                     {
+                        case TrainerOptions::ConfigModeStateType::ConfigModeStateType_Wizard:
+                           m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectConfigModeOptions;
+                           break;
+                        case TrainerOptions::ConfigModeStateType::ConfigModeStateType_SoundEffects:
+                           m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectConfigModeOptions;
+                           break;
+                        default:
+                           InvalidEnumValue("TrainerOptions::ConfigModeStateType", menuAction);
+                           break;
+                     }
+                     break;
+                  case TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_Pass:
+                     m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled = !m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled;
+                     break;
+                  case TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_Fail:
+                     m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled = !m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled;
+                     break;
+                  case TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_TimeLow:
+                     m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled = !m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled;
+                     break;
+                  case TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_Countdown:
+                     m_MenuOptions.m_TrainerOptions.m_SoundEffectsCountdownEnabled = !m_MenuOptions.m_TrainerOptions.m_SoundEffectsCountdownEnabled;
+                     break;
+                  default:
+                     InvalidEnumValue("TrainerOptions::SoundEffectsModeType", menuAction);
+                     break;
+               }
+               break;
+            default:
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
+               break;
+         }
+         break;
+       case MenuOptionsRecord::MenuStateType::MenuStateType_Disabled_Disabled:
          dpr.ShowMenuTextTitle("Ball Control Disabled");
          dpr.ShowMenuText("Menu key continues simulation");
          dpr.ShowMenuText("Plunger returns to previous menu");
@@ -5487,7 +5628,23 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       if (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun > 0)
       {
          // countdown before run starts
-         dpr.ShowMenuTextTitle("Run %zu (of %zu) starts in %.2f seconds", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_RunRecords.size(), ((m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs) - runElapsedTimeMs) / 1000.0f);
+         float secondsBeforeStart = ((m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs) - runElapsedTimeMs) / 1000.0f;
+         if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsCountdownEnabled)
+         {
+            if (secondsBeforeStart < TrainerOptions::WarningSoundSeconds && secondsBeforeStart < m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed)
+            {
+               if (secondsBeforeStart < 1.0f)
+               {
+                  ::PlaySound(MAKEINTRESOURCE(ID_BALL_HISTORY_SOUND_EFFECT_COUNTDOWN_GO), ::GetModuleHandle(NULL), SND_RESOURCE | SND_ASYNC);
+               }
+               else
+               {
+                  ::PlaySound(MAKEINTRESOURCE(ID_BALL_HISTORY_SOUND_EFFECT_COUNTDOWN_READYSET), ::GetModuleHandle(NULL), SND_RESOURCE | SND_ASYNC);
+               }
+               m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = int(secondsBeforeStart);
+            }
+         }
+         dpr.ShowMenuTextTitle("Run %zu (of %zu) starts in %.2f seconds", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_RunRecords.size(), secondsBeforeStart);
          ShowPreviousRunRecord(dpr);
          if (!m_MenuOptions.m_MenuError.empty())
          {
@@ -5527,6 +5684,13 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
             m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = false;
             player.m_ptable->m_useTrailForBalls = m_UseTrailsForBallsInitialValue;
          }
+      }
+
+      float remainingRunTime = ((m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * OneSecondMs) - runElapsedTimeMs + (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs)) / 1000.0f;
+      if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled && remainingRunTime < TrainerOptions::WarningSoundSeconds && !m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying)
+      {
+         ::PlaySound(MAKEINTRESOURCE(ID_BALL_HISTORY_SOUND_EFFECT_TIME_LOW), ::GetModuleHandle(NULL), SND_RESOURCE | SND_ASYNC);
+         m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = true;
       }
 
       ShowCurrentRunRecord(dpr, currentTimeMs);
@@ -5600,7 +5764,13 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          currentRunRecord.m_StartToPassLocationIndexes = startToPassLocationIndexes;
          m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
          m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+         m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun;
+         m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
          m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+         if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled)
+         {
+            ::PlaySound(MAKEINTRESOURCE(ID_BALL_HISTORY_SOUND_EFFECT_PASS), ::GetModuleHandle(NULL), SND_RESOURCE);
+         }
       }
 
       bool anyFail = false;
@@ -5668,7 +5838,13 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          currentRunRecord.m_StartToFailLocationIndexes = startToFailLocationIndexes;
          m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
          m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+         m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun;
+         m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
          m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+         if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
+         {
+            ::PlaySound(MAKEINTRESOURCE(ID_BALL_HISTORY_SOUND_EFFECT_FAIL), ::GetModuleHandle(NULL), SND_RESOURCE);
+         }
       }
 
       bool oneKicker = false;
@@ -5702,6 +5878,8 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
             case TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_Reset:
                m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
                m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+               m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun;
+               m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
                m_MenuOptions.m_MenuError = "Trainer run reset - ball hit active kicker";
                break;
             case TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_Fail:
@@ -5709,7 +5887,13 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
                m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
                m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+               m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun;
+               m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
                m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+               if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
+               {
+                  ::PlaySound(MAKEINTRESOURCE(ID_BALL_HISTORY_SOUND_EFFECT_FAIL), ::GetModuleHandle(NULL), SND_RESOURCE);
+               }
                break;
             default:
                InvalidEnumValue("TrainerOptions::BallKickerBehaviorModeType", m_MenuOptions.m_ModeType);
@@ -5723,7 +5907,13 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
       m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
       m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+      m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun;
+      m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
       m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+      if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
+      {
+         ::PlaySound(MAKEINTRESOURCE(ID_BALL_HISTORY_SOUND_EFFECT_FAIL), ::GetModuleHandle(NULL), SND_RESOURCE);
+      }
    }
 }
 

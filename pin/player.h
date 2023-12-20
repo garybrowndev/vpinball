@@ -318,6 +318,7 @@ public:
       ConfigModeStateType_BallKickerBehavior,
       ConfigModeStateType_MaxSecondsPerRun,
       ConfigModeStateType_CountdownSecondsBeforeRun,
+      ConfigModeStateType_SoundEffects,
       ConfigModeStateType_GoBack,
       ConfigModeStateType_COUNT
    };
@@ -372,6 +373,13 @@ public:
       BallEndCompleteModeType_COUNT
    };
 
+   enum RunOrderModeType
+   {
+      RunOrderModeType_InOrder,
+      RunOrderModeType_Random,
+      RunOrderModeType_COUNT
+   };
+
    enum BallKickerBehaviorModeType
    {
       BallKickerBehaviorModeType_Reset,
@@ -379,11 +387,14 @@ public:
       BallKickerBehaviorModeType_COUNT
    };
 
-   enum RunOrderModeType
+   enum SoundEffectsModeType
    {
-      RunOrderModeType_InOrder,
-      RunOrderModeType_Random,
-      RunOrderModeType_COUNT
+      SoundEffectsModeType_Accept,
+      SoundEffectsModeType_Pass,
+      SoundEffectsModeType_Fail,
+      SoundEffectsModeType_Countdown,
+      SoundEffectsModeType_TimeLow,
+      SoundEffectsModeType_COUNT
    };
 
    struct BallStartOptionsRecord
@@ -466,6 +477,11 @@ public:
    BallEndCompleteModeType m_BallEndCompleteMode;
    BallKickerBehaviorModeType m_BallKickerBehaviorMode;
    RunOrderModeType m_RunOrderMode;
+   SoundEffectsModeType m_SoundEffectsMode;
+   bool m_SoundEffectsPassEnabled;
+   bool m_SoundEffectsFailEnabled;
+   bool m_SoundEffectsTimeLowEnabled;
+   bool m_SoundEffectsCountdownEnabled;
 
    S32 m_CreateBallEndZ;
 
@@ -489,6 +505,11 @@ public:
    std::vector<RunRecord> m_RunRecords;
    std::size_t m_CurrentRunRecord;
    int m_RunStartTimeMs;
+
+   int m_CountdownSoundPlayed;
+   static const float WarningSoundSeconds;
+   bool m_TimeLowSoundPlaying;
+
    bool m_SetupBallStarts;
 
    TrainerOptions();
@@ -705,6 +726,7 @@ private:
          MenuStateType_Trainer_SelectBallKickerBehaviorMode,
          MenuStateType_Trainer_SelectMaxSecondsPerRun,
          MenuStateType_Trainer_SelectCountdownSecondsBeforeRun,
+         MenuStateType_Trainer_SelectSoundEffects,
          MenuStateType_Disabled_Disabled,
          MenuStateType_COUNT
       };
@@ -819,6 +841,10 @@ private:
    static const char * TrainerModeBallKickerBehaviorModeKeyName;
    static const char * TrainerModeMaxSecondsPerRunKeyName;
    static const char * TrainerModeCountdownSecondsBeforeRunKeyName;
+   static const char * TrainerModeSoundEffectsPassEnabledKeyName;
+   static const char * TrainerModeSoundEffectsFailEnabledKeyName;
+   static const char * TrainerModeSoundEffectsTimeLowEnabledKeyName;
+   static const char * TrainerModeSoundEffectsCountdownEnabledKeyName;
    static const char * TrainerModeBallStartPositionKeyName;
    static const char * TrainerModeBallStartVelocityKeyName;
    static const char * TrainerModeBallStartAngularMomentumKeyName;
