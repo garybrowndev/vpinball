@@ -927,6 +927,9 @@ private:
 
    void InvalidEnumValue(const char * enumName, const int enumValue);
    void InvalidEnumValue(const char * enumName, const char * enumValue);
+
+   void PlaySound(UINT rcId, bool async=false);
+   void StopSound();
 };
 
 struct TimerOnOff

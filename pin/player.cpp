@@ -722,6 +722,17 @@ void BallHistory::InvalidEnumValue(const char * enumName, const char * enumValue
    m_MenuOptions.m_MenuError = errorMessage.str();
 }
 
+
+void BallHistory::PlaySound(UINT rcId, bool async)
+{
+   ::PlaySound(MAKEINTRESOURCE(rcId), ::GetModuleHandle(NULL), SND_RESOURCE | (async ? SND_ASYNC : SND_SYNC));
+}
+
+void BallHistory::StopSound()
+{
+   ::PlaySound(NULL, NULL, 0);
+}
+
 void BallHistory::CenterMouse(Player &player)
 {
    POINT p = {player.m_width / 2, player.m_height / 2};
@@ -1612,7 +1623,7 @@ void BallHistory::SetControl(bool control)
       m_Control = control;
       if (m_Control)
       {
-         ::PlaySound(NULL, NULL, 0);
+         StopSound();
          g_pplayer->m_ptable->StopAllSounds();
          g_pplayer->PauseMusic();
          g_pplayer->m_noTimeCorrect = true;
@@ -5635,11 +5646,11 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
             {
                if (secondsBeforeStart < 1.0f)
                {
-                  ::PlaySound(MAKEINTRESOURCE(ID_BALL_HISTORY_SOUND_EFFECT_COUNTDOWN_GO), ::GetModuleHandle(NULL), SND_RESOURCE | SND_ASYNC);
+                  PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_COUNTDOWN_GO, true);
                }
                else
                {
-                  ::PlaySound(MAKEINTRESOURCE(ID_BALL_HISTORY_SOUND_EFFECT_COUNTDOWN_READYSET), ::GetModuleHandle(NULL), SND_RESOURCE | SND_ASYNC);
+                  PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_COUNTDOWN_READYSET, true);
                }
                m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = int(secondsBeforeStart);
             }
@@ -5689,7 +5700,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       float remainingRunTime = ((m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * OneSecondMs) - runElapsedTimeMs + (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs)) / 1000.0f;
       if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled && remainingRunTime < TrainerOptions::WarningSoundSeconds && !m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying)
       {
-         ::PlaySound(MAKEINTRESOURCE(ID_BALL_HISTORY_SOUND_EFFECT_TIME_LOW), ::GetModuleHandle(NULL), SND_RESOURCE | SND_ASYNC);
+         PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_TIME_LOW, true);
          m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = true;
       }
 
@@ -5769,7 +5780,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
          if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled)
          {
-            ::PlaySound(MAKEINTRESOURCE(ID_BALL_HISTORY_SOUND_EFFECT_PASS), ::GetModuleHandle(NULL), SND_RESOURCE);
+            PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_PASS);
          }
       }
 
@@ -5843,7 +5854,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
          if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
          {
-            ::PlaySound(MAKEINTRESOURCE(ID_BALL_HISTORY_SOUND_EFFECT_FAIL), ::GetModuleHandle(NULL), SND_RESOURCE);
+            PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL);
          }
       }
 
@@ -5892,7 +5903,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
                if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
                {
-                  ::PlaySound(MAKEINTRESOURCE(ID_BALL_HISTORY_SOUND_EFFECT_FAIL), ::GetModuleHandle(NULL), SND_RESOURCE);
+                  PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL);
                }
                break;
             default:
@@ -5912,7 +5923,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
       if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
       {
-         ::PlaySound(MAKEINTRESOURCE(ID_BALL_HISTORY_SOUND_EFFECT_FAIL), ::GetModuleHandle(NULL), SND_RESOURCE);
+         PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL);
       }
    }
 }
