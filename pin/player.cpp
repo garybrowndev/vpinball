@@ -4448,7 +4448,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassDistance;
                      if (m_ControlVBalls.size())
                      {
-                        if (bpor.m_RadiusPercent == 0.0f)
+                        if (bpor.m_RadiusPercent == 0.0f || bpor.m_RadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
                         {
                            bpor.m_RadiusPercent = 100.0f;
                         }
@@ -4903,7 +4903,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailDistance;
                      if (m_ControlVBalls.size())
                      {
-                        if (bfor.m_RadiusPercent == 0.0f)
+                        if (bfor.m_RadiusPercent == 0.0f || bfor.m_RadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
                         {
                            bfor.m_RadiusPercent = 100.0f;
                         }
