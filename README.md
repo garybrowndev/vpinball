@@ -1,3 +1,6 @@
+Forked to create "Ball History" feature, allowing to pause, rewind and retry play.
+Also includes a trainer allowing for setup of variety of scenarios to practice.
+
 # Visual Pinball
 
 *An open source pinball table editor and simulator.*
