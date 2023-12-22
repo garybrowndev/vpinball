@@ -1,6 +1,9 @@
-Forked to create "Ball History" feature, allowing to pause, rewind and retry play.
-Also includes a trainer allowing for setup of variety of scenarios to practice.
+### Amateur pinball player who wanted to add a feature to Visual Pinball (VPX)
+### Forked vpinball to create "Ball History" feature, allowing to pause, rewind and retry play.
+### Also includes a trainer allowing for setup of variety of scenarios to practice.
+If you would like to know more, message me via Github/Linkedin/Discord or ask me about it if you see me in IRL
 
+(Original Readme below)
 # Visual Pinball
 
 *An open source pinball table editor and simulator.*
