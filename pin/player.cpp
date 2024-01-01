@@ -2983,10 +2983,37 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                // do nothing
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
-               ControlPrev();
-               break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
-               ControlNext();
+               {
+               std::size_t controlCount = 1;
+               if ((currentTimeMs - m_MenuOptions.m_SkipControlUsedMs) < MenuOptionsRecord::SkipControlIntervalMs)
+               {
+                  controlCount = MenuOptionsRecord::SkipControlStepFactor;
+               }
+               for (std::size_t x = 0; x < controlCount; x++)
+               {
+                  switch (menuAction)
+                  {
+                     case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+                     case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
+                        // do nothing;
+                        break;
+                     case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
+                        ControlPrev();
+                        break;
+                     case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
+                        ControlNext();
+                        break;
+                     case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+                        // do nothing
+                        break;
+                     default:
+                        InvalidEnumValue("NormalOptions::ModeStateType", m_MenuOptions.m_NormalOptions.m_ModeState);
+                        break;
+                  }
+               }
+               m_MenuOptions.m_SkipControlUsedMs = currentTimeMs;
+               }
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                m_MenuOptions.m_NormalOptions.m_RecallControlIndex = m_CurrentControlIndex;
