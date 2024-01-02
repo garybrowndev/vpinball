@@ -4014,6 +4014,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuTextTitle("Custom Ball Start %zu Finish Velocity", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::VelocityMinimum, static_cast<S32>(bsor.m_VelocityFinish), TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
 
+         if (bsor.m_VelocityStart != bsor.m_VelocityFinish && bsor.m_TotalVelocities == 1)
+         {
+            bsor.m_TotalVelocities = 2;
+         }
+
          dpr.ShowText("");
          ShowBallStartOptionsRecord(dpr, bsor);
 
@@ -4113,6 +4118,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuTextTitle("Custom Ball Start %zu Finish Angle", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::AngleMinimum, static_cast<S32>(bsor.m_AngleFinish), TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1);
+
+         if (bsor.m_AngleStart != bsor.m_AngleFinish && bsor.m_TotalAngles == 1)
+         {
+            bsor.m_TotalAngles = 2;
+         }
 
          dpr.ShowText("");
          ShowBallStartOptionsRecord(dpr, bsor);
