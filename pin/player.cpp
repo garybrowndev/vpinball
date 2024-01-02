@@ -3982,6 +3982,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuTextTitle("Custom Ball Start %zu Start Velocity", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::VelocityMinimum, static_cast<S32>(bsor.m_VelocityStart), TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
 
+         if (bsor.m_TotalVelocities == 1)
+         {
+            bsor.m_VelocityFinish = bsor.m_VelocityStart;
+         }
+
          dpr.ShowText("");
          ShowBallStartOptionsRecord(dpr, bsor);
 
@@ -4036,6 +4041,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                ProcessMenuChangeValueInc<float>(bsor.m_VelocityFinish, TrainerOptions::BallStartOptionsRecord::VelocityMinimum, TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+               if (bsor.m_VelocityStart == bsor.m_VelocityFinish)
+               {
+                  bsor.m_TotalVelocities = 1;
+               }
+               else
+               {
+                  if (bsor.m_TotalVelocities == 1)
+                  {
+                     bsor.m_TotalVelocities = 2;
+                  }
+               }
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartVelocityTotal;
                break;
             default:
@@ -4048,8 +4064,15 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
          TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
+         S32 minimum = TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum + (bsor.m_VelocityStart == bsor.m_VelocityFinish ? 0 : 1);
+         S32 maximum = (bsor.m_VelocityStart == bsor.m_VelocityFinish ? 1 : TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMaximum);
+
          dpr.ShowMenuTextTitle("Custom Ball Start %zu Total Velocities", m_MenuOptions.m_CurrentBallIndex + 1);
-         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum, static_cast<S32>(bsor.m_TotalVelocities), TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMaximum);
+         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", minimum, static_cast<S32>(bsor.m_TotalVelocities), maximum);
+         if (minimum == 1 && maximum == 1)
+         {
+            dpr.ShowMenuText("(Start=Finish, Total must be 1)", minimum, static_cast<S32>(bsor.m_TotalVelocities), maximum);
+         }
 
          dpr.ShowText("");
          ShowBallStartOptionsRecord(dpr, bsor);
@@ -4057,21 +4080,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType::MenuActionType_None:
-               ProcessMenuChangeValueSkip<S32>(bsor.m_TotalVelocities, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMaximum, currentTimeMs);
+               ProcessMenuChangeValueSkip<S32>(bsor.m_TotalVelocities, minimum, maximum, currentTimeMs);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
-               ProcessMenuChangeValueDec<S32>(bsor.m_TotalVelocities, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMaximum);
+               ProcessMenuChangeValueDec<S32>(bsor.m_TotalVelocities, minimum, maximum);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
-               ProcessMenuChangeValueInc<S32>(bsor.m_TotalVelocities, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum, TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMaximum);
+               ProcessMenuChangeValueInc<S32>(bsor.m_TotalVelocities, minimum, maximum);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
-               if (bsor.m_TotalVelocities == 0 || bsor.m_TotalVelocities == 1)
-               {
-                  bsor.m_VelocityFinish = bsor.m_VelocityStart;
-               }
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartAngleStart;
                break;
             default:
@@ -4086,6 +4105,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuTextTitle("Custom Ball Start %zu Start Angle", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::AngleMinimum, static_cast<S32>(bsor.m_AngleStart), TrainerOptions::BallStartOptionsRecord::AngleMaximum - 1);
+
+         if (bsor.m_TotalAngles == 1)
+         {
+            bsor.m_AngleFinish = bsor.m_AngleStart;
+         }
 
          dpr.ShowMenuText("");
          ShowBallStartOptionsRecord(dpr, bsor);
@@ -4153,8 +4177,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
          TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
+         S32 minimum = TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum + (bsor.m_AngleStart == bsor.m_AngleFinish ? 0 : 1);
+
          dpr.ShowMenuTextTitle("Custom Ball Start %zu Total Angles", m_MenuOptions.m_CurrentBallIndex + 1);
-         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum, static_cast<S32>(bsor.m_TotalAngles), TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum);
+         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", minimum, static_cast<S32>(bsor.m_TotalAngles), TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum);
 
          dpr.ShowText("");
          ShowBallStartOptionsRecord(dpr, bsor);
@@ -4162,21 +4188,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          switch (menuAction)
          {
             case MenuOptionsRecord::MenuActionType::MenuActionType_None:
-               ProcessMenuChangeValueSkip<S32>(bsor.m_TotalAngles, TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum, TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum, currentTimeMs);
+               ProcessMenuChangeValueSkip<S32>(bsor.m_TotalAngles, minimum, TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum, currentTimeMs);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
-               ProcessMenuChangeValueDec<S32>(bsor.m_TotalAngles, TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum, TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum);
+               ProcessMenuChangeValueDec<S32>(bsor.m_TotalAngles, minimum, TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
-               ProcessMenuChangeValueInc<S32>(bsor.m_TotalAngles, TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum, TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum);
+               ProcessMenuChangeValueInc<S32>(bsor.m_TotalAngles, minimum, TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
-               if (bsor.m_TotalAngles == 0 || bsor.m_TotalAngles == 1)
-               {
-                  bsor.m_AngleFinish = bsor.m_AngleStart;
-               }
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStart;
                break;
             default:
@@ -6560,7 +6582,8 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
          }
       }
    }
-   else if (input->dwOfs == player.m_rgKeys[ePlungerKey])
+   else if (input->dwOfs == player.m_rgKeys[ePlungerKey] ||
+      input->dwOfs == player.m_rgKeys[eRightMagnaSave])
    {
       if (input->dwData & 0x80)
       {
