@@ -5360,10 +5360,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "(%s) Pass", m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled ? "X" : "O");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode == TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_Fail,
             "(%s) Fail", m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled ? "X" : "O");
-         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode == TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_TimeLow,
-            "(%s) Time Low", m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled ? "X" : "O");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode == TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_Countdown,
             "(%s) Countdown", m_MenuOptions.m_TrainerOptions.m_SoundEffectsCountdownEnabled ? "X" : "O");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode == TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_TimeLow,
+            "(%s) Time Low", m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled ? "X" : "O");
 
          switch (menuAction)
          {
