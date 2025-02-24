@@ -2066,6 +2066,17 @@ void PinTable::Play(const bool cameraMode)
          m_fOverrideMinSlope = LoadValueFloatWithDefault(regKey[RegName::Player], "TablePhysicsMinSlope" + std::to_string(m_overridePhysics - 1), DEFAULT_TABLE_MIN_SLOPE);
          m_fOverrideMaxSlope = LoadValueFloatWithDefault(regKey[RegName::Player], "TablePhysicsMaxSlope" + std::to_string(m_overridePhysics - 1), DEFAULT_TABLE_MAX_SLOPE);
       }
+      else
+      {
+         m_fOverrideGravityConstant = 0.0f;
+         m_fOverrideContactFriction = 0.0f;
+         m_fOverrideElasticity = 0.0f;
+         m_fOverrideElasticityFalloff = 0.0f;
+         m_fOverrideScatterAngle = 0.0f;
+         fOverrideContactScatterAngle = 0.0f;
+         m_fOverrideMinSlope = 0.0f;
+         m_fOverrideMaxSlope = 0.0f;
+      }
 
       c_hardScatter = ANGTORAD(m_overridePhysics ? fOverrideContactScatterAngle : m_defaultScatter);
 
