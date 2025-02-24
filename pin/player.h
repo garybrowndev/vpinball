@@ -313,6 +313,7 @@ public:
       ConfigModeStateType_BallStart,
       ConfigModeStateType_BallPass,
       ConfigModeStateType_BallFail,
+      ConfigModeStateType_Difficulty,
       ConfigModeStateType_TotalRuns,
       ConfigModeStateType_RunOrder,
       ConfigModeStateType_BallKickerBehavior,
@@ -371,6 +372,23 @@ public:
       BallEndCompleteModeType_Accept,
       BallEndCompleteModeType_Select,
       BallEndCompleteModeType_COUNT
+   };
+
+   enum DifficultyConfigModeState
+   {
+      DifficultyConfigModeState_Accept,
+      DifficultyConfigModeState_GlobalDifficulty,
+      DifficultyConfigModeState_VarianceDifficulty,
+      DifficultyConfigModeState_GravityVariance,
+      DifficultyConfigModeState_COUNT
+   };
+
+   enum DifficultyVarianceModeType
+   {
+      DifficultyVarianceModeType_AboveAndBelow,
+      DifficultyVarianceModeType_AboveOnly,
+      DifficultyVarianceModeType_BelowOnly,
+      DifficultyVarianceModeType_COUNT
    };
 
    enum RunOrderModeType
@@ -475,8 +493,9 @@ public:
    BallEndFinishModeType m_BallFailFinishMode;
    BallEndAssociationModeType m_BallEndAssociationMode;
    BallEndCompleteModeType m_BallEndCompleteMode;
-   BallKickerBehaviorModeType m_BallKickerBehaviorMode;
+   DifficultyConfigModeState m_DifficultyConfigModeState;
    RunOrderModeType m_RunOrderMode;
+   BallKickerBehaviorModeType m_BallKickerBehaviorMode;
    SoundEffectsModeType m_SoundEffectsMode;
    bool m_SoundEffectsPassEnabled;
    bool m_SoundEffectsFailEnabled;
@@ -484,6 +503,20 @@ public:
    bool m_SoundEffectsCountdownEnabled;
 
    S32 m_CreateBallEndZ;
+
+   static const S32 GlobalDifficultyMinimum = 0;
+   static const S32 GlobalDifficultyMaximum = 100;
+   S32 m_GlobalDifficulty;
+
+   static const S32 VarianceDifficultyMinimum = 0;
+   static const S32 VarianceDifficultyMaximum = 100;
+   S32 m_VarianceDifficulty;
+
+   static const S32 GravityVarianceMinimum = 0;
+   static const S32 GravityVarianceMaximum = 100;
+   S32 m_GravityVariance;
+
+   DifficultyVarianceModeType m_GravityVarianceMode;
 
    static const S32 TotalRunsMinimum = 1;
    static const S32 TotalRunsMaximum = 100;
@@ -512,6 +545,9 @@ public:
    bool m_TimeLowSoundPlaying;
 
    bool m_SetupBallStarts;
+
+   bool m_SetupDifficulty;
+   float m_GravityInitial;
 
    TrainerOptions();
 };
@@ -571,7 +607,7 @@ public:
 struct BallHistory
 {
 public:
-   BallHistory();
+   BallHistory(PinTable &ptable);
    void Init(Player &player, int currentTimeMs, bool loadSettings);
    void UnInit(Player &player);
    void Process(Player &player, int currentTimeMsec);
@@ -722,6 +758,11 @@ private:
          MenuStateType_Trainer_SelectBallFailFinishMode,
          MenuStateType_Trainer_SelectBallFailDistance,
          MenuStateType_Trainer_SelectBallFailAssociations,
+         MenuStateType_Trainer_SelectDifficultyOptions,
+         MenuStateType_Trainer_SelectDifficultyGlobalDifficulty,
+         MenuStateType_Trainer_SelectDifficultyVarianceDifficulty,
+         MenuStateType_Trainer_SelectDifficultyGravityVariance,
+         MenuStateType_Trainer_SelectDifficultyGravityVarianceType,
          MenuStateType_Trainer_SelectTotalRuns,
          MenuStateType_Trainer_SelectRunOrderMode,
          MenuStateType_Trainer_SelectBallKickerBehaviorMode,
@@ -837,6 +878,10 @@ private:
    static const char * NormalModeSettingsSectionName;
    static const char * NormalModeAutoControlVerticesPosition3DKeyName;
    static const char * TrainerModeSettingsSectionName;
+   static const char * TrainerModeGlobalDifficultyKeyName;
+   static const char * TrainerModeVarianceDifficultyKeyName;
+   static const char * TrainerModeGravityVarianceKeyName;
+   static const char * TrainerModeGravityVarianceModeKeyName;
    static const char * TrainerModeTotalRunsKeyName;
    static const char * TrainerModeRunOrderModeKeyName;
    static const char * TrainerModeBallKickerBehaviorModeKeyName;

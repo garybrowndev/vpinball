@@ -134,14 +134,19 @@ TrainerOptions::TrainerOptions():
    m_BallFailFinishMode(BallEndFinishModeType::BallEndFinishModeType_Stop),
    m_BallEndAssociationMode(BallEndAssociationModeType::BallEndAssociationModeType_Accept),
    m_BallEndCompleteMode(BallEndCompleteModeType::BallEndCompleteModeType_Accept),
+   m_DifficultyConfigModeState(DifficultyConfigModeState::DifficultyConfigModeState_Accept),
+   m_GravityVarianceMode(DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow),
    m_RunOrderMode(RunOrderModeType::RunOrderModeType_InOrder),
-   m_SoundEffectsMode(SoundEffectsModeType::SoundEffectsModeType_Accept),
    m_BallKickerBehaviorMode(BallKickerBehaviorModeType::BallKickerBehaviorModeType_Reset),
+   m_SoundEffectsMode(SoundEffectsModeType::SoundEffectsModeType_Accept),
    m_SoundEffectsPassEnabled(true),
    m_SoundEffectsFailEnabled(true),
    m_SoundEffectsTimeLowEnabled(true),
    m_SoundEffectsCountdownEnabled(true),
    m_CreateBallEndZ(0),
+   m_GlobalDifficulty(0),
+   m_VarianceDifficulty(0),
+   m_GravityVariance(0),
    m_TotalRuns(5),
    m_MaxSecondsPerRun(15),
    m_CountdownSecondsBeforeRun(3),
@@ -150,7 +155,9 @@ TrainerOptions::TrainerOptions():
    m_RunStartTimeMs(0),
    m_CountdownSoundPlayed(0),
    m_TimeLowSoundPlaying(false),
-   m_SetupBallStarts(true)
+   m_SetupBallStarts(true),
+   m_SetupDifficulty(true),
+   m_GravityInitial(0.0f)
 {
 }
 
@@ -598,6 +605,10 @@ const char * BallHistory::DateSavedKeyName = "DateSaved";
 const char * BallHistory::NormalModeSettingsSectionName = "NormalModeSettings";
 const char * BallHistory::NormalModeAutoControlVerticesPosition3DKeyName = "Position3D";
 const char * BallHistory::TrainerModeSettingsSectionName = "TrainerModeSettings";
+const char * BallHistory::TrainerModeGlobalDifficultyKeyName = "GlobalDifficulty";
+const char * BallHistory::TrainerModeVarianceDifficultyKeyName = "VarianceDifficulty";
+const char * BallHistory::TrainerModeGravityVarianceKeyName = "GravityVariance";
+const char * BallHistory::TrainerModeGravityVarianceModeKeyName = "GravityVarianceMode";
 const char * BallHistory::TrainerModeTotalRunsKeyName = "TotalRuns";
 const char * BallHistory::TrainerModeRunOrderModeKeyName = "RunOrderMode";
 const char * BallHistory::TrainerModeBallKickerBehaviorModeKeyName = "BallKickerBehaviorMode";
@@ -623,7 +634,7 @@ const char * BallHistory::TrainerModeBallFailPosition3DKeyName = "FailPosition3D
 const char * BallHistory::TrainerModeBallFailRadiusPercentKeyName = "FailRadiusPercent";
 const char * BallHistory::TrainerModeBallFailAssociationsKeyName = "FailAssociations";
 
-BallHistory::BallHistory() :
+BallHistory::BallHistory(PinTable &ptable) :
    m_ShowStatus(false),
    m_Control(false),
    m_WasControlled(false),
@@ -642,6 +653,7 @@ BallHistory::BallHistory() :
    m_ActiveBallKickerTexture(nullptr),
    m_UseTrailsForBallsInitialValue(0)
 {
+   ptable.get_Gravity(&m_MenuOptions.m_TrainerOptions.m_GravityInitial);
 }
 
 bool BallHistory::GetSettingsFileName(Player &player, std::string &fileName)
@@ -780,6 +792,7 @@ void BallHistory::LoadSettings(Player &player)
    iniFile.LoadFile(m_SettingsFilePath.c_str());
    {
       // Normal Mode Settings
+ 
       std::istringstream autoControlVerticesPosition3D;
       if (LoadSettingsGetValue(iniFile, NormalModeSettingsSectionName, NormalModeAutoControlVerticesPosition3DKeyName, autoControlVerticesPosition3D) == true)
       {
@@ -794,6 +807,42 @@ void BallHistory::LoadSettings(Player &player)
 
    {
       // Trainer Mode Settings
+
+      if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeGlobalDifficultyKeyName, tempStream) == true)
+      {
+         tempStream >> m_MenuOptions.m_TrainerOptions.m_GlobalDifficulty;
+      }
+
+      if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeVarianceDifficultyKeyName, tempStream) == true)
+      {
+         tempStream >> m_MenuOptions.m_TrainerOptions.m_VarianceDifficulty;
+      }
+
+      if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeGravityVarianceKeyName, tempStream) == true)
+      {
+         tempStream >> m_MenuOptions.m_TrainerOptions.m_GravityVariance;
+      }
+
+      if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeGravityVarianceModeKeyName, tempStream) == true)
+      {
+         if (tempStream.str() == "AboveAndBelow")
+         {
+            m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode = TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow;
+         }
+         else if (tempStream.str() == "Above")
+         {
+            m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode = TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly;
+         }
+         else if (tempStream.str() == "Below")
+         {
+            m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode = TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly;
+         }
+         else
+         {
+            InvalidEnumValue("TrainerOptions::DifficultyVarianceModeType", tempStream.str().c_str());
+         }
+      }
+
       if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeTotalRunsKeyName, tempStream) == true)
       {
          tempStream >> m_MenuOptions.m_TrainerOptions.m_TotalRuns;
@@ -971,6 +1020,7 @@ void BallHistory::SaveSettings(Player &player)
 
    {
       // Normal Mode Settings
+
       std::ostringstream autoControlVerticesPosition2D;
       std::ostringstream autoControlVerticesPosition3D;
       for each (const NormalOptions::AutoControlVertex &acv in m_MenuOptions.m_NormalOptions.m_AutoControlVertices)
@@ -984,6 +1034,33 @@ void BallHistory::SaveSettings(Player &player)
 
    {
       // Trainer Mode Settings
+
+      tempStr = std::to_string(m_MenuOptions.m_TrainerOptions.m_GlobalDifficulty);
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeGlobalDifficultyKeyName, tempStr.c_str());
+
+      tempStr = std::to_string(m_MenuOptions.m_TrainerOptions.m_VarianceDifficulty);
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeVarianceDifficultyKeyName, tempStr.c_str());
+
+      tempStr = std::to_string(m_MenuOptions.m_TrainerOptions.m_GravityVariance);
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeGravityVarianceKeyName, tempStr.c_str());
+
+      switch (m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode)
+      {
+         case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow:
+            tempStr = "AboveAndBelow";
+            break;
+         case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly:
+            tempStr = "Above";
+            break;
+         case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly:
+            tempStr = "Below";
+            break;
+         default:
+            InvalidEnumValue("TrainerOptions::DifficultyVarianceModeType", m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode);
+            break;
+      }
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeGravityVarianceModeKeyName, tempStr.c_str());
+
       tempStr = std::to_string(m_MenuOptions.m_TrainerOptions.m_TotalRuns);
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeTotalRunsKeyName, tempStr.c_str());
 
@@ -1759,6 +1836,7 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
          }
          break;
       case MenuOptionsRecord::ModeType::ModeType_Trainer:
+      {
          dpr.ShowText("Mode = Trainer");
          switch (m_MenuOptions.m_TrainerOptions.m_ModeState)
          {
@@ -1795,6 +1873,9 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                break;
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_BallFail:
                dpr.ShowText("Config Mode State = Ball Fail");
+               break;
+            case TrainerOptions::ConfigModeStateType::ConfigModeStateType_Difficulty:
+               dpr.ShowText("Config Mode State = Difficulty");
                break;
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_TotalRuns:
                dpr.ShowText("Config Mode State = Total Runs");
@@ -1844,6 +1925,30 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                break;
          }
 
+         dpr.ShowText("Global Difficulty = %d", m_MenuOptions.m_TrainerOptions.m_GlobalDifficulty);
+         dpr.ShowText("Variance Difficulty = %d", m_MenuOptions.m_TrainerOptions.m_VarianceDifficulty);
+
+         float gravityCurrent = 0.0f;
+         player.m_ptable->get_Gravity(&gravityCurrent);
+         dpr.ShowText("Gravity Current = %.4f", gravityCurrent);
+         dpr.ShowText("Gravity Variance = %d", m_MenuOptions.m_TrainerOptions.m_GravityVariance);
+         dpr.ShowText("Gravity Initial = %.4f", m_MenuOptions.m_TrainerOptions.m_GravityInitial);
+         switch (m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode)
+         {
+            case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow:
+               dpr.ShowText("Gravity Variance Mode = Above and Below");
+               break;
+            case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly:
+               dpr.ShowText("Gravity Variance Mode = Above Only");
+               break;
+            case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly:
+               dpr.ShowText("Gravity Variance Mode = Below Only");
+               break;
+            default:
+               dpr.ShowText("Gravity Variance Mode = **UNKNOWN**");
+               break;
+         }
+
          dpr.ShowText("Total Runs = %d", m_MenuOptions.m_TrainerOptions.m_TotalRuns);
          dpr.ShowText("Time Per Run = %d (seconds)", m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun);
          dpr.ShowText("Countdown Before Run = %d (seconds)", m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun);
@@ -1851,13 +1956,13 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
          switch (m_MenuOptions.m_TrainerOptions.m_RunOrderMode)
          {
             case TrainerOptions::RunOrderModeType::RunOrderModeType_InOrder:
-               dpr.ShowText("Run Order = In Order");
+               dpr.ShowText("Run Order Mode = In Order");
                break;
             case TrainerOptions::RunOrderModeType::RunOrderModeType_Random:
-               dpr.ShowText("Run Order = Random");
+               dpr.ShowText("Run Order Mode = Random");
                break;
             default:
-               dpr.ShowText("Run Order = **UNKNOWN**");
+               dpr.ShowText("Run Order Mode = **UNKNOWN**");
                break;
          }
 
@@ -2048,6 +2153,7 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
             }
          }
          break;
+      }
       case MenuOptionsRecord::ModeType::ModeType_Disabled:
          dpr.ShowText("Mode = Disabled");
          break;
@@ -3188,6 +3294,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                         ToggleControl();
 
                         m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord = 0;
+                        m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
                         m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
                         m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
                         m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
@@ -3233,6 +3340,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Ball Pass");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ConfigModeState == TrainerOptions::ConfigModeStateType::ConfigModeStateType_BallFail,
             "Ball Fail");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ConfigModeState == TrainerOptions::ConfigModeStateType::ConfigModeStateType_Difficulty,
+            "Diffulty");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ConfigModeState == TrainerOptions::ConfigModeStateType::ConfigModeStateType_TotalRuns,
             "Total Runs");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_ConfigModeState == TrainerOptions::ConfigModeStateType::ConfigModeStateType_RunOrder,
@@ -3298,6 +3407,61 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   }
                   ShowBallEndOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[beorIndex]);
                }
+               if (!wizard)
+               {
+                  break;
+               }
+            case TrainerOptions::ConfigModeStateType::ConfigModeStateType_Difficulty:
+               {
+               dpr.ShowMenuText("Global Difficulty = %d", m_MenuOptions.m_TrainerOptions.m_GlobalDifficulty);
+               dpr.ShowMenuText("Variance Difficulty = %d", m_MenuOptions.m_TrainerOptions.m_VarianceDifficulty);
+
+               float gravityCurrent = 0.0f;
+               player.m_ptable->get_Gravity(&gravityCurrent);
+               dpr.ShowMenuText("Gravity Current = %.4f", gravityCurrent);
+               dpr.ShowMenuText("Gravity Variance = %d", m_MenuOptions.m_TrainerOptions.m_GravityVariance);
+               dpr.ShowMenuText("Gravity Initial = %.4f", m_MenuOptions.m_TrainerOptions.m_GravityInitial);
+               switch (m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode)
+               {
+                  case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow:
+                     dpr.ShowMenuText("Gravity Variance Mode = Above and Below");
+                     break;
+                  case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly:
+                     dpr.ShowMenuText("Gravity Variance Mode = Above Only");
+                     break;
+                  case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly:
+                     dpr.ShowMenuText("Gravity Variance Mode = Below Only");
+                     break;
+                  default:
+                     dpr.ShowMenuText("Gravity Variance Mode = **UNKNOWN**");
+                     break;
+               }
+
+               dpr.ShowMenuText("");
+
+               dpr.ShowMenuText("Override Physics = %s", player.m_ptable->m_overridePhysics ? "true" : "false");
+               dpr.ShowMenuText("Global Flipper Scatter Angle = %.4f", 0.0f);
+               dpr.ShowMenuText("Global Playfield Scatter = %.4f", player.m_ptable->m_fOverrideScatterAngle);
+               dpr.ShowMenuText("Global Default Elements Scatter = %.4f", c_hardScatter);
+               for (size_t i = 0; i < player.m_ptable->m_vedit.size(); i++)
+               {
+                  IEditable* const pedit = player.m_ptable->m_vedit[i];
+                  if (pedit->GetItemType() == eItemFlipper)
+                  {
+                     Flipper * const pflipper = static_cast<Flipper* const>(pedit);
+                     PhysicsSet physicsSet = PhysicsSet::Disable;
+                     pflipper->get_OverridePhysics(&physicsSet);
+                     dpr.ShowMenuText("Override Flipper Physics (%s) = %s", pflipper->GetName(), physicsSet == PhysicsSet::Disable ? "false" : "true");
+                  }
+               }
+               float scatter = 0.0f;
+               player.m_ptable->get_Scatter(&scatter);
+               dpr.ShowMenuText("Table Playfield Scatter Angle = %.4f", scatter);
+               float defaultScatter = 0.0f;
+               player.m_ptable->get_DefaultScatter(&defaultScatter);
+               dpr.ShowMenuText("Table Default Elements Scatter = %.4f", defaultScatter);
+               }
+
                if (!wizard)
                {
                   break;
@@ -3419,6 +3583,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      break;
                   case TrainerOptions::ConfigModeStateType::ConfigModeStateType_BallFail:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_BallFailComplete;
+                     break;
+                  case TrainerOptions::ConfigModeStateType::ConfigModeStateType_Difficulty:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyOptions;
                      break;
                   case TrainerOptions::ConfigModeStateType::ConfigModeStateType_TotalRuns:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectTotalRuns;
@@ -4748,7 +4915,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      switch (m_MenuOptions.m_TrainerOptions.m_ConfigModeState)
                      {
                         case TrainerOptions::ConfigModeStateType::ConfigModeStateType_Wizard:
-                           m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectTotalRuns;
+                           m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyOptions;
                            break;
                         case TrainerOptions::ConfigModeStateType::ConfigModeStateType_BallFail:
                            m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectConfigModeOptions;
@@ -5118,7 +5285,229 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
          }
          break;
-      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectTotalRuns:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyOptions:
+         {
+         dpr.ShowMenuTextTitle("Difficulty Options");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_Accept,
+            "Accept");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_GlobalDifficulty,
+            "Global Difficulty");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_VarianceDifficulty,
+            "Variance Difficulty");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_GravityVariance,
+            "Gravity Variance");
+
+         dpr.ShowMenuText("");
+
+         bool acceptMode = m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_Accept;
+         switch (m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState)
+         {
+            case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_Accept:
+               // fall through
+            case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_GlobalDifficulty:
+               dpr.ShowMenuText("Global Difficulty = %d", m_MenuOptions.m_TrainerOptions.m_GlobalDifficulty);
+               if (!acceptMode)
+               {
+                  break;
+               }
+            case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_VarianceDifficulty:
+               dpr.ShowMenuText("Variance Difficulty = %d", m_MenuOptions.m_TrainerOptions.m_VarianceDifficulty);
+               if (!acceptMode)
+               {
+                  break;
+               }
+            case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_GravityVariance:
+               float gravityCurrent = 0.0f;
+               player.m_ptable->get_Gravity(&gravityCurrent);
+               dpr.ShowMenuText("Gravity Current = %.4f", gravityCurrent);
+               dpr.ShowMenuText("Gravity Variance = %d", m_MenuOptions.m_TrainerOptions.m_GravityVariance);
+               dpr.ShowMenuText("Gravity Initial = %.4f", m_MenuOptions.m_TrainerOptions.m_GravityInitial);
+               if (!acceptMode)
+               {
+                  break;
+               }
+         }
+
+         // TODO GARY Logic
+         // 
+         // - Variance
+         // -- Values
+         // --- Playfield Friction
+         // ---- PinTable::get_Friction() / PinTable::put_Friction()
+         // --- Flipper Strength
+         // ---- Flipper::get_Strength() / Flipper::put_Strength()
+         // --- Flipper Friction
+         // ---- Flipper::get_Friction() / Flipper::put_Friction()
+         // -- Options for each value
+         // --- Choose a value from 0% to 100%
+         // ---- [0%] = Do not vary
+         // ---- (0%, 100%] = Vary this percent (%) amount above or below the current value
+         // --- Vary type
+         // ---- Above and below
+         // ---- Above only
+         // ---- Below only
+         //
+         // Abilities
+         //  - Don't vary
+         //  - Vary both directions
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
+               ProcessMenuChangeValueDec<TrainerOptions::DifficultyConfigModeState>(m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState, 0, TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
+               ProcessMenuChangeValueInc<TrainerOptions::DifficultyConfigModeState>(m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState, 0, TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+               switch (m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState)
+               {
+                  case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_Accept:
+                     switch (m_MenuOptions.m_TrainerOptions.m_ConfigModeState)
+                     {
+                        case TrainerOptions::ConfigModeStateType::ConfigModeStateType_Wizard:
+                           m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectTotalRuns;
+                           break;
+                        case TrainerOptions::ConfigModeStateType::ConfigModeStateType_Difficulty:
+                           m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectConfigModeOptions;
+                           break;
+                        default:
+                           InvalidEnumValue("TrainerOptions::ConfigModeStateType", menuAction);
+                           break;
+                     }
+                     break;
+                  case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_GlobalDifficulty:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyGlobalDifficulty;
+                     break;
+                  case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_VarianceDifficulty:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyVarianceDifficulty;
+                     break;
+                  case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_GravityVariance:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyGravityVariance;
+                     break;
+                  default:
+                     InvalidEnumValue("TrainerOptions::ModeStateType", m_MenuOptions.m_TrainerOptions.m_ModeState);
+                     break;
+                  }
+               break;
+            default:
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
+               break;
+         }
+         }
+         break;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyGlobalDifficulty:
+         dpr.ShowMenuTextTitle("Global Difficulty");
+         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::GlobalDifficultyMinimum, m_MenuOptions.m_TrainerOptions.m_GlobalDifficulty, TrainerOptions::GlobalDifficultyMaximum);
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+               ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_GlobalDifficulty, TrainerOptions::GlobalDifficultyMinimum, TrainerOptions::GlobalDifficultyMaximum, currentTimeMs);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
+               ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_GlobalDifficulty, TrainerOptions::GlobalDifficultyMinimum, TrainerOptions::GlobalDifficultyMaximum);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
+               ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_GlobalDifficulty, TrainerOptions::GlobalDifficultyMinimum, TrainerOptions::GlobalDifficultyMaximum);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyOptions;
+               break;
+            default:
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
+               break;
+         }
+         break;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyVarianceDifficulty:
+         dpr.ShowMenuTextTitle("Variance Difficulty");
+         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::VarianceDifficultyMinimum, m_MenuOptions.m_TrainerOptions.m_VarianceDifficulty, TrainerOptions::VarianceDifficultyMaximum);
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+               ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_VarianceDifficulty, TrainerOptions::VarianceDifficultyMinimum, TrainerOptions::VarianceDifficultyMaximum, currentTimeMs);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
+               ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_VarianceDifficulty, TrainerOptions::VarianceDifficultyMinimum, TrainerOptions::VarianceDifficultyMaximum);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
+               ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_VarianceDifficulty, TrainerOptions::VarianceDifficultyMinimum, TrainerOptions::VarianceDifficultyMaximum);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyOptions;
+               break;
+            default:
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
+               break;
+         }
+         break;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyGravityVariance:
+         dpr.ShowMenuTextTitle("Gravity Variance");
+         dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::GravityVarianceMinimum, m_MenuOptions.m_TrainerOptions.m_GravityVariance, TrainerOptions::GravityVarianceMaximum);
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+               ProcessMenuChangeValueSkip<S32>(m_MenuOptions.m_TrainerOptions.m_GravityVariance, TrainerOptions::GravityVarianceMinimum, TrainerOptions::GravityVarianceMaximum, currentTimeMs);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
+               ProcessMenuChangeValueDec<S32>(m_MenuOptions.m_TrainerOptions.m_GravityVariance, TrainerOptions::GravityVarianceMinimum, TrainerOptions::GravityVarianceMaximum);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
+               ProcessMenuChangeValueInc<S32>(m_MenuOptions.m_TrainerOptions.m_GravityVariance, TrainerOptions::GravityVarianceMinimum, TrainerOptions::GravityVarianceMaximum);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyGravityVarianceType;
+               break;
+            default:
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
+               break;
+         }
+         break;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyGravityVarianceType:
+         dpr.ShowMenuTextTitle("Gravity Variance Mode");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow,
+            "Above and Below");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly,
+            "Above Only");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly,
+            "Below Only");
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
+               ProcessMenuChangeValueDec<TrainerOptions::DifficultyVarianceModeType>(m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode, 0, TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
+               ProcessMenuChangeValueInc<TrainerOptions::DifficultyVarianceModeType>(m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode, 0, TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyOptions;
+               break;
+            default:
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
+               break;
+         }
+         break;
+       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectTotalRuns:
          {
          bool anyCustom = false;
          std::size_t totalPermutations = m_MenuOptions.m_TrainerOptions.m_TotalRuns;
@@ -5662,6 +6051,8 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                InvalidEnumValue("TrainerOptions::RunOrderModeType", m_MenuOptions.m_TrainerOptions.m_RunOrderMode);
                break;
          }
+
+         player.m_ptable->put_Gravity(m_MenuOptions.m_TrainerOptions.m_GravityInitial);
       }
 
       m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = currentTimeMs;
@@ -5757,6 +6148,53 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          }
       }
 
+      if (m_MenuOptions.m_TrainerOptions.m_SetupDifficulty)
+      {
+         player.m_ptable->SetGlobalDifficulty(float(m_MenuOptions.m_TrainerOptions.m_GlobalDifficulty));
+
+         if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord > 0)
+         {
+            if (m_MenuOptions.m_TrainerOptions.m_GravityVariance > 0)
+            {
+               float gravityCurrent = 0.0f;
+               player.m_ptable->get_Gravity(&gravityCurrent);
+
+               float direction = 0.0f;
+               float minGravity = m_MenuOptions.m_TrainerOptions.m_GravityInitial;
+               float maxGravity = m_MenuOptions.m_TrainerOptions.m_GravityInitial;
+               float gravityVariance = m_MenuOptions.m_TrainerOptions.m_GravityInitial * m_MenuOptions.m_TrainerOptions.m_GravityVariance / 100.0f;
+               switch (m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode)
+               {
+                  case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow:
+                     direction = rand_mt_m11() >= 0.0f ? 0.5f : -0.5f;
+                     minGravity -= gravityVariance;
+                     maxGravity += gravityVariance;
+                     break;
+                  case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly:
+                     direction = 1.0f;
+                     maxGravity += gravityVariance;
+                     break;
+                  case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly:
+                     direction = -1.0f;
+                     minGravity -= gravityVariance;
+                     break;
+                  default:
+                     InvalidEnumValue("TrainerOptions::DifficultyVarianceModeType", m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode);
+                     break;
+               }
+
+               float gravityRange = maxGravity - minGravity;
+
+               gravityCurrent += (float(m_MenuOptions.m_TrainerOptions.m_VarianceDifficulty) / TrainerOptions::VarianceDifficultyMaximum) * gravityRange * direction;
+               gravityCurrent = std::max(minGravity, std::min(gravityCurrent, maxGravity));
+
+               player.m_ptable->put_Gravity(gravityCurrent);
+            }
+         }
+
+         m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = false;
+      }
+         
       float remainingRunTime = ((m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * OneSecondMs) - runElapsedTimeMs + (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs)) / 1000.0f;
       if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled && remainingRunTime < TrainerOptions::TimeLowSoundSeconds && !m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying)
       {
@@ -5835,6 +6273,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
          currentRunRecord.m_StartToPassLocationIndexes = startToPassLocationIndexes;
          m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
+         m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
          m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
          m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
          m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
@@ -5908,6 +6347,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
          currentRunRecord.m_StartToFailLocationIndexes = startToFailLocationIndexes;
          m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
+         m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
          m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
          m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
          m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
@@ -5948,6 +6388,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          {
             case TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_Reset:
                m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
+               m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
                m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
                m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
                m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
@@ -5957,6 +6398,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_FailedKicker;
                currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
                m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
+               m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
                m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
                m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
                m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
@@ -5977,6 +6419,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_FailedTimeElapsed;
       currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
       m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
+      m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
       m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
       m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
       m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
@@ -6651,7 +7094,9 @@ static unsigned int stats_drawn_static_triangles = 0;
 INT_PTR CALLBACK PauseProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 
-Player::Player(const bool cameraMode, PinTable * const ptable) : m_cameraMode(cameraMode)
+Player::Player(const bool cameraMode, PinTable * const ptable):
+   m_cameraMode(cameraMode),
+   m_BallHistory(*ptable)
 {
 #if defined(_M_ARM64)
 #pragma message ( "Warning: No CPU float ignore denorm implemented" )
