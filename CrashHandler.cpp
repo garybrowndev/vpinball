@@ -180,9 +180,15 @@ namespace
 
       if (exceptionPtrs->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION)
       {
-         fprintf(f, "Attempt to %s 0x%08X\n",
+#ifdef _WIN64
+         fprintf(f, "Attempt to %s 0x%llX\n",
             (exceptionPtrs->ExceptionRecord->ExceptionInformation[0] == 1 ?
             "write to" : "read from"), exceptionPtrs->ExceptionRecord->ExceptionInformation[1]);
+#else
+         fprintf(f, "Attempt to %s 0x%lX\n",
+            (exceptionPtrs->ExceptionRecord->ExceptionInformation[0] == 1 ?
+            "write to" : "read from"), exceptionPtrs->ExceptionRecord->ExceptionInformation[1]);
+#endif
       }
       const DWORD threadId = ::GetCurrentThreadId();
       fprintf(f, "Thread ID: 0x%X [%lu]\n\n", threadId, threadId);
@@ -238,13 +244,13 @@ namespace
    void WriteMemoryStatus(FILE* f, const rde::MemoryStatus& status)
    {
       fprintf(f, "Memory status\n=============\n");
-      fprintf(f, "Total Reserved: %uK (%uM) bytes\n", status.totalReserved >> 10,
+      fprintf(f, "Total Reserved: %zuK (%zuM) bytes\n", status.totalReserved >> 10,
          status.totalReserved >> 20);
-      fprintf(f, "Total Commited: %uK (%uM) bytes\n", status.totalCommited >> 10,
+      fprintf(f, "Total Commited: %zuK (%zuM) bytes\n", status.totalCommited >> 10,
          status.totalCommited >> 20);
-      fprintf(f, "Total Free: %uK (%uM) bytes\n", status.totalFree >> 10,
+      fprintf(f, "Total Free: %zuK (%zuM) bytes\n", status.totalFree >> 10,
          status.totalFree >> 20);
-      fprintf(f, "Largest Free: %uK (%uM) bytes\n\n", status.largestFree >> 10,
+      fprintf(f, "Largest Free: %zuK (%zuM) bytes\n\n", status.largestFree >> 10,
          status.largestFree >> 20);
    }
 
@@ -259,16 +265,16 @@ namespace
 #pragma message ( "Warning: No CPU state debug output implemented yet" )
 #else
 #ifdef _WIN64
-      fprintf(f, "RAX=%08X RBX=%08X RCX=%08X RDX=%08X\n" \
-         "RSI=%08X RDI=%08X RBP=%08X RSP=%08X RIP=%08X\n" \
-         "FLG=%08X CS=%04X DS=%04X SS=%04X ES=%04X FS=%04X GS=%04X\n\n",
+      fprintf(f, "RAX=%llX RBX=%llX RCX=%llX RDX=%llX\n" \
+         "RSI=%llX RDI=%llX RBP=%llX RSP=%llX RIP=%llX\n" \
+         "FLG=%04X CS=%04X DS=%04X SS=%04X ES=%04X FS=%04X GS=%04X\n\n",
          ctx->Rax, ctx->Rbx, ctx->Rcx, ctx->Rdx, ctx->Rsi, ctx->Rdi,
          ctx->Rbp, ctx->Rsp, ctx->Rip, ctx->EFlags, ctx->SegCs,
          ctx->SegDs, ctx->SegSs, ctx->SegEs, ctx->SegFs, ctx->SegGs);
 #else
-      fprintf(f, "EAX=%08X EBX=%08X ECX=%08X EDX=%08X\n" \
-         "ESI=%08X EDI=%08X EBP=%08X ESP=%08X EIP=%08X\n" \
-         "FLG=%08X CS=%04X DS=%04X SS=%04X ES=%04X FS=%04X GS=%04X\n\n",
+      fprintf(f, "EAX=%lX EBX=%lX ECX=%lX EDX=%lX\n" \
+         "ESI=%lX EDI=%lX EBP=%lX ESP=%lX EIP=%lX\n" \
+         "FLG=%lX CS=%04X DS=%04X SS=%04X ES=%04X FS=%04X GS=%04X\n\n",
          ctx->Eax, ctx->Ebx, ctx->Ecx, ctx->Edx, ctx->Esi, ctx->Edi,
          ctx->Ebp, ctx->Esp, ctx->Eip, ctx->EFlags, ctx->SegCs,
          ctx->SegDs, ctx->SegSs, ctx->SegEs, ctx->SegFs, ctx->SegGs);

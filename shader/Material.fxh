@@ -80,7 +80,7 @@ float3 DoPointLight(const float3 pos, const float3 N, const float3 V, const floa
 	 const float LdotH = dot(L, H);
 	 const float VdotH = dot(V, H);
 	 if ((NdotH > 0.0) && (LdotH > 0.0) && (VdotH > 0.0))
-		Out += FresnelSchlick(glossy, LdotH, edge) * (((glossyPower + 1.0) / (8.0*VdotH)) * pow(NdotH, glossyPower));
+		Out += FresnelSchlick(glossy, LdotH, edge) * (((glossyPower + 1.0) / (8.0*VdotH)) * pow(abs(NdotH), glossyPower));
    }
 
    //float fAtten = saturate( 1.0 - dot(lightDir/cAmbient_LightRange.w, lightDir/cAmbient_LightRange.w) );

@@ -1236,7 +1236,7 @@ void VPinball::UpdateRecentFileList(const string& szfilename)
          menuInfo.fState = MFS_ENABLED;
          menuInfo.wID = RECENT_FIRST_MENU_IDM + (UINT)i;
          menuInfo.dwTypeData = recentMenuname;
-         menuInfo.cch = strlen(recentMenuname);
+         menuInfo.cch = UINT(strlen(recentMenuname));
 
          menuFile.InsertMenuItem(count, menuInfo, TRUE);
          //or: menuFile.InsertMenu(count, MF_BYPOSITION | MF_ENABLED | MF_STRING, RECENT_FIRST_MENU_IDM + (UINT)i, recentMenuname);

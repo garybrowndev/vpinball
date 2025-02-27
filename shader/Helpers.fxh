@@ -115,7 +115,7 @@ float InvsRGB(const float color)
     if (color <= 0.04045) // 0.03928 ?
         return color * (1.0/12.92);
     else
-        return pow(color * (1.0/1.055) + (0.055/1.055), 2.4);
+        return pow(abs(color * (1.0/1.055) + (0.055/1.055)), 2.4);
 }
 
 float InvRec709(const float color)
