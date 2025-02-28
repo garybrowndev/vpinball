@@ -291,7 +291,7 @@ struct BallHistoryRecord
    BallHistoryRecord(int timeMs);
    void Set(const Ball * controlVBall, BallHistoryState &bhr);
    void Set(std::vector<Ball*> &controlVBalls, int timeMs);
-   void Insert(const Ball * controlVBall, int insertIndex);
+   void Insert(const Ball * controlVBall, std::size_t insertIndex);
 };
 
 class TrainerOptions
@@ -377,7 +377,7 @@ public:
    enum DifficultyConfigModeState
    {
       DifficultyConfigModeState_Accept,
-      DifficultyConfigModeState_GlobalDifficulty,
+      DifficultyConfigModeState_GameplayDifficulty,
       DifficultyConfigModeState_VarianceDifficulty,
       DifficultyConfigModeState_GravityVariance,
       DifficultyConfigModeState_COUNT
@@ -501,12 +501,13 @@ public:
    bool m_SoundEffectsFailEnabled;
    bool m_SoundEffectsTimeLowEnabled;
    bool m_SoundEffectsCountdownEnabled;
+   bool m_SoundEffectsMenuPlayed;
 
    S32 m_CreateBallEndZ;
 
-   static const S32 GlobalDifficultyMinimum = 0;
-   static const S32 GlobalDifficultyMaximum = 100;
-   S32 m_GlobalDifficulty;
+   static const S32 GameplayDifficultyMinimum = 0;
+   static const S32 GameplayDifficultyMaximum = 100;
+   S32 m_GameplayDifficulty;
 
    static const S32 VarianceDifficultyMinimum = 0;
    static const S32 VarianceDifficultyMaximum = 100;
@@ -548,6 +549,7 @@ public:
 
    bool m_SetupDifficulty;
    float m_GravityInitial;
+   S32 m_GameplayDifficultyInitial;
 
    TrainerOptions();
 };
@@ -565,11 +567,11 @@ public:
       ModeStateType_COUNT
    };
 
-   enum SetupRecallBallHistoryModeType
+   enum ConfigureRecallBallHistoryModeType
    {
-      SetupRecallBallHistoryModeType_Select,
-      SetupRecallBallHistoryModeType_Disable,
-      SetupRecallBallHistoryModeType_COUNT
+      ConfigureRecallBallHistoryModeType_Select,
+      ConfigureRecallBallHistoryModeType_Disable,
+      ConfigureRecallBallHistoryModeType_COUNT
    };
 
    enum ClearAutoControlLocationsModeType
@@ -592,7 +594,7 @@ public:
 
    ModeStateType m_ModeState;
 
-   SetupRecallBallHistoryModeType m_SetupRecallBallHistoryMode;
+   ConfigureRecallBallHistoryModeType m_ConfigureRecallBallHistoryMode;
    std::size_t m_RecallControlIndex;
 
    ClearAutoControlLocationsModeType m_ClearAutoControlLocationsMode;
@@ -689,6 +691,7 @@ private:
       void ShowText(const char * format, ...);
       void ShowTextPos(int x, int y, const char * format, ...);
       void ShowTextTitle(const char * format, ...);
+      void ShowTextWithMenu(bool isMenu, const char * format, ...);
       void ShowMenuText(const char * format, ...);
       void ShowMenuTextPos(int x, int y, const char * format, ...);
       void ShowMenuTextTitle(const char * format, ...);
@@ -728,7 +731,7 @@ private:
          MenuStateType_Root_SelectMode,
          MenuStateType_Normal_SelectModeOptions,
          MenuStateType_Normal_SelectCurrentBallHistory,
-         MenuStateType_Normal_SetupRecallBallHistory,
+         MenuStateType_Normal_ConfigureRecallBallHistory,
          MenuStateType_Normal_SelectRecallBallHistory,
          MenuStateType_Normal_ManageAutoControlLocations,
          MenuStateType_Normal_ClearAutoControlLocations,
@@ -759,7 +762,7 @@ private:
          MenuStateType_Trainer_SelectBallFailDistance,
          MenuStateType_Trainer_SelectBallFailAssociations,
          MenuStateType_Trainer_SelectDifficultyOptions,
-         MenuStateType_Trainer_SelectDifficultyGlobalDifficulty,
+         MenuStateType_Trainer_SelectDifficultyGameplayDifficulty,
          MenuStateType_Trainer_SelectDifficultyVarianceDifficulty,
          MenuStateType_Trainer_SelectDifficultyGravityVariance,
          MenuStateType_Trainer_SelectDifficultyGravityVarianceType,
@@ -878,7 +881,7 @@ private:
    static const char * NormalModeSettingsSectionName;
    static const char * NormalModeAutoControlVerticesPosition3DKeyName;
    static const char * TrainerModeSettingsSectionName;
-   static const char * TrainerModeGlobalDifficultyKeyName;
+   static const char * TrainerModeGameplayDifficultyKeyName;
    static const char * TrainerModeVarianceDifficultyKeyName;
    static const char * TrainerModeGravityVarianceKeyName;
    static const char * TrainerModeGravityVarianceModeKeyName;
@@ -934,11 +937,17 @@ private:
    void CalculateAngleVelocityStep(TrainerOptions::BallStartOptionsRecord &bsor, float &angleStep, float &velocityStep);
    void UpdateBallState(BallHistoryRecord &ballHistoryRecord);
    void ShowStatus(Player &player, int currentTimeMs);
+   void ShowRecallBall(Player &player, DebugPrintRecord &dpr);
    void ShowAutoControlVertices(Player &player, DebugPrintRecord &dpr);
    void ShowPreviousRunRecord(DebugPrintRecord &dpr);
    void ShowCurrentRunRecord(DebugPrintRecord &dpr, int currentTimeMs);
    void ShowBallStartOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallStartOptionsRecord &bsor);
    void ShowBallEndOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallEndOptionsRecord &beor);
+   void ShowDifficultyTableConstants(DebugPrintRecord &dpr, Player &player);
+   void ShowDifficultyVarianceMode(DebugPrintRecord &dpr, bool isMenu, const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode);
+   void ShowDifficultyVarianceRange(DebugPrintRecord &dpr, bool isMenu, const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, S32 variance, float initial);
+   void ShowDescription(DebugPrintRecord &dpr, const std::vector<std::string> &description);
+   void InitBallStartOptionRecords(DebugPrintRecord &dpr);
    void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs);
    void ProcessMode(Player &player, int currentTimeMs);
    void ProcessModeNormal(Player &player);
@@ -957,6 +966,7 @@ private:
    float DistancePixels(POINT &p1, POINT &p2);
    float DistancePixels(const Vertex3Ds &pos1, const Vertex3Ds &pos2);
    float VelocityPixels(const Vertex3Ds &vel);
+   char GetBallHistoryKey(Player &player, EnumAssignKeys enumAssignKey);
    POINT Get2DPointFrom3D(Player &player, const Vertex3Ds& vertex);
    Vertex3Ds GetKickerPosition(Kicker &kicker);
    bool ControlNextMove();
