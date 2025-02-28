@@ -2829,7 +2829,7 @@ void BallHistory::DrawAngleVelocityPreview(Player &player, TrainerOptions::BallS
    memcpy(buf, testVertices.data(), testVertices.size() * sizeof(testVertices[0]));
    testVerticesVB->unlock();
 
-   player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::TRIANGLEFAN, MY_D3DFVF_COLOR_VERTEX, testVerticesVB, 0, testVertices.size(), false);
+   player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::TRIANGLEFAN, MY_D3DFVF_COLOR_VERTEX, testVerticesVB, 0, DWORD(testVertices.size()), false);
 
    SAFE_BUFFER_RELEASE(testVerticesVB);
 }
@@ -6905,7 +6905,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                m_MenuOptions.m_TrainerOptions.m_RunRecords.back().m_StartAngularMomentums.push_back(bsor.m_AngMom);
             }
 
-            S32 next = indexes.size() - 1;
+            S32 next = S32(indexes.size() - 1);
             while (next >= 0 && (indexes[next] + 1 >= angleAndVelocityPairs[next].size()))
             {
                next--;
@@ -7573,7 +7573,7 @@ void BallHistory::DrawLine(Player &player, const Vertex3Ds &posA, const Vertex3D
       memcpy(buf, testVertices.data(), testVertices.size() * sizeof(testVertices[0]));
       testVerticesVB->unlock();
 
-      player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::LINELIST, MY_D3DFVF_COLOR_VERTEX, testVerticesVB, 0, testVertices.size(), false);
+      player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::LINELIST, MY_D3DFVF_COLOR_VERTEX, testVerticesVB, 0, DWORD(testVertices.size()), false);
 
       SAFE_BUFFER_RELEASE(testVerticesVB);
    }
@@ -7589,7 +7589,7 @@ void BallHistory::DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float b
    std::vector<Vertex3DColor> testVertices;
    testVertices.push_back({pos.x, pos.y, heightZ, color});
 
-   float angleStep = (2.0f * M_PI) / NumTriangles;
+   float angleStep = (2.0f * float(M_PI)) / NumTriangles;
    float currentAngle = 0.0f;
    for (std::size_t triangleIndex = 0; triangleIndex < NumTriangles; triangleIndex++)
    {
@@ -7612,7 +7612,7 @@ void BallHistory::DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float b
    memcpy(buf, testVertices.data(), testVertices.size() * sizeof(testVertices[0]));
    testVerticesVB->unlock();
 
-   player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::TRIANGLEFAN, MY_D3DFVF_COLOR_VERTEX, testVerticesVB, 0, testVertices.size(), false);
+   player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::TRIANGLEFAN, MY_D3DFVF_COLOR_VERTEX, testVerticesVB, 0, DWORD(testVertices.size()), false);
 
    SAFE_BUFFER_RELEASE(testVerticesVB);
 }

@@ -57,7 +57,10 @@ namespace
       {
          OSVERSIONINFOEX sysInfo = {};
          sysInfo.dwOSVersionInfoSize = sizeof(sysInfo);
+         #pragma warning( push )
+         #pragma warning( disable : 4996 )
          ::GetVersionEx((OSVERSIONINFO*)&sysInfo);
+         #pragma warning( pop )
 
          major = sysInfo.dwMajorVersion;
          minor = sysInfo.dwMinorVersion;
