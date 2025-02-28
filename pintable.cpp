@@ -3640,8 +3640,8 @@ HRESULT PinTable::LoadGameFromStorage(IStorage *pstgRoot)
             for (size_t i = 0; i < m_vedit.size(); ++i)
                if (m_vedit[i]->GetItemType() == ItemTypeEnum::eItemPrimitive && strcmp(m_vedit[i]->GetName(), "playfield_mesh") == 0)
                {
-                  ((Primitive*)m_vedit[i])->put_IsToy(False);
-                  ((Primitive*)m_vedit[i])->put_Collidable(True);
+                  ((Primitive*)m_vedit[i])->put_IsToy(VARIANT_FALSE);
+                  ((Primitive*)m_vedit[i])->put_Collidable(VARIANT_TRUE);
                }
 
          //////// End Authentication block

@@ -34,7 +34,9 @@
 //#include <atlcom.h>
 #include <atlbase.h>
 //#include <atlhost.h>
-#include <atlctl.h>
+//#include <atlctl.h>
+#include <atlcom.h>
+#include <ObjSafe.h>
 //#include <cassert>
 
 //#include <commctrl.h>
