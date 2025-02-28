@@ -344,7 +344,7 @@ BOOL KeysConfigDialog::OnInitDialog()
     const float legacyNudgeStrength = LoadValueFloatWithDefault(regKey[RegName::Player], "LegacyNudgeStrength"s, 1.f);
     SetDlgItemInt(IDC_LEGACY_NUDGE_STRENGTH, quantizeUnsignedPercent(legacyNudgeStrength), FALSE);
 
-    for (unsigned int i = 0; i <= 31; ++i)
+    for (unsigned int i = 0; i <= 32; ++i)
     {
         HRESULT hr;
         int item,selected;
@@ -382,6 +382,7 @@ BOOL KeysConfigDialog::OnInitDialog()
             case 29:hr = LoadValue(regKey[RegName::Player], "JoyPMEnter"s, selected); item = IDC_JOYPMENTER; break;
             case 30:hr = LoadValue(regKey[RegName::Player], "JoyLockbarKey"s, selected); item = IDC_JOYLOCKBARCOMBO; break;
             case 31:hr = LoadValue(regKey[RegName::Player], "BallHistoryMenu"s, selected); item = IDC_JOYBHMENUCOMBO; break;
+            case 32:hr = LoadValue(regKey[RegName::Player], "BallHistoryRecall"s, selected); item = IDC_JOYBHRECALLCOMBO; break;
         }
 
         if (hr != S_OK)
@@ -949,6 +950,7 @@ void KeysConfigDialog::OnOK()
     SetValue(IDC_LRAXISCOMBO, regKey[RegName::Player], "LRAxis"s);
     SetValue(IDC_UDAXISCOMBO, regKey[RegName::Player], "UDAxis"s);
     SetValue(IDC_JOYBHMENUCOMBO, regKey[RegName::Player], "BallHistoryMenu"s);
+    SetValue(IDC_JOYBHRECALLCOMBO, regKey[RegName::Player], "BallHistoryRecall"s);
 
     size_t selected;
     int newvalue;
