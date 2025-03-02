@@ -380,6 +380,7 @@ public:
       DifficultyConfigModeState_GameplayDifficulty,
       DifficultyConfigModeState_VarianceDifficulty,
       DifficultyConfigModeState_GravityVariance,
+      DifficultyConfigModeState_PlayfieldFrictionVariance,
       DifficultyConfigModeState_COUNT
    };
 
@@ -459,7 +460,7 @@ public:
       std::vector<std::tuple<int, Vertex3Ds>> m_StopBallsTracker;
 
       BallEndOptionsRecord();
-      BallEndOptionsRecord(Vertex3Ds &pos, float radiusPercent);
+      BallEndOptionsRecord(const Vertex3Ds &pos, float radiusPercent);
    };
 
    struct RunRecord
@@ -519,6 +520,12 @@ public:
 
    DifficultyVarianceModeType m_GravityVarianceMode;
 
+   static const S32 PlayfieldFrictionVarianceMinimum = 0;
+   static const S32 PlayfieldFrictionVarianceMaximum = 100;
+   S32 m_PlayfieldFrictionVariance;
+
+   DifficultyVarianceModeType m_PlayfieldFrictionVarianceMode;
+
    static const S32 TotalRunsMinimum = 1;
    static const S32 TotalRunsMaximum = 100;
    S32 m_TotalRuns;
@@ -548,8 +555,9 @@ public:
    bool m_SetupBallStarts;
 
    bool m_SetupDifficulty;
-   float m_GravityInitial;
    S32 m_GameplayDifficultyInitial;
+   float m_GravityInitial;
+   float m_PlayfieldFrictionInitial;
 
    TrainerOptions();
 };
@@ -766,6 +774,8 @@ private:
          MenuStateType_Trainer_SelectDifficultyVarianceDifficulty,
          MenuStateType_Trainer_SelectDifficultyGravityVariance,
          MenuStateType_Trainer_SelectDifficultyGravityVarianceType,
+         MenuStateType_Trainer_SelectDifficultyPlayfieldFrictionVariance,
+         MenuStateType_Trainer_SelectDifficultyPlayfieldFrictionVarianceType,
          MenuStateType_Trainer_SelectTotalRuns,
          MenuStateType_Trainer_SelectRunOrderMode,
          MenuStateType_Trainer_SelectBallKickerBehaviorMode,
@@ -885,6 +895,8 @@ private:
    static const char * TrainerModeVarianceDifficultyKeyName;
    static const char * TrainerModeGravityVarianceKeyName;
    static const char * TrainerModeGravityVarianceModeKeyName;
+   static const char * TrainerModePlayfieldFrictionVarianceKeyName;
+   static const char * TrainerModePlayfieldFrictionVarianceModeKeyName;
    static const char * TrainerModeTotalRunsKeyName;
    static const char * TrainerModeRunOrderModeKeyName;
    static const char * TrainerModeBallKickerBehaviorModeKeyName;
@@ -947,6 +959,7 @@ private:
    void ShowDifficultyVarianceMode(DebugPrintRecord &dpr, bool isMenu, const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode);
    void ShowDifficultyVarianceRange(DebugPrintRecord &dpr, bool isMenu, const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, S32 variance, float initial);
    void ShowDescription(DebugPrintRecord &dpr, const std::vector<std::string> &description);
+   float CalculateDifficultyVariance(Player &player, float initial, S32 variance, TrainerOptions::DifficultyVarianceModeType varianceMode);
    void InitBallStartOptionRecords(DebugPrintRecord &dpr);
    void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs);
    void ProcessMode(Player &player, int currentTimeMs);
