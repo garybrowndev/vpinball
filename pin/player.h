@@ -3,6 +3,7 @@
 #include "kdtree.h"
 #include "quadtree.h"
 #include "Debugger.h"
+#include "simpleini/SimpleIni.h"
 
 #include <set>
 
@@ -924,7 +925,9 @@ private:
 
    bool GetSettingsFileName(Player &player, std::string &fileName);
    void LoadSettings(Player &player);
+   void LoadSettingsDifficultyVariance(Player &player, CSimpleIni &iniFile, const char * sectionName, const char * varianceKeyName, S32 &variance, const char * modeKeyName, TrainerOptions::DifficultyVarianceModeType &mode);
    void SaveSettings(Player &player);
+   void SaveSettingsDifficultyVariance(Player &player, CSimpleIni &iniFile, const char * sectionName, const char * varianceKeyName, S32 variance, const char * modeKeyName, TrainerOptions::DifficultyVarianceModeType mode);
    void InitBallsDecreased(Player &player);
    void InitBallsIncreased(Player &player);
    void InitControlVBalls(Player &player);
@@ -959,6 +962,10 @@ private:
    void ShowDifficultyVarianceMode(DebugPrintRecord &dpr, bool isMenu, const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode);
    void ShowDifficultyVarianceRange(DebugPrintRecord &dpr, bool isMenu, const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, S32 variance, float initial);
    void ShowDescription(DebugPrintRecord &dpr, const std::vector<std::string> &description);
+   void ShowDifficultyVarianceStatusAll(DebugPrintRecord &dpr, Player &player, bool isMenu);
+   void ShowDifficultyVarianceStatusSingle(DebugPrintRecord &dpr, bool isMenu, const std::string &name, float current, S32 variance, float initial, TrainerOptions::DifficultyVarianceModeType mode);
+   void ShowDifficultyVarianceStatusGravity(DebugPrintRecord &dpr, Player &player, bool isMenu);
+   void ShowDifficultyVarianceStatusPlayfieldFriction(DebugPrintRecord &dpr, Player &player, bool isMenu);
    float CalculateDifficultyVariance(Player &player, float initial, S32 variance, TrainerOptions::DifficultyVarianceModeType varianceMode);
    void InitBallStartOptionRecords(DebugPrintRecord &dpr);
    void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs);
@@ -971,6 +978,7 @@ private:
    template <class T> void ProcessMenuChangeValueDec(T &value, S32 min, S32 max);
    template <class T> void ProcessMenuChangeValueDecSkip(T &value, S32 min, S32 max);
    template <class T> void ProcessMenuChangeValueSkip(T &value, S32 min, S32 max, int currentTimeMs);
+   template <class T> void ProcessMenuAction(MenuOptionsRecord::MenuActionType menuAction, MenuOptionsRecord::MenuStateType enterMenuState, T &value, S32 minimum, S32 maximum, int currentTimeMs);
 
    void Add(std::vector<Ball *> &controlVBalls, int currentTimeMsec);
    BallHistoryRecord &Get(std::size_t index);
