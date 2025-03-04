@@ -135,6 +135,8 @@ TrainerOptions::TrainerOptions():
    m_DifficultyConfigModeState(DifficultyConfigModeState::DifficultyConfigModeState_Accept),
    m_GravityVarianceMode(DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow),
    m_PlayfieldFrictionVarianceMode(DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow),
+   m_FlipperStrengthVarianceMode(DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow),
+   m_FlipperFrictionVarianceMode(DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow),
    m_RunOrderMode(RunOrderModeType::RunOrderModeType_InOrder),
    m_BallKickerBehaviorMode(BallKickerBehaviorModeType::BallKickerBehaviorModeType_Reset),
    m_SoundEffectsMode(SoundEffectsModeType::SoundEffectsModeType_Accept),
@@ -146,8 +148,10 @@ TrainerOptions::TrainerOptions():
    m_CreateBallEndZ(0),
    m_GameplayDifficulty(0),
    m_VarianceDifficulty(0),
-   m_PlayfieldFrictionVariance(0),
    m_GravityVariance(0),
+   m_PlayfieldFrictionVariance(0),
+   m_FlipperStrengthVariance(0),
+   m_FlipperFrictionVariance(0),
    m_TotalRuns(5),
    m_MaxSecondsPerRun(15),
    m_CountdownSecondsBeforeRun(3),
@@ -160,7 +164,9 @@ TrainerOptions::TrainerOptions():
    m_SetupDifficulty(true),
    m_GameplayDifficultyInitial(0),
    m_GravityInitial(0.0f),
-   m_PlayfieldFrictionInitial(0.0f)
+   m_PlayfieldFrictionInitial(0.0f),
+   m_FlipperStrengthInitial(0.0f),
+   m_FlipperFrictionInitial(0.0f)
 {
 }
 
@@ -622,6 +628,10 @@ const char * BallHistory::TrainerModeGravityVarianceKeyName = "GravityVariance";
 const char * BallHistory::TrainerModeGravityVarianceModeKeyName = "GravityVarianceMode";
 const char * BallHistory::TrainerModePlayfieldFrictionVarianceKeyName = "PlayfieldFrictionVariance";
 const char * BallHistory::TrainerModePlayfieldFrictionVarianceModeKeyName = "PlayfieldFrictionVarianceMode";
+const char * BallHistory::TrainerModeFlipperStrengthVarianceKeyName = "FlipperStrengthVariance";
+const char * BallHistory::TrainerModeFlipperStrengthVarianceModeKeyName = "FlipperStrengthVarianceMode";
+const char * BallHistory::TrainerModeFlipperFrictionVarianceKeyName = "FlipperFrictionVariance";
+const char * BallHistory::TrainerModeFlipperFrictionVarianceModeKeyName = "FlipperFrictionVarianceMode";
 const char * BallHistory::TrainerModeTotalRunsKeyName = "TotalRuns";
 const char * BallHistory::TrainerModeRunOrderModeKeyName = "RunOrderMode";
 const char * BallHistory::TrainerModeBallKickerBehaviorModeKeyName = "BallKickerBehaviorMode";
@@ -647,7 +657,7 @@ const char * BallHistory::TrainerModeBallFailPosition3DKeyName = "FailPosition3D
 const char * BallHistory::TrainerModeBallFailRadiusPercentKeyName = "FailRadiusPercent";
 const char * BallHistory::TrainerModeBallFailAssociationsKeyName = "FailAssociations";
 
-BallHistory::BallHistory(PinTable &ptable) :
+BallHistory::BallHistory(PinTable &pinTable) :
    m_ShowStatus(false),
    m_Control(false),
    m_WasControlled(false),
@@ -666,14 +676,16 @@ BallHistory::BallHistory(PinTable &ptable) :
    m_ActiveBallKickerTexture(nullptr),
    m_UseTrailsForBallsInitialValue(0)
 {
-   m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyInitial = S32(ptable.GetGlobalDifficulty());
-   ptable.get_Gravity(&m_MenuOptions.m_TrainerOptions.m_GravityInitial);
-   ptable.get_Friction((&m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionInitial));
+   m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyInitial = S32(pinTable.GetGlobalDifficulty());
+   pinTable.get_Gravity(&m_MenuOptions.m_TrainerOptions.m_GravityInitial);
+   pinTable.get_Friction((&m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionInitial));
+   InitFlippers(pinTable);
+   m_MenuOptions.m_TrainerOptions.m_FlipperStrengthInitial = GetFlipperStrength();
+   m_MenuOptions.m_TrainerOptions.m_FlipperFrictionInitial = GetFlipperFriction();
 }
 
 bool BallHistory::GetSettingsFileName(Player &player, std::string &fileName)
 {
-
    // TODO GARY fix potential leak of crypt context, crypt hash and file hanles
    // if return false happens, the handles will not be cleaned up
    fileName.clear();
@@ -844,6 +856,16 @@ void BallHistory::LoadSettings(Player &player)
          TrainerModeSettingsSectionName,
          TrainerModePlayfieldFrictionVarianceKeyName, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVariance,
          TrainerModePlayfieldFrictionVarianceModeKeyName, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVarianceMode);
+
+      LoadSettingsDifficultyVariance(player, iniFile,
+         TrainerModeSettingsSectionName,
+         TrainerModeFlipperStrengthVarianceKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVariance,
+         TrainerModeFlipperStrengthVarianceModeKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode);
+
+      LoadSettingsDifficultyVariance(player, iniFile,
+         TrainerModeSettingsSectionName,
+         TrainerModeFlipperFrictionVarianceKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVariance,
+         TrainerModeFlipperFrictionVarianceModeKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode);
 
       if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeTotalRunsKeyName, tempStream) == true)
       {
@@ -1082,6 +1104,16 @@ void BallHistory::SaveSettings(Player &player)
          TrainerModeSettingsSectionName,
          TrainerModePlayfieldFrictionVarianceKeyName, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVariance,
          TrainerModePlayfieldFrictionVarianceModeKeyName, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVarianceMode);
+
+      SaveSettingsDifficultyVariance(player, iniFile,
+         TrainerModeSettingsSectionName,
+         TrainerModeFlipperStrengthVarianceKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVariance,
+         TrainerModeFlipperStrengthVarianceModeKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode);
+
+      SaveSettingsDifficultyVariance(player, iniFile,
+         TrainerModeSettingsSectionName,
+         TrainerModeFlipperFrictionVarianceKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVariance,
+         TrainerModeFlipperFrictionVarianceModeKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode);
 
       tempStr = std::to_string(m_MenuOptions.m_TrainerOptions.m_TotalRuns);
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeTotalRunsKeyName, tempStr.c_str());
@@ -1341,6 +1373,7 @@ void BallHistory::UnInit(Player &player)
 {
    SaveSettings(player);
    m_ActiveBallKickers.clear();
+   m_Flippers.clear();
    m_DebugFontRecord.UnInit();
    delete m_AutoControlBallTexture;
    delete m_RecallBallTexture;
@@ -1599,6 +1632,44 @@ Vertex3Ds BallHistory::GetKickerPosition(Kicker &kicker)
       };
    }
    return kickerPosition;
+}
+
+void BallHistory::SetFlipperStrength(float flipperStrength)
+{
+   for each (Flipper * flipper in m_Flippers)
+   {
+      flipper->put_Strength(flipperStrength);
+   }
+}
+
+float BallHistory::GetFlipperStrength()
+{
+   float flipperStrength = 0.0f;
+   if (m_Flippers.size())
+   {
+      Flipper * flipper = static_cast<Flipper*>(m_Flippers[0]);
+      flipper->get_Strength(&flipperStrength);
+   }
+   return flipperStrength;
+}
+
+void BallHistory::SetFlipperFriction(float flipperFriction)
+{
+   for each (Flipper * flipper in m_Flippers)
+   {
+      flipper->put_Friction(flipperFriction);
+   }
+}
+
+float BallHistory::GetFlipperFriction()
+{
+   float flipperFriction = 0.0f;
+   if (m_Flippers.size())
+   {
+      Flipper * flipper = static_cast<Flipper*>(m_Flippers[0]);
+      flipper->get_Friction(&flipperFriction);
+   }
+   return flipperFriction;
 }
 
 bool BallHistory::ControlNextMove()
@@ -1882,6 +1953,17 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                   kickerPosition.x,
                   kickerPosition.y,
                   kickerPosition.z);
+            }
+         }
+
+         dpr.ShowText("Flippers Count = %zu", m_Flippers.size());
+         for (std::size_t flipperIndex = 0; flipperIndex < m_Flippers.size(); flipperIndex++)
+         {
+            if (Flipper * flipper = m_Flippers[flipperIndex])
+            {
+               dpr.ShowText("  Flipper %zu %s",
+                  flipperIndex + 1,
+                  flipper->GetName());
             }
          }
          break;
@@ -2184,6 +2266,17 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                   kickerPosition.z);
             }
          }
+
+         dpr.ShowText("Flippers Count = %zu", m_Flippers.size());
+         for (std::size_t flipperIndex = 0; flipperIndex < m_Flippers.size(); flipperIndex++)
+         {
+            if (Flipper * flipper = m_Flippers[flipperIndex])
+            {
+               dpr.ShowText("  Flipper %zu %s",
+                  flipperIndex + 1,
+                  flipper->GetName());
+            }
+         }
          break;
       }
       case MenuOptionsRecord::ModeType::ModeType_Disabled:
@@ -2476,6 +2569,8 @@ void BallHistory::ShowDifficultyVarianceStatusAll(DebugPrintRecord &dpr, Player 
 {
    ShowDifficultyVarianceStatusGravity(dpr, player, isMenu);
    ShowDifficultyVarianceStatusPlayfieldFriction(dpr, player, isMenu);
+   ShowDifficultyVarianceStatusFlipperStrength(dpr, player, isMenu);
+   ShowDifficultyVarianceStatusFlipperFriction(dpr, player, isMenu);
 }
 
 void BallHistory::ShowDifficultyVarianceStatusSingle(DebugPrintRecord &dpr, bool isMenu, const std::string &name, float current, S32 variance, float initial, TrainerOptions::DifficultyVarianceModeType mode)
@@ -2507,13 +2602,28 @@ void BallHistory::ShowDifficultyVarianceStatusPlayfieldFriction(DebugPrintRecord
       m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVarianceMode);
 }
 
-float BallHistory::CalculateDifficultyVariance(Player &player, float initial, S32 variance, TrainerOptions::DifficultyVarianceModeType varianceMode)
+void BallHistory::ShowDifficultyVarianceStatusFlipperStrength(DebugPrintRecord &dpr, Player &player, bool isMenu)
 {
-   float current = 0.0f;
+   float flipperStrengthCurrent = GetFlipperStrength();
+   ShowDifficultyVarianceStatusSingle(dpr, isMenu, "Flipper Strength", flipperStrengthCurrent,
+      m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVariance,
+      m_MenuOptions.m_TrainerOptions.m_FlipperStrengthInitial,
+      m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode);
+}
+
+void BallHistory::ShowDifficultyVarianceStatusFlipperFriction(DebugPrintRecord &dpr, Player &player, bool isMenu)
+{
+   float flipperFrictionCurrent = GetFlipperFriction();
+   ShowDifficultyVarianceStatusSingle(dpr, isMenu, "Flipper Friction", flipperFrictionCurrent,
+      m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVariance,
+      m_MenuOptions.m_TrainerOptions.m_FlipperFrictionInitial,
+      m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode);
+}
+
+float BallHistory::CalculateDifficultyVariance(Player &player, float initial, float current, S32 variance, TrainerOptions::DifficultyVarianceModeType varianceMode)
+{
    if (variance > 0)
    {
-      player.m_ptable->get_Friction(&current);
-
       float direction = 0.0f;
       float min = initial;
       float max = initial;
@@ -5962,6 +6072,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Gravity Variance");
          dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_PlayfieldFrictionVariance,
             "Playfield Friction Variance");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_FlipperStrengthVariance,
+            "Flipper Strength Variance");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_FlipperFrictionVariance,
+            "Flipper Friction Variance");
 
          dpr.ShowMenuText("");
          dpr.ShowMenuTextTitle("Current Configuration");
@@ -6027,6 +6141,34 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                   });
                   break;
                }
+            case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_FlipperStrengthVariance:
+               ShowDifficultyVarianceStatusFlipperStrength(dpr, player, true);
+
+               if (!acceptMode)
+               {
+                  ShowDescription(dpr,
+                  {
+                     "Flipper Strength Variance sets range above/below 'Initial'",
+                     "'Current'/'Initial' provided for reference",
+                     "'Current' shows active table value",
+                     "'Initial' shows starting table value"
+                  });
+                  break;
+               }
+            case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_FlipperFrictionVariance:
+               ShowDifficultyVarianceStatusFlipperFriction(dpr, player, true);
+
+               if (!acceptMode)
+               {
+                  ShowDescription(dpr,
+                  {
+                     "Flipper Friction Variance sets range above/below 'Initial'",
+                     "'Current'/'Initial' provided for reference",
+                     "'Current' shows active table value",
+                     "'Initial' shows starting table value"
+                  });
+                  break;
+               }
          }
 
          if (acceptMode)
@@ -6044,24 +6186,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          // 
          // - Variance
          // -- Values
-         // --- Playfield Friction
-         // ---- PinTable::get_Friction() / PinTable::put_Friction()
          // --- Flipper Strength
          // ---- Flipper::get_Strength() / Flipper::put_Strength()
          // --- Flipper Friction
          // ---- Flipper::get_Friction() / Flipper::put_Friction()
          // -- Options for each value
-         // --- Choose a value from 0% to 100%
-         // ---- [0%] = Do not vary
-         // ---- (0%, 100%] = Vary this percent (%) amount above or below the current value
-         // --- Vary type
-         // ---- Above and below
-         // ---- Above only
-         // ---- Below only
-         //
-         // Abilities
-         //  - Don't vary
-         //  - Vary both directions
 
          switch (menuAction)
          {
@@ -6103,6 +6232,12 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                      break;
                   case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_PlayfieldFrictionVariance:
                      m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyPlayfieldFrictionVariance;
+                     break;
+                  case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_FlipperStrengthVariance:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperStrengthVariance;
+                     break;
+                  case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_FlipperFrictionVariance:
+                     m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperFrictionVariance;
                      break;
                   default:
                      InvalidEnumValue("TrainerOptions::ModeStateType", m_MenuOptions.m_TrainerOptions.m_ModeState);
@@ -6313,6 +6448,174 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
                ProcessMenuChangeValueInc<TrainerOptions::DifficultyVarianceModeType>(m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVarianceMode, 0, TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyOptions;
+               break;
+            default:
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
+               break;
+         }
+         break;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperStrengthVariance:
+         dpr.ShowMenuTextTitle("Flipper Strength Variance");
+         dpr.ShowMenuText("(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::FlipperStrengthVarianceMinimum, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVariance, TrainerOptions::FlipperStrengthVarianceMaximum);
+
+         dpr.ShowMenuText("");
+         dpr.ShowMenuTextTitle("Current Configuration");
+         ShowDifficultyVarianceStatusFlipperStrength(dpr, player, true);
+
+         ShowDescription(dpr,
+         {
+            "Use flippers to set Flipper Strength Variance above/below 'Initial'",
+            "'Current'/'Initial' provided for reference",
+            "'Current' shows active table value",
+            "'Initial' shows starting table value"
+         });
+
+         ProcessMenuAction<S32>(menuAction,
+            MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperStrengthVarianceType,
+            m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVariance,
+            TrainerOptions::FlipperStrengthVarianceMinimum,
+            TrainerOptions::FlipperStrengthVarianceMaximum,
+            currentTimeMs);
+         break;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperStrengthVarianceType:
+         dpr.ShowMenuTextTitle("Flipper Strength Variance Mode");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow,
+            "Above and Below");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly,
+            "Above Only");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly,
+            "Below Only");
+
+         dpr.ShowMenuText("");
+         dpr.ShowMenuTextTitle("Current Configuration");
+         ShowDifficultyVarianceStatusFlipperStrength(dpr, player, true);
+
+         switch (m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode)
+         {
+            case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow:
+               ShowDescription(dpr,
+               {
+                  "Configures Flipper Strength Variance range to ['Variance Below', 'Variance Above']",
+                  "Plunger accepts configuration",
+               });
+               break;
+            case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly:
+               ShowDescription(dpr,
+               {
+                  "Configures Flipper Strength Variance range to ['Initial', 'Variance Above']",
+                  "Plunger accepts configuration",
+               });
+               break;
+            case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly:
+               ShowDescription(dpr,
+               {
+                  "Configures Flipper Strength Variance range to ['Variance Below', 'Initial']",
+                  "Plunger accepts configuration",
+               });
+               break;
+            default:
+               InvalidEnumValue("TrainerOptions::DifficultyVarianceModeType", m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode);
+               break;
+         }
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
+               ProcessMenuChangeValueDec<TrainerOptions::DifficultyVarianceModeType>(m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode, 0, TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
+               ProcessMenuChangeValueInc<TrainerOptions::DifficultyVarianceModeType>(m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode, 0, TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyOptions;
+               break;
+            default:
+               InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
+               break;
+         }
+         break;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperFrictionVariance:
+         dpr.ShowMenuTextTitle("Flipper Friction Variance");
+         dpr.ShowMenuText("(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::FlipperFrictionVarianceMinimum, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVariance, TrainerOptions::FlipperFrictionVarianceMaximum);
+
+         dpr.ShowMenuText("");
+         dpr.ShowMenuTextTitle("Current Configuration");
+         ShowDifficultyVarianceStatusFlipperFriction(dpr, player, true);
+
+         ShowDescription(dpr,
+         {
+            "Use flippers to set Flipper Friction Variance above/below 'Initial'",
+            "'Current'/'Initial' provided for reference",
+            "'Current' shows active table value",
+            "'Initial' shows starting table value"
+         });
+
+         ProcessMenuAction<S32>(menuAction,
+            MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperFrictionVarianceType,
+            m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVariance,
+            TrainerOptions::FlipperFrictionVarianceMinimum,
+            TrainerOptions::FlipperFrictionVarianceMaximum,
+            currentTimeMs);
+         break;
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperFrictionVarianceType:
+         dpr.ShowMenuTextTitle("Flipper Friction Variance Mode");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow,
+            "Above and Below");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly,
+            "Above Only");
+         dpr.ShowMenuTextSelect(m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly,
+            "Below Only");
+
+         dpr.ShowMenuText("");
+         dpr.ShowMenuTextTitle("Current Configuration");
+         ShowDifficultyVarianceStatusFlipperFriction(dpr, player, true);
+
+         switch (m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode)
+         {
+            case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow:
+               ShowDescription(dpr,
+               {
+                  "Configures Flipper Friction Variance range to ['Variance Below', 'Variance Above']",
+                  "Plunger accepts configuration",
+               });
+               break;
+            case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly:
+               ShowDescription(dpr,
+               {
+                  "Configures Flipper Friction Variance range to ['Initial', 'Variance Above']",
+                  "Plunger accepts configuration",
+               });
+               break;
+            case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly:
+               ShowDescription(dpr,
+               {
+                  "Configures Flipper Friction Variance range to ['Variance Below', 'Initial']",
+                  "Plunger accepts configuration",
+               });
+               break;
+            default:
+               InvalidEnumValue("TrainerOptions::DifficultyVarianceModeType", m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode);
+               break;
+         }
+
+         switch (menuAction)
+         {
+            case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+            case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
+               // do nothing
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
+               ProcessMenuChangeValueDec<TrainerOptions::DifficultyVarianceModeType>(m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode, 0, TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_COUNT - 1);
+               break;
+            case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
+               ProcessMenuChangeValueInc<TrainerOptions::DifficultyVarianceModeType>(m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode, 0, TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_COUNT - 1);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyOptions;
@@ -7001,6 +7304,8 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
 
          player.m_ptable->put_Gravity(m_MenuOptions.m_TrainerOptions.m_GravityInitial);
          player.m_ptable->put_Friction(m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionInitial);
+         SetFlipperStrength(m_MenuOptions.m_TrainerOptions.m_FlipperStrengthInitial);
+         SetFlipperFriction(m_MenuOptions.m_TrainerOptions.m_FlipperFrictionInitial);
       }
 
       m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = currentTimeMs;
@@ -7107,8 +7412,11 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          {
             if (m_MenuOptions.m_TrainerOptions.m_GravityVariance > 0)
             {
+               float currentGravity = 0.0f;
+               player.m_ptable->get_Gravity(&currentGravity);
                float newGravity = CalculateDifficultyVariance(player,
                   m_MenuOptions.m_TrainerOptions.m_GravityInitial,
+                  currentGravity,
                   m_MenuOptions.m_TrainerOptions.m_GravityVariance,
                   m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode);
 
@@ -7117,12 +7425,39 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
 
             if (m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVariance > 0)
             {
+               float currentPlayfieldFriction = 0.0f;
+               player.m_ptable->get_Friction(&currentPlayfieldFriction);
                float newPlayfieldFriction = CalculateDifficultyVariance(player,
                   m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionInitial,
+                  currentPlayfieldFriction,
                   m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVariance,
                   m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVarianceMode);
 
                player.m_ptable->put_Friction(newPlayfieldFriction);
+            }
+
+            if (m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVariance > 0)
+            {
+               float currentFlipperStrength = GetFlipperStrength();
+               float newFlipperStrength = CalculateDifficultyVariance(player,
+                  m_MenuOptions.m_TrainerOptions.m_FlipperStrengthInitial,
+                  currentFlipperStrength,
+                  m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVariance,
+                  m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode);
+
+               SetFlipperStrength(newFlipperStrength);
+            }
+
+            if (m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVariance > 0)
+            {
+               float currentFlipperFriction = GetFlipperFriction();
+               float newFlipperFriction = CalculateDifficultyVariance(player,
+                  m_MenuOptions.m_TrainerOptions.m_FlipperFrictionInitial,
+                  currentFlipperFriction,
+                  m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVariance,
+                  m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode);
+
+               SetFlipperFriction(newFlipperFriction);
             }
          }
 
@@ -7745,10 +8080,10 @@ void BallHistory::InitControlVBalls(Player &player)
    }
 }
 
-void BallHistory::InitActiveBallKickers(Player &player)
+void BallHistory::InitActiveBallKickers(PinTable &pinTable)
 {
    m_ActiveBallKickers.clear();
-   for each (auto vedit in player.m_ptable->m_vedit)
+   for each (auto vedit in pinTable.m_vedit)
    {
       if (vedit && vedit->GetItemType() == ItemTypeEnum::eItemKicker)
       {
@@ -7775,13 +8110,30 @@ void BallHistory::InitActiveBallKickers(Player &player)
    }
 }
 
+void BallHistory::InitFlippers(PinTable &pinTable)
+{
+   m_Flippers.clear();
+   for each (auto vedit in pinTable.m_vedit)
+   {
+      if (vedit && vedit->GetItemType() == ItemTypeEnum::eItemFlipper)
+      {
+         Flipper * flipper = static_cast<Flipper*>(vedit);
+         {
+            m_Flippers.push_back(flipper);
+         }
+      }
+   }
+}
+
 void BallHistory::Process(Player &player, int currentTimeMs)
 {
    ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_ProcessUsec);
 
    InitControlVBalls(player);
 
-   InitActiveBallKickers(player);
+   InitActiveBallKickers(*player.m_ptable);
+
+   InitFlippers(*player.m_ptable);
 
    ShowStatus(player, currentTimeMs);
 

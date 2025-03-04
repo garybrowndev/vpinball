@@ -382,6 +382,8 @@ public:
       DifficultyConfigModeState_VarianceDifficulty,
       DifficultyConfigModeState_GravityVariance,
       DifficultyConfigModeState_PlayfieldFrictionVariance,
+      DifficultyConfigModeState_FlipperStrengthVariance,
+      DifficultyConfigModeState_FlipperFrictionVariance,
       DifficultyConfigModeState_COUNT
    };
 
@@ -516,14 +518,26 @@ public:
    S32 m_VarianceDifficulty;
 
    static const S32 GravityVarianceMinimum = 0;
-   static const S32 GravityVarianceMaximum = 100;
+   static const S32 GravityVarianceMaximum = 500;
    S32 m_GravityVariance;
 
    DifficultyVarianceModeType m_GravityVarianceMode;
 
    static const S32 PlayfieldFrictionVarianceMinimum = 0;
-   static const S32 PlayfieldFrictionVarianceMaximum = 100;
+   static const S32 PlayfieldFrictionVarianceMaximum = 500;
    S32 m_PlayfieldFrictionVariance;
+
+   static const S32 FlipperStrengthVarianceMinimum = 0;
+   static const S32 FlipperStrengthVarianceMaximum = 500;
+   S32 m_FlipperStrengthVariance;
+
+   DifficultyVarianceModeType m_FlipperStrengthVarianceMode;
+
+   static const S32 FlipperFrictionVarianceMinimum = 0;
+   static const S32 FlipperFrictionVarianceMaximum = 500;
+   S32 m_FlipperFrictionVariance;
+
+   DifficultyVarianceModeType m_FlipperFrictionVarianceMode;
 
    DifficultyVarianceModeType m_PlayfieldFrictionVarianceMode;
 
@@ -559,6 +573,8 @@ public:
    S32 m_GameplayDifficultyInitial;
    float m_GravityInitial;
    float m_PlayfieldFrictionInitial;
+   float m_FlipperStrengthInitial;
+   float m_FlipperFrictionInitial;
 
    TrainerOptions();
 };
@@ -618,7 +634,7 @@ public:
 struct BallHistory
 {
 public:
-   BallHistory(PinTable &ptable);
+   BallHistory(PinTable &pinTable);
    void Init(Player &player, int currentTimeMs, bool loadSettings);
    void UnInit(Player &player);
    void Process(Player &player, int currentTimeMsec);
@@ -777,6 +793,10 @@ private:
          MenuStateType_Trainer_SelectDifficultyGravityVarianceType,
          MenuStateType_Trainer_SelectDifficultyPlayfieldFrictionVariance,
          MenuStateType_Trainer_SelectDifficultyPlayfieldFrictionVarianceType,
+         MenuStateType_Trainer_SelectDifficultyFlipperStrengthVariance,
+         MenuStateType_Trainer_SelectDifficultyFlipperStrengthVarianceType,
+         MenuStateType_Trainer_SelectDifficultyFlipperFrictionVariance,
+         MenuStateType_Trainer_SelectDifficultyFlipperFrictionVarianceType,
          MenuStateType_Trainer_SelectTotalRuns,
          MenuStateType_Trainer_SelectRunOrderMode,
          MenuStateType_Trainer_SelectBallKickerBehaviorMode,
@@ -838,6 +858,8 @@ private:
 
    std::vector<Kicker*> m_ActiveBallKickers;
 
+   std::vector<Flipper*> m_Flippers;
+
    ProfilerRecord m_ProfilerRecord;
 
    DebugFontRecord m_DebugFontRecord;
@@ -898,6 +920,10 @@ private:
    static const char * TrainerModeGravityVarianceModeKeyName;
    static const char * TrainerModePlayfieldFrictionVarianceKeyName;
    static const char * TrainerModePlayfieldFrictionVarianceModeKeyName;
+   static const char * TrainerModeFlipperStrengthVarianceKeyName;
+   static const char * TrainerModeFlipperStrengthVarianceModeKeyName;
+   static const char * TrainerModeFlipperFrictionVarianceKeyName;
+   static const char * TrainerModeFlipperFrictionVarianceModeKeyName;
    static const char * TrainerModeTotalRunsKeyName;
    static const char * TrainerModeRunOrderModeKeyName;
    static const char * TrainerModeBallKickerBehaviorModeKeyName;
@@ -931,7 +957,8 @@ private:
    void InitBallsDecreased(Player &player);
    void InitBallsIncreased(Player &player);
    void InitControlVBalls(Player &player);
-   void InitActiveBallKickers(Player &player);
+   void InitActiveBallKickers(PinTable &pinTable);
+   void InitFlippers(PinTable &pinTable);
    void ControlNext();
    void ControlPrev();
    void ResetBallHistoryRenderSizes();
@@ -966,7 +993,9 @@ private:
    void ShowDifficultyVarianceStatusSingle(DebugPrintRecord &dpr, bool isMenu, const std::string &name, float current, S32 variance, float initial, TrainerOptions::DifficultyVarianceModeType mode);
    void ShowDifficultyVarianceStatusGravity(DebugPrintRecord &dpr, Player &player, bool isMenu);
    void ShowDifficultyVarianceStatusPlayfieldFriction(DebugPrintRecord &dpr, Player &player, bool isMenu);
-   float CalculateDifficultyVariance(Player &player, float initial, S32 variance, TrainerOptions::DifficultyVarianceModeType varianceMode);
+   void ShowDifficultyVarianceStatusFlipperStrength(DebugPrintRecord &dpr, Player &player, bool isMenu);
+   void ShowDifficultyVarianceStatusFlipperFriction(DebugPrintRecord &dpr, Player &player, bool isMenu);
+   float CalculateDifficultyVariance(Player &player, float initial, float current, S32 variance, TrainerOptions::DifficultyVarianceModeType varianceMode);
    void InitBallStartOptionRecords(DebugPrintRecord &dpr);
    void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs);
    void ProcessMode(Player &player, int currentTimeMs);
@@ -990,6 +1019,10 @@ private:
    char GetBallHistoryKey(Player &player, EnumAssignKeys enumAssignKey);
    POINT Get2DPointFrom3D(Player &player, const Vertex3Ds& vertex);
    Vertex3Ds GetKickerPosition(Kicker &kicker);
+   void SetFlipperStrength(float flipperStrength);
+   float GetFlipperStrength();
+   void SetFlipperFriction(float flipperFriction);
+   float GetFlipperFriction();
    bool ControlNextMove();
    bool ControlPrevMove();
 
