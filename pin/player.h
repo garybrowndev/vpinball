@@ -267,9 +267,9 @@ class NudgeFilterY : public NudgeFilter
 
 struct BallHistoryState
 {
-   Vertex3Ds m_Pos;
-   Vertex3Ds m_Vel;
-   Vertex3Ds m_AngMom;
+   Vertex3Ds m_Position;
+   Vertex3Ds m_Velocity;
+   Vertex3Ds m_AngularMomentum;
    Vertex3Ds m_LastEventPos;
 
    Matrix3 m_Orientation;
@@ -314,6 +314,7 @@ public:
       ConfigModeStateType_BallStart,
       ConfigModeStateType_BallPass,
       ConfigModeStateType_BallFail,
+      ConfigModeStateType_BallCorridor,
       ConfigModeStateType_Difficulty,
       ConfigModeStateType_TotalRuns,
       ConfigModeStateType_RunOrder,
@@ -375,6 +376,15 @@ public:
       BallEndCompleteModeType_COUNT
    };
 
+   enum BallCorridorConfigModeState
+   {
+      BallCorridorConfigModeState_Accept,
+      BallCorridorConfigModeState_PassLocation,
+      BallCorridorConfigModeState_Opening1Location,
+      BallCorridorConfigModeState_Opening2Location,
+      BallCorridorConfigModeState_COUNT
+   };
+
    enum DifficultyConfigModeState
    {
       DifficultyConfigModeState_Accept,
@@ -433,18 +443,18 @@ public:
       static const S32 TotalVelocitiesMinimum = 1;
       static const S32 TotalVelocitiesMaximum = 20;
 
-      Vertex3Ds m_Pos;
-      Vertex3Ds m_Vel;
-      Vertex3Ds m_AngMom;
-      float m_AngleStart;
-      float m_AngleFinish;
-      S32 m_TotalAngles;
-      float m_VelocityStart;
-      float m_VelocityFinish;
-      S32 m_TotalVelocities;
+      Vertex3Ds m_StartPosition;
+      Vertex3Ds m_StartVelocity;
+      Vertex3Ds m_StartAngularMomentum;
+      float m_AngleRangeStart;
+      float m_AngleRangeFinish;
+      S32 m_TotalRangeAngles;
+      float m_VelocityRangeStart;
+      float m_VelocityRangeFinish;
+      S32 m_TotalRangeVelocities;
 
       BallStartOptionsRecord();
-      BallStartOptionsRecord(const Vertex3Ds &pos, const Vertex3Ds &vel, const Vertex3Ds &angMom, float angleStart, float angleFinish, S32 totalAngles, float velocityStart, float velocityFinish, S32 totalVelocities);
+      BallStartOptionsRecord(const Vertex3Ds &startPosition, const Vertex3Ds &startVelocity, const Vertex3Ds &startAngularMomentum, float angleRangeStart, float angleRangeFinish, S32 totalRangeAngles, float velocityRangeStart, float velocityRangeFinish, S32 totalRangeVelocities);
       bool IsZero();
    };
 
@@ -454,14 +464,30 @@ public:
       static const S32 RadiusPercentMaximum = 300;
       static const float RadiusPercentDisabled;
 
-      Vertex3Ds m_Pos;
-      float m_RadiusPercent;
+      Vertex3Ds m_EndPosition;
+      float m_EndRadiusPercent;
       std::set<std::size_t> m_AssociatedBallStartIndexes;
 
       std::vector<std::tuple<int, Vertex3Ds>> m_StopBallsTracker;
 
       BallEndOptionsRecord();
-      BallEndOptionsRecord(const Vertex3Ds &pos, float radiusPercent);
+      BallEndOptionsRecord(const Vertex3Ds &endPosition, float endRadiusPercent);
+   };
+
+   struct BallCorridorOptionsRecord
+   {
+      static const S32 RadiusPercentMinimum = 1;
+      static const S32 RadiusPercentMaximum = 300;
+      static const float RadiusPercentDisabled;
+
+      Vertex3Ds m_PassPosition;
+      float m_PassRadiusPercent;
+
+      Vertex3Ds m_Opening1;
+      Vertex3Ds m_Opening2;
+
+      BallCorridorOptionsRecord();
+      BallCorridorOptionsRecord(const Vertex3Ds &passPosition, float passRadiusPercent, const Vertex3Ds &opening1, const Vertex3Ds &opening2);
    };
 
    struct RunRecord
@@ -555,6 +581,7 @@ public:
    std::size_t m_BallStartOptionsRecordsSize;
    std::vector<BallEndOptionsRecord> m_BallPassOptionsRecords;
    std::vector<BallEndOptionsRecord> m_BallFailOptionsRecords;
+   BallCorridorOptionsRecord m_BallCorridorOptionsRecord;
 
    std::vector<RunRecord> m_RunRecords;
    std::size_t m_CurrentRunRecord;
@@ -606,7 +633,7 @@ public:
 
    struct AutoControlVertex
    {
-      Vertex3Ds m_Pos;
+      Vertex3Ds m_Position;
       bool Active;
    };
 
@@ -793,6 +820,8 @@ private:
          MenuStateType_Trainer_SelectBallFailFinishMode,
          MenuStateType_Trainer_SelectBallFailDistance,
          MenuStateType_Trainer_SelectBallFailAssociations,
+         MenuStateType_Trainer_BallCorridorOptions,
+         MenuStateType_Trainer_SelectBallCorridorPassLocation,
          MenuStateType_Trainer_SelectDifficultyOptions,
          MenuStateType_Trainer_SelectDifficultyGameplayDifficulty,
          MenuStateType_Trainer_SelectDifficultyVarianceDifficulty,
