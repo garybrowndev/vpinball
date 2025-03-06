@@ -290,9 +290,9 @@ struct BallHistoryRecord
 
    BallHistoryRecord();
    BallHistoryRecord(int timeMs);
-   void Set(const Ball * controlVBall, BallHistoryState &bhr);
-   void Set(std::vector<Ball*> &controlVBalls, int timeMs);
-   void Insert(const Ball * controlVBall, std::size_t insertIndex);
+   void Set(const Ball *controlVBall, BallHistoryState &bhr);
+   void Set(std::vector<Ball *> &controlVBalls, int timeMs);
+   void Insert(const Ball *controlVBall, std::size_t insertIndex);
 };
 
 class TrainerOptions
@@ -444,9 +444,7 @@ public:
       S32 m_TotalVelocities;
 
       BallStartOptionsRecord();
-      BallStartOptionsRecord(const Vertex3Ds &pos, const Vertex3Ds &vel, const Vertex3Ds &angMom,
-         float angleStart, float angleFinish, S32 totalAngles,
-         float velocityStart, float velocityFinish, S32 totalVelocities);
+      BallStartOptionsRecord(const Vertex3Ds &pos, const Vertex3Ds &vel, const Vertex3Ds &angMom, float angleStart, float angleFinish, S32 totalAngles, float velocityStart, float velocityFinish, S32 totalVelocities);
       bool IsZero();
    };
 
@@ -552,7 +550,7 @@ public:
    static const S32 CountdownSecondsBeforeRunMinimum = 0;
    static const S32 CountdownSecondsBeforeRunMaximum = 5;
    S32 m_CountdownSecondsBeforeRun;
-   
+
    std::vector<BallStartOptionsRecord> m_BallStartOptionsRecords;
    std::size_t m_BallStartOptionsRecordsSize;
    std::vector<BallEndOptionsRecord> m_BallPassOptionsRecords;
@@ -638,7 +636,7 @@ public:
    void Init(Player &player, int currentTimeMs, bool loadSettings);
    void UnInit(Player &player);
    void Process(Player &player, int currentTimeMsec);
-   bool ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, int currentTimeMs);
+   bool ProcessKeys(Player &player, const DIDEVICEOBJECTDATA *input, int currentTimeMs);
    void ProcessMouse(Player &player, int currentTimeMs);
    bool Control();
    void SetControl(bool control);
@@ -677,13 +675,13 @@ private:
 
    struct DebugFontRecord
    {
-      static const char * FontTypeFace;
+      static const char *FontTypeFace;
       static const int FontHeightDefault;
       static const int FontHeightMax;
       static const float PlayerTextWidthRatio;
 
       LPD3DXSPRITE m_Sprite;
-      ID3DXFont * m_Font;
+      ID3DXFont *m_Font;
       INT m_FontHeight;
 
       DebugFontRecord();
@@ -694,6 +692,11 @@ private:
 
    struct DebugPrintRecord
    {
+      enum JustificationType
+      {
+         JustificationType_Left,
+         JustificationType_Right
+      };
       static const D3DCOLOR NormalMenuColor;
       static const D3DCOLOR SelectedMenuColor;
       static const D3DCOLOR ErrorMenuColor;
@@ -702,28 +705,32 @@ private:
       Player &m_Player;
       DebugFontRecord &m_DebugFontRecord;
 
+      DebugPrintRecord(Player &player, DebugFontRecord &debugFontRecord);
+      void SetPosition(float x, float y);
+      void SetPositionPercent(float x, float y);
+      void ToggleReverse();
+      int GetTextWidth(const char *format, ...);
+      void ShowText(const char *format, ...);
+      void ShowTextOffset(int xOffset, const char *format, ...);
+      void ShowTextPos(int x, int y, const char *format, ...);
+      void ShowTextTitle(const char *format, ...);
+      void ShowTextWithMenu(bool isMenu, const char *format, ...);
+      void ShowMenuText(const char *format, ...);
+      void ShowMenuTextPos(int x, int y, const char *format, ...);
+      void ShowMenuTextTitle(const char *format, ...);
+      void ShowMenuTextError(const char *format, ...);
+      void ShowMenuTextSelect(bool selected, const char *format, ...);
+
+    private:
       int m_TextX;
       int m_TextY;
       int m_TextYStep;
       char m_StrBuffer[1024];
-      
-      DebugPrintRecord(Player &player, DebugFontRecord &debugFontRecord);
+      JustificationType Justification;
+
       void InitTextXY();
-      void SetPosition(float x, float y);
-      void SetPositionPercent(float x, float y);
-      void ToggleReverse();
-      int GetTextWidth(const char * format, ...);
-      void ShowText(const char * format, ...);
-      void ShowTextPos(int x, int y, const char * format, ...);
-      void ShowTextTitle(const char * format, ...);
-      void ShowTextWithMenu(bool isMenu, const char * format, ...);
-      void ShowMenuText(const char * format, ...);
-      void ShowMenuTextPos(int x, int y, const char * format, ...);
-      void ShowMenuTextTitle(const char * format, ...);
-      void ShowMenuTextError(const char * format, ...);
-      void ShowMenuTextSelect(bool selected, const char * format, ...);
       void SetDebugOutputPosition(const float x, const float y);
-      void DebugPrint(int x, int y, LPCSTR text, bool center, D3DCOLOR color, ID3DXFont * font);
+      void DebugPrint(int x, int y, LPCSTR text, bool center, D3DCOLOR color, ID3DXFont *font);
    };
 
    struct Vertex3DColor
@@ -853,12 +860,12 @@ private:
    static const float BallHistoryMaxPointSize;
    static const float ControlVerticesDistanceMax;
 
-   std::vector<Ball*> m_ControlVBalls;
-   std::vector<Ball*> m_ControlVBallsPrevious;
+   std::vector<Ball *> m_ControlVBalls;
+   std::vector<Ball *> m_ControlVBallsPrevious;
 
-   std::vector<Kicker*> m_ActiveBallKickers;
+   std::vector<Kicker *> m_ActiveBallKickers;
 
-   std::vector<Flipper*> m_Flippers;
+   std::vector<Flipper *> m_Flippers;
 
    ProfilerRecord m_ProfilerRecord;
 
@@ -879,13 +886,13 @@ private:
    std::size_t m_BallHistoryRecordsSize;
    float m_MaxBallVelocityPixels;
 
-   Texture * m_AutoControlBallTexture;
-   Texture * m_RecallBallTexture;
-   Texture * m_TrainerBallStartTexture;
-   Texture * m_TrainerBallPassTexture;
-   Texture * m_TrainerBallFailTexture;
-   Texture * m_ActiveBallKickerTexture;
-   std::map<U32, Texture*> m_ControlHistoryBallTextures;
+   Texture *m_AutoControlBallTexture;
+   Texture *m_RecallBallTexture;
+   Texture *m_TrainerBallStartTexture;
+   Texture *m_TrainerBallPassTexture;
+   Texture *m_TrainerBallFailTexture;
+   Texture *m_ActiveBallKickerTexture;
+   std::map<U32, Texture *> m_ControlHistoryBallTextures;
 
    int m_UseTrailsForBallsInitialValue;
 
@@ -902,58 +909,58 @@ private:
 
    static const D3DCOLOR IntersectionCircleColor;
 
-   static const char * SettingsFileExtension;
-   static const char * SettingsFolderName;
+   static const char *SettingsFileExtension;
+   static const char *SettingsFolderName;
    static const char SettingsValueDelimeter;
-   static const char * TableInfoSectionName;
-   static const char * FilePathKeyName;
-   static const char * TableNameKeyName;
-   static const char * AuthorKeyName;
-   static const char * VersionKeyName;
-   static const char * DateSavedKeyName;
-   static const char * NormalModeSettingsSectionName;
-   static const char * NormalModeAutoControlVerticesPosition3DKeyName;
-   static const char * TrainerModeSettingsSectionName;
-   static const char * TrainerModeGameplayDifficultyKeyName;
-   static const char * TrainerModeVarianceDifficultyKeyName;
-   static const char * TrainerModeGravityVarianceKeyName;
-   static const char * TrainerModeGravityVarianceModeKeyName;
-   static const char * TrainerModePlayfieldFrictionVarianceKeyName;
-   static const char * TrainerModePlayfieldFrictionVarianceModeKeyName;
-   static const char * TrainerModeFlipperStrengthVarianceKeyName;
-   static const char * TrainerModeFlipperStrengthVarianceModeKeyName;
-   static const char * TrainerModeFlipperFrictionVarianceKeyName;
-   static const char * TrainerModeFlipperFrictionVarianceModeKeyName;
-   static const char * TrainerModeTotalRunsKeyName;
-   static const char * TrainerModeRunOrderModeKeyName;
-   static const char * TrainerModeBallKickerBehaviorModeKeyName;
-   static const char * TrainerModeMaxSecondsPerRunKeyName;
-   static const char * TrainerModeCountdownSecondsBeforeRunKeyName;
-   static const char * TrainerModeSoundEffectsPassEnabledKeyName;
-   static const char * TrainerModeSoundEffectsFailEnabledKeyName;
-   static const char * TrainerModeSoundEffectsTimeLowEnabledKeyName;
-   static const char * TrainerModeSoundEffectsCountdownEnabledKeyName;
-   static const char * TrainerModeBallStartPositionKeyName;
-   static const char * TrainerModeBallStartVelocityKeyName;
-   static const char * TrainerModeBallStartAngularMomentumKeyName;
-   static const char * TrainerModeBallStartAngleStartKeyName;
-   static const char * TrainerModeBallStartAngleFinishKeyName;
-   static const char * TrainerModeBallStartTotalAnglesKeyName;
-   static const char * TrainerModeBallStartVelocityStartKeyName;
-   static const char * TrainerModeBallStartVelocityFinishKeyName;
-   static const char * TrainerModeBallStartTotalVelocitiesKeyName;
-   static const char * TrainerModeBallPassPosition3DKeyName;
-   static const char * TrainerModeBallPassRadiusPercentKeyName;
-   static const char * TrainerModeBallPassAssociationsKeyName;
-   static const char * TrainerModeBallFailPosition3DKeyName;
-   static const char * TrainerModeBallFailRadiusPercentKeyName;
-   static const char * TrainerModeBallFailAssociationsKeyName;
+   static const char *TableInfoSectionName;
+   static const char *FilePathKeyName;
+   static const char *TableNameKeyName;
+   static const char *AuthorKeyName;
+   static const char *VersionKeyName;
+   static const char *DateSavedKeyName;
+   static const char *NormalModeSettingsSectionName;
+   static const char *NormalModeAutoControlVerticesPosition3DKeyName;
+   static const char *TrainerModeSettingsSectionName;
+   static const char *TrainerModeGameplayDifficultyKeyName;
+   static const char *TrainerModeVarianceDifficultyKeyName;
+   static const char *TrainerModeGravityVarianceKeyName;
+   static const char *TrainerModeGravityVarianceModeKeyName;
+   static const char *TrainerModePlayfieldFrictionVarianceKeyName;
+   static const char *TrainerModePlayfieldFrictionVarianceModeKeyName;
+   static const char *TrainerModeFlipperStrengthVarianceKeyName;
+   static const char *TrainerModeFlipperStrengthVarianceModeKeyName;
+   static const char *TrainerModeFlipperFrictionVarianceKeyName;
+   static const char *TrainerModeFlipperFrictionVarianceModeKeyName;
+   static const char *TrainerModeTotalRunsKeyName;
+   static const char *TrainerModeRunOrderModeKeyName;
+   static const char *TrainerModeBallKickerBehaviorModeKeyName;
+   static const char *TrainerModeMaxSecondsPerRunKeyName;
+   static const char *TrainerModeCountdownSecondsBeforeRunKeyName;
+   static const char *TrainerModeSoundEffectsPassEnabledKeyName;
+   static const char *TrainerModeSoundEffectsFailEnabledKeyName;
+   static const char *TrainerModeSoundEffectsTimeLowEnabledKeyName;
+   static const char *TrainerModeSoundEffectsCountdownEnabledKeyName;
+   static const char *TrainerModeBallStartPositionKeyName;
+   static const char *TrainerModeBallStartVelocityKeyName;
+   static const char *TrainerModeBallStartAngularMomentumKeyName;
+   static const char *TrainerModeBallStartAngleStartKeyName;
+   static const char *TrainerModeBallStartAngleFinishKeyName;
+   static const char *TrainerModeBallStartTotalAnglesKeyName;
+   static const char *TrainerModeBallStartVelocityStartKeyName;
+   static const char *TrainerModeBallStartVelocityFinishKeyName;
+   static const char *TrainerModeBallStartTotalVelocitiesKeyName;
+   static const char *TrainerModeBallPassPosition3DKeyName;
+   static const char *TrainerModeBallPassRadiusPercentKeyName;
+   static const char *TrainerModeBallPassAssociationsKeyName;
+   static const char *TrainerModeBallFailPosition3DKeyName;
+   static const char *TrainerModeBallFailRadiusPercentKeyName;
+   static const char *TrainerModeBallFailAssociationsKeyName;
 
    bool GetSettingsFileName(Player &player, std::string &fileName);
    void LoadSettings(Player &player);
-   void LoadSettingsDifficultyVariance(Player &player, CSimpleIni &iniFile, const char * sectionName, const char * varianceKeyName, S32 &variance, const char * modeKeyName, TrainerOptions::DifficultyVarianceModeType &mode);
+   void LoadSettingsDifficultyVariance(Player &player, CSimpleIni &iniFile, const char *sectionName, const char *varianceKeyName, S32 &variance, const char *modeKeyName, TrainerOptions::DifficultyVarianceModeType &mode);
    void SaveSettings(Player &player);
-   void SaveSettingsDifficultyVariance(Player &player, CSimpleIni &iniFile, const char * sectionName, const char * varianceKeyName, S32 variance, const char * modeKeyName, TrainerOptions::DifficultyVarianceModeType mode);
+   void SaveSettingsDifficultyVariance(Player &player, CSimpleIni &iniFile, const char *sectionName, const char *varianceKeyName, S32 variance, const char *modeKeyName, TrainerOptions::DifficultyVarianceModeType mode);
    void InitBallsDecreased(Player &player);
    void InitBallsIncreased(Player &player);
    void InitControlVBalls(Player &player);
@@ -966,7 +973,7 @@ private:
    void DrawLine(Player &player, const Vertex3Ds &posA, const Vertex3Ds &posB, D3DCOLOR color);
    void DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float ballRadius, float intersectionRadius, D3DCOLOR color);
    void DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
-   void DrawFakeBallAtMousePosition(Player &player, float heightZ, float intersectionRadius, Texture &texture, const Vertex3Ds * lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr);
+   void DrawFakeBallAtMousePosition(Player &player, float heightZ, float intersectionRadius, Texture &texture, const Vertex3Ds *lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr);
    bool ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallPasses(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallFails(std::size_t index, int currentTimeMs);
@@ -1017,7 +1024,9 @@ private:
    float DistancePixels(const Vertex3Ds &pos1, const Vertex3Ds &pos2);
    float VelocityPixels(const Vertex3Ds &vel);
    char GetBallHistoryKey(Player &player, EnumAssignKeys enumAssignKey);
-   POINT Get2DPointFrom3D(Player &player, const Vertex3Ds& vertex);
+   POINT Get2DPointFrom3D(Player &player, const Vertex3Ds &vertex);
+   Vertex3Ds Get3DPointFromMousePosition(Player &player, float heightZ);
+   bool Get2DMousePosition(Player &player, POINT &mousePosition2D, bool correct=true);
    Vertex3Ds GetKickerPosition(Kicker &kicker);
    void SetFlipperStrength(float flipperStrength);
    float GetFlipperStrength();
@@ -1032,13 +1041,13 @@ private:
 
    bool BallInsideAutoControlVertex(std::vector<Ball *> &controlVBalls);
 
-   std::vector<std::string> Split(const char * str, char delimeter);
+   std::vector<std::string> Split(const char *str, char delimeter);
    void CenterMouse(Player &player);
 
-   void InvalidEnumValue(const char * enumName, const int enumValue);
-   void InvalidEnumValue(const char * enumName, const char * enumValue);
+   void InvalidEnumValue(const char *enumName, const int enumValue);
+   void InvalidEnumValue(const char *enumName, const char *enumValue);
 
-   void PlaySound(UINT rcId, bool async=false);
+   void PlaySound(UINT rcId, bool async = false);
    void StopSound();
 };
 

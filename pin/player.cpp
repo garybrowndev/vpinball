@@ -376,9 +376,10 @@ BallHistory::DebugPrintRecord::DebugPrintRecord(Player &player, DebugFontRecord 
 
 void BallHistory::DebugPrintRecord::InitTextXY()
 {
-   m_TextX = 10;
+   m_TextX = 0;
    m_TextY = -10;
    m_TextYStep = int(m_DebugFontRecord.m_FontHeight * TextYStepPercent);
+   Justification = JustificationType::JustificationType_Left;
 }
 
 void BallHistory::DebugPrintRecord::SetPosition(float x, float y)
@@ -391,6 +392,10 @@ void BallHistory::DebugPrintRecord::SetPosition(float x, float y)
    else if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 90.0f)
    {
       SetDebugOutputPosition(x - DBG_SPRITE_SIZE, y);
+   }
+   else if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 180.0f)
+   {
+      SetDebugOutputPosition(-x + 260, -y - 300);
    }
    else
    {
@@ -408,6 +413,10 @@ void BallHistory::DebugPrintRecord::SetPositionPercent(float x, float y)
    else if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 90.0f)
    {
       SetPosition(m_Player.m_width - (y * m_Player.m_width), x * m_Player.m_height);
+   }
+   else if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 180.0f)
+   {
+      SetPosition(x * m_Player.m_width, y * m_Player.m_height);
    }
    else
    {
@@ -436,7 +445,48 @@ void BallHistory::DebugPrintRecord::ShowText(const char * format, ...)
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
+
+   int textYStepNext = m_TextY + (2 * m_TextYStep);
+   if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 270.0f)
+   {
+      if (textYStepNext > m_Player.m_width)
+      {
+         SetPositionPercent(1.00f, 0.00f);
+         Justification = JustificationType_Right;
+      }
+   }
+   else if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 90.0f)
+   {
+      if (textYStepNext > m_Player.m_width)
+      {
+         SetPositionPercent(1.00f, 0.00f);
+         Justification = JustificationType_Right;
+      }
+   }
+   else
+   {
+      if (textYStepNext > m_Player.m_height)
+      {
+         SetPositionPercent(1.00f, 0.00f);
+         Justification = JustificationType_Right;
+      }
+   }
+
    DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, false, NormalMenuColor, m_DebugFontRecord.m_Font);
+}
+
+void BallHistory::DebugPrintRecord::ShowTextOffset(int xOffset, const char * format, ...)
+{
+   va_list formatArgs;
+   va_start(formatArgs, format);
+   vsprintf_s(m_StrBuffer, format, formatArgs);
+   if (m_TextY > m_Player.m_height)
+   {
+      SetPositionPercent(1.00f, 0.00f);
+      Justification = JustificationType_Right;
+   }
+
+   DebugPrint(m_TextX + xOffset, m_TextY += m_TextYStep, m_StrBuffer, false, NormalMenuColor, m_DebugFontRecord.m_Font);
 }
 
 void BallHistory::DebugPrintRecord::ShowTextPos(int x, int y, const char * format, ...)
@@ -517,7 +567,7 @@ void BallHistory::DebugPrintRecord::ShowMenuTextSelect(bool selected, const char
 void BallHistory::DebugPrintRecord::SetDebugOutputPosition(const float x, const float y)
 {
    const D3DXVECTOR2 spritePos(x,y);
-   const D3DXVECTOR2 spriteCenter(DBG_SPRITE_SIZE/2, DBG_SPRITE_SIZE/2);
+   const D3DXVECTOR2 spriteCenter(DBG_SPRITE_SIZE / 2, DBG_SPRITE_SIZE / 2);
 
    const float angle = ANGTORAD(m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set]);
    D3DXMATRIX mat;
@@ -531,22 +581,36 @@ void BallHistory::DebugPrintRecord::DebugPrint(int x, int y, LPCSTR text, bool c
 {
    if (font)
    {
-      int xx = x;
       m_DebugFontRecord.m_Sprite->Begin(D3DXSPRITE_ALPHABLEND | D3DXSPRITE_SORT_TEXTURE);
       RECT fontRect;
       SetRect(&fontRect, x, y, 0, 0);
       font->DrawText(m_DebugFontRecord.m_Sprite, text, -1, &fontRect, DT_CALCRECT, 0xFFFFFFFF);
+
       if (center)
       {
-         xx = x - (fontRect.right - fontRect.left) / 2;
+         x = x - (fontRect.right - fontRect.left) / 2;
       }
-      SetRect(&fontRect, xx, y, 0, 0);
+      else
+      {
+         switch (Justification)
+         {
+            case JustificationType::JustificationType_Left:
+               x = (x + 5);
+               break;
+
+            case JustificationType::JustificationType_Right:
+               x = (x - 5) - (fontRect.right - fontRect.left);
+               break;
+         }
+      }
+
+      SetRect(&fontRect, x, y, 0, 0);
 
       for(unsigned int i = 0; i < 4; ++i)
       {
          constexpr int offset = 1;
          RECT shadowRect;
-         SetRect( &shadowRect, xx + ((i == 0) ? -offset : (i == 1) ? offset : 0), y + ((i == 2) ? -offset : (i == 3) ? offset : 0), 0, 0 );
+         SetRect( &shadowRect, x + ((i == 0) ? -offset : (i == 1) ? offset : 0), y + ((i == 2) ? -offset : (i == 3) ? offset : 0), 0, 0 );
          font->DrawText(m_DebugFontRecord.m_Sprite, text, -1, &shadowRect, DT_NOCLIP, 0xFF000000);
       }
 
@@ -686,7 +750,7 @@ BallHistory::BallHistory(PinTable &pinTable) :
 
 bool BallHistory::GetSettingsFileName(Player &player, std::string &fileName)
 {
-   // TODO GARY fix potential leak of crypt context, crypt hash and file hanles
+   // TODO GARY fix potential leak of crypt context, crypt hash and file handles
    // if return false happens, the handles will not be cleaned up
    fileName.clear();
 
@@ -1592,6 +1656,23 @@ char BallHistory::GetBallHistoryKey(Player &player, EnumAssignKeys enumAssignKey
    return get_vk(player.m_rgKeys[enumAssignKey]);
 }
 
+bool BallHistory::Get2DMousePosition(Player &player, POINT &mousePosition2D, bool correct)
+{
+   bool retVal = false;
+   if (GetCursorPos(&mousePosition2D) == TRUE &&
+      ScreenToClient(player.m_pininput.m_hwnd, &mousePosition2D) == TRUE)
+   {
+      if (correct && player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 180.0f)
+      {
+         mousePosition2D.x = player.m_width - mousePosition2D.x;
+         mousePosition2D.y = player.m_height - mousePosition2D.y;
+      }
+
+      retVal = true;
+   }
+   return retVal;
+}
+
 // Generated via ChatGPT (and refactored to fit vpinball style/types) using the prompt:
 // "Write me a function in C++ which converts a 3d vertex in DirectX to screen space x/y coordinate"
 POINT BallHistory::Get2DPointFrom3D(Player &player, const Vertex3Ds& vertex)
@@ -1616,7 +1697,24 @@ POINT BallHistory::Get2DPointFrom3D(Player &player, const Vertex3Ds& vertex)
       LONG((-transformedVertex.y + 1.0f) * 0.5f * player.m_height)
    };
 
+   if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 180.0f)
+   {
+      screenPoint.x = player.m_width - screenPoint.x;
+      screenPoint.y = player.m_height - screenPoint.y;
+   }
+
    return screenPoint;
+}
+
+Vertex3Ds BallHistory::Get3DPointFromMousePosition(Player &player, float heightZ)
+{
+   Vertex3Ds point3D = { 0.0f, 0.0f, 0.0f };
+   POINT mousePosition2D = { 0 };
+   if (Get2DMousePosition(player, mousePosition2D, false))
+   {
+      point3D = g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D, float(m_MenuOptions.m_NormalOptions.m_CreateZ));
+   }
+   return point3D;
 }
 
 Vertex3Ds BallHistory::GetKickerPosition(Kicker &kicker)
@@ -2142,7 +2240,7 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
 
                if (bpor.m_RadiusPercent == 0.0f)
                {
-                  dpr.ShowMenuText("  Finish Mode = <Not Set>");
+                  dpr.ShowText("  Finish Mode = <Not Set>");
                }
                else if (bpor.m_RadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
                {
@@ -2162,7 +2260,7 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
 
                if (bpor.m_AssociatedBallStartIndexes.size() == 0)
                {
-                  dpr.ShowMenuText("  Associations = **None - Ball End Ignored**");
+                  dpr.ShowText("  Associations = **None - Ball End Ignored**");
                }
                else
                {
@@ -2205,7 +2303,7 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
 
                if (bfor.m_RadiusPercent == 0.0f)
                {
-                  dpr.ShowMenuText("  Finish Mode = <Not Set>");
+                  dpr.ShowText("  Finish Mode = <Not Set>");
                }
                else if (bfor.m_RadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
                {
@@ -2224,7 +2322,7 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
 
                if (bfor.m_AssociatedBallStartIndexes.size() == 0)
                {
-                  dpr.ShowMenuText("  Associations = **None - Ball End Ignored**");
+                  dpr.ShowText("  Associations = **None - Ball End Ignored**");
                }
                else
                {
@@ -3239,8 +3337,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       dpr.ShowMenuTextError("%s", m_MenuOptions.m_MenuError.c_str());
    }
 
-   POINT mousePosition2D;
-   Vertex3Ds mousePosition3D;
+   POINT mousePosition2D = { 0 };
+   Get2DMousePosition(player, mousePosition2D);
+   Vertex3Ds mousePosition3D = Get3DPointFromMousePosition(player, float(m_MenuOptions.m_NormalOptions.m_CreateZ));
 
    switch (m_MenuOptions.m_MenuState)
    {
@@ -3616,17 +3715,11 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
          dpr.ShowMenuTextTitle("Manage Auto Control Locations");
 
-         if (GetCursorPos(&mousePosition2D) == TRUE)
-         {
-            if (ScreenToClient(player.m_pininput.m_hwnd, &mousePosition2D) == TRUE)
-            {
-               mousePosition3D = g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D, float(m_MenuOptions.m_NormalOptions.m_CreateZ));
-               dpr.ShowMenuText("Point %zu %.2f,%.2f,%.2f,%ld,%ld (3x,3y,3z,2x,2y)",
-                  m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size() + 1,
-                  mousePosition3D.x, mousePosition3D.y, mousePosition3D.z,
-                  mousePosition2D.x, mousePosition2D.y);
-            }
-         }
+         mousePosition3D = Get3DPointFromMousePosition(player, float(m_MenuOptions.m_NormalOptions.m_CreateZ));
+         dpr.ShowMenuText("Point %zu %.2f,%.2f,%.2f,%ld,%ld (3x,3y,3z,2x,2y)",
+            m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size() + 1,
+            mousePosition3D.x, mousePosition3D.y, mousePosition3D.z,
+            mousePosition2D.x, mousePosition2D.y);
 
          float radius = m_ControlVBalls.size() ? m_ControlVBalls[0]->m_d.m_radius : 25.0f;
          S32 heightMinimum = S32(player.m_ptable->m_tableheight + radius);
@@ -4195,10 +4288,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          // Simply being on the results view causes this and it should not work this way
 
          ShowPreviousRunRecord(dpr);
-         dpr.m_TextX -= 150;
+
          dpr.ShowText("");
          dpr.ShowText("%s:", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord == m_MenuOptions.m_TrainerOptions.m_RunRecords.size() ? "Final Run Results" : "Current Run Results");
-
          std::size_t totalPasses = 0;
          std::size_t totalFailsLocation = 0;
          std::size_t totalFailsTimeElapsed = 0;
@@ -4233,10 +4325,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
 
          std::size_t runRecordsSize = m_MenuOptions.m_TrainerOptions.m_RunRecords.size();
-         dpr.ShowText("%5zu = Pass%s", totalPasses, totalPasses == 1 ? "" : "es");
+         dpr.ShowText("%*zu = Pass%s", 8, totalPasses, totalPasses == 1 ? "" : "es");
          if (runRecordsSize)
          {
-            dpr.ShowText("%4.1f%% = Pass Percent", float(totalPasses) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
+            dpr.ShowText("%04.1f%% = Pass Percent", float(totalPasses) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
          }
          else
          {
@@ -4244,8 +4336,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
          if (totalPasses)
          {
-            dpr.ShowText("%5.2f = Pass Time Average", float(totalPassMs) / totalPasses / 1000);
-            dpr.ShowText("%5.2f = Pass Time StdDev", 0.0f);
+            dpr.ShowText("%05.2f = Pass Time Average", float(totalPassMs) / totalPasses / 1000);
+            dpr.ShowText("%05.2f = Pass Time StdDev", 0.0f);
          }
          else
          {
@@ -4253,10 +4345,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             dpr.ShowText("<n/a> = Pass Time StdDev");
          }
 
-         dpr.ShowText("%5zu = Fail%s (LOCATION)", totalFailsLocation, totalFailsLocation == 1 ? "" : "s");
+         dpr.ShowText("%*zu = Fail%s (LOCATION)", 8, totalFailsLocation, totalFailsLocation == 1 ? "" : "s");
          if (runRecordsSize)
          {
-            dpr.ShowText("%4.1f%% = Fail Percent", float(totalFailsLocation) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
+            dpr.ShowText("%04.1f%% = Fail Percent", float(totalFailsLocation) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
          }
          else
          {
@@ -4264,8 +4356,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
          if (totalFailsLocation)
          {
-            dpr.ShowText("%5.2f = Fail Time Average", float(totalFailLocationMs) / totalFailsLocation / 1000);
-            dpr.ShowText("%5.2f = Fail Time StdDev", 0.0f);
+            dpr.ShowText("%05.2f = Fail Time Average", float(totalFailLocationMs) / totalFailsLocation / 1000);
+            dpr.ShowText("%05.2f = Fail Time StdDev", 0.0f);
          }
          else
          {
@@ -4273,20 +4365,20 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             dpr.ShowText("<n/a> = Fail Time StdDev");
          }
 
-         dpr.ShowText("%5zu = Fail%s (TIME)", totalFailsTimeElapsed, totalFailsTimeElapsed == 1 ? "" : "s");
+         dpr.ShowText("%*zu = Fail%s (TIME)", 8, totalFailsTimeElapsed, totalFailsTimeElapsed == 1 ? "" : "s");
          if (runRecordsSize)
          {
-            dpr.ShowText("%4.1f%% = Fail Percent", float(totalFailsTimeElapsed) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
+            dpr.ShowText("%04.1f%% = Fail Percent", float(totalFailsTimeElapsed) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
          }
          else
          {
             dpr.ShowText("<n/a> = Fail Percent");
          }
 
-         dpr.ShowText("%5zu = Fail%s (KICKER)", totalFailsKicker, totalFailsKicker == 1 ? "" : "s");
+         dpr.ShowText("%*zu = Fail%s (KICKER)", 8, totalFailsKicker, totalFailsKicker == 1 ? "" : "s");
          if (runRecordsSize)
          {
-            dpr.ShowText("%4.1f%% = Fail Percent", float(totalFailsKicker) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
+            dpr.ShowText("%04.1f%% = Fail Percent", float(totalFailsKicker) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
          }
          else
          {
@@ -4295,8 +4387,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord)
          {
-            dpr.ShowText("%5.2f = Run Time Average", float(totalRunsMs) / m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord / 1000);
-            dpr.ShowText("%5.2f = Run Time StdDev", 0.0f);
+            dpr.ShowText("%05.2f = Run Time Average", float(totalRunsMs) / m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord / 1000);
+            dpr.ShowText("%05.2f = Run Time StdDev", 0.0f);
          }
          else
          {
@@ -4304,7 +4396,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             dpr.ShowText("<n/a> = Run Time StdDev");
          }
 
-         dpr.InitTextXY();
          dpr.SetPositionPercent(0.50f, 1.00f);
          dpr.ToggleReverse();
          ShowCurrentRunRecord(dpr, currentTimeMs);
@@ -4612,15 +4703,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
          TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
          dpr.ShowMenuTextTitle("Custom Ball Start %zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
-
-         if (GetCursorPos(&mousePosition2D) == TRUE)
-         {
-            if (ScreenToClient(player.m_pininput.m_hwnd, &mousePosition2D) == TRUE)
-            {
-               mousePosition3D = g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ));
-               dpr.ShowMenuText("Position %.2f,%.2f,%.2f (3x,3y,3z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
-            }
-         }
+         dpr.ShowMenuText("Position %.2f,%.2f,%.2f (3x,3y,3z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
 
          float radius = m_ControlVBalls.size() ? m_ControlVBalls[0]->m_d.m_radius : 25.0f;
          S32 heightMinimum = S32(player.m_ptable->m_tableheight + radius);
@@ -5223,21 +5306,13 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
          dpr.ShowMenuTextTitle("Ball Pass %zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
+         dpr.ShowMenuText("Position = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
 
-         if (GetCursorPos(&mousePosition2D) == TRUE)
+         for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
          {
-            if (ScreenToClient(player.m_pininput.m_hwnd, &mousePosition2D) == TRUE)
-            {
-               mousePosition3D = g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ));
-               dpr.ShowMenuText("Position = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
-
-               for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
-               {
-                  TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
-                  float distance = DistancePixels(mousePosition3D, bsor.m_Pos);
-                  dpr.ShowMenuText("Distance to Start %zu = %.2f", bsorIndex + 1, distance);
-               }
-            }
+            TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
+            float distance = DistancePixels(mousePosition3D, bsor.m_Pos);
+            dpr.ShowMenuText("Distance to Start %zu = %.2f", bsorIndex + 1, distance);
          }
 
          float radius = m_ControlVBalls.size() ? m_ControlVBalls[0]->m_d.m_radius : 25.0f;
@@ -5765,20 +5840,13 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuTextTitle("Ball Fail %zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
 
-         if (GetCursorPos(&mousePosition2D) == TRUE)
-         {
-            if (ScreenToClient(player.m_pininput.m_hwnd, &mousePosition2D) == TRUE)
-            {
-               mousePosition3D = g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D, float(m_MenuOptions.m_TrainerOptions.m_CreateBallEndZ));
-               dpr.ShowMenuText("Position = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
+         dpr.ShowMenuText("Position = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
 
-               for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
-               {
-                  TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
-                  float distance = DistancePixels(mousePosition3D, bsor.m_Pos);
-                  dpr.ShowMenuText("Distance to Start %zu = %.2f", bsorIndex + 1, distance);
-               }
-            }
+         for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
+         {
+            TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
+            float distance = DistancePixels(mousePosition3D, bsor.m_Pos);
+            dpr.ShowMenuText("Distance to Start %zu = %.2f", bsorIndex + 1, distance);
          }
 
          float radius = m_ControlVBalls.size() ? m_ControlVBalls[0]->m_d.m_radius : 25.0f;
@@ -6181,16 +6249,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             dpr.ShowMenuText("");
             ShowDifficultyTableConstants(dpr, player);
          }
-
-         // TODO GARY Logic
-         // 
-         // - Variance
-         // -- Values
-         // --- Flipper Strength
-         // ---- Flipper::get_Strength() / Flipper::put_Strength()
-         // --- Flipper Friction
-         // ---- Flipper::get_Friction() / Flipper::put_Friction()
-         // -- Options for each value
 
          switch (menuAction)
          {
@@ -8032,31 +8090,24 @@ void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr,
 
 void BallHistory::DrawFakeBallAtMousePosition(Player &player, float heightZ, float intersectionRadius, Texture &texture, const Vertex3Ds * lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr)
 {
-   POINT mousePosition;
-   if (GetCursorPos(&mousePosition) == TRUE)
+   Vertex3Ds vertex = Get3DPointFromMousePosition(player, heightZ);
+
+   Matrix3 orientation;
+   orientation.Identity();
+   float radius = 25.0f;
+
+   if (Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr)
    {
-      if (ScreenToClient(player.m_pininput.m_hwnd, &mousePosition) == TRUE)
-      {
-         Vertex3Ds vertex(g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition, heightZ));
+      orientation = controlVBall->m_orientation;
+      radius = controlVBall->m_d.m_radius;
+   }
 
-         Matrix3 orientation;
-         orientation.Identity();
-         float radius = 25.0f;
-
-         if (Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr)
-         {
-            orientation = controlVBall->m_orientation;
-            radius = controlVBall->m_d.m_radius;
-         }
-
-         Vertex3Ds fakeBallPosition(vertex.x, vertex.y, heightZ);
-         player.DrawFakeBall(fakeBallPosition, radius, orientation, &texture);
-         DrawIntersectionCircle(player, vertex, radius, intersectionRadius, IntersectionCircleColor);
-         if (lineEndPosition)
-         {
-            DrawLine(player, fakeBallPosition, *lineEndPosition, lineColor);
-         }
-      }
+   Vertex3Ds fakeBallPosition(vertex.x, vertex.y, heightZ);
+   player.DrawFakeBall(fakeBallPosition, radius, orientation, &texture);
+   DrawIntersectionCircle(player, vertex, radius, intersectionRadius, IntersectionCircleColor);
+   if (lineEndPosition)
+   {
+      DrawLine(player, fakeBallPosition, *lineEndPosition, lineColor);
    }
 }
 
@@ -12429,156 +12480,156 @@ void Player::UpdateHUD()
     }
     SetDebugOutputPosition(x, y);
 
-	// draw all kinds of stats, incl. FPS counter
-	if (ShowStats() && !m_cameraMode && !m_closeDown)
-	{
-		char szFoo[256];
+   // draw all kinds of stats, incl. FPS counter
+   if (ShowStats() && !m_cameraMode && !m_closeDown)
+   {
+      char szFoo[256];
 
-		const float fpsAvg = (m_fpsCount == 0) ? 0.0f : m_fpsAvg / m_fpsCount;
-		if (ShowFPSonly())
-		{
-			sprintf_s(szFoo, sizeof(szFoo), "FPS: %.1f (%.1f avg)", m_fps + 0.01f, fpsAvg + 0.01f);
-			DebugPrint(0, 10, szFoo);
-		}
-		else
-		{
-		// Draw the amount of video memory used.
-		//!! Disabled until we can compute this correctly.
-		//sprintf_s(szFoo, sizeof(szFoo), " Used Graphics Memory: %.2f MB ", (float)NumVideoBytes / (float)(1024 * 1024));
-		//DebugPrint(0, 230, szFoo); //!!?
+      const float fpsAvg = (m_fpsCount == 0) ? 0.0f : m_fpsAvg / m_fpsCount;
+      if (ShowFPSonly())
+      {
+         sprintf_s(szFoo, sizeof(szFoo), "FPS: %.1f (%.1f avg)", m_fps + 0.01f, fpsAvg + 0.01f);
+         DebugPrint(0, 10, szFoo);
+      }
+      else
+      {
+      // Draw the amount of video memory used.
+      //!! Disabled until we can compute this correctly.
+      //sprintf_s(szFoo, sizeof(szFoo), " Used Graphics Memory: %.2f MB ", (float)NumVideoBytes / (float)(1024 * 1024));
+      //DebugPrint(0, 230, szFoo); //!!?
 
-		// Draw the framerate.
-		sprintf_s(szFoo, sizeof(szFoo), "FPS: %.1f (%.1f avg)  Display %s Objects (%uk/%uk Triangles)  DayNight %u%%", m_fps+0.01f, fpsAvg+0.01f, RenderStaticOnly() ? "only static" : "all", (RenderDevice::m_stats_drawn_triangles + 999) / 1000, (stats_drawn_static_triangles + m_pin3d.m_pd3dPrimaryDevice->m_stats_drawn_triangles + 999) / 1000, quantizeUnsignedPercent(m_globalEmissionScale));
-		DebugPrint(0, 10, szFoo);
+      // Draw the framerate.
+      sprintf_s(szFoo, sizeof(szFoo), "FPS: %.1f (%.1f avg)  Display %s Objects (%uk/%uk Triangles)  DayNight %u%%", m_fps+0.01f, fpsAvg+0.01f, RenderStaticOnly() ? "only static" : "all", (RenderDevice::m_stats_drawn_triangles + 999) / 1000, (stats_drawn_static_triangles + m_pin3d.m_pd3dPrimaryDevice->m_stats_drawn_triangles + 999) / 1000, quantizeUnsignedPercent(m_globalEmissionScale));
+      DebugPrint(0, 10, szFoo);
 
-		const U32 period = m_lastFrameDuration;
-		if (period > m_max || m_time_msec - m_lastMaxChangeTime > 1000)
-			m_max = period;
-		if (period > m_max_total && period < 100000)
-			m_max_total = period;
+      const U32 period = m_lastFrameDuration;
+      if (period > m_max || m_time_msec - m_lastMaxChangeTime > 1000)
+         m_max = period;
+      if (period > m_max_total && period < 100000)
+         m_max_total = period;
 
-		if (m_phys_period-m_script_period > m_phys_max || m_time_msec - m_lastMaxChangeTime > 1000)
-			m_phys_max = m_phys_period-m_script_period;
-		if (m_phys_period-m_script_period > m_phys_max_total)
-			m_phys_max_total = m_phys_period-m_script_period;
+      if (m_phys_period-m_script_period > m_phys_max || m_time_msec - m_lastMaxChangeTime > 1000)
+         m_phys_max = m_phys_period-m_script_period;
+      if (m_phys_period-m_script_period > m_phys_max_total)
+         m_phys_max_total = m_phys_period-m_script_period;
 
-		if (m_phys_iterations > m_phys_max_iterations || m_time_msec - m_lastMaxChangeTime > 1000)
-			m_phys_max_iterations = m_phys_iterations;
+      if (m_phys_iterations > m_phys_max_iterations || m_time_msec - m_lastMaxChangeTime > 1000)
+         m_phys_max_iterations = m_phys_iterations;
 
-		if (m_script_period > m_script_max || m_time_msec - m_lastMaxChangeTime > 1000)
-			m_script_max = m_script_period;
-		if (m_script_period > m_script_max_total)
-			m_script_max_total = m_script_period;
+      if (m_script_period > m_script_max || m_time_msec - m_lastMaxChangeTime > 1000)
+         m_script_max = m_script_period;
+      if (m_script_period > m_script_max_total)
+         m_script_max_total = m_script_period;
 
-		if (m_time_msec - m_lastMaxChangeTime > 1000)
-			m_lastMaxChangeTime = m_time_msec;
+      if (m_time_msec - m_lastMaxChangeTime > 1000)
+         m_lastMaxChangeTime = m_time_msec;
 
-		if (m_count == 0)
-		{
-			m_total = period;
-			m_phys_total = m_phys_period-m_script_period;
-			m_phys_total_iterations = m_phys_iterations;
-			m_script_total = m_script_period;
-			m_count = 1;
-		}
-		else
-		{
-			m_total += period;
-			m_phys_total += m_phys_period-m_script_period;
-			m_phys_total_iterations += m_phys_iterations;
-			m_script_total += m_script_period;
-			m_count++;
-		}
+      if (m_count == 0)
+      {
+         m_total = period;
+         m_phys_total = m_phys_period-m_script_period;
+         m_phys_total_iterations = m_phys_iterations;
+         m_script_total = m_script_period;
+         m_count = 1;
+      }
+      else
+      {
+         m_total += period;
+         m_phys_total += m_phys_period-m_script_period;
+         m_phys_total_iterations += m_phys_iterations;
+         m_script_total += m_script_period;
+         m_count++;
+      }
 
-		sprintf_s(szFoo, sizeof(szFoo), "Overall: %.1f ms (%.1f (%.1f) avg %.1f max)",
-			float(1e-3*period), float(1e-3 * (double)m_total / (double)m_count), float(1e-3*m_max), float(1e-3*m_max_total));
-		DebugPrint(0, 30, szFoo);
-		sprintf_s(szFoo, sizeof(szFoo), "%4.1f%% Physics: %.1f ms (%.1f (%.1f %4.1f%%) avg %.1f max)",
-			float((m_phys_period-m_script_period)*100.0 / period), float(1e-3*(m_phys_period-m_script_period)),
-			float(1e-3 * (double)m_phys_total / (double)m_count), float(1e-3*m_phys_max), float((double)m_phys_total*100.0 / (double)m_total), float(1e-3*m_phys_max_total));
-		DebugPrint(0, 50, szFoo);
-		sprintf_s(szFoo, sizeof(szFoo), "%4.1f%% Scripts: %.1f ms (%.1f (%.1f %4.1f%%) avg %.1f max)",
-			float(m_script_period*100.0 / period), float(1e-3*m_script_period),
-			float(1e-3 * (double)m_script_total / (double)m_count), float(1e-3*m_script_max), float((double)m_script_total*100.0 / (double)m_total), float(1e-3*m_script_max_total));
-		DebugPrint(0, 70, szFoo);
+      sprintf_s(szFoo, sizeof(szFoo), "Overall: %.1f ms (%.1f (%.1f) avg %.1f max)",
+         float(1e-3*period), float(1e-3 * (double)m_total / (double)m_count), float(1e-3*m_max), float(1e-3*m_max_total));
+      DebugPrint(0, 30, szFoo);
+      sprintf_s(szFoo, sizeof(szFoo), "%4.1f%% Physics: %.1f ms (%.1f (%.1f %4.1f%%) avg %.1f max)",
+         float((m_phys_period-m_script_period)*100.0 / period), float(1e-3*(m_phys_period-m_script_period)),
+         float(1e-3 * (double)m_phys_total / (double)m_count), float(1e-3*m_phys_max), float((double)m_phys_total*100.0 / (double)m_total), float(1e-3*m_phys_max_total));
+      DebugPrint(0, 50, szFoo);
+      sprintf_s(szFoo, sizeof(szFoo), "%4.1f%% Scripts: %.1f ms (%.1f (%.1f %4.1f%%) avg %.1f max)",
+         float(m_script_period*100.0 / period), float(1e-3*m_script_period),
+         float(1e-3 * (double)m_script_total / (double)m_count), float(1e-3*m_script_max), float((double)m_script_total*100.0 / (double)m_total), float(1e-3*m_script_max_total));
+      DebugPrint(0, 70, szFoo);
 
-		// performance counters
-		sprintf_s(szFoo, sizeof(szFoo), "Draw calls: %u (%u Locks)", m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumDrawCalls(), m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumLockCalls());
-		DebugPrint(0, 95, szFoo);
-		sprintf_s(szFoo, sizeof(szFoo), "State changes: %u", m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumStateChanges());
-		DebugPrint(0, 115, szFoo);
-		sprintf_s(szFoo, sizeof(szFoo), "Texture changes: %u (%u Uploads)", m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumTextureChanges(), m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumTextureUploads());
-		DebugPrint(0, 135, szFoo);
-		sprintf_s(szFoo, sizeof(szFoo), "Shader/Parameter changes: %u / %u (%u Material ID changes)", m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumTechniqueChanges(), m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumParameterChanges(), material_flips);
-		DebugPrint(0, 155, szFoo);
-		sprintf_s(szFoo, sizeof(szFoo), "Objects: %u Transparent, %u Solid", (unsigned int)m_vHitTrans.size(), (unsigned int)m_vHitNonTrans.size());
-		DebugPrint(0, 175, szFoo);
+      // performance counters
+      sprintf_s(szFoo, sizeof(szFoo), "Draw calls: %u (%u Locks)", m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumDrawCalls(), m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumLockCalls());
+      DebugPrint(0, 95, szFoo);
+      sprintf_s(szFoo, sizeof(szFoo), "State changes: %u", m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumStateChanges());
+      DebugPrint(0, 115, szFoo);
+      sprintf_s(szFoo, sizeof(szFoo), "Texture changes: %u (%u Uploads)", m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumTextureChanges(), m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumTextureUploads());
+      DebugPrint(0, 135, szFoo);
+      sprintf_s(szFoo, sizeof(szFoo), "Shader/Parameter changes: %u / %u (%u Material ID changes)", m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumTechniqueChanges(), m_pin3d.m_pd3dPrimaryDevice->Perf_GetNumParameterChanges(), material_flips);
+      DebugPrint(0, 155, szFoo);
+      sprintf_s(szFoo, sizeof(szFoo), "Objects: %u Transparent, %u Solid", (unsigned int)m_vHitTrans.size(), (unsigned int)m_vHitNonTrans.size());
+      DebugPrint(0, 175, szFoo);
 
-		sprintf_s(szFoo, sizeof(szFoo), "Physics: %u iterations per frame (%u avg %u max)    Ball Velocity / Ang.Vel.: %.1f %.1f",
-			m_phys_iterations,
-			(U32)(m_phys_total_iterations / m_count),
-			m_phys_max_iterations,
-			m_pactiveball ? (m_pactiveball->m_d.m_vel + (float)PHYS_FACTOR*m_gravity).Length() : -1.f, m_pactiveball ? (m_pactiveball->m_angularmomentum / m_pactiveball->Inertia()).Length() : -1.f);
-		DebugPrint(0, 200, szFoo);
+      sprintf_s(szFoo, sizeof(szFoo), "Physics: %u iterations per frame (%u avg %u max)    Ball Velocity / Ang.Vel.: %.1f %.1f",
+         m_phys_iterations,
+         (U32)(m_phys_total_iterations / m_count),
+         m_phys_max_iterations,
+         m_pactiveball ? (m_pactiveball->m_d.m_vel + (float)PHYS_FACTOR*m_gravity).Length() : -1.f, m_pactiveball ? (m_pactiveball->m_angularmomentum / m_pactiveball->Inertia()).Length() : -1.f);
+      DebugPrint(0, 200, szFoo);
 
 #ifdef DEBUGPHYSICS
 #ifdef C_DYNAMIC
-		sprintf_s(szFoo, sizeof(szFoo), "Hits:%5u Collide:%5u Ctacs:%5u Static:%5u Embed:%5u TimeSearch:%5u",
-			c_hitcnts, c_collisioncnt, c_contactcnt, c_staticcnt, c_embedcnts, c_timesearch);
+      sprintf_s(szFoo, sizeof(szFoo), "Hits:%5u Collide:%5u Ctacs:%5u Static:%5u Embed:%5u TimeSearch:%5u",
+         c_hitcnts, c_collisioncnt, c_contactcnt, c_staticcnt, c_embedcnts, c_timesearch);
 #else
-		sprintf_s(szFoo, sizeof(szFoo), "Hits:%5u Collide:%5u Ctacs:%5u Embed:%5u TimeSearch:%5u",
-			c_hitcnts, c_collisioncnt, c_contactcnt, c_embedcnts, c_timesearch);
+      sprintf_s(szFoo, sizeof(szFoo), "Hits:%5u Collide:%5u Ctacs:%5u Embed:%5u TimeSearch:%5u",
+         c_hitcnts, c_collisioncnt, c_contactcnt, c_embedcnts, c_timesearch);
 #endif
-		DebugPrint(0, 220, szFoo);
+      DebugPrint(0, 220, szFoo);
 
-		sprintf_s(szFoo, sizeof(szFoo), "kDObjects: %5u kD:%5u QuadObjects: %5u Quadtree:%5u Traversed:%5u Tested:%5u DeepTested:%5u",
-			c_kDObjects, c_kDNextlevels, c_quadObjects, c_quadNextlevels, c_traversed, c_tested, c_deepTested);
-		DebugPrint(0, 240, szFoo);
+      sprintf_s(szFoo, sizeof(szFoo), "kDObjects: %5u kD:%5u QuadObjects: %5u Quadtree:%5u Traversed:%5u Tested:%5u DeepTested:%5u",
+         c_kDObjects, c_kDNextlevels, c_quadObjects, c_quadNextlevels, c_traversed, c_tested, c_deepTested);
+      DebugPrint(0, 240, szFoo);
 #endif
 
-		sprintf_s(szFoo, sizeof(szFoo), "Left Flipper keypress to rotate: %.1f ms (%d f) to eos: %.1f ms (%d f)",
-			(INT64)(m_pininput.m_leftkey_down_usec_rotate_to_end - m_pininput.m_leftkey_down_usec) < 0 ? int_as_float(0x7FC00000) : (double)(m_pininput.m_leftkey_down_usec_rotate_to_end - m_pininput.m_leftkey_down_usec) / 1000.,
-			(int)(m_pininput.m_leftkey_down_frame_rotate_to_end - m_pininput.m_leftkey_down_frame) < 0 ? -1 : (int)(m_pininput.m_leftkey_down_frame_rotate_to_end - m_pininput.m_leftkey_down_frame),
-			(INT64)(m_pininput.m_leftkey_down_usec_EOS - m_pininput.m_leftkey_down_usec) < 0 ? int_as_float(0x7FC00000) : (double)(m_pininput.m_leftkey_down_usec_EOS - m_pininput.m_leftkey_down_usec) / 1000.,
-			(int)(m_pininput.m_leftkey_down_frame_EOS - m_pininput.m_leftkey_down_frame) < 0 ? -1 : (int)(m_pininput.m_leftkey_down_frame_EOS - m_pininput.m_leftkey_down_frame));
-		DebugPrint(0, 260, szFoo);
-		}
-	}
+      sprintf_s(szFoo, sizeof(szFoo), "Left Flipper keypress to rotate: %.1f ms (%d f) to eos: %.1f ms (%d f)",
+         (INT64)(m_pininput.m_leftkey_down_usec_rotate_to_end - m_pininput.m_leftkey_down_usec) < 0 ? int_as_float(0x7FC00000) : (double)(m_pininput.m_leftkey_down_usec_rotate_to_end - m_pininput.m_leftkey_down_usec) / 1000.,
+         (int)(m_pininput.m_leftkey_down_frame_rotate_to_end - m_pininput.m_leftkey_down_frame) < 0 ? -1 : (int)(m_pininput.m_leftkey_down_frame_rotate_to_end - m_pininput.m_leftkey_down_frame),
+         (INT64)(m_pininput.m_leftkey_down_usec_EOS - m_pininput.m_leftkey_down_usec) < 0 ? int_as_float(0x7FC00000) : (double)(m_pininput.m_leftkey_down_usec_EOS - m_pininput.m_leftkey_down_usec) / 1000.,
+         (int)(m_pininput.m_leftkey_down_frame_EOS - m_pininput.m_leftkey_down_frame) < 0 ? -1 : (int)(m_pininput.m_leftkey_down_frame_EOS - m_pininput.m_leftkey_down_frame));
+      DebugPrint(0, 260, szFoo);
+      }
+   }
 
-	// Draw performance readout - at end of CPU frame, so hopefully the previous frame
-	//  (whose data we're getting) will have finished on the GPU by now.
-	if (ProfilingMode() != 0 && !m_closeDown && !m_cameraMode)
-	{
-		DebugPrint(0, 300, "Detailed (approximate) GPU profiling:");
+   // Draw performance readout - at end of CPU frame, so hopefully the previous frame
+   //  (whose data we're getting) will have finished on the GPU by now.
+   if (ProfilingMode() != 0 && !m_closeDown && !m_cameraMode)
+   {
+      DebugPrint(0, 300, "Detailed (approximate) GPU profiling:");
 
-		m_pin3d.m_gpu_profiler.WaitForDataAndUpdate();
+      m_pin3d.m_gpu_profiler.WaitForDataAndUpdate();
 
-		double dTDrawTotal = 0.0;
-		for (GTS gts = GTS_BeginFrame; gts < GTS_EndFrame; gts = GTS(gts + 1))
-			dTDrawTotal += m_pin3d.m_gpu_profiler.DtAvg(gts);
+      double dTDrawTotal = 0.0;
+      for (GTS gts = GTS_BeginFrame; gts < GTS_EndFrame; gts = GTS(gts + 1))
+         dTDrawTotal += m_pin3d.m_gpu_profiler.DtAvg(gts);
 
-		char szFoo[256];
-		if (ProfilingMode() == 1)
-		{
-			sprintf_s(szFoo, sizeof(szFoo), " Draw time: %.2f ms", float(1000.0 * dTDrawTotal));
-			DebugPrint(0, 320, szFoo);
-			for (GTS gts = GTS(GTS_BeginFrame + 1); gts < GTS_EndFrame; gts = GTS(gts + 1))
-			{
-				sprintf_s(szFoo, sizeof(szFoo), "   %s: %.2f ms (%4.1f%%)", GTS_name[gts], float(1000.0 * m_pin3d.m_gpu_profiler.DtAvg(gts)), float(100. * m_pin3d.m_gpu_profiler.DtAvg(gts)/dTDrawTotal));
-				DebugPrint(0, 320 + gts * 20, szFoo);
-			}
-			sprintf_s(szFoo, sizeof(szFoo), " Frame time: %.2f ms", float(1000.0 * (dTDrawTotal + m_pin3d.m_gpu_profiler.DtAvg(GTS_EndFrame))));
-			DebugPrint(0, 320 + GTS_EndFrame * 20, szFoo);
-		}
-		else
-		{
-			for (GTS gts = GTS(GTS_BeginFrame + 1); gts < GTS_EndFrame; gts = GTS(gts + 1))
-			{
-				sprintf_s(szFoo, sizeof(szFoo), " %s: %.2f ms (%4.1f%%)", GTS_name_item[gts], float(1000.0 * m_pin3d.m_gpu_profiler.DtAvg(gts)), float(100. * m_pin3d.m_gpu_profiler.DtAvg(gts)/dTDrawTotal));
-				DebugPrint(0, 300 + gts * 20, szFoo);
-			}
-		}
-	}
+      char szFoo[256];
+      if (ProfilingMode() == 1)
+      {
+         sprintf_s(szFoo, sizeof(szFoo), " Draw time: %.2f ms", float(1000.0 * dTDrawTotal));
+         DebugPrint(0, 320, szFoo);
+         for (GTS gts = GTS(GTS_BeginFrame + 1); gts < GTS_EndFrame; gts = GTS(gts + 1))
+         {
+            sprintf_s(szFoo, sizeof(szFoo), "   %s: %.2f ms (%4.1f%%)", GTS_name[gts], float(1000.0 * m_pin3d.m_gpu_profiler.DtAvg(gts)), float(100. * m_pin3d.m_gpu_profiler.DtAvg(gts)/dTDrawTotal));
+            DebugPrint(0, 320 + gts * 20, szFoo);
+         }
+         sprintf_s(szFoo, sizeof(szFoo), " Frame time: %.2f ms", float(1000.0 * (dTDrawTotal + m_pin3d.m_gpu_profiler.DtAvg(GTS_EndFrame))));
+         DebugPrint(0, 320 + GTS_EndFrame * 20, szFoo);
+      }
+      else
+      {
+         for (GTS gts = GTS(GTS_BeginFrame + 1); gts < GTS_EndFrame; gts = GTS(gts + 1))
+         {
+            sprintf_s(szFoo, sizeof(szFoo), " %s: %.2f ms (%4.1f%%)", GTS_name_item[gts], float(1000.0 * m_pin3d.m_gpu_profiler.DtAvg(gts)), float(100. * m_pin3d.m_gpu_profiler.DtAvg(gts)/dTDrawTotal));
+            DebugPrint(0, 300 + gts * 20, szFoo);
+         }
+      }
+   }
 
     // set debug output pos for centered text
     x = (float)(m_width - DBG_SPRITE_SIZE)*0.5f;
@@ -12605,78 +12656,78 @@ void Player::UpdateHUD()
         //!! visualize with real buttons or at least the areas??
     }
 
-	if (m_fullScreen && m_closeDown && !IsWindows10_1803orAbove()) // cannot use dialog boxes in exclusive fullscreen on older windows versions, so necessary
-		DebugPrint(DBG_SPRITE_SIZE/2, m_height/2-5, "Press 'Enter' to continue or Press 'Q' to exit", true);
+   if (m_fullScreen && m_closeDown && !IsWindows10_1803orAbove()) // cannot use dialog boxes in exclusive fullscreen on older windows versions, so necessary
+      DebugPrint(DBG_SPRITE_SIZE/2, m_height/2-5, "Press 'Enter' to continue or Press 'Q' to exit", true);
 
-	if (m_closeDown) // print table name,author,version and blurb and description in pause mode
-	{
-		char szFoo[256];
-		szFoo[0] = '\0';
+   if (m_closeDown) // print table name,author,version and blurb and description in pause mode
+   {
+      char szFoo[256];
+      szFoo[0] = '\0';
 
-		int line = 0;
+      int line = 0;
 
-		if ( !m_ptable->m_szTableName.empty() )
-			strncat_s(szFoo, m_ptable->m_szTableName.c_str(), sizeof(szFoo)-strnlen_s(szFoo, sizeof(szFoo))-1);
-		else
-			strncat_s(szFoo, "Table", sizeof(szFoo)-strnlen_s(szFoo, sizeof(szFoo))-1);
-		if (!m_ptable->m_szAuthor.empty())
-		{
-			strncat_s(szFoo, " by ", sizeof(szFoo)-strnlen_s(szFoo, sizeof(szFoo))-1);
-			strncat_s(szFoo, m_ptable->m_szAuthor.c_str(), sizeof(szFoo)-strnlen_s(szFoo, sizeof(szFoo))-1);
-		}
-		if (!m_ptable->m_szVersion.empty())
-		{
-			strncat_s(szFoo, " (", sizeof(szFoo)-strnlen_s(szFoo, sizeof(szFoo))-1);
-			strncat_s(szFoo, m_ptable->m_szVersion.c_str(), sizeof(szFoo)-strnlen_s(szFoo, sizeof(szFoo))-1);
-			strncat_s(szFoo, ")", sizeof(szFoo)-strnlen_s(szFoo, sizeof(szFoo))-1);
-		}
+      if ( !m_ptable->m_szTableName.empty() )
+         strncat_s(szFoo, m_ptable->m_szTableName.c_str(), sizeof(szFoo)-strnlen_s(szFoo, sizeof(szFoo))-1);
+      else
+         strncat_s(szFoo, "Table", sizeof(szFoo)-strnlen_s(szFoo, sizeof(szFoo))-1);
+      if (!m_ptable->m_szAuthor.empty())
+      {
+         strncat_s(szFoo, " by ", sizeof(szFoo)-strnlen_s(szFoo, sizeof(szFoo))-1);
+         strncat_s(szFoo, m_ptable->m_szAuthor.c_str(), sizeof(szFoo)-strnlen_s(szFoo, sizeof(szFoo))-1);
+      }
+      if (!m_ptable->m_szVersion.empty())
+      {
+         strncat_s(szFoo, " (", sizeof(szFoo)-strnlen_s(szFoo, sizeof(szFoo))-1);
+         strncat_s(szFoo, m_ptable->m_szVersion.c_str(), sizeof(szFoo)-strnlen_s(szFoo, sizeof(szFoo))-1);
+         strncat_s(szFoo, ")", sizeof(szFoo)-strnlen_s(szFoo, sizeof(szFoo))-1);
+      }
 
-		char buffer[256];
-		sprintf_s(buffer, sizeof(buffer), " (%s Revision %u)", !m_ptable->m_szDateSaved.empty() ? m_ptable->m_szDateSaved.c_str() : "N.A.", m_ptable->m_numTimesSaved);
-		strncat_s(szFoo, buffer, sizeof(szFoo)-strnlen_s(szFoo, sizeof(szFoo))-1);
+      char buffer[256];
+      sprintf_s(buffer, sizeof(buffer), " (%s Revision %u)", !m_ptable->m_szDateSaved.empty() ? m_ptable->m_szDateSaved.c_str() : "N.A.", m_ptable->m_numTimesSaved);
+      strncat_s(szFoo, buffer, sizeof(szFoo)-strnlen_s(szFoo, sizeof(szFoo))-1);
 
-		if (strnlen_s(szFoo,sizeof(szFoo)) > 0)
-		{
-			DebugPrint(DBG_SPRITE_SIZE/2, line * 20 + 10, szFoo, true);
-			line += 2;
-			DebugPrint(DBG_SPRITE_SIZE/2, line * 20 + 10, "========================================", true);
-			line += 2;
-		}
+      if (strnlen_s(szFoo,sizeof(szFoo)) > 0)
+      {
+         DebugPrint(DBG_SPRITE_SIZE/2, line * 20 + 10, szFoo, true);
+         line += 2;
+         DebugPrint(DBG_SPRITE_SIZE/2, line * 20 + 10, "========================================", true);
+         line += 2;
+      }
 
-		for (unsigned int i2 = 0; i2 < 2; ++i2)
-		{
-			const string& s = (i2 == 0) ? m_ptable->m_szBlurb : m_ptable->m_szDescription;
-			int length = (int)s.length();
-			const char *desc = s.c_str();
-			while (length > 0)
-			{
-				unsigned int o = 0;
-				for (unsigned int i = 0; i < 100; ++i, ++o)
-					if (desc[i] != '\n' && desc[i] != 0)
-						szFoo[o] = desc[i];
-					else
-						break;
+      for (unsigned int i2 = 0; i2 < 2; ++i2)
+      {
+         const string& s = (i2 == 0) ? m_ptable->m_szBlurb : m_ptable->m_szDescription;
+         int length = (int)s.length();
+         const char *desc = s.c_str();
+         while (length > 0)
+         {
+            unsigned int o = 0;
+            for (unsigned int i = 0; i < 100; ++i, ++o)
+               if (desc[i] != '\n' && desc[i] != 0)
+                  szFoo[o] = desc[i];
+               else
+                  break;
 
-				szFoo[o] = 0;
+            szFoo[o] = 0;
 
-				DebugPrint(DBG_SPRITE_SIZE/2, line * 20 + 10, szFoo, true);
+            DebugPrint(DBG_SPRITE_SIZE/2, line * 20 + 10, szFoo, true);
 
-				if (o < 100)
-					o++;
-				length -= o;
-				desc += o;
+            if (o < 100)
+               o++;
+            length -= o;
+            desc += o;
 
-				line++;
-			}
+            line++;
+         }
 
-			if (i2 == 0 && !s.empty())
-			{
-				line++;
-				DebugPrint(DBG_SPRITE_SIZE/2, line * 20 + 10, "========================================", true);
-				line+=2;
-			}
-		}
-	}
+         if (i2 == 0 && !s.empty())
+         {
+            line++;
+            DebugPrint(DBG_SPRITE_SIZE/2, line * 20 + 10, "========================================", true);
+            line+=2;
+         }
+      }
+   }
 }
 #endif
 
