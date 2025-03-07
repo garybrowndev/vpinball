@@ -736,7 +736,6 @@ private:
       void ToggleReverse();
       int GetTextWidth(const char *format, ...);
       void ShowText(const char *format, ...);
-      void ShowTextOffset(int xOffset, const char *format, ...);
       void ShowTextPos(int x, int y, const char *format, ...);
       void ShowTextTitle(const char *format, ...);
       void ShowTextWithMenu(bool isMenu, const char *format, ...);
@@ -859,7 +858,7 @@ private:
       static const int SkipControlIntervalMs;
       static const S32 SkipControlStepFactor;
 
-      static const float DefaultFakeBallRadius;
+      static const float DefaultBallRadius;
 
       MenuStateType m_MenuState;
       ModeType m_ModeType;
@@ -1061,6 +1060,7 @@ private:
    BallHistoryRecord &Get(std::size_t index);
    std::size_t GetTailIndex();
 
+   float GetDefaultBallRadius();
    float DistancePixels(POINT &p1, POINT &p2);
    float DistancePixels(const Vertex3Ds &pos1, const Vertex3Ds &pos2);
    float VelocityPixels(const Vertex3Ds &vel);
