@@ -376,13 +376,12 @@ public:
       BallEndCompleteModeType_COUNT
    };
 
-   enum BallCorridorConfigModeState
+   enum BallCorridorCompleteModeType
    {
-      BallCorridorConfigModeState_Accept,
-      BallCorridorConfigModeState_PassLocation,
-      BallCorridorConfigModeState_Opening1Location,
-      BallCorridorConfigModeState_Opening2Location,
-      BallCorridorConfigModeState_COUNT
+      BallCorridorCompleteModeType_Accept,
+      BallCorridorCompleteModeType_Config,
+      BallCorridorCompleteModeType_Reset,
+      BallCorridorCompleteModeType_COUNT
    };
 
    enum DifficultyConfigModeState
@@ -483,8 +482,8 @@ public:
       Vertex3Ds m_PassPosition;
       float m_PassRadiusPercent;
 
-      Vertex3Ds m_Opening1;
-      Vertex3Ds m_Opening2;
+      Vertex3Ds m_OpeningPosition1;
+      Vertex3Ds m_OpeningPosition2;
 
       BallCorridorOptionsRecord();
       BallCorridorOptionsRecord(const Vertex3Ds &passPosition, float passRadiusPercent, const Vertex3Ds &opening1, const Vertex3Ds &opening2);
@@ -521,6 +520,7 @@ public:
    BallEndFinishModeType m_BallFailFinishMode;
    BallEndAssociationModeType m_BallEndAssociationMode;
    BallEndCompleteModeType m_BallEndCompleteMode;
+   BallCorridorCompleteModeType m_BallCorridorCompleteMode;
    DifficultyConfigModeState m_DifficultyConfigModeState;
    RunOrderModeType m_RunOrderMode;
    BallKickerBehaviorModeType m_BallKickerBehaviorMode;
@@ -530,8 +530,6 @@ public:
    bool m_SoundEffectsTimeLowEnabled;
    bool m_SoundEffectsCountdownEnabled;
    bool m_SoundEffectsMenuPlayed;
-
-   S32 m_CreateBallEndZ;
 
    static const S32 GameplayDifficultyMinimum = 0;
    static const S32 GameplayDifficultyMaximum = 100;
@@ -581,7 +579,9 @@ public:
    std::size_t m_BallStartOptionsRecordsSize;
    std::vector<BallEndOptionsRecord> m_BallPassOptionsRecords;
    std::vector<BallEndOptionsRecord> m_BallFailOptionsRecords;
+
    BallCorridorOptionsRecord m_BallCorridorOptionsRecord;
+   static const float DefaultBallCorridorOpeningRadius;
 
    std::vector<RunRecord> m_RunRecords;
    std::size_t m_CurrentRunRecord;
@@ -648,8 +648,6 @@ public:
    std::size_t m_RecallControlIndex;
 
    ClearAutoControlLocationsModeType m_ClearAutoControlLocationsMode;
-
-   S32 m_CreateZ;
 
    std::vector<AutoControlVertex> m_AutoControlVertices;
 
@@ -809,19 +807,22 @@ private:
          MenuStateType_Trainer_SelectCustomBallStartAngleFinish,
          MenuStateType_Trainer_SelectCustomBallStartAngleTotal,
          MenuStateType_Trainer_BallPassComplete,
-         MenuStateType_Trainer_SelectBallPassAccept,
+         MenuStateType_Trainer_SelectBallPassManage,
          MenuStateType_Trainer_SelectBallPassLocation,
          MenuStateType_Trainer_SelectBallPassFinishMode,
          MenuStateType_Trainer_SelectBallPassDistance,
          MenuStateType_Trainer_SelectBallPassAssociations,
          MenuStateType_Trainer_BallFailComplete,
-         MenuStateType_Trainer_SelectBallFailAccept,
+         MenuStateType_Trainer_SelectBallFailManage,
          MenuStateType_Trainer_SelectBallFailLocation,
          MenuStateType_Trainer_SelectBallFailFinishMode,
          MenuStateType_Trainer_SelectBallFailDistance,
          MenuStateType_Trainer_SelectBallFailAssociations,
-         MenuStateType_Trainer_BallCorridorOptions,
+         MenuStateType_Trainer_SelectBallCorridorComplete,
          MenuStateType_Trainer_SelectBallCorridorPassLocation,
+         MenuStateType_Trainer_SelectBallCorridorPassDistance,
+         MenuStateType_Trainer_SelectBallCorridorOpening1Location,
+         MenuStateType_Trainer_SelectBallCorridorOpening2PassLocation,
          MenuStateType_Trainer_SelectDifficultyOptions,
          MenuStateType_Trainer_SelectDifficultyGameplayDifficulty,
          MenuStateType_Trainer_SelectDifficultyVarianceDifficulty,
@@ -858,9 +859,13 @@ private:
       static const int SkipControlIntervalMs;
       static const S32 SkipControlStepFactor;
 
+      static const float DefaultFakeBallRadius;
+
       MenuStateType m_MenuState;
       ModeType m_ModeType;
       std::string m_MenuError;
+
+      S32 m_CreateZ;
 
       NormalOptions m_NormalOptions;
       TrainerOptions m_TrainerOptions;
@@ -920,6 +925,8 @@ private:
    Texture *m_TrainerBallStartTexture;
    Texture *m_TrainerBallPassTexture;
    Texture *m_TrainerBallFailTexture;
+   Texture *m_TrainerBallCorridorPassTexture;
+   Texture *m_TrainerBallCorridorOpeningTexture;
    Texture *m_ActiveBallKickerTexture;
    std::map<U32, Texture *> m_ControlHistoryBallTextures;
 
@@ -984,6 +991,10 @@ private:
    static const char *TrainerModeBallFailPosition3DKeyName;
    static const char *TrainerModeBallFailRadiusPercentKeyName;
    static const char *TrainerModeBallFailAssociationsKeyName;
+   static const char *TrainerModeBallCorridorPassPosition3DKeyName;
+   static const char *TrainerModeBallCorridorPassRadiusPercentKeyName;
+   static const char *TrainerModeBallCorridorOpeningPosition13DKeyName;
+   static const char *TrainerModeBallCorridorOpeningPosition23DKeyName;
 
    bool GetSettingsFileName(Player &player, std::string &fileName);
    void LoadSettings(Player &player);
@@ -1002,10 +1013,11 @@ private:
    void DrawLine(Player &player, const Vertex3Ds &posA, const Vertex3Ds &posB, D3DCOLOR color);
    void DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float ballRadius, float intersectionRadius, D3DCOLOR color);
    void DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
-   void DrawFakeBallAtMousePosition(Player &player, float heightZ, float intersectionRadius, Texture &texture, const Vertex3Ds *lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr);
+   void DrawFakeBallAtMousePosition(Player &player, float heightZ, float radius, float intersectionRadius, Texture &texture, const Vertex3Ds *lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr);
    bool ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallPasses(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallFails(std::size_t index, int currentTimeMs);
+   bool ShouldDrawTrainerBallCorridor(int currentTimeMs);
    bool ShouldDrawActiveBallKickers(int currentTimeMs);
    void DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
    void DrawActiveBallKickers(Player &player, float radius, Matrix3 &orientation, DebugPrintRecord &dpr);
