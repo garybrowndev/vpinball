@@ -1032,6 +1032,7 @@ private:
    void ShowCurrentRunRecord(DebugPrintRecord &dpr, int currentTimeMs);
    void ShowBallStartOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallStartOptionsRecord &bsor);
    void ShowBallEndOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallEndOptionsRecord &beor);
+   void ShowBallCorridorOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor, const Vertex3Ds &mousePosition3D, bool isMenu);
    void ShowDifficultyTableConstants(DebugPrintRecord &dpr, Player &player);
    void ShowDifficultyVarianceMode(DebugPrintRecord &dpr, bool isMenu, const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode);
    void ShowDifficultyVarianceRange(DebugPrintRecord &dpr, bool isMenu, const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, S32 variance, float initial);
@@ -1063,6 +1064,7 @@ private:
    float GetDefaultBallRadius();
    float DistancePixels(POINT &p1, POINT &p2);
    float DistancePixels(const Vertex3Ds &pos1, const Vertex3Ds &pos2);
+   float DistanceToLineSegment(const Vertex3Ds& lineA, const Vertex3Ds& lineB, const Vertex3Ds& point);
    float VelocityPixels(const Vertex3Ds &vel);
    char GetBallHistoryKey(Player &player, EnumAssignKeys enumAssignKey);
    POINT Get2DPointFrom3D(Player &player, const Vertex3Ds &vertex);

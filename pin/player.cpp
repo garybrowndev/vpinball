@@ -1799,7 +1799,7 @@ Vertex3Ds BallHistory::Get3DPointFromMousePosition(Player &player, float heightZ
    POINT mousePosition2D = { 0 };
    if (Get2DMousePosition(player, mousePosition2D, false))
    {
-      point3D = g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D, float(m_MenuOptions.m_CreateZ));
+      point3D = g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D, heightZ);
    }
    return point3D;
 }
@@ -2051,8 +2051,14 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
    DebugPrintRecord dpr(player, m_DebugFontRecord);
    dpr.SetPositionPercent(0.00f, 0.00f);
 
-   dpr.ShowText("Ball History Status");
+   POINT mousePosition2D = { 0 };
+   Get2DMousePosition(player, mousePosition2D);
+   dpr.ShowText("Mouse Position 2D = %ld,%ld (x,y)", mousePosition2D.x, mousePosition2D.y);
 
+   Vertex3Ds mousePosition3D = Get3DPointFromMousePosition(player, GetDefaultBallRadius());
+   dpr.ShowText("Mouse Position 3D = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y,mousePosition3D.z);
+
+   dpr.ShowText("Ball History Status");
    dpr.ShowText("Process = %.2fms", m_ProfilerRecord.m_ProcessUsec / 1000.0f);
    dpr.ShowText("  Show Status = %.2fms", m_ProfilerRecord.m_ShowStatusUsec / 1000.0f);
    dpr.ShowText("  Process Menu = %.2fms", m_ProfilerRecord.m_ProcessMenuUsec / 1000.0f);
@@ -2067,7 +2073,7 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
    {
       dpr.ShowText("Error = %s", m_MenuOptions.m_MenuError.c_str());
    }
- 
+
    switch (m_MenuOptions.m_ModeType)
    {
       case MenuOptionsRecord::ModeType::ModeType_Normal:
@@ -2445,6 +2451,20 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
          dpr.ShowText("  Opening 1 = %.2f,%.2f,%.2f (x,y,z)", bcor.m_OpeningPosition1.x, bcor.m_OpeningPosition1.y, bcor.m_OpeningPosition1.z);
          dpr.ShowText("  Opening 2 = %.2f,%.2f,%.2f (x,y,z)", bcor.m_OpeningPosition2.x, bcor.m_OpeningPosition2.y, bcor.m_OpeningPosition2.z);
 
+         Vertex3Ds passPosition1 = bcor.m_PassPosition - Vertex3Ds(GetDefaultBallRadius(), 0.0f, 0.0f);
+         Vertex3Ds passPosition2 = bcor.m_PassPosition + Vertex3Ds(GetDefaultBallRadius(), 0.0f, 0.0f);
+         dpr.ShowText("Distance PassL<-->PassR = %.2f", DistanceToLineSegment(passPosition1, passPosition2, mousePosition3D));
+         if (bcor.m_OpeningPosition1.x < bcor.m_OpeningPosition2.x)
+         {
+            dpr.ShowText("Distance PassL<-->Opening1 = %.2f", DistanceToLineSegment(passPosition1, bcor.m_OpeningPosition1, mousePosition3D));
+            dpr.ShowText("Distance PassR<-->Opening2 = %.2f", DistanceToLineSegment(passPosition2, bcor.m_OpeningPosition2, mousePosition3D));
+         }
+         else
+         {
+            dpr.ShowText("Distance PassL<-->Opening2 = %.2f", DistanceToLineSegment(passPosition1, bcor.m_OpeningPosition2, mousePosition3D));
+            dpr.ShowText("Distance PassR<-->Opening1 = %.2f", DistanceToLineSegment(passPosition2, bcor.m_OpeningPosition1, mousePosition3D));
+         }
+
          dpr.ShowText("ActiveBallKickers Count = %zu", m_ActiveBallKickers.size());
          for (std::size_t activeBallKickerIndex = 0; activeBallKickerIndex < m_ActiveBallKickers.size(); activeBallKickerIndex++)
          {
@@ -2676,6 +2696,44 @@ void BallHistory::ShowBallEndOptionsRecord(DebugPrintRecord &dpr, TrainerOptions
          dpr.ShowMenuText("Stop Ball %zu (ms,x,y,z) = %d,%.2f,%.2f,%.2f", stopBallTrackerIndex + 1, stopBallMs, stopBallPos.x, stopBallPos.y, stopBallPos.z);
       }
    }
+}
+
+float BallHistory::DistanceToLineSegment(const Vertex3Ds& lineA, const Vertex3Ds& lineB, const Vertex3Ds& point)
+{
+   Vertex3Ds lineAB = lineB - lineA;
+   Vertex3Ds lineAP = point - lineA;
+   Vertex3Ds lineBP = point - lineB;
+
+   float lineABSquared = powf(lineAB.Length(), 2.0f);
+   if (lineABSquared == 0.0f)
+   {
+      return lineAP.Length();
+   }
+
+   float projectionFactor = lineAP.Dot(lineAB) / lineABSquared;
+   if (projectionFactor < 0.0f)
+   {
+      return lineAP.Length();
+   }
+   else if (projectionFactor > 1.0f)
+   {
+      return lineBP.Length();
+   }
+   else
+   {
+      Vertex3Ds closest = { lineA.x + projectionFactor * lineAB.x, lineA.y + projectionFactor * lineAB.y, lineA.z + projectionFactor * lineAB.z };
+      Vertex3Ds vectorToClosestPoint = { point.x - closest.x, point.y - closest.y, point.z - closest.z };
+      return vectorToClosestPoint.Length();
+   }
+}
+
+
+void BallHistory::ShowBallCorridorOptionsRecord(DebugPrintRecord& dpr, TrainerOptions::BallCorridorOptionsRecord& bcor, const Vertex3Ds &mousePosition3D, bool isMenu)
+{
+   dpr.ShowTextWithMenu(isMenu, "Pass = %.2f,%.2f,%.2f (x,y,z)", bcor.m_PassPosition.x, bcor.m_PassPosition.y, bcor.m_PassPosition.z);
+   dpr.ShowTextWithMenu(isMenu, "Pass Radius = %.0f%%", bcor.m_PassRadiusPercent);
+   dpr.ShowTextWithMenu(isMenu, "Opening 1 = %.2f,%.2f,%.2f (x,y,z)", bcor.m_OpeningPosition1.x, bcor.m_OpeningPosition1.y, bcor.m_OpeningPosition1.z);
+   dpr.ShowTextWithMenu(isMenu, "Opening 2 = %.2f,%.2f,%.2f (x,y,z)", bcor.m_OpeningPosition2.x, bcor.m_OpeningPosition2.y, bcor.m_OpeningPosition2.z);
 }
 
 void BallHistory::ShowDifficultyTableConstants(DebugPrintRecord &dpr, Player &player)
@@ -3535,7 +3593,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
    POINT mousePosition2D = { 0 };
    Get2DMousePosition(player, mousePosition2D);
-   Vertex3Ds mousePosition3D = Get3DPointFromMousePosition(player, float(m_MenuOptions.m_CreateZ));
+   Vertex3Ds mousePosition3D = Get3DPointFromMousePosition(player, GetDefaultBallRadius());
 
    switch (m_MenuOptions.m_MenuState)
    {
@@ -4263,26 +4321,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                break;
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_BallCorridor:
                dpr.ShowMenuTextTitle("Current Configuration");
-               dpr.ShowMenuText("<BALL CORRIDOR CONFIGURATION TBD");
-               /*
-               dpr.ShowMenuText("Gameplay Difficulty = %d", m_MenuOptions.m_TrainerOptions.m_GameplayDifficulty);
-               dpr.ShowMenuText("Gameplay Difficulty Initial = %d", m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyInitial);
-               
-               dpr.ShowMenuText("Variance Difficulty = %d", m_MenuOptions.m_TrainerOptions.m_VarianceDifficulty);
-
-               ShowDifficultyVarianceStatusAll(dpr, player, true);
-
-               ShowDescription(dpr,
-               {
-                  "Configure Difficulty and Variance",
-                  "Controls scatter (difficulty) lowering randomness creating consistent play",
-                  "Varies gravity, playfield friction, flipper strength and flipper friction",
-                  "Increase skills of adaptation to real-world variances"
-               });
-
-               dpr.ShowMenuText("");
-               ShowDifficultyTableConstants(dpr, player);
-               */
+               ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, mousePosition3D, true);
+               dpr.ShowMenuText("<BALL CORRIDOR DESCRIPTION TBD");
                break;
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_Difficulty:
                dpr.ShowMenuTextTitle("Current Configuration");
@@ -6362,7 +6402,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuText("");
          dpr.ShowMenuTextTitle("Current Configuration");
-         dpr.ShowMenuText("<BALL CORRIDOR CONFIGURATION TBD");
+         ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, mousePosition3D, true);
+
+         dpr.ShowMenuTextTitle("<BALL CORRIDOR DESCRIPTION TBD>");
 
          switch (menuAction)
          {
@@ -6431,7 +6473,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuText("");
          dpr.ShowMenuTextTitle("Current Configuration");
-         dpr.ShowMenuText("<BALL CORRIDOR CONFIGURATION TBD");
+         ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, mousePosition3D, true);
 
          dpr.ShowMenuText("<BALL CORRIDOR DESCRIPTION TBD");
 
@@ -6481,7 +6523,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuText("");
          dpr.ShowMenuTextTitle("Current Configuration");
-         dpr.ShowMenuText("<BALL CORRIDOR CONFIGURATION TBD");
+         ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, mousePosition3D, true);
 
          dpr.ShowMenuText("<BALL CORRIDOR DESCRIPTION TBD");
 
@@ -6527,7 +6569,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuText("");
          dpr.ShowMenuTextTitle("Current Configuration");
-         dpr.ShowMenuText("<BALL CORRIDOR CONFIGURATION TBD");
+         ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, mousePosition3D, true);
 
          dpr.ShowMenuText("<BALL CORRIDOR DESCRIPTION TBD");
 
@@ -6583,7 +6625,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuText("");
          dpr.ShowMenuTextTitle("Current Configuration");
-         dpr.ShowMenuText("<BALL CORRIDOR CONFIGURATION TBD");
+         ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, mousePosition3D, true);
 
          dpr.ShowMenuText("<BALL CORRIDOR DESCRIPTION TBD");
 
