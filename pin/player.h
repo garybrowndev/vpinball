@@ -357,8 +357,8 @@ public:
 
    enum BallEndFinishModeType
    {
-      BallEndFinishModeType_Stop,
       BallEndFinishModeType_Distance,
+      BallEndFinishModeType_Stop,
       BallEndStopModeType_COUNT
    };
 
@@ -1067,6 +1067,8 @@ private:
    float DistanceToLineSegment(const Vertex3Ds& lineA, const Vertex3Ds& lineB, const Vertex3Ds& point);
    float VelocityPixels(const Vertex3Ds &vel);
    char GetBallHistoryKey(Player &player, EnumAssignKeys enumAssignKey);
+   bool BallsReadyForTrainer();
+   bool BallCorridorReadyForTrainer();
    POINT Get2DPointFrom3D(Player &player, const Vertex3Ds &vertex);
    Vertex3Ds Get3DPointFromMousePosition(Player &player, float heightZ);
    bool Get2DMousePosition(Player &player, POINT &mousePosition2D, bool correct=true);
