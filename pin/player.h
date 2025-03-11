@@ -493,19 +493,27 @@ public:
    {
       enum ResultType
       {
-         ResultType_Passed,
+         ResultType_PassedLocation,
          ResultType_FailedLocation,
+         ResultType_PassedCorridor,
+         ResultType_FailedCorridorLeft,
+         ResultType_FailedCorridorRight,
          ResultType_FailedTimeElapsed,
-         ResultType_FailedKicker
+         ResultType_FailedKicker,
+         ResultType_Unknown
       };
 
       std::vector<Vertex3Ds> m_StartPositions;
       std::vector<Vertex3Ds> m_StartVelocities;
       std::vector<Vertex3Ds> m_StartAngularMomentums;
+
       ResultType m_Result;
       int m_TotalTimeMs;
+
       std::vector<std::tuple<std::size_t, std::size_t>> m_StartToPassLocationIndexes;
       std::vector<std::tuple<std::size_t, std::size_t>> m_StartToFailLocationIndexes;
+      std::size_t m_StartToPassCorridorIndex;
+      std::size_t m_StartToFailCorridorIndex;
 
       RunRecord();
    };
@@ -719,6 +727,9 @@ private:
    {
       enum JustificationType
       {
+         JustificationType_Center,
+         JustificationType_CenterLeft,
+         JustificationType_CenterRight,
          JustificationType_Left,
          JustificationType_Right
       };
@@ -736,6 +747,8 @@ private:
       void ToggleReverse();
       int GetTextWidth(const char *format, ...);
       void ShowText(const char *format, ...);
+      void ShowMenuTextLeft(const char* format, ...);
+      void ShowMenuTextRight(const char* format, ...);
       void ShowTextPos(int x, int y, const char *format, ...);
       void ShowTextTitle(const char *format, ...);
       void ShowTextWithMenu(bool isMenu, const char *format, ...);
@@ -750,11 +763,11 @@ private:
       int m_TextY;
       int m_TextYStep;
       char m_StrBuffer[1024];
-      JustificationType Justification;
+      JustificationType JustificationOverflow;
 
       void InitTextXY();
       void SetDebugOutputPosition(const float x, const float y);
-      void DebugPrint(int x, int y, LPCSTR text, bool center, D3DCOLOR color, ID3DXFont *font);
+      void DebugPrint(int x, int y, LPCSTR text, JustificationType justification, D3DCOLOR color, ID3DXFont *font);
    };
 
    struct Vertex3DColor
@@ -1043,6 +1056,7 @@ private:
    void ShowDifficultyVarianceStatusPlayfieldFriction(DebugPrintRecord &dpr, Player &player, bool isMenu);
    void ShowDifficultyVarianceStatusFlipperStrength(DebugPrintRecord &dpr, Player &player, bool isMenu);
    void ShowDifficultyVarianceStatusFlipperFriction(DebugPrintRecord &dpr, Player &player, bool isMenu);
+   void ShowResult(DebugPrintRecord &dpr, std::size_t total, std::size_t totalMs, const char * type, const char * subType);
    float CalculateDifficultyVariance(Player &player, float initial, float current, S32 variance, TrainerOptions::DifficultyVarianceModeType varianceMode);
    void InitBallStartOptionRecords(DebugPrintRecord &dpr);
    void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs);

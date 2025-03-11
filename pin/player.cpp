@@ -129,8 +129,11 @@ TrainerOptions::BallCorridorOptionsRecord::BallCorridorOptionsRecord(const Verte
 }
 
 TrainerOptions::RunRecord::RunRecord() :
-   m_Result(ResultType_Passed),
-   m_TotalTimeMs(0)
+   m_Result(ResultType_Unknown),
+   m_TotalTimeMs(0),
+   m_StartToPassCorridorIndex(0),
+   m_StartToFailCorridorIndex(0)
+
 {
 }
 
@@ -395,7 +398,7 @@ void BallHistory::DebugPrintRecord::InitTextXY()
    m_TextX = 0;
    m_TextY = -10;
    m_TextYStep = int(m_DebugFontRecord.m_FontHeight * TextYStepPercent);
-   Justification = JustificationType::JustificationType_Left;
+   JustificationOverflow = JustificationType::JustificationType_Left;
 }
 
 void BallHistory::DebugPrintRecord::SetPosition(float x, float y)
@@ -468,7 +471,7 @@ void BallHistory::DebugPrintRecord::ShowText(const char * format, ...)
       if (textYStepNext > m_Player.m_width)
       {
          SetPositionPercent(1.00f, 0.00f);
-         Justification = JustificationType_Right;
+         JustificationOverflow = JustificationType_Right;
       }
    }
    else if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 90.0f)
@@ -476,7 +479,7 @@ void BallHistory::DebugPrintRecord::ShowText(const char * format, ...)
       if (textYStepNext > m_Player.m_width)
       {
          SetPositionPercent(1.00f, 0.00f);
-         Justification = JustificationType_Right;
+         JustificationOverflow = JustificationType_Right;
       }
    }
    else
@@ -484,11 +487,30 @@ void BallHistory::DebugPrintRecord::ShowText(const char * format, ...)
       if (textYStepNext > m_Player.m_height)
       {
          SetPositionPercent(1.00f, 0.00f);
-         Justification = JustificationType_Right;
+         JustificationOverflow = JustificationType_Right;
       }
    }
 
-   DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, false, NormalMenuColor, m_DebugFontRecord.m_Font);
+   DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, JustificationOverflow, NormalMenuColor, m_DebugFontRecord.m_Font);
+}
+
+void BallHistory::DebugPrintRecord::ShowMenuTextLeft(const char * format, ...)
+{
+   m_TextY += m_TextYStep;
+   va_list formatArgs;
+   va_start(formatArgs, format);
+   vsprintf_s(m_StrBuffer, format, formatArgs);
+   std::string tempStr = std::string(m_StrBuffer) + " ";
+   DebugPrint(m_TextX, m_TextY, tempStr.c_str(), JustificationType::JustificationType_CenterLeft, NormalMenuColor, m_DebugFontRecord.m_Font);
+}
+
+void BallHistory::DebugPrintRecord::ShowMenuTextRight(const char * format, ...)
+{
+   va_list formatArgs;
+   va_start(formatArgs, format);
+   vsprintf_s(m_StrBuffer, format, formatArgs);
+   std::string tempStr = " " + std::string(m_StrBuffer);
+   DebugPrint(m_TextX, m_TextY, tempStr.c_str(), JustificationType::JustificationType_CenterRight, NormalMenuColor, m_DebugFontRecord.m_Font);
 }
 
 void BallHistory::DebugPrintRecord::ShowTextPos(int x, int y, const char * format, ...)
@@ -496,7 +518,7 @@ void BallHistory::DebugPrintRecord::ShowTextPos(int x, int y, const char * forma
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
-   DebugPrint(x, y, m_StrBuffer, false, NormalMenuColor, m_DebugFontRecord.m_Font);
+   DebugPrint(x, y, m_StrBuffer, JustificationType::JustificationType_Left, NormalMenuColor, m_DebugFontRecord.m_Font);
 }
 
 void BallHistory::DebugPrintRecord::ShowTextTitle(const char * format, ...)
@@ -505,7 +527,7 @@ void BallHistory::DebugPrintRecord::ShowTextTitle(const char * format, ...)
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
    std::string tempStr = "-----" + std::string(m_StrBuffer) + "-----";
-   DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true, NormalMenuColor, m_DebugFontRecord.m_Font);
+   DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), JustificationType::JustificationType_Center, NormalMenuColor, m_DebugFontRecord.m_Font);
 }
 
 void BallHistory::DebugPrintRecord::ShowTextWithMenu(bool isMenu, const char * format, ...)
@@ -513,7 +535,7 @@ void BallHistory::DebugPrintRecord::ShowTextWithMenu(bool isMenu, const char * f
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
-   DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, isMenu, NormalMenuColor, m_DebugFontRecord.m_Font);
+   DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, isMenu ? JustificationType::JustificationType_Center : JustificationType::JustificationType_Left, NormalMenuColor, m_DebugFontRecord.m_Font);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuText(const char * format, ...)
@@ -521,7 +543,7 @@ void BallHistory::DebugPrintRecord::ShowMenuText(const char * format, ...)
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
-   DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, true, NormalMenuColor, m_DebugFontRecord.m_Font);
+   DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, JustificationType::JustificationType_Center, NormalMenuColor, m_DebugFontRecord.m_Font);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuTextPos(int x, int y, const char * format, ...)
@@ -529,7 +551,7 @@ void BallHistory::DebugPrintRecord::ShowMenuTextPos(int x, int y, const char * f
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
-   DebugPrint(x, y, m_StrBuffer, true, NormalMenuColor, m_DebugFontRecord.m_Font);
+   DebugPrint(x, y, m_StrBuffer, JustificationType::JustificationType_Center, NormalMenuColor, m_DebugFontRecord.m_Font);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuTextTitle(const char * format, ...)
@@ -538,7 +560,7 @@ void BallHistory::DebugPrintRecord::ShowMenuTextTitle(const char * format, ...)
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
    std::string tempStr = "*****" + std::string(m_StrBuffer) + "*****";
-   DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true, NormalMenuColor, m_DebugFontRecord.m_Font);
+   DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), JustificationType::JustificationType_Center, NormalMenuColor, m_DebugFontRecord.m_Font);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuTextError(const char * format, ...)
@@ -547,7 +569,7 @@ void BallHistory::DebugPrintRecord::ShowMenuTextError(const char * format, ...)
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
    std::string tempStr = "!!!!! ERROR:" + std::string(m_StrBuffer) + "!!!!!";
-   DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true, ErrorMenuColor, m_DebugFontRecord.m_Font);
+   DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), JustificationType::JustificationType_Center, ErrorMenuColor, m_DebugFontRecord.m_Font);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuTextSelect(bool selected, const char * format, ...)
@@ -558,11 +580,11 @@ void BallHistory::DebugPrintRecord::ShowMenuTextSelect(bool selected, const char
    if (selected)
    {
       std::string tempStr = "-->" + std::string(m_StrBuffer) + "<--";
-      DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), true, SelectedMenuColor, m_DebugFontRecord.m_Font);
+      DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), JustificationType::JustificationType_Center, SelectedMenuColor, m_DebugFontRecord.m_Font);
    }
    else
    {
-      DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, true, NormalMenuColor, m_DebugFontRecord.m_Font);
+      DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, JustificationType::JustificationType_Center, NormalMenuColor, m_DebugFontRecord.m_Font);
    }
 }
 
@@ -579,7 +601,7 @@ void BallHistory::DebugPrintRecord::SetDebugOutputPosition(const float x, const 
    InitTextXY();
 }
 
-void BallHistory::DebugPrintRecord::DebugPrint(int x, int y, LPCSTR text, bool center, D3DCOLOR color, ID3DXFont * font)
+void BallHistory::DebugPrintRecord::DebugPrint(int x, int y, LPCSTR text, JustificationType justification, D3DCOLOR color, ID3DXFont * font)
 {
    if (font)
    {
@@ -588,35 +610,40 @@ void BallHistory::DebugPrintRecord::DebugPrint(int x, int y, LPCSTR text, bool c
       SetRect(&fontRect, x, y, 0, 0);
       font->DrawText(m_DebugFontRecord.m_Sprite, text, -1, &fontRect, DT_CALCRECT, 0xFFFFFFFF);
 
-      if (center)
+      switch (justification)
       {
-         x = x - (fontRect.right - fontRect.left) / 2;
-      }
-      else
-      {
-         switch (Justification)
-         {
-            case JustificationType::JustificationType_Left:
-               x = (x + 5);
-               break;
+         case JustificationType::JustificationType_Center:
+            x = x - (fontRect.right - fontRect.left) / 2;
+            break;
 
-            case JustificationType::JustificationType_Right:
-               x = (x - 5) - (fontRect.right - fontRect.left);
-               if (text[0] == ' ')
+         case JustificationType::JustificationType_CenterLeft:
+            x -= fontRect.right - fontRect.left;
+            break;
+
+         case JustificationType::JustificationType_CenterRight:
+            // do nothing
+            break;
+
+         case JustificationType::JustificationType_Left:
+            x = (x + 5);
+            break;
+
+         case JustificationType::JustificationType_Right:
+            x = (x - 5) - (fontRect.right - fontRect.left);
+            if (text[0] == ' ')
+            {
+               std::string textTemp = text;
+               if (textTemp.find_first_not_of(' ') != std::string::npos)
                {
-                  std::string textTemp = text;
-                  if (textTemp.find_first_not_of(' ') != std::string::npos)
+                  while (textTemp[0] == ' ')
                   {
-                     while (textTemp[0] == ' ')
-                     {
-                        textTemp.erase(0, 1);
-                        textTemp.push_back(' ');
-                     }
-                     memcpy_s((void*)text, strlen(text) * sizeof(*text) + 1, textTemp.c_str(), textTemp.length() + 1);
+                     textTemp.erase(0, 1);
+                     textTemp.push_back(' ');
                   }
+                  memcpy_s((void*)text, strlen(text) * sizeof(*text) + 1, textTemp.c_str(), textTemp.length() + 1);
                }
-               break;
-         }
+            }
+            break;
       }
 
       SetRect(&fontRect, x, y, 0, 0);
@@ -2593,8 +2620,8 @@ void BallHistory::ShowPreviousRunRecord(DebugPrintRecord &dpr)
 
       switch (previousRunRecord.m_Result)
       {
-         case TrainerOptions::RunRecord::ResultType::ResultType_Passed:
-            dpr.ShowMenuText("Pass");
+         case TrainerOptions::RunRecord::ResultType::ResultType_PassedLocation:
+            dpr.ShowMenuText("Pass (Location)");
             for each (const std::tuple<std::size_t, std::size_t> &startToPassLocationIndex in previousRunRecord.m_StartToPassLocationIndexes)
             {
                std::stringstream startToPassLocationIndexes;
@@ -2603,13 +2630,25 @@ void BallHistory::ShowPreviousRunRecord(DebugPrintRecord &dpr)
             }
             break;
          case TrainerOptions::RunRecord::ResultType::ResultType_FailedLocation:
-            dpr.ShowMenuText("Fail (location)");
+            dpr.ShowMenuText("Fail (Location)");
             for each (const std::tuple<std::size_t, std::size_t> &startToFailLocationIndex in previousRunRecord.m_StartToFailLocationIndexes)
             {
                std::stringstream startToFailLocationIndexes;
                startToFailLocationIndexes << "Start #" << std::get<0>(startToFailLocationIndex) + 1 << " --> Fail #" << std::get<1>(startToFailLocationIndex) + 1;
                dpr.ShowMenuText("%s", startToFailLocationIndexes.str().c_str());
             }
+            break;
+         case TrainerOptions::RunRecord::ResultType::ResultType_PassedCorridor:
+            dpr.ShowMenuText("Pass (Corridor)");
+            dpr.ShowMenuText("Start #%zu <--> Pass Corridor", previousRunRecord.m_StartToPassCorridorIndex);
+            break;
+         case TrainerOptions::RunRecord::ResultType::ResultType_FailedCorridorLeft:
+            dpr.ShowMenuText("Fail (Corridor Left)");
+            dpr.ShowMenuText("Start #%zu <--> Fail Corridor Left", previousRunRecord.m_StartToFailCorridorIndex);
+            break;
+         case TrainerOptions::RunRecord::ResultType::ResultType_FailedCorridorRight:
+            dpr.ShowMenuText("Fail (Corridor Right)");
+            dpr.ShowMenuText("Start #%zu <--> Fail Corridor Right", previousRunRecord.m_StartToFailCorridorIndex);
             break;
          case TrainerOptions::RunRecord::ResultType::ResultType_FailedTimeElapsed:
             dpr.ShowMenuText("Fail (time elapsed)");
@@ -2905,6 +2944,45 @@ void BallHistory::ShowDifficultyVarianceStatusFlipperFriction(DebugPrintRecord &
       m_MenuOptions.m_TrainerOptions.m_FlipperFrictionInitial,
       m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode);
 }
+
+void BallHistory::ShowResult(DebugPrintRecord &dpr, std::size_t total, std::size_t totalMs, const char *type, const char *subType)
+{
+   std::size_t runRecordsSize = m_MenuOptions.m_TrainerOptions.m_RunRecords.size();
+
+   dpr.ShowMenuTextLeft("%zu =", total);
+   dpr.ShowMenuTextRight("%s (%s)", type, subType);
+   if (runRecordsSize)
+   {
+      dpr.ShowMenuTextLeft("%3.2f%% =", float(total) / runRecordsSize * 100.0f);
+   }
+   else
+   {
+      dpr.ShowMenuTextLeft("<n/a> =");
+   }
+   dpr.ShowMenuTextRight("%s Percent", type);
+   if (totalMs > 0)
+   {
+      if (total)
+      {
+         dpr.ShowMenuTextLeft("%3.2f =", float(totalMs) / total / 1000.0f);
+      }
+      else
+      {
+         dpr.ShowMenuTextLeft("<n/a> =");
+      }
+      dpr.ShowMenuTextRight("%s Time Average", type);
+      if (total)
+      {
+         dpr.ShowMenuTextLeft("%3.2f =", 0.0f);
+      }
+      else
+      {
+         dpr.ShowMenuTextLeft("<n/a> =");
+      }
+      dpr.ShowMenuTextRight("%s Time StdDev", type);
+   }
+}
+
 
 float BallHistory::CalculateDifficultyVariance(Player &player, float initial, float current, S32 variance, TrainerOptions::DifficultyVarianceModeType varianceMode)
 {
@@ -4588,34 +4666,52 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          ShowPreviousRunRecord(dpr);
 
-         dpr.ShowText("");
-         dpr.ShowText("%s:", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord == m_MenuOptions.m_TrainerOptions.m_RunRecords.size() ? "Final Run Results" : "Current Run Results");
-         std::size_t totalPasses = 0;
-         std::size_t totalFailsLocation = 0;
-         std::size_t totalFailsTimeElapsed = 0;
-         std::size_t totalFailsKicker = 0;
-         DWORD totalPassMs = 0;
+         dpr.ShowMenuText("");
+         dpr.ShowMenuText("%s:", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord == m_MenuOptions.m_TrainerOptions.m_RunRecords.size() ? "Final Run Results" : "Current Run Results");
+         std::size_t totalPassLocation = 0;
+         std::size_t totalFailLocation = 0;
+         std::size_t totalPassCorridor = 0;
+         std::size_t totalFailCorridorLeft = 0;
+         std::size_t totalFailCorridorRight = 0;
+         std::size_t totalFailTimeElapsed = 0;
+         std::size_t totalFailKicker = 0;
+         DWORD totalPassLocationMs = 0;
          DWORD totalFailLocationMs = 0;
-         DWORD totalRunsMs = 0;
+         DWORD totalPassCorridorMs = 0;
+         DWORD totalFailCorridorLeftMs = 0;
+         DWORD totalFailCorridorRightMs = 0;
+         DWORD totalFailKickerMs = 0;
          for (std::size_t x = 0; x < m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord; x++)
          {
             TrainerOptions::RunRecord &rr = m_MenuOptions.m_TrainerOptions.m_RunRecords[x];
-            totalRunsMs += rr.m_TotalTimeMs;
             switch (rr.m_Result)
             {
-               case TrainerOptions::RunRecord::ResultType::ResultType_Passed:
-                  totalPasses++;
-                  totalPassMs += rr.m_TotalTimeMs;
+               case TrainerOptions::RunRecord::ResultType::ResultType_PassedLocation:
+                  totalPassLocation++;
+                  totalPassLocationMs += rr.m_TotalTimeMs;
                   break;
                case TrainerOptions::RunRecord::ResultType::ResultType_FailedLocation:
-                  totalFailsLocation++;
+                  totalFailLocation++;
                   totalFailLocationMs += rr.m_TotalTimeMs;
                   break;
+               case TrainerOptions::RunRecord::ResultType::ResultType_PassedCorridor:
+                  totalPassCorridor++;
+                  totalPassCorridorMs += rr.m_TotalTimeMs;
+                  break;
+               case TrainerOptions::RunRecord::ResultType::ResultType_FailedCorridorLeft:
+                  totalFailCorridorLeft++;
+                  totalFailCorridorLeftMs += rr.m_TotalTimeMs;
+                  break;
+               case TrainerOptions::RunRecord::ResultType::ResultType_FailedCorridorRight:
+                  totalFailCorridorRight++;
+                  totalFailCorridorRightMs += rr.m_TotalTimeMs;
+                  break;
                case TrainerOptions::RunRecord::ResultType::ResultType_FailedTimeElapsed:
-                  totalFailsTimeElapsed++;
+                  totalFailTimeElapsed++;
                   break;
                case TrainerOptions::RunRecord::ResultType::ResultType_FailedKicker:
-                  totalFailsKicker++;
+                  totalFailKicker++;
+                  totalFailKickerMs += rr.m_TotalTimeMs;
                   break;
                default:
                   InvalidEnumValue("TrainerOptions::RunRecord::ResultType", rr.m_Result);
@@ -4623,77 +4719,13 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             }
          }
 
-         std::size_t runRecordsSize = m_MenuOptions.m_TrainerOptions.m_RunRecords.size();
-         dpr.ShowText("%*zu = Pass%s", 8, totalPasses, totalPasses == 1 ? "" : "es");
-         if (runRecordsSize)
-         {
-            dpr.ShowText("%04.1f%% = Pass Percent", float(totalPasses) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
-         }
-         else
-         {
-            dpr.ShowText("<n/a> = Pass Percent");
-         }
-         if (totalPasses)
-         {
-            dpr.ShowText("%05.2f = Pass Time Average", float(totalPassMs) / totalPasses / 1000);
-            dpr.ShowText("%05.2f = Pass Time StdDev", 0.0f);
-         }
-         else
-         {
-            dpr.ShowText("<n/a> = Pass Time Average");
-            dpr.ShowText("<n/a> = Pass Time StdDev");
-         }
-
-         dpr.ShowText("%*zu = Fail%s (LOCATION)", 8, totalFailsLocation, totalFailsLocation == 1 ? "" : "s");
-         if (runRecordsSize)
-         {
-            dpr.ShowText("%04.1f%% = Fail Percent", float(totalFailsLocation) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
-         }
-         else
-         {
-            dpr.ShowText("<n/a> = Fail Percent");
-         }
-         if (totalFailsLocation)
-         {
-            dpr.ShowText("%05.2f = Fail Time Average", float(totalFailLocationMs) / totalFailsLocation / 1000);
-            dpr.ShowText("%05.2f = Fail Time StdDev", 0.0f);
-         }
-         else
-         {
-            dpr.ShowText("<n/a> = Fail Time Average");
-            dpr.ShowText("<n/a> = Fail Time StdDev");
-         }
-
-         dpr.ShowText("%*zu = Fail%s (TIME)", 8, totalFailsTimeElapsed, totalFailsTimeElapsed == 1 ? "" : "s");
-         if (runRecordsSize)
-         {
-            dpr.ShowText("%04.1f%% = Fail Percent", float(totalFailsTimeElapsed) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
-         }
-         else
-         {
-            dpr.ShowText("<n/a> = Fail Percent");
-         }
-
-         dpr.ShowText("%*zu = Fail%s (KICKER)", 8, totalFailsKicker, totalFailsKicker == 1 ? "" : "s");
-         if (runRecordsSize)
-         {
-            dpr.ShowText("%04.1f%% = Fail Percent", float(totalFailsKicker) / m_MenuOptions.m_TrainerOptions.m_RunRecords.size() * 100.0f);
-         }
-         else
-         {
-            dpr.ShowText("<n/a> = Fail Percent");
-         }
-
-         if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord)
-         {
-            dpr.ShowText("%05.2f = Run Time Average", float(totalRunsMs) / m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord / 1000);
-            dpr.ShowText("%05.2f = Run Time StdDev", 0.0f);
-         }
-         else
-         {
-            dpr.ShowText("<n/a> = Run Time Average");
-            dpr.ShowText("<n/a> = Run Time StdDev");
-         }
+         ShowResult(dpr, totalPassLocation, totalPassLocationMs, "Pass", "Location");
+         ShowResult(dpr, totalPassCorridor, totalPassCorridorMs, "Pass", "Corridor");
+         ShowResult(dpr, totalFailLocation, totalFailLocationMs, "Fail", "Location");
+         ShowResult(dpr, totalFailCorridorLeft, totalFailCorridorLeftMs, "Fail", "Corridor Left");
+         ShowResult(dpr, totalFailCorridorRight, totalFailCorridorRightMs, "Fail", "Corridor Right");
+         ShowResult(dpr, totalFailTimeElapsed, 0, "Fail", "Time");
+         ShowResult(dpr, totalFailKicker, totalFailKickerMs, "Fail", "Kicker");
 
          ShowDescription(dpr,
          {
@@ -6694,6 +6726,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                else
                {
                   m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorComplete;
+                  m_MenuOptions.m_TrainerOptions.m_BallCorridorCompleteMode = TrainerOptions::BallCorridorCompleteModeType::BallCorridorCompleteModeType_Accept;
                }
                break;
             default:
@@ -8118,83 +8151,86 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
 
       ShowCurrentRunRecord(dpr, currentTimeMs);
 
-      bool allPass = true;
-      std::vector<std::tuple<std::size_t, std::size_t>> startToPassLocationIndexes;
-      for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
+      if (m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size() > 0)
       {
-         Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
-         bool controlVBallAssociated = false;
-         bool anyPassBeor = false;
-
-         for (std::size_t passBeorIndex = 0; passBeorIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); passBeorIndex++)
+         bool allPass = true;
+         std::vector<std::tuple<std::size_t, std::size_t>> startToPassLocationIndexes;
+         for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
          {
-            TrainerOptions::BallEndOptionsRecord &passBeor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[passBeorIndex];
-            if (passBeor.m_AssociatedBallStartIndexes.find(controlVBallIndex) != passBeor.m_AssociatedBallStartIndexes.end())
-            {
-               controlVBallAssociated = true;
-               float distance = DistancePixels(passBeor.m_EndPosition, controlVBall.m_d.m_pos);
-               if (passBeor.m_EndRadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
-               {
-                  int &stopBallMs = std::get<0>(passBeor.m_StopBallsTracker[controlVBallIndex]);
-                  Vertex3Ds &stopBallPos = std::get<1>(passBeor.m_StopBallsTracker[controlVBallIndex]);
-                  if (distance < controlVBall.m_d.m_radius)
-                  {
-                     if (stopBallMs == 0)
-                     {
-                        stopBallMs = currentTimeMs;
-                     }
+            Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
+            bool controlVBallAssociated = false;
+            bool anyPassBeor = false;
 
-                     if ((controlVBall.m_d.m_pos - stopBallPos).Length() < 1.0f)
+            for (std::size_t passBeorIndex = 0; passBeorIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); passBeorIndex++)
+            {
+               TrainerOptions::BallEndOptionsRecord& passBeor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[passBeorIndex];
+               if (passBeor.m_AssociatedBallStartIndexes.find(controlVBallIndex) != passBeor.m_AssociatedBallStartIndexes.end())
+               {
+                  controlVBallAssociated = true;
+                  float distance = DistancePixels(passBeor.m_EndPosition, controlVBall.m_d.m_pos);
+                  if (passBeor.m_EndRadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
+                  {
+                     int& stopBallMs = std::get<0>(passBeor.m_StopBallsTracker[controlVBallIndex]);
+                     Vertex3Ds& stopBallPos = std::get<1>(passBeor.m_StopBallsTracker[controlVBallIndex]);
+                     if (distance < controlVBall.m_d.m_radius)
                      {
-                        if ((currentTimeMs - stopBallMs) > 200)
+                        if (stopBallMs == 0)
                         {
-                           startToPassLocationIndexes.push_back(std::tuple<std::size_t, std::size_t>(controlVBallIndex, passBeorIndex));
-                           anyPassBeor = true;
-                           break;
+                           stopBallMs = currentTimeMs;
+                        }
+
+                        if ((controlVBall.m_d.m_pos - stopBallPos).Length() < 1.0f)
+                        {
+                           if ((currentTimeMs - stopBallMs) > 200)
+                           {
+                              startToPassLocationIndexes.push_back(std::tuple<std::size_t, std::size_t>(controlVBallIndex, passBeorIndex));
+                              anyPassBeor = true;
+                              break;
+                           }
+                        }
+                        else
+                        {
+                           stopBallMs = currentTimeMs;
+                           stopBallPos = controlVBall.m_d.m_pos;
                         }
                      }
                      else
                      {
-                        stopBallMs = currentTimeMs;
-                        stopBallPos = controlVBall.m_d.m_pos;
+                        stopBallMs = 0;
+                        stopBallPos.SetZero();
                      }
                   }
-                  else
+                  else if (distance < (controlVBall.m_d.m_radius * passBeor.m_EndRadiusPercent / 100.0f))
                   {
-                     stopBallMs = 0;
-                     stopBallPos.SetZero();
+                     startToPassLocationIndexes.push_back(std::tuple<std::size_t, std::size_t>(controlVBallIndex, passBeorIndex));
+                     anyPassBeor = true;
+                     break;
                   }
                }
-               else if (distance < (controlVBall.m_d.m_radius * passBeor.m_EndRadiusPercent / 100.0f))
-               {
-                  startToPassLocationIndexes.push_back(std::tuple<std::size_t, std::size_t>(controlVBallIndex, passBeorIndex));
-                  anyPassBeor = true;
-                  break;
-               }
+            }
+
+            if (controlVBallAssociated && !anyPassBeor)
+            {
+               allPass = false;
+               break;
             }
          }
 
-         if (controlVBallAssociated && !anyPassBeor)
+         if (allPass == true)
          {
-            allPass = false;
-            break;
-         }
-      }
-
-      if (allPass == true)
-      {
-         currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_Passed;
-         currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
-         currentRunRecord.m_StartToPassLocationIndexes = startToPassLocationIndexes;
-         m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
-         m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
-         m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
-         m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
-         m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
-         m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
-         if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled)
-         {
-            PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_PASS);
+            currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_PassedLocation;
+            currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
+            currentRunRecord.m_StartToPassLocationIndexes = startToPassLocationIndexes;
+            m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
+            m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
+            m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+            m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
+            m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
+            m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+            if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled)
+            {
+               PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_PASS);
+            }
          }
       }
 
@@ -8269,6 +8305,102 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
          {
             PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL);
+         }
+      }
+
+      if (BallCorridorReadyForTrainer())
+      {
+         {
+            std::size_t startToPassCorridorIndex = 0;
+            TrainerOptions::RunRecord::ResultType resultType = TrainerOptions::RunRecord::ResultType::ResultType_Unknown;
+            for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
+            {
+               Ball& controlVBall = *m_ControlVBalls[controlVBallIndex];
+               TrainerOptions::BallCorridorOptionsRecord& bcor = m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord;
+               Vertex3Ds passPositionLeft = bcor.m_PassPosition - Vertex3Ds(GetDefaultBallRadius(), 0.0f, 0.0f);
+               Vertex3Ds passPositionRight = bcor.m_PassPosition + Vertex3Ds(GetDefaultBallRadius(), 0.0f, 0.0f);
+               float distanceToPassLine = DistanceToLineSegment(passPositionLeft, passPositionRight, controlVBall.m_d.m_pos);
+               if (distanceToPassLine < (controlVBall.m_d.m_radius * bcor.m_PassRadiusPercent / 100.0f))
+               {
+                  startToPassCorridorIndex = controlVBallIndex;
+                  resultType = TrainerOptions::RunRecord::ResultType::ResultType_PassedCorridor;
+                  break;
+               }
+            }
+
+            if (resultType != TrainerOptions::RunRecord::ResultType::ResultType_Unknown)
+            {
+               currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_PassedCorridor;
+               currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
+               currentRunRecord.m_StartToPassCorridorIndex = startToPassCorridorIndex;
+               m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
+               m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
+               m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+               m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
+               m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
+               m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+               if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled)
+               {
+                  PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_PASS);
+               }
+            }
+         }
+
+         {
+            std::size_t startToFailCorridorIndex = 0;
+            TrainerOptions::RunRecord::ResultType resultType = TrainerOptions::RunRecord::ResultType::ResultType_Unknown;
+            for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
+            {
+               Ball& controlVBall = *m_ControlVBalls[controlVBallIndex];
+               TrainerOptions::BallCorridorOptionsRecord& bcor = m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord;
+
+               Vertex3Ds passPositionLeft = bcor.m_PassPosition - Vertex3Ds(GetDefaultBallRadius(), 0.0f, 0.0f);
+               Vertex3Ds passPositionRight = bcor.m_PassPosition + Vertex3Ds(GetDefaultBallRadius(), 0.0f, 0.0f);
+
+               float distanceToFailLeft = 0.0f;
+               float distanceToFailRight = 0.0f;
+
+               if (bcor.m_OpeningPosition1.x < bcor.m_OpeningPosition2.x)
+               {
+                  distanceToFailLeft = DistanceToLineSegment(passPositionLeft, bcor.m_OpeningPosition1, controlVBall.m_d.m_pos);
+                  distanceToFailRight = DistanceToLineSegment(passPositionRight, bcor.m_OpeningPosition2, controlVBall.m_d.m_pos);
+               }
+               else
+               {
+                  distanceToFailLeft = DistanceToLineSegment(passPositionLeft, bcor.m_OpeningPosition2, controlVBall.m_d.m_pos);
+                  distanceToFailRight = DistanceToLineSegment(passPositionRight, bcor.m_OpeningPosition1, controlVBall.m_d.m_pos);
+               }
+
+               if (distanceToFailLeft < controlVBall.m_d.m_radius)
+               {
+                  resultType = TrainerOptions::RunRecord::ResultType::ResultType_FailedCorridorLeft;
+                  startToFailCorridorIndex = controlVBallIndex;
+                  break;
+               }
+               else if (distanceToFailRight < controlVBall.m_d.m_radius)
+               {
+                  resultType = TrainerOptions::RunRecord::ResultType::ResultType_FailedCorridorRight;
+                  startToFailCorridorIndex = controlVBallIndex;
+                  break;
+               }
+            }
+
+            if (resultType != TrainerOptions::RunRecord::ResultType::ResultType_Unknown)
+            {
+               currentRunRecord.m_Result = resultType;
+               currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
+               currentRunRecord.m_StartToFailCorridorIndex = startToFailCorridorIndex;
+               m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
+               m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
+               m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+               m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
+               m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
+               m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+               if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled)
+               {
+                  PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_PASS);
+               }
+            }
          }
       }
 
