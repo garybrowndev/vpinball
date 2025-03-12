@@ -6745,7 +6745,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuTextTitle("Opening Left Height");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_CreateZ, heightMaximum);
 
-         DrawFakeBall(player, mousePosition3D, *m_TrainerBallCorridorOpeningTexture, &bcor.m_OpeningPositionLeft, D3DCOLOR_ARGB(0x00, 0xFF, 0x00, 0x00), dpr);
+         DrawFakeBall(player, mousePosition3D, GetDefaultBallRadius() / 2.0f, *m_TrainerBallCorridorOpeningTexture, &bcor.m_OpeningPositionLeft, D3DCOLOR_ARGB(0x00, 0xFF, 0x00, 0x00), dpr);
 
          dpr.ShowMenuText("");
          dpr.ShowMenuTextTitle("Current Configuration");
@@ -6808,7 +6808,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuTextTitle("Opening Right Height");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_CreateZ, heightMaximum);
 
-         DrawFakeBall(player, mousePosition3D, *m_TrainerBallCorridorOpeningTexture, &bcor.m_OpeningPositionRight, D3DCOLOR_ARGB(0x00, 0xFF, 0x00, 0x00), dpr);
+         DrawFakeBall(player, mousePosition3D, GetDefaultBallRadius() / 2.0f, *m_TrainerBallCorridorOpeningTexture, &bcor.m_OpeningPositionRight, D3DCOLOR_ARGB(0x00, 0xFF, 0x00, 0x00), dpr);
 
          dpr.ShowMenuText("");
          dpr.ShowMenuTextTitle("Current Configuration");
@@ -8517,7 +8517,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
                m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
                if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled)
                {
-                  PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_PASS);
+                  PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL);
                }
             }
          }
@@ -8907,9 +8907,9 @@ void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr,
    DrawActiveBallKickers(player, dpr);
 }
 
-void BallHistory::DrawFakeBall(Player &player, Vertex3Ds &position, Texture &texture, const Vertex3Ds * lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr)
+void BallHistory::DrawFakeBall(Player &player, Vertex3Ds &position, float radius, Texture &texture, const Vertex3Ds * lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr)
 {
-   float ballRadius = GetDefaultBallRadius();
+   float ballRadius = radius == 0.0f ? GetDefaultBallRadius() : radius;
    Matrix3 orientation = GetDefaultBallOrientation();
 
    player.DrawFakeBall(position, ballRadius, orientation, &texture);
@@ -8917,6 +8917,11 @@ void BallHistory::DrawFakeBall(Player &player, Vertex3Ds &position, Texture &tex
    {
       DrawLine(player, position, *lineEndPosition, lineColor);
    }
+}
+
+void BallHistory::DrawFakeBall(Player &player, Vertex3Ds &position, Texture &texture, const Vertex3Ds * lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr)
+{
+   DrawFakeBall(player, position, 0.0f, texture, lineEndPosition, lineColor, dpr);
 }
 
 void BallHistory::InitControlVBalls(Player &player)
