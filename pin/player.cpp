@@ -515,7 +515,7 @@ void BallHistory::DebugPrintRecord::ShowTextPos(int x, int y, const char * forma
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
-   DebugPrint(x, y, m_StrBuffer, JustificationType::JustificationType_Left, NormalMenuColor, m_DebugFontRecord.m_Font);
+   DebugPrint(x, y, m_StrBuffer, JustificationType::JustificationType_Center, NormalMenuColor, m_DebugFontRecord.m_Font);
 }
 
 void BallHistory::DebugPrintRecord::ShowTextTitle(const char * format, ...)
@@ -14086,7 +14086,6 @@ void Player::Render()
    //if ( !cameraMode )
    if (m_minphyslooptime == 0) // (vsync) latency reduction code not active? -> Do Physics Updates here
       UpdatePhysics();
-   m_BallHistory.Process(*this, (int)(timeforframe / 1000));
 
    m_overall_frames++;
 
@@ -14126,6 +14125,8 @@ void Player::Render()
       RenderDynamics();
       m_pin3d.m_pd3dPrimaryDevice->EndScene();
    }
+
+   m_BallHistory.Process(*this, (int)(timeforframe / 1000));
 
    m_pininput.ProcessKeys(/*sim_msec,*/ -(int)(timeforframe / 1000)); // trigger key events mainly for VPM<->VP rountrip
 
