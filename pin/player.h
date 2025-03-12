@@ -477,16 +477,15 @@ public:
    {
       static const S32 RadiusPercentMinimum = 1;
       static const S32 RadiusPercentMaximum = 300;
-      static const float RadiusPercentDisabled;
 
       Vertex3Ds m_PassPosition;
       float m_PassRadiusPercent;
 
-      Vertex3Ds m_OpeningPosition1;
-      Vertex3Ds m_OpeningPosition2;
+      Vertex3Ds m_OpeningPositionLeft;
+      Vertex3Ds m_OpeningPositionRight;
 
       BallCorridorOptionsRecord();
-      BallCorridorOptionsRecord(const Vertex3Ds &passPosition, float passRadiusPercent, const Vertex3Ds &opening1, const Vertex3Ds &opening2);
+      BallCorridorOptionsRecord(const Vertex3Ds &passPosition, float passRadiusPercent, const Vertex3Ds &openingLeft, const Vertex3Ds &openingRight);
    };
 
    struct RunRecord
@@ -915,7 +914,9 @@ private:
 
    ProfilerRecord m_ProfilerRecord;
 
-   DebugFontRecord m_DebugFontRecord;
+   DebugFontRecord m_DebugFontRecordStatus;
+   DebugFontRecord m_DebugFontRecordMenu;
+   DebugFontRecord m_DebugFontRecordPosition;
 
    bool m_ShowStatus;
    bool m_Control;
@@ -941,6 +942,10 @@ private:
    Texture *m_TrainerBallCorridorOpeningTexture;
    Texture *m_ActiveBallKickerTexture;
    std::map<U32, Texture *> m_ControlHistoryBallTextures;
+
+   VertexBuffer* m_BallCorridorPassVertices;
+   VertexBuffer* m_BallCorridorOpeningLeft;
+   VertexBuffer* m_BallCorridorOpeningRight;
 
    int m_UseTrailsForBallsInitialValue;
 
@@ -1005,8 +1010,8 @@ private:
    static const char *TrainerModeBallFailAssociationsKeyName;
    static const char *TrainerModeBallCorridorPassPosition3DKeyName;
    static const char *TrainerModeBallCorridorPassRadiusPercentKeyName;
-   static const char *TrainerModeBallCorridorOpeningPosition13DKeyName;
-   static const char *TrainerModeBallCorridorOpeningPosition23DKeyName;
+   static const char *TrainerModeBallCorridorOpeningPositionLeft3DKeyName;
+   static const char *TrainerModeBallCorridorOpeningPositionRight3DKeyName;
 
    bool GetSettingsFileName(Player &player, std::string &fileName);
    void LoadSettings(Player &player);
@@ -1023,16 +1028,20 @@ private:
    void ResetBallHistoryRenderSizes();
    void DrawBallHistory(Player &player);
    void DrawLine(Player &player, const Vertex3Ds &posA, const Vertex3Ds &posB, D3DCOLOR color);
-   void DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float ballRadius, float intersectionRadius, D3DCOLOR color);
+   void DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float intersectionRadius, D3DCOLOR color);
    void DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
-   void DrawFakeBallAtMousePosition(Player &player, float heightZ, float radius, float intersectionRadius, Texture &texture, const Vertex3Ds *lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr);
+   void DrawFakeBallAtMousePosition(Player &player, float heightZ, Texture &texture, const Vertex3Ds *lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr);
    bool ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallPasses(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallFails(std::size_t index, int currentTimeMs);
+   void DrawTrainerBallCorridorPass(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor, Vertex3Ds *overridePosition=nullptr);
+   void DrawTrainerBallCorridorOpeningLeft(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor);
+   void DrawTrainerBallCorridorOpeningRight(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor);
    bool ShouldDrawTrainerBallCorridor(int currentTimeMs);
    bool ShouldDrawActiveBallKickers(int currentTimeMs);
    void DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
-   void DrawActiveBallKickers(Player &player, float radius, Matrix3 &orientation, DebugPrintRecord &dpr);
+   void DrawTrainerBallCorridor(Player &player, DebugPrintRecord &dpr);
+   void DrawActiveBallKickers(Player &player, DebugPrintRecord &dpr);
    void DrawAngleVelocityPreview(Player &player, TrainerOptions::BallStartOptionsRecord &bsor);
    void DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angleStep, float velocityStep, float radius);
    void DrawAngleVelocityPreviewHelperAdd(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angle, float velocity, float radius);
@@ -1056,7 +1065,8 @@ private:
    void ShowDifficultyVarianceStatusPlayfieldFriction(DebugPrintRecord &dpr, Player &player, bool isMenu);
    void ShowDifficultyVarianceStatusFlipperStrength(DebugPrintRecord &dpr, Player &player, bool isMenu);
    void ShowDifficultyVarianceStatusFlipperFriction(DebugPrintRecord &dpr, Player &player, bool isMenu);
-   void ShowResult(DebugPrintRecord &dpr, std::size_t total, std::size_t totalMs, const char * type, const char * subType);
+   void ShowResult(DebugPrintRecord &dpr, std::size_t total, std::vector<DWORD> &timesMs, const char *type, const char *subType);
+   template <class T> float CalculateStandardDeviation(std::vector<T> &values);
    float CalculateDifficultyVariance(Player &player, float initial, float current, S32 variance, TrainerOptions::DifficultyVarianceModeType varianceMode);
    void InitBallStartOptionRecords(DebugPrintRecord &dpr);
    void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs);
@@ -1075,10 +1085,12 @@ private:
    BallHistoryRecord &Get(std::size_t index);
    std::size_t GetTailIndex();
 
+   void ResetVertices(VertexBuffer *&vertices);
    float GetDefaultBallRadius();
+   Matrix3 GetDefaultBallOrientation();
    float DistancePixels(POINT &p1, POINT &p2);
    float DistancePixels(const Vertex3Ds &pos1, const Vertex3Ds &pos2);
-   float DistanceToLineSegment(const Vertex3Ds& lineA, const Vertex3Ds& lineB, const Vertex3Ds& point);
+   float DistanceToLineSegment(const Vertex3Ds &lineA, const Vertex3Ds &lineB, const Vertex3Ds &point);
    float VelocityPixels(const Vertex3Ds &vel);
    char GetBallHistoryKey(Player &player, EnumAssignKeys enumAssignKey);
    bool BallsReadyForTrainer();
