@@ -674,7 +674,7 @@ BallHistory::Vertex3DColor::Vertex3DColor(D3DVALUE xValue, D3DVALUE yValue, D3DV
 }
 
 const int BallHistory::MenuOptionsRecord::SkipKeyPressHoldMs = 2000;
-const int BallHistory::MenuOptionsRecord::SkipKeyIntervalMs = 333;
+const int BallHistory::MenuOptionsRecord::SkipKeyIntervalMs = 250;
 const S32 BallHistory::MenuOptionsRecord::SkipKeyStepFactor = 10;
 
 const int BallHistory::MenuOptionsRecord::SkipControlIntervalMs = 300;
@@ -715,7 +715,7 @@ const float BallHistory::DrawAngleVelocityHeightOffset = 2.0f;
 
 const int BallHistory::DrawBallBlinkMs = 200;
 
-const D3DCOLOR BallHistory::IntersectionCircleColor = D3DCOLOR_ARGB(0x00, 0x00, 0x00, 0xFF);
+const D3DCOLOR BallHistory::IntersectionCircleColor = D3DCOLOR_ARGB(0xFF, 0x00, 0x00, 0xFF);
 
 const char * BallHistory::SettingsFileExtension = "ini";
 const char * BallHistory::SettingsFolderName = "BallHistory";
@@ -787,9 +787,6 @@ BallHistory::BallHistory(PinTable &pinTable) :
    m_TrainerBallCorridorPassTexture(nullptr),
    m_TrainerBallCorridorOpeningTexture(nullptr),
    m_ActiveBallKickerTexture(nullptr),
-   m_BallCorridorPassVertices(nullptr),
-   m_BallCorridorOpeningLeft(nullptr),
-   m_BallCorridorOpeningRight(nullptr),
    m_UseTrailsForBallsInitialValue(0)
 {
    m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyInitial = S32(pinTable.GetGlobalDifficulty());
@@ -1562,10 +1559,6 @@ void BallHistory::UnInit(Player &player)
    delete m_TrainerBallCorridorPassTexture;
    delete m_TrainerBallCorridorOpeningTexture;
    delete m_ActiveBallKickerTexture;
-
-   ResetVertices(m_BallCorridorPassVertices);
-   ResetVertices(m_BallCorridorOpeningLeft);
-   ResetVertices(m_BallCorridorOpeningRight);
 }
 
 void BallHistory::InitBallsIncreased(Player &player)
@@ -1751,15 +1744,6 @@ std::size_t BallHistory::GetTailIndex()
       tailIndex = m_BallHistoryRecords.size() - backStepRemaining + 1;
    }
    return tailIndex;
-}
-
-void BallHistory::ResetVertices(VertexBuffer *&vertices)
-{
-   if (vertices != nullptr)
-   {
-      SAFE_BUFFER_RELEASE(vertices);
-      vertices = nullptr;
-   }
 }
 
 float BallHistory::GetDefaultBallRadius()
@@ -2546,13 +2530,13 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
          dpr.ShowText("Distance PassL<-->PassR = %.2f", DistanceToLineSegment(passPosition1, passPosition2, mousePosition3D));
          if (bcor.m_OpeningPositionLeft.x < bcor.m_OpeningPositionRight.x)
          {
-            dpr.ShowText("Distance PassL<-->Opening1 = %.2f", DistanceToLineSegment(passPosition1, bcor.m_OpeningPositionLeft, mousePosition3D));
-            dpr.ShowText("Distance PassR<-->Opening2 = %.2f", DistanceToLineSegment(passPosition2, bcor.m_OpeningPositionRight, mousePosition3D));
+            dpr.ShowText("Distance PassL<-->OpeningL = %.2f", DistanceToLineSegment(passPosition1, bcor.m_OpeningPositionLeft, mousePosition3D));
+            dpr.ShowText("Distance PassR<-->OpeningR = %.2f", DistanceToLineSegment(passPosition2, bcor.m_OpeningPositionRight, mousePosition3D));
          }
          else
          {
-            dpr.ShowText("Distance PassL<-->Opening2 = %.2f", DistanceToLineSegment(passPosition1, bcor.m_OpeningPositionRight, mousePosition3D));
-            dpr.ShowText("Distance PassR<-->Opening1 = %.2f", DistanceToLineSegment(passPosition2, bcor.m_OpeningPositionLeft, mousePosition3D));
+            dpr.ShowText("Distance PassL<-->OpeningR = %.2f", DistanceToLineSegment(passPosition1, bcor.m_OpeningPositionRight, mousePosition3D));
+            dpr.ShowText("Distance PassR<-->OpeningL = %.2f", DistanceToLineSegment(passPosition2, bcor.m_OpeningPositionLeft, mousePosition3D));
          }
 
          dpr.ShowText("ActiveBallKickers Count = %zu", m_ActiveBallKickers.size());
@@ -2829,8 +2813,7 @@ float BallHistory::DistanceToLineSegment(const Vertex3Ds &lineA, const Vertex3Ds
    }
 }
 
-
-void BallHistory::ShowBallCorridorOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor, const Vertex3Ds &mousePosition3D, bool isMenu)
+void BallHistory::ShowBallCorridorOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor, bool isMenu)
 {
    dpr.ShowTextWithMenu(isMenu, "Pass = %.2f,%.2f,%.2f (x,y,z)", bcor.m_PassPosition.x, bcor.m_PassPosition.y, bcor.m_PassPosition.z);
    dpr.ShowTextWithMenu(isMenu, "Pass Radius = %.0f%%", bcor.m_PassRadiusPercent);
@@ -2971,6 +2954,10 @@ void BallHistory::ShowDifficultyVarianceStatusFlipperFriction(DebugPrintRecord &
       m_MenuOptions.m_TrainerOptions.m_FlipperFrictionInitial,
       m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode);
 }
+
+// TODO GARY
+// Check other vertice creations and see if non-freed memory can be used
+// Add description for rest of Ball Corridor
 
 void BallHistory::ShowResult(DebugPrintRecord &dpr, std::size_t total, std::vector<DWORD> &timesMs, const char *type, const char *subType)
 {
@@ -3221,9 +3208,9 @@ bool BallHistory::ShouldDrawTrainerBallCorridor(int currentTimeMs)
 
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorComplete:
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorPassLocation:
-      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorPassDistance:
-      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorOpening1Location:
-      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorOpening2PassLocation:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorPassWidth:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorOpeningRightLocation:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorOpeningLeftLocation:
          return (currentTimeMs % OneSecondMs) >= DrawBallBlinkMs;
 
       default:
@@ -3251,6 +3238,22 @@ bool BallHistory::ShouldDrawActiveBallKickers(int currentTimeMs)
    }
 }
 
+void BallHistory::DrawPrimitives(Player &player, std::vector<Vertex3DColor> &vertices, RenderDevice::PrimitiveTypes type)
+{
+   player.DrawFakeBall(Vertex3Ds(), 0.0f, Matrix3(), nullptr);
+   VertexBuffer *testVerticesVB = nullptr;
+   VertexBuffer::CreateVertexBuffer((unsigned int)vertices.size(), 0, MY_D3DFVF_COLOR_VERTEX, &testVerticesVB, PRIMARY_DEVICE);
+   {
+      void* buf;
+      testVerticesVB->lock(0, 0, &buf, VertexBuffer::WRITEONLY);
+      memcpy(buf, vertices.data(), vertices.size() * sizeof(vertices[0]));
+      testVerticesVB->unlock();
+      player.m_pin3d.m_pd3dPrimaryDevice->SetRenderStateCulling(RenderDevice::CULL_NONE);
+      player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(type, MY_D3DFVF_COLOR_VERTEX, testVerticesVB, 0, DWORD(vertices.size()), false);
+   }
+   SAFE_BUFFER_RELEASE(testVerticesVB);
+}
+
 void BallHistory::DrawTrainerBallCorridorPass(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor, Vertex3Ds *overridePosition)
 {
    Vertex3Ds* position = overridePosition;
@@ -3270,17 +3273,7 @@ void BallHistory::DrawTrainerBallCorridorPass(Player &player, TrainerOptions::Ba
       vertices.push_back(Vertex3DColor(position->x - passWidth, position->y, position->z - passBallRadius, green));
       vertices.push_back(Vertex3DColor(position->x + passWidth, position->y, position->z - passBallRadius, green));
 
-      ResetVertices(m_BallCorridorPassVertices);
-      VertexBuffer::CreateVertexBuffer((unsigned int)vertices.size(), 0, MY_D3DFVF_COLOR_VERTEX, &m_BallCorridorPassVertices, PRIMARY_DEVICE);
-      if (m_BallCorridorPassVertices)
-      {
-         void* buf;
-         m_BallCorridorPassVertices->lock(0, 0, &buf, VertexBuffer::WRITEONLY);
-         memcpy(buf, vertices.data(), vertices.size() * sizeof(vertices[0]));
-         m_BallCorridorPassVertices->unlock();
-         player.m_pin3d.m_pd3dPrimaryDevice->SetRenderStateCulling(RenderDevice::CULL_NONE);
-         player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::TRIANGLESTRIP, MY_D3DFVF_COLOR_VERTEX, m_BallCorridorPassVertices, 0, DWORD(vertices.size()), false);
-      }
+      DrawPrimitives(player, vertices, RenderDevice::TRIANGLESTRIP);
 
       DebugPrintRecord dpr(player, m_DebugFontRecordPosition);
       POINT screenPoint = Get2DPointFrom3D(player, *position);
@@ -3312,17 +3305,7 @@ void BallHistory::DrawTrainerBallCorridorOpeningLeft(Player &player, DebugPrintR
       vertices.push_back(Vertex3DColor(bcor.m_PassPosition.x - passWidth, bcor.m_PassPosition.y, bcor.m_PassPosition.z - passBallRadius, red));
       vertices.push_back(Vertex3DColor(bcor.m_OpeningPositionLeft.x, bcor.m_OpeningPositionLeft.y, bcor.m_OpeningPositionLeft.z - passBallRadius, red));
 
-      ResetVertices(m_BallCorridorOpeningLeft);
-      VertexBuffer::CreateVertexBuffer((unsigned int)vertices.size(), 0, MY_D3DFVF_COLOR_VERTEX, &m_BallCorridorOpeningLeft, PRIMARY_DEVICE);
-      if (m_BallCorridorOpeningLeft)
-      {
-         void* buf;
-         m_BallCorridorOpeningLeft->lock(0, 0, &buf, VertexBuffer::WRITEONLY);
-         memcpy(buf, vertices.data(), vertices.size() * sizeof(vertices[0]));
-         m_BallCorridorOpeningLeft->unlock();
-         player.m_pin3d.m_pd3dPrimaryDevice->SetRenderStateCulling(RenderDevice::CULL_NONE);
-         player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::TRIANGLESTRIP, MY_D3DFVF_COLOR_VERTEX, m_BallCorridorOpeningLeft, 0, DWORD(vertices.size()), false);
-      }
+      DrawPrimitives(player, vertices, RenderDevice::TRIANGLESTRIP);
    }
 }
 
@@ -3350,17 +3333,7 @@ void BallHistory::DrawTrainerBallCorridorOpeningRight(Player &player, DebugPrint
       vertices.push_back(Vertex3DColor(bcor.m_PassPosition.x + passWidth, bcor.m_PassPosition.y, bcor.m_PassPosition.z - passBallRadius, red));
       vertices.push_back(Vertex3DColor(bcor.m_OpeningPositionRight.x, bcor.m_OpeningPositionRight.y, bcor.m_OpeningPositionRight.z - passBallRadius, red));
 
-      ResetVertices(m_BallCorridorOpeningRight);
-      VertexBuffer::CreateVertexBuffer((unsigned int)vertices.size(), 0, MY_D3DFVF_COLOR_VERTEX, &m_BallCorridorOpeningRight, PRIMARY_DEVICE);
-      if (m_BallCorridorOpeningRight)
-      {
-         void* buf;
-         m_BallCorridorOpeningRight->lock(0, 0, &buf, VertexBuffer::WRITEONLY);
-         memcpy(buf, vertices.data(), vertices.size() * sizeof(vertices[0]));
-         m_BallCorridorOpeningRight->unlock();
-         player.m_pin3d.m_pd3dPrimaryDevice->SetRenderStateCulling(RenderDevice::CULL_NONE);
-         player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::TRIANGLESTRIP, MY_D3DFVF_COLOR_VERTEX, m_BallCorridorOpeningRight, 0, DWORD(vertices.size()), false);
-      }
+      DrawPrimitives(player, vertices, RenderDevice::TRIANGLESTRIP);
    }
 }
 
@@ -3576,27 +3549,18 @@ void BallHistory::DrawAngleVelocityPreview(Player &player, TrainerOptions::BallS
 {
    float ballRadius = GetDefaultBallRadius() + DrawAngleVelocityRadiusExtraMinimum;
 
-   std::vector<Vertex3DColor> testVertices;
-   testVertices.push_back(Vertex3DColor(bsor.m_StartPosition.x, bsor.m_StartPosition.y, bsor.m_StartPosition.z + ballRadius, 0));
+   std::vector<Vertex3DColor> vertices;
+   vertices.push_back(Vertex3DColor(bsor.m_StartPosition.x, bsor.m_StartPosition.y, bsor.m_StartPosition.z + ballRadius, 0));
 
    float angleStep = 0.0f;
    float velocityStep = 0.0f;
    CalculateAngleVelocityStep(bsor, angleStep, velocityStep);
 
-   DrawAngleVelocityPreviewHelper(testVertices, bsor, angleStep, velocityStep, ballRadius);
+   DrawAngleVelocityPreviewHelper(vertices, bsor, angleStep, velocityStep, ballRadius);
 
-   if (testVertices.size() > 1)
+   if (vertices.size() > 1)
    {
-      VertexBuffer* testVerticesVB = nullptr;
-      VertexBuffer::CreateVertexBuffer((unsigned int)testVertices.size(), 0, MY_D3DFVF_COLOR_VERTEX, &testVerticesVB, PRIMARY_DEVICE);
-      void* buf;
-      testVerticesVB->lock(0, 0, &buf, VertexBuffer::WRITEONLY);
-      memcpy(buf, testVertices.data(), testVertices.size() * sizeof(testVertices[0]));
-      testVerticesVB->unlock();
-
-      player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::TRIANGLEFAN, MY_D3DFVF_COLOR_VERTEX, testVerticesVB, 0, DWORD(testVertices.size()), false);
-
-      SAFE_BUFFER_RELEASE(testVerticesVB);
+      DrawPrimitives(player, vertices, RenderDevice::TRIANGLEFAN);
    }
 }
 
@@ -4202,7 +4166,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Plunger returns to previous menu"
          });
 
-         DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_CreateZ), *m_AutoControlBallTexture, nullptr, 0, dpr);
+         DrawFakeBall(player, mousePosition3D, *m_AutoControlBallTexture, nullptr, 0, dpr);
 
          switch (menuAction)
          {
@@ -4519,21 +4483,21 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                ShowDescription(dpr,
                {
                   "Configure requirements for Ball Starts in order to 'fail' a training run",
-                  "Training run will 'fail' when any Ball Start satisfies any Ball Fail",
+                  "Training run will 'fail' when any ball satisfies any Ball Fail",
                   "Distance from a position and velocity can be configured per Ball Fail",
                   "Specific Ball Starts can be associated with Ball Fails"
                });
                break;
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_BallCorridor:
                dpr.ShowMenuTextTitle("Current Configuration");
-               ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, mousePosition3D, true);
+               ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, true);
 
                ShowDescription(dpr,
                {
                   "Configure requirements for Ball Corridor",
                   "Creates a Corridor with three walls: Pass, Fail Left and Fail Right",
-                  "Training run will 'pass' when any Ball Start intersects the Pass wall",
-                  "Training run will 'fail' when any Ball Start intersects any Fail wall"
+                  "Training run will 'pass' when any ball intersects the Pass wall",
+                  "Training run will 'fail' when any ball intersects any Fail wall"
                });
                break;
             case TrainerOptions::ConfigModeStateType::ConfigModeStateType_Difficulty:
@@ -5144,7 +5108,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartLocation:
          {
+         mousePosition3D = Get3DPointFromMousePosition(player, float(m_MenuOptions.m_CreateZ));
          TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
+
          dpr.ShowMenuTextTitle("Custom Ball Start %zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
          dpr.ShowMenuText("Position %.2f,%.2f,%.2f (3x,3y,3z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
 
@@ -5156,7 +5122,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("Ball Height");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_CreateZ, heightMaximum);
 
-         DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_CreateZ), *m_TrainerBallStartTexture, &bsor.m_StartPosition, D3DCOLOR_ARGB(0x00, 0x00, 0x00, 0xFF), dpr);
+         DrawFakeBall(player, mousePosition3D, *m_TrainerBallStartTexture, &bsor.m_StartPosition, D3DCOLOR_ARGB(0x00, 0x00, 0x00, 0xFF), dpr);
 
          dpr.ShowMenuText("");
          dpr.ShowMenuTextTitle("Current Configuration");
@@ -5355,6 +5321,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                ProcessMenuChangeValueSkip<float>(bsor.m_VelocityRangeFinish, TrainerOptions::BallStartOptionsRecord::VelocityMinimum, TrainerOptions::BallStartOptionsRecord::VelocityMaximum, currentTimeMs);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
+               // do nothing
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
                ProcessMenuChangeValueDec<float>(bsor.m_VelocityRangeFinish, TrainerOptions::BallStartOptionsRecord::VelocityMinimum, TrainerOptions::BallStartOptionsRecord::VelocityMaximum);
@@ -5746,6 +5713,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassLocation:
          {
+         mousePosition3D = Get3DPointFromMousePosition(player, float(m_MenuOptions.m_CreateZ));
          TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
          dpr.ShowMenuTextTitle("Ball Pass %zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
@@ -5767,7 +5735,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_CreateZ, heightMaximum);
 
          float intersectionRadiusPercent = bpor.m_EndRadiusPercent != TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled ? bpor.m_EndRadiusPercent : 0.0f;
-         DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_CreateZ), *m_TrainerBallPassTexture, &bpor.m_EndPosition, D3DCOLOR_ARGB(0x00, 0x00, 0xFF, 0x00), dpr);
+         DrawFakeBall(player, mousePosition3D, *m_TrainerBallPassTexture, &bpor.m_EndPosition, D3DCOLOR_ARGB(0x00, 0x00, 0xFF, 0x00), dpr);
          DrawIntersectionCircle(player, mousePosition3D, intersectionRadiusPercent, IntersectionCircleColor);
 
          dpr.ShowMenuText("");
@@ -5895,7 +5863,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
          TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
          
-         dpr.ShowMenuTextTitle("Ball Pass Distance (%% of radius)");
+         dpr.ShowMenuTextTitle("Ball Pass Distance (%% of ball radius)");
          dpr.ShowMenuText("(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, static_cast<S32>(bpor.m_EndRadiusPercent), TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
 
          dpr.ShowMenuText("");
@@ -5904,8 +5872,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          ShowDescription(dpr,
          {
-            "Use flippers to set 'pass' distance as a percentage of the radius",
-            "Ball Pass satisfied when associated ball intersects black disk shown visually"
+            "Use flippers to set 'pass' distance as a percentage of ball radius",
+            "Ball Pass satisfied when associated ball intersects blue disk shown visually"
          });
 
          ProcessMenuAction<float>(menuAction,
@@ -6280,6 +6248,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailLocation:
          {
+         mousePosition3D = Get3DPointFromMousePosition(player, float(m_MenuOptions.m_CreateZ));
          TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
          dpr.ShowMenuTextTitle("Ball Fail %zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
@@ -6302,7 +6271,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_CreateZ, heightMaximum);
 
          float intersectionRadius = bfor.m_EndRadiusPercent != TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled ? bfor.m_EndRadiusPercent : 0.0f;
-         DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_CreateZ), *m_TrainerBallFailTexture, &bfor.m_EndPosition, D3DCOLOR_ARGB(0x00, 0xFF, 0x00, 0x00), dpr);
+         DrawFakeBall(player, mousePosition3D, *m_TrainerBallFailTexture, &bfor.m_EndPosition, D3DCOLOR_ARGB(0x00, 0xFF, 0x00, 0x00), dpr);
          DrawIntersectionCircle(player, mousePosition3D, intersectionRadius, IntersectionCircleColor);
 
          dpr.ShowMenuText("");
@@ -6430,7 +6399,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          {
          TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
          
-         dpr.ShowMenuTextTitle("Ball Fail Distance (%% of radius)");
+         dpr.ShowMenuTextTitle("Ball Fail Distance (%% of ball radius)");
          dpr.ShowMenuText("(minimum)%d%% <-- %d%%--> %d%%(maximum)", TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, static_cast<S32>(bfor.m_EndRadiusPercent), TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
 
          dpr.ShowMenuText("");
@@ -6439,8 +6408,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          ShowDescription(dpr,
          {
-            "Use flippers to set 'fail' distance as a percentage of the radius",
-            "Ball Fail satisfied when associated ball intersects black disk shown visually"
+            "Use flippers to set 'fail' distance as a percentage of ball radius",
+            "Ball Fail satisfied when associated ball intersects blue disk shown visually"
          });
 
          ProcessMenuAction<float>(menuAction,
@@ -6583,7 +6552,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
          dpr.ShowMenuText("");
          dpr.ShowMenuTextTitle("Current Configuration");
-         ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, mousePosition3D, true);
+         ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, true);
 
          switch (m_MenuOptions.m_TrainerOptions.m_BallCorridorCompleteMode)
          {
@@ -6658,6 +6627,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          break;
       case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorPassLocation:
          {
+         mousePosition3D = Get3DPointFromMousePosition(player, float(m_MenuOptions.m_CreateZ));
          TrainerOptions::BallCorridorOptionsRecord &bcor = m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord;
 
          dpr.ShowMenuTextTitle("Ball Corridor Pass Location");
@@ -6671,14 +6641,20 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuText("");
          dpr.ShowMenuTextTitle("Ball Height");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_CreateZ, heightMaximum);
-
+         
          DrawTrainerBallCorridorPass(player, bcor, &mousePosition3D);
 
          dpr.ShowMenuText("");
          dpr.ShowMenuTextTitle("Current Configuration");
-         ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, mousePosition3D, true);
+         ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, true);
 
-         dpr.ShowMenuText("<BALL CORRIDOR DESCRIPTION TBD");
+         ShowDescription(dpr,
+         {
+            "Use mouse (move/click) to set position",
+            "Use flippers to set Ball Corridor Pass height",
+            "Plunger accepts configuration",
+            "Trainer run will 'pass' when any ball intersects green Pass Wall"
+         });
 
          switch (menuAction)
          {
@@ -6704,11 +6680,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                else
                {
-                  m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorPassDistance;
-                  if (bcor.m_PassRadiusPercent == 0.0f)
-                  {
-                     bcor.m_PassRadiusPercent = 100.0f;
-                  }
+                  m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorPassWidth;
                }
                break;
             default:
@@ -6717,18 +6689,22 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
          }
          break;
-      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorPassDistance:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorPassWidth:
          {
          TrainerOptions::BallCorridorOptionsRecord &bcor = m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord;
          
-         dpr.ShowMenuTextTitle("Ball Corridor Pass Distance (%% of radius)");
+         dpr.ShowMenuTextTitle("Ball Corridor Pass Width (%% of ball radius)");
          dpr.ShowMenuText("(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::BallCorridorOptionsRecord::RadiusPercentMinimum, static_cast<S32>(bcor.m_PassRadiusPercent), TrainerOptions::BallCorridorOptionsRecord::RadiusPercentMaximum);
 
          dpr.ShowMenuText("");
          dpr.ShowMenuTextTitle("Current Configuration");
-         ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, mousePosition3D, true);
+         ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, true);
 
-         dpr.ShowMenuText("<BALL CORRIDOR DESCRIPTION TBD");
+         ShowDescription(dpr,
+         {
+            "Use flippers to set 'pass' width as a percentage of ball radius",
+            "Ball Corridor Pass satisfied when any ball intersects green Pass Wall"
+         });
 
          switch (menuAction)
          {
@@ -6745,7 +6721,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                ProcessMenuChangeValueInc<float>(bcor.m_PassRadiusPercent, TrainerOptions::BallCorridorOptionsRecord::RadiusPercentMinimum, TrainerOptions::BallCorridorOptionsRecord::RadiusPercentMaximum);
                break;
             case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
-               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorOpening1Location;
+               m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorOpeningLeftLocation;
                break;
             default:
                InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
@@ -6753,8 +6729,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
          }
          break;
-      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorOpening1Location:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorOpeningLeftLocation:
          {
+         mousePosition3D = Get3DPointFromMousePosition(player, float(m_MenuOptions.m_CreateZ));
          TrainerOptions::BallCorridorOptionsRecord &bcor = m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord;
 
          dpr.ShowMenuTextTitle("Ball Corridor Opening Left");
@@ -6768,13 +6745,19 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuTextTitle("Opening Left Height");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_CreateZ, heightMaximum);
 
-         DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_CreateZ), *m_TrainerBallCorridorOpeningTexture, &bcor.m_OpeningPositionLeft, D3DCOLOR_ARGB(0x00, 0xFF, 0x00, 0x00), dpr);
+         DrawFakeBall(player, mousePosition3D, *m_TrainerBallCorridorOpeningTexture, &bcor.m_OpeningPositionLeft, D3DCOLOR_ARGB(0x00, 0xFF, 0x00, 0x00), dpr);
 
          dpr.ShowMenuText("");
          dpr.ShowMenuTextTitle("Current Configuration");
-         ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, mousePosition3D, true);
+         ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, true);
 
-         dpr.ShowMenuText("<BALL CORRIDOR DESCRIPTION TBD");
+         ShowDescription(dpr,
+         {
+            "Use mouse (move/click) to set position",
+            "Use flippers to set Ball Corridor Opening Left height",
+            "Plunger accepts configuration",
+            "Trainer run will 'fail' when any ball intersects red Opening Left wall"
+         });
 
          switch (menuAction)
          {
@@ -6800,7 +6783,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
                }
                else
                {
-                  m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorOpening2PassLocation;
+                  m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorOpeningRightLocation;
                }
                break;
             default:
@@ -6809,8 +6792,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
          }
          break;
-      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorOpening2PassLocation:
+      case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorOpeningRightLocation:
          {
+         mousePosition3D = Get3DPointFromMousePosition(player, float(m_MenuOptions.m_CreateZ));
          TrainerOptions::BallCorridorOptionsRecord &bcor = m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord;
 
          dpr.ShowMenuTextTitle("Ball Corridor Opening Right");
@@ -6824,13 +6808,20 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          dpr.ShowMenuTextTitle("Opening Right Height");
          dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_CreateZ, heightMaximum);
 
-         DrawFakeBallAtMousePosition(player, float(m_MenuOptions.m_CreateZ), *m_TrainerBallCorridorOpeningTexture, &bcor.m_OpeningPositionRight, D3DCOLOR_ARGB(0x00, 0xFF, 0x00, 0x00), dpr);
+         DrawFakeBall(player, mousePosition3D, *m_TrainerBallCorridorOpeningTexture, &bcor.m_OpeningPositionRight, D3DCOLOR_ARGB(0x00, 0xFF, 0x00, 0x00), dpr);
 
          dpr.ShowMenuText("");
          dpr.ShowMenuTextTitle("Current Configuration");
-         ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, mousePosition3D, true);
+         ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, true);
 
-         dpr.ShowMenuText("<BALL CORRIDOR DESCRIPTION TBD");
+         ShowDescription(dpr,
+         {
+            "Use mouse (move/click) to set position",
+            "Use flippers to set Ball Corridor Opening Right height",
+            "Plunger accepts configuration",
+            "Trainer run will 'fail' when any ball intersects red Opening Right wall"
+         });
+
 
          switch (menuAction)
          {
@@ -8722,8 +8713,11 @@ void BallHistory::DrawBallHistory(Player &player)
 
          if (previousBhr)
          {
-            drawBallHistoryRecords[ballHistoryStateIndex].TotalDistancePixelsTraveled
-               += DistancePixels(previousBhr->m_BallHistoryStates[ballHistoryStateIndex].m_Position, ballHistoryState.m_Position);
+            float distance = DistancePixels(previousBhr->m_BallHistoryStates[ballHistoryStateIndex].m_Position, ballHistoryState.m_Position);
+            if (distance < (GetDefaultBallRadius() * 3.0f))
+            {
+               drawBallHistoryRecords[ballHistoryStateIndex].TotalDistancePixelsTraveled += distance;
+            }
          }
 
          BallHistoryRecord *lastDrawnBhr = drawBallHistoryRecords[ballHistoryStateIndex].LastDrawnBallHistoryRecord;
@@ -8833,47 +8827,34 @@ void BallHistory::DrawBallHistory(Player &player)
 
 void BallHistory::DrawLine(Player &player, const Vertex3Ds &posA, const Vertex3Ds &posB, D3DCOLOR color)
 {
-   // TODO GARY lines are flickering, i think it has something to do with
-   // releasing the buffer, maybe try keeping it around, but have to handle
-   // the memory lifetime
    if (!posA.IsZero() && !posB.IsZero())
    {
-      std::vector<Vertex3DColor> testVertices;
-      testVertices.push_back({posA.x, posA.y, posA.z, color});
-      testVertices.push_back({posB.x, posB.y, posB.z, color});
+      std::vector<Vertex3DColor> vertices;
+      vertices.push_back({posA.x, posA.y, posA.z, color});
+      vertices.push_back({posB.x, posB.y, posB.z, color});
 
-      VertexBuffer *testVerticesVB = nullptr;
-      VertexBuffer::CreateVertexBuffer((unsigned int)testVertices.size(), 0, MY_D3DFVF_COLOR_VERTEX, &testVerticesVB, PRIMARY_DEVICE);
-      void *buf;
-      testVerticesVB->lock(0, 0, &buf, VertexBuffer::WRITEONLY);
-      memcpy(buf, testVertices.data(), testVertices.size() * sizeof(testVertices[0]));
-      testVerticesVB->unlock();
-
-      player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::LINELIST, MY_D3DFVF_COLOR_VERTEX, testVerticesVB, 0, DWORD(testVertices.size()), false);
-
-      SAFE_BUFFER_RELEASE(testVerticesVB);
+      DrawPrimitives(player, vertices, RenderDevice::LINELIST);
    }
 }
 
 void BallHistory::DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float intersectionRadiusPercent, D3DCOLOR color)
 {
-   // TODO GARY circle is black (instead blue) on VPM for some reason, figure out why this is
    static const std::size_t NumTriangles = 36;
 
    float ballRadius = GetDefaultBallRadius();
-   float intersectionRadius = ballRadius * intersectionRadiusPercent * 100.0f;
+   float intersectionRadius = ballRadius * intersectionRadiusPercent / 100.0f;
 
    float heightZ = intersectionRadius >= ballRadius ? pos.z : pos.z + ballRadius;
 
-   std::vector<Vertex3DColor> testVertices;
-   testVertices.push_back({pos.x, pos.y, heightZ, color});
+   std::vector<Vertex3DColor> vertices;
+   vertices.push_back({pos.x, pos.y, heightZ, color});
 
    float angleStep = (2.0f * float(M_PI)) / NumTriangles;
    float currentAngle = 0.0f;
    for (std::size_t triangleIndex = 0; triangleIndex < NumTriangles; triangleIndex++)
    {
       currentAngle += angleStep;
-      testVertices.push_back(
+      vertices.push_back(
       {
          pos.x + intersectionRadius * std::cosf(currentAngle),
          pos.y + intersectionRadius * std::sinf(currentAngle),
@@ -8882,18 +8863,9 @@ void BallHistory::DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float i
       });
    }
 
-   testVertices.push_back(testVertices[1]);
+   vertices.push_back(vertices[1]);
 
-   VertexBuffer *testVerticesVB = nullptr;
-   VertexBuffer::CreateVertexBuffer((unsigned int)testVertices.size(), 0, MY_D3DFVF_COLOR_VERTEX, &testVerticesVB, PRIMARY_DEVICE);
-   void *buf;
-   testVerticesVB->lock(0, 0, &buf, VertexBuffer::WRITEONLY);
-   memcpy(buf, testVertices.data(), testVertices.size() * sizeof(testVertices[0]));
-   testVerticesVB->unlock();
-
-   player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(RenderDevice::TRIANGLEFAN, MY_D3DFVF_COLOR_VERTEX, testVerticesVB, 0, DWORD(testVertices.size()), false);
-
-   SAFE_BUFFER_RELEASE(testVerticesVB);
+   DrawPrimitives(player, vertices, RenderDevice::TRIANGLEFAN);
 }
 
 void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs)
@@ -8935,23 +8907,15 @@ void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr,
    DrawActiveBallKickers(player, dpr);
 }
 
-void BallHistory::DrawFakeBallAtMousePosition(Player &player, float heightZ, Texture &texture, const Vertex3Ds * lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr)
+void BallHistory::DrawFakeBall(Player &player, Vertex3Ds &position, Texture &texture, const Vertex3Ds * lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr)
 {
-   Vertex3Ds vertex = Get3DPointFromMousePosition(player, heightZ);
-
    float ballRadius = GetDefaultBallRadius();
    Matrix3 orientation = GetDefaultBallOrientation();
-   if (Ball* controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr)
-   {
-      orientation = controlVBall->m_orientation;
-      ballRadius = controlVBall->m_d.m_radius;
-   }
 
-   Vertex3Ds fakeBallPosition(vertex.x, vertex.y, heightZ);
-   player.DrawFakeBall(fakeBallPosition, ballRadius, orientation, &texture);
+   player.DrawFakeBall(position, ballRadius, orientation, &texture);
    if (lineEndPosition)
    {
-      DrawLine(player, fakeBallPosition, *lineEndPosition, lineColor);
+      DrawLine(player, position, *lineEndPosition, lineColor);
    }
 }
 

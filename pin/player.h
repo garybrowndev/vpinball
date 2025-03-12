@@ -831,9 +831,9 @@ private:
          MenuStateType_Trainer_SelectBallFailAssociations,
          MenuStateType_Trainer_SelectBallCorridorComplete,
          MenuStateType_Trainer_SelectBallCorridorPassLocation,
-         MenuStateType_Trainer_SelectBallCorridorPassDistance,
-         MenuStateType_Trainer_SelectBallCorridorOpening1Location,
-         MenuStateType_Trainer_SelectBallCorridorOpening2PassLocation,
+         MenuStateType_Trainer_SelectBallCorridorPassWidth,
+         MenuStateType_Trainer_SelectBallCorridorOpeningLeftLocation,
+         MenuStateType_Trainer_SelectBallCorridorOpeningRightLocation,
          MenuStateType_Trainer_SelectDifficultyOptions,
          MenuStateType_Trainer_SelectDifficultyGameplayDifficulty,
          MenuStateType_Trainer_SelectDifficultyVarianceDifficulty,
@@ -943,10 +943,6 @@ private:
    Texture *m_ActiveBallKickerTexture;
    std::map<U32, Texture *> m_ControlHistoryBallTextures;
 
-   VertexBuffer* m_BallCorridorPassVertices;
-   VertexBuffer* m_BallCorridorOpeningLeft;
-   VertexBuffer* m_BallCorridorOpeningRight;
-
    int m_UseTrailsForBallsInitialValue;
 
    MenuOptionsRecord m_MenuOptions;
@@ -1030,10 +1026,11 @@ private:
    void DrawLine(Player &player, const Vertex3Ds &posA, const Vertex3Ds &posB, D3DCOLOR color);
    void DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float intersectionRadius, D3DCOLOR color);
    void DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
-   void DrawFakeBallAtMousePosition(Player &player, float heightZ, Texture &texture, const Vertex3Ds *lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr);
+   void DrawFakeBall(Player &player, Vertex3Ds &position, Texture &texture, const Vertex3Ds *lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr);
    bool ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallPasses(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallFails(std::size_t index, int currentTimeMs);
+   void DrawPrimitives(Player &player, std::vector<Vertex3DColor> &vertices, RenderDevice::PrimitiveTypes type);
    void DrawTrainerBallCorridorPass(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor, Vertex3Ds *overridePosition=nullptr);
    void DrawTrainerBallCorridorOpeningLeft(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor);
    void DrawTrainerBallCorridorOpeningRight(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor);
@@ -1054,7 +1051,7 @@ private:
    void ShowCurrentRunRecord(DebugPrintRecord &dpr, int currentTimeMs);
    void ShowBallStartOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallStartOptionsRecord &bsor);
    void ShowBallEndOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallEndOptionsRecord &beor);
-   void ShowBallCorridorOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor, const Vertex3Ds &mousePosition3D, bool isMenu);
+   void ShowBallCorridorOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor, bool isMenu);
    void ShowDifficultyTableConstants(DebugPrintRecord &dpr, Player &player);
    void ShowDifficultyVarianceMode(DebugPrintRecord &dpr, bool isMenu, const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode);
    void ShowDifficultyVarianceRange(DebugPrintRecord &dpr, bool isMenu, const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, S32 variance, float initial);
