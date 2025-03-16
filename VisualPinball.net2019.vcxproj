@@ -434,6 +434,7 @@ copy "$(TargetPath)" "%25VPIN_DIR%25"
     <ClCompile Include="IndexBuffer.cpp" />
     <ClCompile Include="math\math.cpp" />
     <ClCompile Include="MemoryStatus.cpp" />
+    <ClCompile Include="pin\ballhistory.cpp" />
     <ClCompile Include="RenderTarget.cpp" />
     <ClCompile Include="rubber.cpp" />
     <ClCompile Include="hash.cpp" />
@@ -890,6 +891,7 @@ copy "$(TargetPath)" "%25VPIN_DIR%25"
     <ClInclude Include="pintable.h" />
     <ClInclude Include="pinundo.h" />
     <ClInclude Include="pin\ball.h" />
+    <ClInclude Include="pin\ballhistory.h" />
     <ClInclude Include="pin\collide.h" />
     <ClInclude Include="pin\collideex.h" />
     <ClInclude Include="pin\hitable.h" />

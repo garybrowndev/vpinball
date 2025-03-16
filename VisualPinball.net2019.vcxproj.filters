@@ -295,6 +295,7 @@
     <ClCompile Include="RenderTarget.cpp" />
     <ClCompile Include="Sampler.cpp" />
     <ClCompile Include="Shader.cpp" />
+    <ClCompile Include="pin\ballhistory.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="vpinball.rc">
@@ -1491,6 +1492,9 @@
     <ClInclude Include="Sampler.h" />
     <ClInclude Include="simpleini\SimpleIni.h">
       <Filter>simpleini</Filter>
+    </ClInclude>
+    <ClInclude Include="pin\ballhistory.h">
+      <Filter>headers</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
