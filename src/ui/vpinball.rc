@@ -70,3 +70,8 @@ IDR_BALL                REGISTRY DISCARDABLE    "res\\ball.rgs"
 /////////////////////////////////////////////////////////////////////////////
 #endif    // not APSTUDIO_INVOKED
 
+ID_BALL_HISTORY_SOUND_EFFECT_PASS               WAVE "res\\pass.wav"
+ID_BALL_HISTORY_SOUND_EFFECT_FAIL               WAVE "res\\fail.wav"
+ID_BALL_HISTORY_SOUND_EFFECT_TIME_LOW           WAVE "res\\timelow.wav"
+ID_BALL_HISTORY_SOUND_EFFECT_COUNTDOWN_GO       WAVE "res\\countdowngo.wav"
+ID_BALL_HISTORY_SOUND_EFFECT_COUNTDOWN_READYSET WAVE "res\\countdownreadyset.wav"

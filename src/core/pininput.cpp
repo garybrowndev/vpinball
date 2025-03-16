@@ -98,6 +98,8 @@ PinInput::PinInput()
  , m_joytabledown(0)
  , m_joypause(0)
  , m_joytweak(0) 
+ , m_ballhistorymenu(0)
+ , m_ballhistoryrecall(0)
  , m_deadz(0)
  , m_override_default_buttons(false)
  , m_plunger_reverse(false)
@@ -224,6 +226,8 @@ void PinInput::LoadSettings(const Settings& settings)
    m_joylockbar = settings.LoadValueWithDefault(Settings::Player, "JoyLockbarKey"s, m_joylockbar);
    m_joypause = settings.LoadValueWithDefault(Settings::Player, "JoyPauseKey"s, m_joypause);
    m_joytweak = settings.LoadValueWithDefault(Settings::Player, "JoyTweakKey"s, m_joytweak);
+   m_ballhistorymenu = settings.LoadValueWithDefault(Settings::Player, "BallHistoryMenu"s, m_ballhistorymenu);
+   m_ballhistoryrecall = settings.LoadValueWithDefault(Settings::Player, "BallHistoryRecall"s, m_ballhistoryrecall);
    m_joytablerecenter = settings.LoadValueWithDefault(Settings::Player, "JoyTableRecenterKey"s, m_joytablerecenter);
    m_joytableup = settings.LoadValueWithDefault(Settings::Player, "JoyTableUpKey"s, m_joytableup);
    m_joytabledown = settings.LoadValueWithDefault(Settings::Player, "JoyTableDownKey"s, m_joytabledown);
@@ -1348,29 +1352,31 @@ void PinInput::Joy(const unsigned int n, const int updown, const bool start)
       if (DISPID_GameEvents_KeyDown == updown)
          g_pplayer->m_liveUI->ToggleFPS();
    }
-   if (m_joyvolumeup == n)   FireKeyEvent(updown, g_pplayer->m_rgKeys[eVolumeUp]);
-   if (m_joyvolumedown == n) FireKeyEvent(updown, g_pplayer->m_rgKeys[eVolumeDown]);
-   if (m_joylefttilt == n)   FireKeyEvent(updown, g_pplayer->m_rgKeys[eLeftTiltKey]);
-   if (m_joycentertilt == n) FireKeyEvent(updown, g_pplayer->m_rgKeys[eCenterTiltKey]);
-   if (m_joyrighttilt == n)  FireKeyEvent(updown, g_pplayer->m_rgKeys[eRightTiltKey]);
-   if (m_joymechtilt == n)   FireKeyEvent(updown, g_pplayer->m_rgKeys[eMechanicalTilt]);
-   if (m_joydebugballs == n) FireKeyEvent(updown, g_pplayer->m_rgKeys[eDBGBalls]);
-   if (m_joydebugger == n)   FireKeyEvent(updown, g_pplayer->m_rgKeys[eDebugger]);
-   if (m_joylockbar == n)    FireKeyEvent(updown, g_pplayer->m_rgKeys[eLockbarKey]);
-   if (m_joypause == n)      FireKeyEvent(updown, g_pplayer->m_rgKeys[ePause]);
-   if (m_joytweak == n)      FireKeyEvent(updown, g_pplayer->m_rgKeys[eTweak]);
-   if (m_joycustom1 == n)    FireKeyEvent(updown, m_joycustom1key);
-   if (m_joycustom2 == n)    FireKeyEvent(updown, m_joycustom2key);
-   if (m_joycustom3 == n)    FireKeyEvent(updown, m_joycustom3key);
-   if (m_joycustom4 == n)    FireKeyEvent(updown, m_joycustom4key);
-   if (m_joypmbuyin == n)    FireKeyEvent(updown, DIK_2);
-   if (m_joypmcoin3 == n)    FireKeyEvent(updown, DIK_5);
-   if (m_joypmcoin4 == n)    FireKeyEvent(updown, DIK_6);
-   if (m_joypmcoindoor == n) FireKeyEvent(updown, DIK_END);
-   if (m_joypmcancel == n)   FireKeyEvent(updown, DIK_7);
-   if (m_joypmdown == n)     FireKeyEvent(updown, DIK_8);
-   if (m_joypmup == n)       FireKeyEvent(updown, DIK_9);
-   if (m_joypmenter == n)    FireKeyEvent(updown, DIK_0);
+   if (m_joyvolumeup == n)       FireKeyEvent(updown, g_pplayer->m_rgKeys[eVolumeUp]);
+   if (m_joyvolumedown == n)     FireKeyEvent(updown, g_pplayer->m_rgKeys[eVolumeDown]);
+   if (m_joylefttilt == n)       FireKeyEvent(updown, g_pplayer->m_rgKeys[eLeftTiltKey]);
+   if (m_joycentertilt == n)     FireKeyEvent(updown, g_pplayer->m_rgKeys[eCenterTiltKey]);
+   if (m_joyrighttilt == n)      FireKeyEvent(updown, g_pplayer->m_rgKeys[eRightTiltKey]);
+   if (m_joymechtilt == n)       FireKeyEvent(updown, g_pplayer->m_rgKeys[eMechanicalTilt]);
+   if (m_joydebugballs == n)     FireKeyEvent(updown, g_pplayer->m_rgKeys[eDBGBalls]);
+   if (m_joydebugger == n)       FireKeyEvent(updown, g_pplayer->m_rgKeys[eDebugger]);
+   if (m_joylockbar == n)        FireKeyEvent(updown, g_pplayer->m_rgKeys[eLockbarKey]);
+   if (m_joypause == n)          FireKeyEvent(updown, g_pplayer->m_rgKeys[ePause]);
+   if (m_joytweak == n)          FireKeyEvent(updown, g_pplayer->m_rgKeys[eTweak]);
+   if (m_ballhistorymenu == n)   FireKeyEvent(updown, g_pplayer->m_rgKeys[eBallHistoryMenu]);
+   if (m_ballhistoryrecall == n) FireKeyEvent(updown, g_pplayer->m_rgKeys[eBallHistoryRecall]);
+   if (m_joycustom1 == n)        FireKeyEvent(updown, m_joycustom1key);
+   if (m_joycustom2 == n)        FireKeyEvent(updown, m_joycustom2key);
+   if (m_joycustom3 == n)        FireKeyEvent(updown, m_joycustom3key);
+   if (m_joycustom4 == n)        FireKeyEvent(updown, m_joycustom4key);
+   if (m_joypmbuyin == n)        FireKeyEvent(updown, DIK_2);
+   if (m_joypmcoin3 == n)        FireKeyEvent(updown, DIK_5);
+   if (m_joypmcoin4 == n)        FireKeyEvent(updown, DIK_6);
+   if (m_joypmcoindoor == n)     FireKeyEvent(updown, DIK_END);
+   if (m_joypmcancel == n)       FireKeyEvent(updown, DIK_7);
+   if (m_joypmdown == n)         FireKeyEvent(updown, DIK_8);
+   if (m_joypmup == n)           FireKeyEvent(updown, DIK_9);
+   if (m_joypmenter == n)        FireKeyEvent(updown, DIK_0);
 }
 
 void PinInput::ProcessJoystick(const DIDEVICEOBJECTDATA * __restrict input, int curr_time_msec)

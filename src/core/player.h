@@ -53,6 +53,8 @@ enum EnumAssignKeys
    eEscape,
    ePause,
    eTweak,
+   eBallHistoryMenu,
+   eBallHistoryRecall,
    eCKeys
 };
 
@@ -84,7 +86,9 @@ static const string regkey_string[eCKeys] = {
    "TableDownKey"s,
    "EscapeKey"s,
    "PauseKey"s,
-   "TweakKey"s
+   "TweakKey"s,
+   "BallHistoryMenu"s,
+   "BallHistoryRecall"s
 };
 
 static constexpr int regkey_defdik[eCKeys] = {
@@ -119,7 +123,9 @@ static constexpr int regkey_defdik[eCKeys] = {
    DIK_NUMPAD2,
    DIK_ESCAPE,
    DIK_P,
-   DIK_F12
+   DIK_F12,
+   DIK_C,
+   DIK_R
 };
 
 static constexpr int regkey_idc[eCKeys] = {
@@ -150,7 +156,9 @@ static constexpr int regkey_idc[eCKeys] = {
    IDC_TABLEDOWN_TEXT,
    -1, // Escape
    IDC_PAUSE,
-   IDC_TWEAK
+   IDC_TWEAK,
+   IDC_BALLHISTORYMENU,
+   IDC_BALLHISTORYRECALL
 };
 
 #define MAX_TOUCHREGION 11
