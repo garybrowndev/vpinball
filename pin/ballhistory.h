@@ -1,6 +1,7 @@
 #pragma once
 
 #include "simpleini/SimpleIni.h"
+
 #include <set>
 
 struct BallHistoryState
@@ -255,6 +256,9 @@ public:
       RunRecord();
    };
 
+   static const int CountdownSoundSeconds;
+   static const float TimeLowSoundSeconds;
+
    ModeStateType m_ModeState;
    ConfigModeStateType m_ConfigModeState;
    BallStartModeType m_BallStartMode;
@@ -294,6 +298,8 @@ public:
    static const S32 PlayfieldFrictionVarianceMaximum = 500;
    S32 m_PlayfieldFrictionVariance;
 
+   DifficultyVarianceModeType m_PlayfieldFrictionVarianceMode;
+
    static const S32 FlipperStrengthVarianceMinimum = 0;
    static const S32 FlipperStrengthVarianceMaximum = 500;
    S32 m_FlipperStrengthVariance;
@@ -305,8 +311,6 @@ public:
    S32 m_FlipperFrictionVariance;
 
    DifficultyVarianceModeType m_FlipperFrictionVarianceMode;
-
-   DifficultyVarianceModeType m_PlayfieldFrictionVarianceMode;
 
    static const S32 TotalRunsMinimum = 1;
    static const S32 TotalRunsMaximum = 100;
@@ -326,15 +330,12 @@ public:
    std::vector<BallEndOptionsRecord> m_BallFailOptionsRecords;
 
    BallCorridorOptionsRecord m_BallCorridorOptionsRecord;
-   static const float DefaultBallCorridorOpeningRadius;
 
    std::vector<RunRecord> m_RunRecords;
    std::size_t m_CurrentRunRecord;
    int m_RunStartTimeMs;
 
    int m_CountdownSoundPlayed;
-   static const int TrainerOptions::CountdownSoundSeconds = 3;
-   static const float TimeLowSoundSeconds;
    bool m_TimeLowSoundPlaying;
 
    bool m_SetupBallStarts;
@@ -427,8 +428,9 @@ private:
       {
          U64 &m_ProfilerUsec;
          U64 m_TempUsec;
+
          ProfilerScope(U64 &usec);
-         ~ProfilerScope();
+         virtual ~ProfilerScope();
       };
 
       U64 m_ProcessUsec;
@@ -484,8 +486,8 @@ private:
       void ToggleReverse();
       int GetTextWidth(const char *format, ...);
       void ShowText(const char *format, ...);
-      void ShowMenuTextLeft(const char* format, ...);
-      void ShowMenuTextRight(const char* format, ...);
+      void ShowMenuTextLeft(const char *format, ...);
+      void ShowMenuTextRight(const char *format, ...);
       void ShowTextPos(int x, int y, const char *format, ...);
       void ShowTextTitle(const char *format, ...);
       void ShowTextWithMenu(bool isMenu, const char *format, ...);
@@ -495,7 +497,7 @@ private:
       void ShowMenuTextError(const char *format, ...);
       void ShowMenuTextSelect(bool selected, const char *format, ...);
 
-    private:
+   private:
       int m_TextX;
       int m_TextY;
       int m_TextYStep;
@@ -645,52 +647,6 @@ private:
    static const float BallHistoryMaxPointSize;
    static const float ControlVerticesDistanceMax;
 
-   std::vector<Ball *> m_ControlVBalls;
-   std::vector<Ball *> m_ControlVBallsPrevious;
-
-   std::vector<Kicker *> m_ActiveBallKickers;
-
-   std::vector<Flipper *> m_Flippers;
-
-   ProfilerRecord m_ProfilerRecord;
-
-   DebugFontRecord m_DebugFontRecordStatus;
-   DebugFontRecord m_DebugFontRecordMenu;
-   DebugFontRecord m_DebugFontRecordPosition;
-
-   bool m_ShowStatus;
-   bool m_Control;
-   bool m_WasControlled;
-   bool m_WasRecalled;
-   std::size_t m_CurrentControlIndex;
-
-   NextPreviousByType m_NextPreviousBy;
-   int m_BallHistoryControlStepMs;
-   float m_BallHistoryControlStepPixels;
-
-   std::vector<BallHistoryRecord> m_BallHistoryRecords;
-   std::size_t m_BallHistoryRecordsHeadIndex;
-   std::size_t m_BallHistoryRecordsSize;
-   float m_MaxBallVelocityPixels;
-
-   VertexDeclaration *m_VertexColorDeclaration;
-
-   Texture *m_AutoControlBallTexture;
-   Texture *m_RecallBallTexture;
-   Texture *m_TrainerBallStartTexture;
-   Texture *m_TrainerBallPassTexture;
-   Texture *m_TrainerBallFailTexture;
-   Texture *m_TrainerBallCorridorPassTexture;
-   Texture *m_TrainerBallCorridorOpeningTexture;
-   Texture *m_ActiveBallKickerTexture;
-   std::map<U32, Texture *> m_ControlHistoryBallTextures;
-
-   int m_UseTrailsForBallsInitialValue;
-
-   MenuOptionsRecord m_MenuOptions;
-
-   std::string m_SettingsFilePath;
-
    static const float DrawAngleVelocityRadiusExtraMinimum;
    static const float DrawAngleVelocityRadiusArc;
    static const float DrawAngleVelocityLengthMultiplier;
@@ -750,10 +706,57 @@ private:
    static const char *TrainerModeBallCorridorPassRadiusPercentKeyName;
    static const char *TrainerModeBallCorridorOpeningPositionLeft3DKeyName;
    static const char *TrainerModeBallCorridorOpeningPositionRight3DKeyName;
+   
+   std::vector<Ball *> m_ControlVBalls;
+   std::vector<Ball *> m_ControlVBallsPrevious;
+
+   std::vector<Kicker *> m_ActiveBallKickers;
+
+   std::vector<Flipper *> m_Flippers;
+
+   ProfilerRecord m_ProfilerRecord;
+
+   DebugFontRecord m_DebugFontRecordStatus;
+   DebugFontRecord m_DebugFontRecordMenu;
+   DebugFontRecord m_DebugFontRecordPosition;
+
+   bool m_ShowStatus;
+   bool m_Control;
+   bool m_WasControlled;
+   bool m_WasRecalled;
+   std::size_t m_CurrentControlIndex;
+
+   NextPreviousByType m_NextPreviousBy;
+   int m_BallHistoryControlStepMs;
+   float m_BallHistoryControlStepPixels;
+
+   std::vector<BallHistoryRecord> m_BallHistoryRecords;
+   std::size_t m_BallHistoryRecordsHeadIndex;
+   std::size_t m_BallHistoryRecordsSize;
+   float m_MaxBallVelocityPixels;
+
+   VertexDeclaration *m_VertexColorDeclaration;
+
+   Texture *m_AutoControlBallTexture;
+   Texture *m_RecallBallTexture;
+   Texture *m_TrainerBallStartTexture;
+   Texture *m_TrainerBallPassTexture;
+   Texture *m_TrainerBallFailTexture;
+   Texture *m_TrainerBallCorridorPassTexture;
+   Texture *m_TrainerBallCorridorOpeningTexture;
+   Texture *m_ActiveBallKickerTexture;
+   std::map<U32, Texture *> m_ControlHistoryBallTextures;
+
+   int m_UseTrailsForBallsInitialValue;
+
+   MenuOptionsRecord m_MenuOptions;
+
+   std::string m_SettingsFilePath;
 
    bool GetSettingsFileName(Player &player, std::string &fileName);
    void LoadSettings(Player &player);
    void LoadSettingsDifficultyVariance(Player &player, CSimpleIni &iniFile, const char *sectionName, const char *varianceKeyName, S32 &variance, const char *modeKeyName, TrainerOptions::DifficultyVarianceModeType &mode);
+   bool LoadSettingsGetValue(CSimpleIni &iniFile, const char *sectionName, const char *keyName, std::istringstream &value);
    void SaveSettings(Player &player);
    void SaveSettingsDifficultyVariance(Player &player, CSimpleIni &iniFile, const char *sectionName, const char *varianceKeyName, S32 variance, const char *modeKeyName, TrainerOptions::DifficultyVarianceModeType mode);
    void InitBallsDecreased(Player &player);
@@ -769,23 +772,23 @@ private:
    void DrawLine(Player &player, const Vertex3Ds &posA, const Vertex3Ds &posB, D3DCOLOR color);
    void DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float intersectionRadius, D3DCOLOR color);
    void DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
-   void DrawFakeBall(Player &player, Vertex3Ds &position, Texture &texture, const Vertex3Ds *lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr);
    void DrawFakeBall(Player &player, Vertex3Ds &position, float radius, Texture &texture, const Vertex3Ds *lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr);
+   void DrawFakeBall(Player &player, Vertex3Ds &position, Texture &texture, const Vertex3Ds *lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr);
    bool ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallPasses(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallFails(std::size_t index, int currentTimeMs);
-   void DrawPrimitives(Player &player, std::vector<Vertex3DColor> &vertices, D3DPRIMITIVETYPE type);
-   void DrawTrainerBallCorridorPass(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor, Vertex3Ds *overridePosition=nullptr);
-   void DrawTrainerBallCorridorOpeningLeft(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor);
-   void DrawTrainerBallCorridorOpeningRight(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor);
    bool ShouldDrawTrainerBallCorridor(int currentTimeMs);
    bool ShouldDrawActiveBallKickers(int currentTimeMs);
+   void DrawPrimitives(Player &player, std::vector<Vertex3DColor> &vertices, D3DPRIMITIVETYPE type);
+   void DrawTrainerBallCorridorPass(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor, Vertex3Ds *overridePosition = nullptr);
+   void DrawTrainerBallCorridorOpeningLeft(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor);
+   void DrawTrainerBallCorridorOpeningRight(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor);
    void DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
    void DrawTrainerBallCorridor(Player &player, DebugPrintRecord &dpr);
    void DrawActiveBallKickers(Player &player, DebugPrintRecord &dpr);
-   void DrawAngleVelocityPreview(Player &player, TrainerOptions::BallStartOptionsRecord &bsor);
-   void DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angleStep, float velocityStep, float radius);
    void DrawAngleVelocityPreviewHelperAdd(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angle, float velocity, float radius);
+   void DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angleStep, float velocityStep, float radius);
+   void DrawAngleVelocityPreview(Player &player, TrainerOptions::BallStartOptionsRecord &bsor);
    void CalculateAngleVelocityStep(TrainerOptions::BallStartOptionsRecord &bsor, float &angleStep, float &velocityStep);
    void UpdateBallState(BallHistoryRecord &ballHistoryRecord);
    void ShowStatus(Player &player, int currentTimeMs);
@@ -826,7 +829,6 @@ private:
    BallHistoryRecord &Get(std::size_t index);
    std::size_t GetTailIndex();
 
-   void ResetVertices(VertexBuffer *&vertices);
    float GetDefaultBallRadius();
    Matrix3 GetDefaultBallOrientation();
    float DistancePixels(POINT &p1, POINT &p2);
@@ -837,9 +839,9 @@ private:
    bool BallsReadyForTrainer();
    bool BallCorridorReadyForTrainer();
    POINT Get2DPointFrom3D(Player &player, const Vertex3Ds &vertex);
+   Vertex3Ds Get3DPointFrom2D(Pin3D &pin3d, const POINT &p, float heightZ);
    Vertex3Ds Get3DPointFromMousePosition(Player &player, float heightZ);
-   Vertex3Ds Get3DPointFrom2D(Pin3D &pin3d, const POINT& p, float heightZ);
-   bool Get2DMousePosition(Player &player, POINT &mousePosition2D, bool correct=true);
+   bool Get2DMousePosition(Player &player, POINT &mousePosition2D, bool correct = true);
    Vertex3Ds GetKickerPosition(Kicker &kicker);
    void SetFlipperStrength(float flipperStrength);
    float GetFlipperStrength();
