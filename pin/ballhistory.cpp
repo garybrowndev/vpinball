@@ -267,7 +267,7 @@ void BallHistory::DebugFontRecord::Init(Player &player)
          SIZE size = { 0 };
          RECT fontRect = { 0 };
          tempFont->DrawText(m_Sprite, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", -1, &fontRect, DT_CALCRECT, 0xFFFFFFFF);
-         tempFont->Release();
+         SAFE_RELEASE(tempFont);
 
          float playerWidthToTextWidthRatio = player.m_width / float(fontRect.right - fontRect.left);
          if (playerWidthToTextWidthRatio < PlayerTextWidthRatio)
@@ -301,16 +301,8 @@ void BallHistory::DebugFontRecord::Init(Player &player)
 
 void BallHistory::DebugFontRecord::UnInit()
 {
-   if (m_Font)
-   {
-      m_Font->Release();
-      m_Font = nullptr;
-   }
-   if (m_Sprite)
-   {
-      m_Sprite->Release();
-      m_Sprite = nullptr;
-   }
+   SAFE_RELEASE(m_Font);
+   SAFE_RELEASE(m_Sprite);
 }
 
 const D3DCOLOR BallHistory::DebugPrintRecord::NormalMenuColor = D3DCOLOR_ARGB(0xFF, 0xD3, 0xD3, 0xD3);
@@ -633,6 +625,13 @@ BallHistory::MenuOptionsRecord::MenuOptionsRecord():
 {
 }
 
+const VertexElement BallHistory::VertexColorElement[] =
+{
+   { 0, 0 * sizeof(float), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 }, // pos
+   { 0, 3 * sizeof(float), D3DDECLTYPE_D3DCOLOR, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR, 0 },  // color
+   D3DDECL_END()
+};
+
 const std::size_t BallHistory::OneSecondMs = 1000;
 
 const std::size_t BallHistory::BallHistorySizeDefault = 8 * 1024;
@@ -715,6 +714,7 @@ BallHistory::BallHistory(PinTable &pinTable) :
    m_BallHistoryRecordsHeadIndex(0),
    m_BallHistoryRecordsSize(0),
    m_MaxBallVelocityPixels(0.0f),
+   m_VertexColorDeclaration(nullptr),
    m_AutoControlBallTexture(nullptr),
    m_RecallBallTexture(nullptr),
    m_TrainerBallStartTexture(nullptr),
@@ -1469,6 +1469,8 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
    
    m_UseTrailsForBallsInitialValue = player.m_ptable->m_useTrailForBalls;
 
+   CHECKD3D(VertexBuffer::m_pd3dPrimaryDevice->CreateVertexDeclaration(VertexColorElement, &m_VertexColorDeclaration));
+
    if (loadSettings)
    {
       LoadSettings(player);
@@ -1495,6 +1497,7 @@ void BallHistory::UnInit(Player &player)
    delete m_TrainerBallCorridorPassTexture;
    delete m_TrainerBallCorridorOpeningTexture;
    delete m_ActiveBallKickerTexture;
+   SAFE_RELEASE(m_VertexColorDeclaration);
 }
 
 void BallHistory::InitBallsIncreased(Player &player)
@@ -3176,20 +3179,58 @@ bool BallHistory::ShouldDrawActiveBallKickers(int currentTimeMs)
    }
 }
 
-void BallHistory::DrawPrimitives(Player &player, std::vector<Vertex3DColor> &vertices, RenderDevice::PrimitiveTypes type)
+static UINT compute_primitive_count(D3DPRIMITIVETYPE type, const int vertexCount)
 {
+   switch (type)
+   {
+      case D3DPRIMITIVETYPE::D3DPT_POINTLIST:
+         return vertexCount;
+      case D3DPRIMITIVETYPE::D3DPT_LINELIST:
+         return vertexCount / 2;
+      case D3DPRIMITIVETYPE::D3DPT_LINESTRIP:
+         return std::max(0, vertexCount - 1);
+      case D3DPRIMITIVETYPE::D3DPT_TRIANGLELIST:
+         return vertexCount / 3;
+      case D3DPRIMITIVETYPE::D3DPT_TRIANGLESTRIP:
+      case D3DPRIMITIVETYPE::D3DPT_TRIANGLEFAN:
+         return std::max(0, vertexCount - 2);
+      default:
+         return 0;
+   }
+}
+
+void BallHistory::DrawPrimitives(Player &player, std::vector<Vertex3DColor> &vertices, D3DPRIMITIVETYPE type)
+{
+   class Vertex3D_ColorOnly
+   {
+   public:
+      // Position
+      D3DVALUE x;
+      D3DVALUE y;
+      D3DVALUE z;
+
+      // Color
+      D3DCOLOR color;
+   };
+
    DrawFakeBall(player, Vertex3Ds(), 0.0f, Matrix3(), nullptr);
-   VertexBuffer *testVerticesVB = nullptr;
-   VertexBuffer::CreateVertexBuffer((unsigned int)vertices.size(), 0, MY_D3DFVF_COLOR_VERTEX, &testVerticesVB, PRIMARY_DEVICE);
+   IDirect3DVertexBuffer9 *vertexBuffer = nullptr;
+   CHECKD3D(VertexBuffer::m_pd3dPrimaryDevice->CreateVertexBuffer(UINT(vertices.size() * sizeof(Vertex3D_ColorOnly)), USAGE_STATIC, 0, (D3DPOOL)memoryPool::DEFAULT, &vertexBuffer, nullptr));
    {
       void* buf;
-      testVerticesVB->lock(0, 0, &buf, VertexBuffer::WRITEONLY);
+      CHECKD3D(vertexBuffer->Lock(0, 0, &buf, VertexBuffer::WRITEONLY));
       memcpy(buf, vertices.data(), vertices.size() * sizeof(vertices[0]));
-      testVerticesVB->unlock();
-      player.m_pin3d.m_pd3dPrimaryDevice->SetRenderStateCulling(RenderDevice::CULL_NONE);
-      player.m_pin3d.m_pd3dPrimaryDevice->DrawPrimitiveVB(type, MY_D3DFVF_COLOR_VERTEX, testVerticesVB, 0, DWORD(vertices.size()), false);
+      vertexBuffer->Unlock();
+
+      VertexBuffer::m_pd3dPrimaryDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+
+      CHECKD3D(VertexBuffer::m_pd3dPrimaryDevice->SetStreamSource(0, vertexBuffer, 0, sizeof(Vertex3D_ColorOnly)));
+      VertexBuffer::m_curVertexBuffer = nullptr;
+
+      CHECKD3D(VertexBuffer::m_pd3dPrimaryDevice->SetVertexDeclaration(m_VertexColorDeclaration));
+      CHECKD3D(VertexBuffer::m_pd3dPrimaryDevice->DrawPrimitive((D3DPRIMITIVETYPE)type, 0, compute_primitive_count(type, DWORD(vertices.size()))));
    }
-   SAFE_BUFFER_RELEASE(testVerticesVB);
+   SAFE_RELEASE(vertexBuffer);
 }
 
 void BallHistory::DrawTrainerBallCorridorPass(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor, Vertex3Ds *overridePosition)
@@ -3211,7 +3252,7 @@ void BallHistory::DrawTrainerBallCorridorPass(Player &player, TrainerOptions::Ba
       vertices.push_back(Vertex3DColor(position->x - passWidth, position->y, position->z - passBallRadius, green));
       vertices.push_back(Vertex3DColor(position->x + passWidth, position->y, position->z - passBallRadius, green));
 
-      DrawPrimitives(player, vertices, RenderDevice::TRIANGLESTRIP);
+      DrawPrimitives(player, vertices, D3DPT_TRIANGLESTRIP);
 
       DebugPrintRecord dpr(player, m_DebugFontRecordPosition);
       POINT screenPoint = Get2DPointFrom3D(player, *position);
@@ -3243,7 +3284,7 @@ void BallHistory::DrawTrainerBallCorridorOpeningLeft(Player &player, DebugPrintR
       vertices.push_back(Vertex3DColor(bcor.m_PassPosition.x - passWidth, bcor.m_PassPosition.y, bcor.m_PassPosition.z - passBallRadius, red));
       vertices.push_back(Vertex3DColor(bcor.m_OpeningPositionLeft.x, bcor.m_OpeningPositionLeft.y, bcor.m_OpeningPositionLeft.z - passBallRadius, red));
 
-      DrawPrimitives(player, vertices, RenderDevice::TRIANGLESTRIP);
+      DrawPrimitives(player, vertices, D3DPT_TRIANGLESTRIP);
    }
 }
 
@@ -3271,7 +3312,7 @@ void BallHistory::DrawTrainerBallCorridorOpeningRight(Player &player, DebugPrint
       vertices.push_back(Vertex3DColor(bcor.m_PassPosition.x + passWidth, bcor.m_PassPosition.y, bcor.m_PassPosition.z - passBallRadius, red));
       vertices.push_back(Vertex3DColor(bcor.m_OpeningPositionRight.x, bcor.m_OpeningPositionRight.y, bcor.m_OpeningPositionRight.z - passBallRadius, red));
 
-      DrawPrimitives(player, vertices, RenderDevice::TRIANGLESTRIP);
+      DrawPrimitives(player, vertices, D3DPT_TRIANGLESTRIP);
    }
 }
 
@@ -3498,7 +3539,7 @@ void BallHistory::DrawAngleVelocityPreview(Player &player, TrainerOptions::BallS
 
    if (vertices.size() > 1)
    {
-      DrawPrimitives(player, vertices, RenderDevice::TRIANGLEFAN);
+      DrawPrimitives(player, vertices, D3DPT_TRIANGLEFAN);
    }
 }
 
@@ -8771,7 +8812,7 @@ void BallHistory::DrawLine(Player &player, const Vertex3Ds &posA, const Vertex3D
       vertices.push_back({posA.x, posA.y, posA.z, color});
       vertices.push_back({posB.x, posB.y, posB.z, color});
 
-      DrawPrimitives(player, vertices, RenderDevice::LINELIST);
+      DrawPrimitives(player, vertices, D3DPT_LINELIST);
    }
 }
 
@@ -8803,7 +8844,7 @@ void BallHistory::DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float i
 
    vertices.push_back(vertices[1]);
 
-   DrawPrimitives(player, vertices, RenderDevice::TRIANGLEFAN);
+   DrawPrimitives(player, vertices, D3DPT_TRIANGLEFAN);
 }
 
 void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs)

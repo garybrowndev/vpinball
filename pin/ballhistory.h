@@ -632,6 +632,8 @@ private:
       MenuOptionsRecord();
    };
 
+   static const VertexElement VertexColorElement[];
+
    static const std::size_t OneSecondMs;
 
    static const std::size_t BallHistorySizeDefault;
@@ -670,6 +672,8 @@ private:
    std::size_t m_BallHistoryRecordsHeadIndex;
    std::size_t m_BallHistoryRecordsSize;
    float m_MaxBallVelocityPixels;
+
+   VertexDeclaration *m_VertexColorDeclaration;
 
    Texture *m_AutoControlBallTexture;
    Texture *m_RecallBallTexture;
@@ -770,7 +774,7 @@ private:
    bool ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallPasses(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallFails(std::size_t index, int currentTimeMs);
-   void DrawPrimitives(Player &player, std::vector<Vertex3DColor> &vertices, RenderDevice::PrimitiveTypes type);
+   void DrawPrimitives(Player &player, std::vector<Vertex3DColor> &vertices, D3DPRIMITIVETYPE type);
    void DrawTrainerBallCorridorPass(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor, Vertex3Ds *overridePosition=nullptr);
    void DrawTrainerBallCorridorOpeningLeft(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor);
    void DrawTrainerBallCorridorOpeningRight(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor);

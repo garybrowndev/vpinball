@@ -17,8 +17,6 @@ static unsigned int fvfToSize(const DWORD fvf)
       return sizeof(Vertex3D_NoTex2);
    case MY_D3DFVF_TEX:
       return sizeof(Vertex3D_TexelOnly);
-   case MY_D3DFVF_COLOR_VERTEX:
-      return sizeof(Vertex3D_ColorOnly);
    default:
       return 0;
    }

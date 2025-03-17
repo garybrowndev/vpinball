@@ -79,7 +79,7 @@ public:
 
    IDirect3DVertexBuffer9* m_vb = nullptr;
 
-private:
+public:
    //VertexBuffer();     // disable default constructor
 
    DWORD m_fvf;
