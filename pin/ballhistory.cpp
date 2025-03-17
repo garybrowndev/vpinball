@@ -4068,8 +4068,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       dpr.ShowMenuText("");
       dpr.ShowMenuTextTitle("Summary");
       dpr.ShowMenuText("Welcome to Ball History");
-      //dpr.ShowMenuText(("Press Ball History Menu key '" + std::string(1, GetBallHistoryKey(player, eBallHistoryMenu)) + "' to show this menu").c_str());
-      //dpr.ShowMenuText(("Press Ball History Recall key '" + std::string(1, GetBallHistoryKey(player, eBallHistoryRecall)) + "' to show verbose status").c_str());
+      dpr.ShowMenuText(("Press Ball History Menu key '" + std::string(1, GetBallHistoryKey(player, eBallHistoryMenu)) + "' to show this menu").c_str());
+      dpr.ShowMenuText(("Press Ball History Recall key '" + std::string(1, GetBallHistoryKey(player, eBallHistoryRecall)) + "' to show verbose status").c_str());
       dpr.ShowMenuText("Use plunger and flippers to select/configure options");
 
       switch (menuAction)
@@ -4140,7 +4140,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          ShowDescription(dpr,
             {
                "Configure Recall Ball along the Ball History",
-               //"Press Ball History Recall key '" + std::string(1, GetBallHistoryKey(player, eBallHistoryRecall)) + "' to recall balls back to predefined position"
+               "Press Ball History Recall key '" + std::string(1, GetBallHistoryKey(player, eBallHistoryRecall)) + "' to recall balls back to predefined position"
             });
          break;
       case NormalOptions::ModeStateType::ModeStateType_ManageAutoControlLocations:
@@ -4219,7 +4219,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       ShowDescription(dpr,
          {
             "Use flippers to navigate backward/forward through current Ball History",
-            //("Press Ball History Menu key '" + std::string(1, GetBallHistoryKey(player, eBallHistoryMenu)) + "' to continue play").c_str(),
+            ("Press Ball History Menu key '" + std::string(1, GetBallHistoryKey(player, eBallHistoryMenu)) + "' to continue play").c_str(),
             "Plunger accepts and resets ball positions to selected Ball History location"
          });
 
@@ -4344,7 +4344,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       ShowDescription(dpr,
          {
             "Use flippers to navigate backward/forward through current Ball History",
-            //("Press Ball History Menu key '" + std::string(1, GetBallHistoryKey(player, eBallHistoryMenu)) + "' to continue play").c_str(),
+            ("Press Ball History Menu key '" + std::string(1, GetBallHistoryKey(player, eBallHistoryMenu)) + "' to continue play").c_str(),
             "Plunger accepts sets Recall position to selected Ball History location"
          });
 
@@ -8106,7 +8106,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
       ShowDescription(dpr,
          {
-            //("Press Ball History Menu key '" + std::string(1, GetBallHistoryKey(player, eBallHistoryMenu)) + "' to continue play").c_str(),
+            ("Press Ball History Menu key '" + std::string(1, GetBallHistoryKey(player, eBallHistoryMenu)) + "' to continue play").c_str(),
             "Plunger returns to previous menu"
          });
 
@@ -9141,12 +9141,10 @@ float BallHistory::VelocityPixels(const Vertex3Ds &vel)
    return sqrtf(powf(vel.x, 2) + powf(vel.y, 2) + powf(vel.z, 2));
 }
 
-/*
 char BallHistory::GetBallHistoryKey(Player &player, EnumAssignKeys enumAssignKey)
 {
    return get_vk(player.m_rgKeys[enumAssignKey]);
 }
-*/
 
 bool BallHistory::BallsReadyForTrainer()
 {

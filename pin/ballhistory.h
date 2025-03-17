@@ -835,7 +835,7 @@ private:
    float DistancePixels(const Vertex3Ds &pos1, const Vertex3Ds &pos2);
    float DistanceToLineSegment(const Vertex3Ds &lineA, const Vertex3Ds &lineB, const Vertex3Ds &point);
    float VelocityPixels(const Vertex3Ds &vel);
-   //char GetBallHistoryKey(Player &player, EnumAssignKeys enumAssignKey);
+   char GetBallHistoryKey(Player &player, EnumAssignKeys enumAssignKey);
    bool BallsReadyForTrainer();
    bool BallCorridorReadyForTrainer();
    POINT Get2DPointFrom3D(Player &player, const Vertex3Ds &vertex);

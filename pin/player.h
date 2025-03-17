@@ -4,8 +4,6 @@
 #include "quadtree.h"
 #include "Debugger.h"
 
-#include "ballhistory.h"
-
 #define DEFAULT_PLAYER_WIDTH 1024
 #define DEFAULT_PLAYER_FS_WIDTH 1920
 #define DEFAULT_PLAYER_FS_REFRESHRATE 60
@@ -123,6 +121,8 @@ static constexpr int regkey_idc[eCKeys] = {
    IDC_BALLHISTORYMENU,
    IDC_BALLHISTORYRECALL,
 };
+
+#include "ballhistory.h"
 
 #ifndef ENABLE_SDL
 // Note: Nowadays the original code seems to be counter-productive, so we use the official
