@@ -838,6 +838,7 @@ private:
    bool BallCorridorReadyForTrainer();
    POINT Get2DPointFrom3D(Player &player, const Vertex3Ds &vertex);
    Vertex3Ds Get3DPointFromMousePosition(Player &player, float heightZ);
+   Vertex3Ds Get3DPointFrom2D(Pin3D &pin3d, const POINT& p, float heightZ);
    bool Get2DMousePosition(Player &player, POINT &mousePosition2D, bool correct=true);
    Vertex3Ds GetKickerPosition(Kicker &kicker);
    void SetFlipperStrength(float flipperStrength);

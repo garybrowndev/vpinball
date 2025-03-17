@@ -1136,16 +1136,11 @@ Vertex3Ds Pin3D::Unproject(const Vertex3Ds& point)
 
 Vertex3Ds Pin3D::Get3DPointFrom2D(const POINT& p)
 {
-   return Get3DPointFrom2D(p, g_pplayer->m_ptable->m_tableheight);
-}
-
-Vertex3Ds Pin3D::Get3DPointFrom2D(const POINT& p, float heightZ)
-{
    const Vertex3Ds pNear((float)p.x,(float)p.y,m_viewPort.MinZ);
    const Vertex3Ds pFar ((float)p.x,(float)p.y,m_viewPort.MaxZ);
    const Vertex3Ds p1 = Unproject(pNear);
    const Vertex3Ds p2 = Unproject(pFar);
-   const float wz = heightZ;
+   const float wz = g_pplayer->m_ptable->m_tableheight;
    const float wx = ((wz - p1.z)*(p2.x - p1.x)) / (p2.z - p1.z) + p1.x;
    const float wy = ((wz - p1.z)*(p2.y - p1.y)) / (p2.z - p1.z) + p1.y;
    const Vertex3Ds vertex(wx, wy, wz);

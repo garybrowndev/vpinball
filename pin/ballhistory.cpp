@@ -1808,13 +1808,26 @@ POINT BallHistory::Get2DPointFrom3D(Player &player, const Vertex3Ds &vertex)
    return screenPoint;
 }
 
+Vertex3Ds BallHistory::Get3DPointFrom2D(Pin3D &pin3d, const POINT& p, float heightZ)
+{
+   const Vertex3Ds pNear((float)p.x,(float)p.y,pin3d.m_viewPort.MinZ);
+   const Vertex3Ds pFar ((float)p.x,(float)p.y,pin3d.m_viewPort.MaxZ);
+   const Vertex3Ds p1 = pin3d.Unproject(pNear);
+   const Vertex3Ds p2 = pin3d.Unproject(pFar);
+   const float wz = heightZ;
+   const float wx = ((wz - p1.z)*(p2.x - p1.x)) / (p2.z - p1.z) + p1.x;
+   const float wy = ((wz - p1.z)*(p2.y - p1.y)) / (p2.z - p1.z) + p1.y;
+   const Vertex3Ds vertex(wx, wy, wz);
+   return vertex;
+}
+
 Vertex3Ds BallHistory::Get3DPointFromMousePosition(Player &player, float heightZ)
 {
    Vertex3Ds point3D = { 0.0f, 0.0f, 0.0f };
    POINT mousePosition2D = { 0 };
    if (Get2DMousePosition(player, mousePosition2D, false))
    {
-      point3D = g_pplayer->m_pin3d.Get3DPointFrom2D(mousePosition2D, heightZ);
+      point3D = Get3DPointFrom2D(g_pplayer->m_pin3d, mousePosition2D, heightZ);
    }
    return point3D;
 }
@@ -3201,21 +3214,11 @@ static UINT compute_primitive_count(D3DPRIMITIVETYPE type, const int vertexCount
 
 void BallHistory::DrawPrimitives(Player &player, std::vector<Vertex3DColor> &vertices, D3DPRIMITIVETYPE type)
 {
-   class Vertex3D_ColorOnly
-   {
-   public:
-      // Position
-      D3DVALUE x;
-      D3DVALUE y;
-      D3DVALUE z;
-
-      // Color
-      D3DCOLOR color;
-   };
-
    DrawFakeBall(player, Vertex3Ds(), 0.0f, Matrix3(), nullptr);
+   VertexBuffer::m_curVertexBuffer = nullptr;
+
    IDirect3DVertexBuffer9 *vertexBuffer = nullptr;
-   CHECKD3D(VertexBuffer::m_pd3dPrimaryDevice->CreateVertexBuffer(UINT(vertices.size() * sizeof(Vertex3D_ColorOnly)), USAGE_STATIC, 0, (D3DPOOL)memoryPool::DEFAULT, &vertexBuffer, nullptr));
+   CHECKD3D(VertexBuffer::m_pd3dPrimaryDevice->CreateVertexBuffer(UINT(vertices.size() * sizeof(vertices[0])), USAGE_STATIC, 0, (D3DPOOL)memoryPool::DEFAULT, &vertexBuffer, nullptr));
    {
       void* buf;
       CHECKD3D(vertexBuffer->Lock(0, 0, &buf, VertexBuffer::WRITEONLY));
@@ -3224,8 +3227,7 @@ void BallHistory::DrawPrimitives(Player &player, std::vector<Vertex3DColor> &ver
 
       VertexBuffer::m_pd3dPrimaryDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 
-      CHECKD3D(VertexBuffer::m_pd3dPrimaryDevice->SetStreamSource(0, vertexBuffer, 0, sizeof(Vertex3D_ColorOnly)));
-      VertexBuffer::m_curVertexBuffer = nullptr;
+      CHECKD3D(VertexBuffer::m_pd3dPrimaryDevice->SetStreamSource(0, vertexBuffer, 0, sizeof(vertices[0])));
 
       CHECKD3D(VertexBuffer::m_pd3dPrimaryDevice->SetVertexDeclaration(m_VertexColorDeclaration));
       CHECKD3D(VertexBuffer::m_pd3dPrimaryDevice->DrawPrimitive((D3DPRIMITIVETYPE)type, 0, compute_primitive_count(type, DWORD(vertices.size()))));
