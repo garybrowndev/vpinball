@@ -266,7 +266,7 @@ class NudgeFilterY : public NudgeFilter
 
 struct TimerOnOff
 {
-   HitTimer *m_timer;
+   HitTimer* m_timer;
    bool m_enabled;
 };
 
@@ -319,7 +319,6 @@ public:
 
    Ball *CreateBall(const float x, const float y, const float z, const float vx, const float vy, const float vz, const float radius = 25.0f, const float mass = 1.0f);
    void DestroyBall(Ball *pball);
-   void DrawFakeBall(const Vertex3Ds &m_pos, float radius, Matrix3 m_orientation, Texture *ballColor);
 
    void AddCabinetBoundingHitShapes();
 
@@ -381,8 +380,8 @@ public:
 
    BallHistory m_BallHistory;
 
-   std::vector<Ball*> m_vball;
-   std::vector<HitFlipper*> m_vFlippers;
+   vector<Ball*> m_vball;
+   vector<HitFlipper*> m_vFlippers;
 
    vector<AnimObject*> m_vanimate; // animated objects that need frame updates
 
@@ -584,7 +583,9 @@ private:
    FILE *m_fplaylog;
 #endif
 
+   public:
    Vertex2D m_BallStretch;
+   private:
 
    float m_NudgeShake;         // whether to shake the screen during nudges and how much
    Vertex2D m_ScreenOffset;    // for screen shake effect during nudge
@@ -634,6 +635,9 @@ private:
    // only called from dtor
    void Shutdown();
 
+   void CreateDebugFont();
+   void SetDebugOutputPosition(const float x, const float y);
+   void DebugPrint(int x, int y, LPCSTR text, bool center = false);
 
    void SetScreenOffset(const float x, const float y);     // set render offset in screen coordinates, e.g., for the nudge shake
 
@@ -642,15 +646,11 @@ private:
 
    void InitShader();
    void CalcBallAspectRatio();
-   void GetBallAspectRatio(const Vertex3Ds &pos, float radius, Vertex2D &stretch, const float zHeight);
+   void GetBallAspectRatio(const Ball * const pball, Vertex2D &stretch, const float zHeight);
    //void DrawBallReflection(Ball *pball, const float zheight, const bool lowDetailBall);
    unsigned int ProfilingMode() const;
 
 public:
-   void CreateDebugFont();
-   void SetDebugOutputPosition(const float x, const float y);
-   void DebugPrint(int x, int y, LPCSTR text, bool center = false);
-
    void StopPlayer();
    void ToggleFPS();
    void InitFPS();

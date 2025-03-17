@@ -5257,7 +5257,7 @@ inline float map_bulblight_to_emission(const Light* const l) // magic mapping of
    return l->m_d.m_currentIntensity * clamp(powf(l->m_d.m_falloff*0.6f, l->m_d.m_falloff_power*0.6f), 0.f, 23000.f); //!! 0.6f,0.6f = magic, also clamp 23000
 }
 
-void search_for_nearest(const Vertex3Ds &pos, const vector<Light*> &lights, Light* light_nearest[MAX_BALL_LIGHT_SOURCES])
+void search_for_nearest(const Ball * const pball, const vector<Light*> &lights, Light* light_nearest[MAX_BALL_LIGHT_SOURCES])
 {
    for (unsigned int l = 0; l < MAX_BALL_LIGHT_SOURCES; ++l)
    {
@@ -5274,7 +5274,7 @@ void search_for_nearest(const Vertex3Ds &pos, const vector<Light*> &lights, Ligh
          if (already_processed)
             continue;
 
-         const float dist = Vertex3Ds(lights[i]->m_d.m_vCenter.x - pos.x, lights[i]->m_d.m_vCenter.y - pos.y, lights[i]->m_d.m_meshRadius + lights[i]->m_surfaceHeight - pos.z).LengthSquared(); //!! z pos
+         const float dist = Vertex3Ds(lights[i]->m_d.m_vCenter.x - pball->m_d.m_pos.x, lights[i]->m_d.m_vCenter.y - pball->m_d.m_pos.y, lights[i]->m_d.m_meshRadius + lights[i]->m_surfaceHeight - pball->m_d.m_pos.z).LengthSquared(); //!! z pos
          //const float contribution = map_bulblight_to_emission(lights[i]) / dist; // could also weight in light color if necessary //!! JF didn't like that, seems like only distance is a measure better suited for the human eye
          if (dist < min_dist)
          {
@@ -5285,11 +5285,11 @@ void search_for_nearest(const Vertex3Ds &pos, const vector<Light*> &lights, Ligh
    }
 }
 
-void Player::GetBallAspectRatio(const Vertex3Ds &pos, float radius, Vertex2D &stretch, const float zHeight)
+void Player::GetBallAspectRatio(const Ball * const pball, Vertex2D &stretch, const float zHeight)
 {
    // always use lowest detail level for fastest update
-   Vertex3Ds rgvIn[(basicBallLoNumVertices + 1) / 2];
-   Vertex2D rgvOut[(basicBallLoNumVertices + 1) / 2];
+   Vertex3Ds rgvIn[(basicBallLoNumVertices+1) / 2];
+   Vertex2D rgvOut[(basicBallLoNumVertices+1) / 2];
 
    //     rgvIn[0].x = pball->m_pos.x;                    rgvIn[0].y = pball->m_pos.y+pball->m_radius;    rgvIn[0].z = zHeight;
    //     rgvIn[1].x = pball->m_pos.x + pball->m_radius;  rgvIn[1].y = pball->m_pos.y;                    rgvIn[1].z = zHeight;
@@ -5297,12 +5297,12 @@ void Player::GetBallAspectRatio(const Vertex3Ds &pos, float radius, Vertex2D &st
    //     rgvIn[3].x = pball->m_pos.x - pball->m_radius;  rgvIn[3].y = pball->m_pos.y;                    rgvIn[3].z = zHeight;
    //     rgvIn[4].x = pball->m_pos.x;                    rgvIn[4].y = pball->m_pos.y;                    rgvIn[4].z = zHeight + pball->m_radius;
    //     rgvIn[5].x = pball->m_pos.x;                    rgvIn[5].y = pball->m_pos.y;                    rgvIn[5].z = zHeight - pball->m_radius;
-
+   
    for (unsigned int i = 0, t = 0; i < basicBallLoNumVertices; i += 2, t++)
    {
-      rgvIn[t].x = basicBallLo[i].x * radius + pos.x;
-      rgvIn[t].y = basicBallLo[i].y * radius + pos.y;
-      rgvIn[t].z = basicBallLo[i].z * radius + zHeight;
+      rgvIn[t].x = basicBallLo[i].x*pball->m_d.m_radius + pball->m_d.m_pos.x;
+      rgvIn[t].y = basicBallLo[i].y*pball->m_d.m_radius + pball->m_d.m_pos.y;
+      rgvIn[t].z = basicBallLo[i].z*pball->m_d.m_radius + zHeight;
    }
    
    m_pin3d.m_proj.TransformVertices(rgvIn, nullptr, basicBallLoNumVertices / 2, rgvOut);
@@ -5423,7 +5423,7 @@ void Player::DrawBalls()
 
       // collect the x nearest lights that can reflect on balls
       Light* light_nearest[MAX_BALL_LIGHT_SOURCES];
-      search_for_nearest(pball->m_d.m_pos, lights, light_nearest);
+      search_for_nearest(pball, lights, light_nearest);
 
       struct CLight
       {
@@ -5481,7 +5481,7 @@ void Player::DrawBalls()
       Vertex2D stretch;
       if (m_antiStretchBall && m_ptable->m_BG_rotation[m_ptable->m_BG_current_set] != 0.0f)
          //const vec4 bs(m_BallStretchX/* +stretch.x*/, m_BallStretchY - stretch.y, inv_tablewidth, inv_tableheight);
-         GetBallAspectRatio(pball->m_d.m_pos, pball->m_d.m_radius, stretch, zheight);
+         GetBallAspectRatio(pball, stretch, zheight);
       else
          stretch = m_BallStretch;
 
@@ -5671,154 +5671,6 @@ void Player::DrawBalls()
       m_pin3d.m_pd3dPrimaryDevice->SetRenderState(RenderDevice::ZENABLE, RenderDevice::RS_TRUE);
    if (m_toggleDebugBalls)
       m_toggleDebugBalls = false;
-}
-
-
-void Player::DrawFakeBall(const Vertex3Ds &m_pos, float radius, Matrix3 m_orientation, Texture *ballColor)
-{
-   m_pin3d.m_pd3dPrimaryDevice->SetRenderStateDepthBias(0.0f);
-   m_pin3d.m_pd3dPrimaryDevice->SetRenderState(RenderDevice::BLENDOP, RenderDevice::BLENDOP_ADD);
-   m_pin3d.m_pd3dPrimaryDevice->SetRenderStateCulling(RenderDevice::CULL_CCW);
-
-   // collect all lights that can reflect on balls (currently only bulbs and if flag set to do so)
-   vector<Light*> lights;
-   for (size_t i = 0; i < m_ptable->m_vedit.size(); i++)
-   {
-      IEditable * const item = m_ptable->m_vedit[i];
-      if (item && item->GetItemType() == eItemLight && ((Light *)item)->m_d.m_BulbLight && ((Light *)item)->m_d.m_showReflectionOnBall)
-         lights.push_back((Light *)item);
-   }
-
-   const Material * const playfield_mat = m_ptable->GetMaterial(m_ptable->m_playfieldMaterial);
-   const vec4 playfield_cBaseF = convertColor(playfield_mat->m_cBase);
-   const float playfield_avg_diffuse = playfield_cBaseF.x*0.176204f + playfield_cBaseF.y*0.812985f + playfield_cBaseF.z*0.0108109f;
-
-   do
-   {
-      float zheight = m_pos.z;
-
-      const float maxz = (radius + m_ptable->m_tableheight) + 3.0f;
-      const float minz = (radius + m_ptable->m_tableheight) - 0.1f;
-
-      const float inv_tablewidth = 1.0f / (m_ptable->m_right - m_ptable->m_left);
-      const float inv_tableheight = 1.0f / (m_ptable->m_bottom - m_ptable->m_top);
-      const vec4 phr(inv_tablewidth, inv_tableheight, m_ptable->m_tableheight,
-                     m_ptable->m_ballPlayfieldReflectionStrength
-                     *playfield_avg_diffuse //!! hack: multiply average diffuse from playfield onto strength, as only diffuse lighting is used for reflection
-                     *0.5f                  //!! additional magic correction factor due to everything being wrong in the earlier reflection/lighting implementation
-                     );
-      m_ballShader->SetVector(SHADER_invTableRes_playfield_height_reflection, &phr);
-
-      if ((zheight > maxz) || (m_pos.z < minz))
-      {
-         // scaling the ball height by the z scale value results in a flying ball over the playfield/ramp
-         // by reducing it with 0.96f (a factor found by trial'n error) the ball is on the ramp again
-         if (m_ptable->m_BG_scalez[m_ptable->m_BG_current_set] != 1.0f)
-            zheight *= (m_ptable->m_BG_scalez[m_ptable->m_BG_current_set] * 0.96f);
-      }
-
-      // collect the x nearest lights that can reflect on balls
-      Light* light_nearest[MAX_BALL_LIGHT_SOURCES];
-      search_for_nearest(m_pos, lights, light_nearest);
-
-      struct CLight
-      {
-         float vPos[3];
-         float vEmission[3];
-      };
-      CLight l[MAX_LIGHT_SOURCES + MAX_BALL_LIGHT_SOURCES];
-
-      vec4 emission = convertColor(m_ptable->m_Light[0].emission);
-      emission.x *= m_ptable->m_lightEmissionScale*m_globalEmissionScale;
-      emission.y *= m_ptable->m_lightEmissionScale*m_globalEmissionScale;
-      emission.z *= m_ptable->m_lightEmissionScale*m_globalEmissionScale;
-
-      for (unsigned int i2 = 0; i2 < MAX_LIGHT_SOURCES; ++i2)
-      {
-         memcpy(&l[i2].vPos, &m_ptable->m_Light[i2].pos, sizeof(float) * 3);
-         memcpy(&l[i2].vEmission, &emission, sizeof(float) * 3);
-      }
-
-      for (unsigned int light_i = 0; light_i < MAX_BALL_LIGHT_SOURCES; ++light_i)
-         if (light_nearest[light_i] != nullptr)
-         {
-            l[light_i + MAX_LIGHT_SOURCES].vPos[0] = light_nearest[light_i]->m_d.m_vCenter.x;
-            l[light_i + MAX_LIGHT_SOURCES].vPos[1] = light_nearest[light_i]->m_d.m_vCenter.y;
-            l[light_i + MAX_LIGHT_SOURCES].vPos[2] = light_nearest[light_i]->m_d.m_meshRadius + light_nearest[light_i]->m_surfaceHeight; //!! z pos
-            const float c = map_bulblight_to_emission(light_nearest[light_i]) * m_ptable->m_defaultBulbIntensityScaleOnBall;
-            const vec4 color = convertColor(light_nearest[light_i]->m_d.m_color);
-            l[light_i + MAX_LIGHT_SOURCES].vEmission[0] = color.x*c;
-            l[light_i + MAX_LIGHT_SOURCES].vEmission[1] = color.y*c;
-            l[light_i + MAX_LIGHT_SOURCES].vEmission[2] = color.z*c;
-         }
-         else //!! rather just set the max number of ball lights!?
-         {
-            l[light_i + MAX_LIGHT_SOURCES].vPos[0] = -100000.0f;
-            l[light_i + MAX_LIGHT_SOURCES].vPos[1] = -100000.0f;
-            l[light_i + MAX_LIGHT_SOURCES].vPos[2] = -100000.0f;
-            l[light_i + MAX_LIGHT_SOURCES].vEmission[0] = 0.0f;
-            l[light_i + MAX_LIGHT_SOURCES].vEmission[1] = 0.0f;
-            l[light_i + MAX_LIGHT_SOURCES].vEmission[2] = 0.0f;
-         }
-
-      m_ballShader->SetValue("packedLights", l, sizeof(CLight)*(MAX_LIGHT_SOURCES + MAX_BALL_LIGHT_SOURCES));
-
-      // now for a weird hack: make material more rough, depending on how near the nearest lightsource is, to 'emulate' the area of the bulbs (as VP only features point lights so far)
-      float Roughness = 0.8f;
-      if (light_nearest[0] != nullptr)
-      {
-          const float dist = Vertex3Ds(light_nearest[0]->m_d.m_vCenter.x - m_pos.x, light_nearest[0]->m_d.m_vCenter.y - m_pos.y, light_nearest[0]->m_d.m_meshRadius + light_nearest[0]->m_surfaceHeight - m_pos.z).Length(); //!! z pos
-          Roughness = min(max(dist*0.006f, 0.4f), Roughness);
-      }
-      const vec4 rwem(exp2f(10.0f * Roughness + 1.0f), 0.f, 1.f, 0.05f);
-      m_ballShader->SetVector(SHADER_Roughness_WrapL_Edge_Thickness, &rwem);
-
-      // ************************* draw the ball itself ****************************
-      Vertex2D stretch;
-      if (m_antiStretchBall && m_ptable->m_BG_rotation[m_ptable->m_BG_current_set] != 0.0f)
-         GetBallAspectRatio(m_pos, radius, stretch, zheight);
-      else
-         stretch = m_BallStretch;
-
-      const vec4 diffuse = convertColor(RGB(0xFF, 0xFF, 0xFF), 1.0f);
-      m_ballShader->SetVector(SHADER_cBase_Alpha, &diffuse);
-
-      D3DXMATRIX m(m_orientation.m_d[0][0], m_orientation.m_d[1][0], m_orientation.m_d[2][0], 0.0f,
-         m_orientation.m_d[0][1], m_orientation.m_d[1][1], m_orientation.m_d[2][1], 0.0f,
-         m_orientation.m_d[0][2], m_orientation.m_d[1][2], m_orientation.m_d[2][2], 0.0f,
-         0.f, 0.f, 0.f, 1.f);
-      Matrix3D temp;
-      memcpy(temp.m, m.m, 4 * 4 * sizeof(float));
-      Matrix3D m3D_full;
-      m3D_full.SetScaling(radius*stretch.x, radius*stretch.y, radius);
-      m3D_full.Multiply(temp, m3D_full);
-      temp.SetTranslation(m_pos.x, m_pos.y, zheight);
-      temp.Multiply(m3D_full, m3D_full);
-      memcpy(m.m, m3D_full.m, 4 * 4 * sizeof(float));
-      m_ballShader->SetMatrix(SHADER_orientation, &m);
-
-      m_ballShader->SetBool(SHADER_disableLighting, m_disableLightingForBalls);
-
-      m_ballShader->SetTexture(SHADER_Texture0, ballColor, TextureFilter::TEXTURE_MODE_TRILINEAR, false, false, false);
-
-      m_ballShader->SetTexture(SHADER_Texture1, &m_pin3d.m_pinballEnvTexture, TextureFilter::TEXTURE_MODE_TRILINEAR, false, false, false);
-
-      const bool lowDetailBall = m_ptable->GetDetailLevel() < 10;
-
-      m_pin3d.m_pd3dPrimaryDevice->SetRenderState(RenderDevice::ZWRITEENABLE, RenderDevice::RS_TRUE);
-
-      if (m_cabinetMode)
-         strncpy_s(m_ballShaderTechnique, "RenderBall_CabMode", sizeof(m_ballShaderTechnique)-1);
-      else
-         strncpy_s(m_ballShaderTechnique, "RenderBall", sizeof(m_ballShaderTechnique)-1);
-
-      m_ballShader->SetTechnique(m_ballShaderTechnique);
-
-      m_ballShader->Begin(0);
-      m_pin3d.m_pd3dPrimaryDevice->DrawIndexedPrimitiveVB(RenderDevice::TRIANGLELIST, MY_D3DFVF_NOTEX2_VERTEX, m_ballVertexBuffer, 0, lowDetailBall ? basicBallLoNumVertices : basicBallMidNumVertices, m_ballIndexBuffer, 0, lowDetailBall ? basicBallLoNumFaces : basicBallMidNumFaces);
-      m_ballShader->End();
-
-   } while (0);
 }
 
 struct DebugMenuItem

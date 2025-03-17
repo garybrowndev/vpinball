@@ -9,6 +9,8 @@
 #include "freeimage.h"
 
 #include "player.h"
+#include "Shader.h"
+#include "../meshes/ballMesh.h"
 
 TrainerOptions::BallStartOptionsRecord::BallStartOptionsRecord():
    BallStartOptionsRecord(Vertex3Ds(0.0f, 0.0f, 0.0f), Vertex3Ds(0.0f, 0.0f, 0.0f), Vertex3Ds(0.0f, 0.0f, 0.0f), AngleMinimum, AngleMinimum, 0, VelocityMinimum, VelocityMinimum, 0)
@@ -3176,7 +3178,7 @@ bool BallHistory::ShouldDrawActiveBallKickers(int currentTimeMs)
 
 void BallHistory::DrawPrimitives(Player &player, std::vector<Vertex3DColor> &vertices, RenderDevice::PrimitiveTypes type)
 {
-   player.DrawFakeBall(Vertex3Ds(), 0.0f, Matrix3(), nullptr);
+   DrawFakeBall(player, Vertex3Ds(), 0.0f, Matrix3(), nullptr);
    VertexBuffer *testVerticesVB = nullptr;
    VertexBuffer::CreateVertexBuffer((unsigned int)vertices.size(), 0, MY_D3DFVF_COLOR_VERTEX, &testVerticesVB, PRIMARY_DEVICE);
    {
@@ -3228,7 +3230,7 @@ void BallHistory::DrawTrainerBallCorridorOpeningLeft(Player &player, DebugPrintR
 
    if (!bcor.m_OpeningPositionLeft.IsZero())
    {
-      player.DrawFakeBall(bcor.m_OpeningPositionLeft, openingBallRadius, orientation, m_TrainerBallCorridorOpeningTexture);
+      DrawFakeBall(player, bcor.m_OpeningPositionLeft, openingBallRadius, orientation, m_TrainerBallCorridorOpeningTexture);
       POINT screenPoint = Get2DPointFrom3D(player, bcor.m_OpeningPositionLeft);
       dpr.ShowMenuTextPos(screenPoint.x, screenPoint.y, "L");
    }
@@ -3256,7 +3258,7 @@ void BallHistory::DrawTrainerBallCorridorOpeningRight(Player &player, DebugPrint
 
    if (!bcor.m_OpeningPositionRight.IsZero())
    {
-      player.DrawFakeBall(bcor.m_OpeningPositionRight, openingBallRadius, orientation, m_TrainerBallCorridorOpeningTexture);
+      DrawFakeBall(player, bcor.m_OpeningPositionRight, openingBallRadius, orientation, m_TrainerBallCorridorOpeningTexture);
       POINT screenPoint = Get2DPointFrom3D(player, bcor.m_OpeningPositionRight);
       dpr.ShowMenuTextPos(screenPoint.x, screenPoint.y, "R");
    }
@@ -3367,7 +3369,7 @@ void BallHistory::DrawActiveBallKickers(Player &player, DebugPrintRecord &dpr)
          dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
          dpr.ShowTextPos(0, 0, finalKickerText.str().c_str());
         
-         player.DrawFakeBall(kickerPosition, ballRadius, orientation, m_ActiveBallKickerTexture);
+         DrawFakeBall(player, kickerPosition, ballRadius, orientation, m_ActiveBallKickerTexture);
       }
    }
 }
@@ -3386,7 +3388,7 @@ void BallHistory::DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int cu
          TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
          if (!bsor.m_StartPosition.IsZero())
          {
-            player.DrawFakeBall(bsor.m_StartPosition, ballRadius, orientation, m_TrainerBallStartTexture);
+            DrawFakeBall(player, bsor.m_StartPosition, ballRadius, orientation, m_TrainerBallStartTexture);
             DrawAngleVelocityPreview(player, bsor);
             POINT screenPoint = Get2DPointFrom3D(player, bsor.m_StartPosition);
             dpr.ShowMenuTextPos(screenPoint.x, screenPoint.y, "S-%zu", bsorIndex + 1);
@@ -3401,7 +3403,7 @@ void BallHistory::DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int cu
          TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[bporIndex];
          if (!bpor.m_EndPosition.IsZero())
          {
-            player.DrawFakeBall(bpor.m_EndPosition, ballRadius, orientation, m_TrainerBallPassTexture);
+            DrawFakeBall(player, bpor.m_EndPosition, ballRadius, orientation, m_TrainerBallPassTexture);
             if (bpor.m_EndRadiusPercent != TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
             {
                DrawIntersectionCircle(player, bpor.m_EndPosition, bpor.m_EndRadiusPercent, IntersectionCircleColor);
@@ -3419,7 +3421,7 @@ void BallHistory::DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int cu
          TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[bforIndex];
          if (!bfor.m_EndPosition.IsZero())
          {
-            player.DrawFakeBall(bfor.m_EndPosition, ballRadius, orientation, m_TrainerBallFailTexture);
+            DrawFakeBall(player, bfor.m_EndPosition, ballRadius, orientation, m_TrainerBallFailTexture);
             if (bfor.m_EndRadiusPercent != TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
             {
                DrawIntersectionCircle(player, bfor.m_EndPosition, bfor.m_EndRadiusPercent, IntersectionCircleColor);
@@ -8755,7 +8757,7 @@ void BallHistory::DrawBallHistory(Player &player)
       {
          if (ballHistoryState.m_DrawRadius > 0.0f)
          {
-            player.DrawFakeBall(ballHistoryState.m_Position, ballHistoryState.m_DrawRadius, ballHistoryState.m_Orientation, ballHistoryState.m_Texture);
+            DrawFakeBall(player, ballHistoryState.m_Position, ballHistoryState.m_DrawRadius, ballHistoryState.m_Orientation, ballHistoryState.m_Texture);
          }
       }
    }
@@ -8821,7 +8823,7 @@ void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr,
       for (std::size_t acvIndex = 0; acvIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); acvIndex++)
       {
          NormalOptions::AutoControlVertex &acv = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[acvIndex];
-         player.DrawFakeBall(acv.m_Position, ballRadius, orientation, m_AutoControlBallTexture);
+         DrawFakeBall(player, acv.m_Position, ballRadius, orientation, m_AutoControlBallTexture);
          POINT screenPoint = Get2DPointFrom3D(player, acv.m_Position);
          dpr.ShowMenuTextPos(screenPoint.x, screenPoint.y, "%zu", acvIndex + 1);
       }
@@ -8833,7 +8835,7 @@ void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr,
          {
             // TODO GARY Currently the recall ball blinks but is behind the draw history ball
             // figure out a why balls are drawn on top of others, Recall should blink on top
-            player.DrawFakeBall(recallBallHistoryState.m_Position, ballRadius, orientation, m_RecallBallTexture);
+            DrawFakeBall(player, recallBallHistoryState.m_Position, ballRadius, orientation, m_RecallBallTexture);
             POINT screenPoint = Get2DPointFrom3D(player, recallBallHistoryState.m_Position);
             dpr.ShowMenuTextPos(screenPoint.x, screenPoint.y, "RCL");
          }
@@ -8848,7 +8850,7 @@ void BallHistory::DrawFakeBall(Player &player, Vertex3Ds &position, float radius
    float ballRadius = radius == 0.0f ? GetDefaultBallRadius() : radius;
    Matrix3 orientation = GetDefaultBallOrientation();
 
-   player.DrawFakeBall(position, ballRadius, orientation, &texture);
+   DrawFakeBall(player, position, ballRadius, orientation, &texture);
    if (lineEndPosition)
    {
       DrawLine(player, position, *lineEndPosition, lineColor);
@@ -9130,4 +9132,226 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA * input, 
 void BallHistory::ProcessMouse(Player &player, int currentTimeMs)
 {
    ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_Toggle, currentTimeMs);
+}
+
+void search_for_nearest_bh(const Vertex3Ds &pos, const vector<Light*> &lights, Light* light_nearest[MAX_BALL_LIGHT_SOURCES])
+{
+   for (unsigned int l = 0; l < MAX_BALL_LIGHT_SOURCES; ++l)
+   {
+      float min_dist = FLT_MAX;
+      light_nearest[l] = nullptr;
+      for (size_t i = 0; i < lights.size(); ++i)
+      {
+         bool already_processed = false;
+         for (unsigned int i2 = 0; i2 < MAX_BALL_LIGHT_SOURCES - 1; ++i2)
+            if (l > i2 && light_nearest[i2] == lights[i]) {
+               already_processed = true;
+               break;
+            }
+         if (already_processed)
+            continue;
+
+         const float dist = Vertex3Ds(lights[i]->m_d.m_vCenter.x - pos.x, lights[i]->m_d.m_vCenter.y - pos.y, lights[i]->m_d.m_meshRadius + lights[i]->m_surfaceHeight - pos.z).LengthSquared(); //!! z pos
+         //const float contribution = map_bulblight_to_emission(lights[i]) / dist; // could also weight in light color if necessary //!! JF didn't like that, seems like only distance is a measure better suited for the human eye
+         if (dist < min_dist)
+         {
+            min_dist = dist;
+            light_nearest[l] = lights[i];
+         }
+      }
+   }
+}
+
+inline float map_bulblight_to_emission_bh(const Light* const l) // magic mapping of bulblight parameters to "real" lightsource emission
+{
+   return l->m_d.m_currentIntensity * clamp(powf(l->m_d.m_falloff*0.6f, l->m_d.m_falloff_power*0.6f), 0.f, 23000.f); //!! 0.6f,0.6f = magic, also clamp 23000
+}
+
+
+void GetBallAspectRatio(Player &player, const Vertex3Ds &pos, float radius, Vertex2D &stretch, const float zHeight)
+{
+   // always use lowest detail level for fastest update
+   Vertex3Ds rgvIn[(basicBallLoNumVertices + 1) / 2];
+   Vertex2D rgvOut[(basicBallLoNumVertices + 1) / 2];
+
+   //     rgvIn[0].x = pball->m_pos.x;                    rgvIn[0].y = pball->m_pos.y+pball->m_radius;    rgvIn[0].z = zHeight;
+   //     rgvIn[1].x = pball->m_pos.x + pball->m_radius;  rgvIn[1].y = pball->m_pos.y;                    rgvIn[1].z = zHeight;
+   //     rgvIn[2].x = pball->m_pos.x;                    rgvIn[2].y = pball->m_pos.y - pball->m_radius;  rgvIn[2].z = zHeight;
+   //     rgvIn[3].x = pball->m_pos.x - pball->m_radius;  rgvIn[3].y = pball->m_pos.y;                    rgvIn[3].z = zHeight;
+   //     rgvIn[4].x = pball->m_pos.x;                    rgvIn[4].y = pball->m_pos.y;                    rgvIn[4].z = zHeight + pball->m_radius;
+   //     rgvIn[5].x = pball->m_pos.x;                    rgvIn[5].y = pball->m_pos.y;                    rgvIn[5].z = zHeight - pball->m_radius;
+
+   for (unsigned int i = 0, t = 0; i < basicBallLoNumVertices; i += 2, t++)
+   {
+      rgvIn[t].x = basicBallLo[i].x * radius + pos.x;
+      rgvIn[t].y = basicBallLo[i].y * radius + pos.y;
+      rgvIn[t].z = basicBallLo[i].z * radius + zHeight;
+   }
+   
+   player.m_pin3d.m_proj.TransformVertices(rgvIn, nullptr, basicBallLoNumVertices / 2, rgvOut);
+   
+   float maxX = -FLT_MAX;
+   float minX = FLT_MAX;
+   float maxY = -FLT_MAX;
+   float minY = FLT_MAX;
+   for (unsigned int i = 0; i < basicBallLoNumVertices / 2; i++)
+   {
+      if (maxX < rgvOut[i].x) maxX = rgvOut[i].x;
+      if (minX > rgvOut[i].x) minX = rgvOut[i].x;
+      if (maxY < rgvOut[i].y) maxY = rgvOut[i].y;
+      if (minY > rgvOut[i].y) minY = rgvOut[i].y;
+   }
+
+   const float midX = maxX - minX;
+   const float midY = maxY - minY;
+   stretch.y = midY/midX;
+   stretch.x = 1.0f; // midX/midY;
+}
+
+
+void BallHistory::DrawFakeBall(Player &player, const Vertex3Ds &m_pos, float radius, Matrix3 m_orientation, Texture *ballColor)
+{
+   player.m_pin3d.m_pd3dPrimaryDevice->SetRenderStateDepthBias(0.0f);
+   player.m_pin3d.m_pd3dPrimaryDevice->SetRenderState(RenderDevice::BLENDOP, RenderDevice::BLENDOP_ADD);
+   player.m_pin3d.m_pd3dPrimaryDevice->SetRenderStateCulling(RenderDevice::CULL_CCW);
+
+   // collect all lights that can reflect on balls (currently only bulbs and if flag set to do so)
+   vector<Light*> lights;
+   for (size_t i = 0; i < player.m_ptable->m_vedit.size(); i++)
+   {
+      IEditable * const item = player.m_ptable->m_vedit[i];
+      if (item && item->GetItemType() == eItemLight && ((Light *)item)->m_d.m_BulbLight && ((Light *)item)->m_d.m_showReflectionOnBall)
+         lights.push_back((Light *)item);
+   }
+
+   const Material * const playfield_mat = player.m_ptable->GetMaterial(player.m_ptable->m_playfieldMaterial);
+   const vec4 playfield_cBaseF = convertColor(playfield_mat->m_cBase);
+   const float playfield_avg_diffuse = playfield_cBaseF.x*0.176204f + playfield_cBaseF.y*0.812985f + playfield_cBaseF.z*0.0108109f;
+
+   do
+   {
+      float zheight = m_pos.z;
+
+      const float maxz = (radius + player.m_ptable->m_tableheight) + 3.0f;
+      const float minz = (radius + player.m_ptable->m_tableheight) - 0.1f;
+
+      const float inv_tablewidth = 1.0f / (player.m_ptable->m_right - player.m_ptable->m_left);
+      const float inv_tableheight = 1.0f / (player.m_ptable->m_bottom - player.m_ptable->m_top);
+      const vec4 phr(inv_tablewidth, inv_tableheight, player.m_ptable->m_tableheight,
+                     player.m_ptable->m_ballPlayfieldReflectionStrength
+                     *playfield_avg_diffuse //!! hack: multiply average diffuse from playfield onto strength, as only diffuse lighting is used for reflection
+                     *0.5f                  //!! additional magic correction factor due to everything being wrong in the earlier reflection/lighting implementation
+                     );
+      player.m_ballShader->SetVector(SHADER_invTableRes_playfield_height_reflection, &phr);
+
+      if ((zheight > maxz) || (m_pos.z < minz))
+      {
+         // scaling the ball height by the z scale value results in a flying ball over the playfield/ramp
+         // by reducing it with 0.96f (a factor found by trial'n error) the ball is on the ramp again
+         if (player.m_ptable->m_BG_scalez[player.m_ptable->m_BG_current_set] != 1.0f)
+            zheight *= (player.m_ptable->m_BG_scalez[player.m_ptable->m_BG_current_set] * 0.96f);
+      }
+
+      // collect the x nearest lights that can reflect on balls
+      Light* light_nearest[MAX_BALL_LIGHT_SOURCES];
+      search_for_nearest_bh(m_pos, lights, light_nearest);
+
+      struct CLight
+      {
+         float vPos[3];
+         float vEmission[3];
+      };
+      CLight l[MAX_LIGHT_SOURCES + MAX_BALL_LIGHT_SOURCES];
+
+      vec4 emission = convertColor(player.m_ptable->m_Light[0].emission);
+      emission.x *= player.m_ptable->m_lightEmissionScale*player.m_globalEmissionScale;
+      emission.y *= player.m_ptable->m_lightEmissionScale*player.m_globalEmissionScale;
+      emission.z *= player.m_ptable->m_lightEmissionScale*player.m_globalEmissionScale;
+
+      for (unsigned int i2 = 0; i2 < MAX_LIGHT_SOURCES; ++i2)
+      {
+         memcpy(&l[i2].vPos, &player.m_ptable->m_Light[i2].pos, sizeof(float) * 3);
+         memcpy(&l[i2].vEmission, &emission, sizeof(float) * 3);
+      }
+
+      for (unsigned int light_i = 0; light_i < MAX_BALL_LIGHT_SOURCES; ++light_i)
+         if (light_nearest[light_i] != nullptr)
+         {
+            l[light_i + MAX_LIGHT_SOURCES].vPos[0] = light_nearest[light_i]->m_d.m_vCenter.x;
+            l[light_i + MAX_LIGHT_SOURCES].vPos[1] = light_nearest[light_i]->m_d.m_vCenter.y;
+            l[light_i + MAX_LIGHT_SOURCES].vPos[2] = light_nearest[light_i]->m_d.m_meshRadius + light_nearest[light_i]->m_surfaceHeight; //!! z pos
+            const float c = map_bulblight_to_emission_bh(light_nearest[light_i]) * player.m_ptable->m_defaultBulbIntensityScaleOnBall;
+            const vec4 color = convertColor(light_nearest[light_i]->m_d.m_color);
+            l[light_i + MAX_LIGHT_SOURCES].vEmission[0] = color.x*c;
+            l[light_i + MAX_LIGHT_SOURCES].vEmission[1] = color.y*c;
+            l[light_i + MAX_LIGHT_SOURCES].vEmission[2] = color.z*c;
+         }
+         else //!! rather just set the max number of ball lights!?
+         {
+            l[light_i + MAX_LIGHT_SOURCES].vPos[0] = -100000.0f;
+            l[light_i + MAX_LIGHT_SOURCES].vPos[1] = -100000.0f;
+            l[light_i + MAX_LIGHT_SOURCES].vPos[2] = -100000.0f;
+            l[light_i + MAX_LIGHT_SOURCES].vEmission[0] = 0.0f;
+            l[light_i + MAX_LIGHT_SOURCES].vEmission[1] = 0.0f;
+            l[light_i + MAX_LIGHT_SOURCES].vEmission[2] = 0.0f;
+         }
+
+      player.m_ballShader->SetValue("packedLights", l, sizeof(CLight)*(MAX_LIGHT_SOURCES + MAX_BALL_LIGHT_SOURCES));
+
+      // now for a weird hack: make material more rough, depending on how near the nearest lightsource is, to 'emulate' the area of the bulbs (as VP only features point lights so far)
+      float Roughness = 0.8f;
+      if (light_nearest[0] != nullptr)
+      {
+          const float dist = Vertex3Ds(light_nearest[0]->m_d.m_vCenter.x - m_pos.x, light_nearest[0]->m_d.m_vCenter.y - m_pos.y, light_nearest[0]->m_d.m_meshRadius + light_nearest[0]->m_surfaceHeight - m_pos.z).Length(); //!! z pos
+          Roughness = min(max(dist*0.006f, 0.4f), Roughness);
+      }
+      const vec4 rwem(exp2f(10.0f * Roughness + 1.0f), 0.f, 1.f, 0.05f);
+      player.m_ballShader->SetVector(SHADER_Roughness_WrapL_Edge_Thickness, &rwem);
+
+      // ************************* draw the ball itself ****************************
+      Vertex2D stretch;
+      if (player.m_antiStretchBall && player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] != 0.0f)
+         GetBallAspectRatio(player, m_pos, radius, stretch, zheight);
+      else
+         stretch = player.m_BallStretch;
+
+      const vec4 diffuse = convertColor(RGB(0xFF, 0xFF, 0xFF), 1.0f);
+      player.m_ballShader->SetVector(SHADER_cBase_Alpha, &diffuse);
+
+      D3DXMATRIX m(m_orientation.m_d[0][0], m_orientation.m_d[1][0], m_orientation.m_d[2][0], 0.0f,
+         m_orientation.m_d[0][1], m_orientation.m_d[1][1], m_orientation.m_d[2][1], 0.0f,
+         m_orientation.m_d[0][2], m_orientation.m_d[1][2], m_orientation.m_d[2][2], 0.0f,
+         0.f, 0.f, 0.f, 1.f);
+      Matrix3D temp;
+      memcpy(temp.m, m.m, 4 * 4 * sizeof(float));
+      Matrix3D m3D_full;
+      m3D_full.SetScaling(radius*stretch.x, radius*stretch.y, radius);
+      m3D_full.Multiply(temp, m3D_full);
+      temp.SetTranslation(m_pos.x, m_pos.y, zheight);
+      temp.Multiply(m3D_full, m3D_full);
+      memcpy(m.m, m3D_full.m, 4 * 4 * sizeof(float));
+      player.m_ballShader->SetMatrix(SHADER_orientation, &m);
+
+      player.m_ballShader->SetBool(SHADER_disableLighting, player.m_disableLightingForBalls);
+
+      player.m_ballShader->SetTexture(SHADER_Texture0, ballColor, TextureFilter::TEXTURE_MODE_TRILINEAR, false, false, false);
+
+      player.m_ballShader->SetTexture(SHADER_Texture1, &player.m_pin3d.m_pinballEnvTexture, TextureFilter::TEXTURE_MODE_TRILINEAR, false, false, false);
+
+      const bool lowDetailBall = player.m_ptable->GetDetailLevel() < 10;
+
+      player.m_pin3d.m_pd3dPrimaryDevice->SetRenderState(RenderDevice::ZWRITEENABLE, RenderDevice::RS_TRUE);
+
+      if (player.m_cabinetMode)
+         strncpy_s(player.m_ballShaderTechnique, "RenderBall_CabMode", sizeof(player.m_ballShaderTechnique)-1);
+      else
+         strncpy_s(player.m_ballShaderTechnique, "RenderBall", sizeof(player.m_ballShaderTechnique)-1);
+
+      player.m_ballShader->SetTechnique(player.m_ballShaderTechnique);
+
+      player.m_ballShader->Begin(0);
+      player.m_pin3d.m_pd3dPrimaryDevice->DrawIndexedPrimitiveVB(RenderDevice::TRIANGLELIST, MY_D3DFVF_NOTEX2_VERTEX, player.m_ballVertexBuffer, 0, lowDetailBall ? basicBallLoNumVertices : basicBallMidNumVertices, player.m_ballIndexBuffer, 0, lowDetailBall ? basicBallLoNumFaces : basicBallMidNumFaces);
+      player.m_ballShader->End();
+
+   } while (0);
 }
