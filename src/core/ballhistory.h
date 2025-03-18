@@ -1,0 +1,867 @@
+#pragma once
+
+#include "simpleini/SimpleIni.h"
+
+#include <set>
+
+struct BallHistoryState
+{
+   Vertex3Ds m_Position;
+   Vertex3Ds m_Velocity;
+   Vertex3Ds m_AngularMomentum;
+   Vertex3Ds m_LastEventPos;
+
+   Matrix3 m_Orientation;
+
+   Vertex3Ds m_OldPos[MAX_BALL_TRAIL_POS];
+   unsigned int m_RingCounter_OldPos;
+
+   float m_DrawRadius;
+   Texture *m_Texture;
+
+   BallHistoryState();
+};
+
+struct BallHistoryRecord
+{
+   int m_TimeMs;
+   std::vector<BallHistoryState> m_BallHistoryStates;
+
+   BallHistoryRecord();
+   BallHistoryRecord(int timeMs);
+   void Set(const Ball *controlVBall, BallHistoryState &bhr);
+   void Set(std::vector<Ball *> &controlVBalls, int timeMs);
+   void Insert(const Ball *controlVBall, std::size_t insertIndex);
+};
+
+class TrainerOptions
+{
+public:
+   enum ModeStateType
+   {
+      ModeStateType_Config,
+      ModeStateType_Start,
+      ModeStateType_Resume,
+      ModeStateType_Results,
+      ModeStateType_GoBack,
+      ModeStateType_COUNT
+   };
+
+   enum ConfigModeStateType
+   {
+      ConfigModeStateType_Wizard,
+      ConfigModeStateType_BallStart,
+      ConfigModeStateType_BallPass,
+      ConfigModeStateType_BallFail,
+      ConfigModeStateType_BallCorridor,
+      ConfigModeStateType_Difficulty,
+      ConfigModeStateType_TotalRuns,
+      ConfigModeStateType_RunOrder,
+      ConfigModeStateType_BallKickerBehavior,
+      ConfigModeStateType_MaxSecondsPerRun,
+      ConfigModeStateType_CountdownSecondsBeforeRun,
+      ConfigModeStateType_SoundEffects,
+      ConfigModeStateType_GoBack,
+      ConfigModeStateType_COUNT
+   };
+
+   enum BallStartModeType
+   {
+      BallStartModeType_Accept,
+      BallStartModeType_Existing,
+      BallStartModeType_Custom,
+      BallStartModeType_COUNT
+   };
+
+   enum BallStartAngleVelocityModeType
+   {
+      BallStartAngleVelocityModeType_Drop,
+      BallStartAngleVelocityModeType_Custom,
+      BallStartAngleVelocityModeType_COUNT
+   };
+
+   enum BallStartCompleteModeType
+   {
+      BallStartCompleteModeType_Accept,
+      BallStartCompleteModeType_Select,
+      BallStartCompleteModeType_COUNT
+   };
+
+   enum BallEndLocationModeType
+   {
+      BallEndLocationModeType_Config,
+      BallEndLocationModeType_Delete,
+      BallEndLocationModeType_COUNT
+   };
+
+   enum BallEndFinishModeType
+   {
+      BallEndFinishModeType_Distance,
+      BallEndFinishModeType_Stop,
+      BallEndStopModeType_COUNT
+   };
+
+   enum BallEndAssociationModeType
+   {
+      BallEndAssociationModeType_Accept,
+      BallEndAssociationModeType_Select,
+      BallEndAssociationModeType_COUNT
+   };
+
+   enum BallEndCompleteModeType
+   {
+      BallEndCompleteModeType_Accept,
+      BallEndCompleteModeType_Select,
+      BallEndCompleteModeType_COUNT
+   };
+
+   enum BallCorridorCompleteModeType
+   {
+      BallCorridorCompleteModeType_Accept,
+      BallCorridorCompleteModeType_Config,
+      BallCorridorCompleteModeType_Reset,
+      BallCorridorCompleteModeType_COUNT
+   };
+
+   enum DifficultyConfigModeState
+   {
+      DifficultyConfigModeState_Accept,
+      DifficultyConfigModeState_GameplayDifficulty,
+      DifficultyConfigModeState_VarianceDifficulty,
+      DifficultyConfigModeState_GravityVariance,
+      DifficultyConfigModeState_PlayfieldFrictionVariance,
+      DifficultyConfigModeState_FlipperStrengthVariance,
+      DifficultyConfigModeState_FlipperFrictionVariance,
+      DifficultyConfigModeState_COUNT
+   };
+
+   enum DifficultyVarianceModeType
+   {
+      DifficultyVarianceModeType_AboveAndBelow,
+      DifficultyVarianceModeType_AboveOnly,
+      DifficultyVarianceModeType_BelowOnly,
+      DifficultyVarianceModeType_COUNT
+   };
+
+   enum RunOrderModeType
+   {
+      RunOrderModeType_InOrder,
+      RunOrderModeType_Random,
+      RunOrderModeType_COUNT
+   };
+
+   enum BallKickerBehaviorModeType
+   {
+      BallKickerBehaviorModeType_Reset,
+      BallKickerBehaviorModeType_Fail,
+      BallKickerBehaviorModeType_COUNT
+   };
+
+   enum SoundEffectsModeType
+   {
+      SoundEffectsModeType_Accept,
+      SoundEffectsModeType_Pass,
+      SoundEffectsModeType_Fail,
+      SoundEffectsModeType_Countdown,
+      SoundEffectsModeType_TimeLow,
+      SoundEffectsModeType_COUNT
+   };
+
+   struct BallStartOptionsRecord
+   {
+      static const S32 AngleMinimum = 0;
+      static const S32 AngleMaximum = 360;
+
+      static const S32 TotalAnglesMinimum = 1;
+      static const S32 TotalAnglesMaximum = 36;
+
+      static const S32 VelocityMinimum = 0;
+      static const S32 VelocityMaximum = 100;
+
+      static const S32 TotalVelocitiesMinimum = 1;
+      static const S32 TotalVelocitiesMaximum = 20;
+
+      Vertex3Ds m_StartPosition;
+      Vertex3Ds m_StartVelocity;
+      Vertex3Ds m_StartAngularMomentum;
+      float m_AngleRangeStart;
+      float m_AngleRangeFinish;
+      S32 m_TotalRangeAngles;
+      float m_VelocityRangeStart;
+      float m_VelocityRangeFinish;
+      S32 m_TotalRangeVelocities;
+
+      BallStartOptionsRecord();
+      BallStartOptionsRecord(const Vertex3Ds &startPosition, const Vertex3Ds &startVelocity, const Vertex3Ds &startAngularMomentum, float angleRangeStart, float angleRangeFinish, S32 totalRangeAngles, float velocityRangeStart, float velocityRangeFinish, S32 totalRangeVelocities);
+      bool IsZero();
+   };
+
+   struct BallEndOptionsRecord
+   {
+      static const S32 RadiusPercentMinimum = 1;
+      static const S32 RadiusPercentMaximum = 300;
+      static const float RadiusPercentDisabled;
+
+      Vertex3Ds m_EndPosition;
+      float m_EndRadiusPercent;
+      std::set<std::size_t> m_AssociatedBallStartIndexes;
+
+      std::vector<std::tuple<int, Vertex3Ds>> m_StopBallsTracker;
+
+      BallEndOptionsRecord();
+      BallEndOptionsRecord(const Vertex3Ds &endPosition, float endRadiusPercent);
+   };
+
+   struct BallCorridorOptionsRecord
+   {
+      static const S32 RadiusPercentMinimum = 1;
+      static const S32 RadiusPercentMaximum = 300;
+
+      Vertex3Ds m_PassPosition;
+      float m_PassRadiusPercent;
+
+      Vertex3Ds m_OpeningPositionLeft;
+      Vertex3Ds m_OpeningPositionRight;
+
+      BallCorridorOptionsRecord();
+      BallCorridorOptionsRecord(const Vertex3Ds &passPosition, float passRadiusPercent, const Vertex3Ds &openingLeft, const Vertex3Ds &openingRight);
+   };
+
+   struct RunRecord
+   {
+      enum ResultType
+      {
+         ResultType_PassedLocation,
+         ResultType_FailedLocation,
+         ResultType_PassedCorridor,
+         ResultType_FailedCorridorLeft,
+         ResultType_FailedCorridorRight,
+         ResultType_FailedTimeElapsed,
+         ResultType_FailedKicker,
+         ResultType_Unknown
+      };
+
+      std::vector<Vertex3Ds> m_StartPositions;
+      std::vector<Vertex3Ds> m_StartVelocities;
+      std::vector<Vertex3Ds> m_StartAngularMomentums;
+
+      ResultType m_Result;
+      int m_TotalTimeMs;
+
+      std::vector<std::tuple<std::size_t, std::size_t>> m_StartToPassLocationIndexes;
+      std::vector<std::tuple<std::size_t, std::size_t>> m_StartToFailLocationIndexes;
+      std::size_t m_StartToPassCorridorIndex;
+      std::size_t m_StartToFailCorridorIndex;
+
+      RunRecord();
+   };
+
+   static const int CountdownSoundSeconds;
+   static const float TimeLowSoundSeconds;
+
+   ModeStateType m_ModeState;
+   ConfigModeStateType m_ConfigModeState;
+   BallStartModeType m_BallStartMode;
+   BallStartAngleVelocityModeType m_BallStartAngleVelocityMode;
+   BallStartCompleteModeType m_BallStartCompleteMode;
+   BallEndLocationModeType m_BallEndLocationMode;
+   BallEndFinishModeType m_BallPassFinishMode;
+   BallEndFinishModeType m_BallFailFinishMode;
+   BallEndAssociationModeType m_BallEndAssociationMode;
+   BallEndCompleteModeType m_BallEndCompleteMode;
+   BallCorridorCompleteModeType m_BallCorridorCompleteMode;
+   DifficultyConfigModeState m_DifficultyConfigModeState;
+   RunOrderModeType m_RunOrderMode;
+   BallKickerBehaviorModeType m_BallKickerBehaviorMode;
+   SoundEffectsModeType m_SoundEffectsMode;
+   bool m_SoundEffectsPassEnabled;
+   bool m_SoundEffectsFailEnabled;
+   bool m_SoundEffectsTimeLowEnabled;
+   bool m_SoundEffectsCountdownEnabled;
+   bool m_SoundEffectsMenuPlayed;
+
+   static const S32 GameplayDifficultyMinimum = 0;
+   static const S32 GameplayDifficultyMaximum = 100;
+   S32 m_GameplayDifficulty;
+
+   static const S32 VarianceDifficultyMinimum = 0;
+   static const S32 VarianceDifficultyMaximum = 100;
+   S32 m_VarianceDifficulty;
+
+   static const S32 GravityVarianceMinimum = 0;
+   static const S32 GravityVarianceMaximum = 500;
+   S32 m_GravityVariance;
+
+   DifficultyVarianceModeType m_GravityVarianceMode;
+
+   static const S32 PlayfieldFrictionVarianceMinimum = 0;
+   static const S32 PlayfieldFrictionVarianceMaximum = 500;
+   S32 m_PlayfieldFrictionVariance;
+
+   DifficultyVarianceModeType m_PlayfieldFrictionVarianceMode;
+
+   static const S32 FlipperStrengthVarianceMinimum = 0;
+   static const S32 FlipperStrengthVarianceMaximum = 500;
+   S32 m_FlipperStrengthVariance;
+
+   DifficultyVarianceModeType m_FlipperStrengthVarianceMode;
+
+   static const S32 FlipperFrictionVarianceMinimum = 0;
+   static const S32 FlipperFrictionVarianceMaximum = 500;
+   S32 m_FlipperFrictionVariance;
+
+   DifficultyVarianceModeType m_FlipperFrictionVarianceMode;
+
+   static const S32 TotalRunsMinimum = 1;
+   static const S32 TotalRunsMaximum = 100;
+   S32 m_TotalRuns;
+
+   static const S32 MaxSecondsPerRunMinimum = 1;
+   static const S32 MaxSecondsPerRunMaximum = 30;
+   S32 m_MaxSecondsPerRun;
+
+   static const S32 CountdownSecondsBeforeRunMinimum = 0;
+   static const S32 CountdownSecondsBeforeRunMaximum = 5;
+   S32 m_CountdownSecondsBeforeRun;
+
+   std::vector<BallStartOptionsRecord> m_BallStartOptionsRecords;
+   std::size_t m_BallStartOptionsRecordsSize;
+   std::vector<BallEndOptionsRecord> m_BallPassOptionsRecords;
+   std::vector<BallEndOptionsRecord> m_BallFailOptionsRecords;
+
+   BallCorridorOptionsRecord m_BallCorridorOptionsRecord;
+
+   std::vector<RunRecord> m_RunRecords;
+   std::size_t m_CurrentRunRecord;
+   int m_RunStartTimeMs;
+
+   int m_CountdownSoundPlayed;
+   bool m_TimeLowSoundPlaying;
+
+   bool m_SetupBallStarts;
+
+   bool m_SetupDifficulty;
+   S32 m_GameplayDifficultyInitial;
+   float m_GravityInitial;
+   float m_PlayfieldFrictionInitial;
+   float m_FlipperStrengthInitial;
+   float m_FlipperFrictionInitial;
+
+   TrainerOptions();
+};
+
+class NormalOptions
+{
+public:
+   enum ModeStateType
+   {
+      ModeStateType_SelectCurrentBallHistory,
+      ModeStateType_SelectRecallBallHistory,
+      ModeStateType_ManageAutoControlLocations,
+      ModeStateType_ClearAutoControlLocations,
+      ModeStateType_GoBack,
+      ModeStateType_COUNT
+   };
+
+   enum ConfigureRecallBallHistoryModeType
+   {
+      ConfigureRecallBallHistoryModeType_Select,
+      ConfigureRecallBallHistoryModeType_Disable,
+      ConfigureRecallBallHistoryModeType_COUNT
+   };
+
+   enum ClearAutoControlLocationsModeType
+   {
+      ClearAutoControlLocationsModeType_Clear,
+      ClearAutoControlLocationsModeType_GoBack,
+      ClearAutoControlLocationsModeType_COUNT
+   };
+
+   struct AutoControlVertex
+   {
+      Vertex3Ds m_Position;
+      bool Active;
+   };
+
+   static const std::size_t RecallControlIndexDisabled = -1;
+   static const std::size_t AutoControlVerticesMax = 256;
+
+   static const float ManageAutoControlFindFactor;
+
+   ModeStateType m_ModeState;
+
+   ConfigureRecallBallHistoryModeType m_ConfigureRecallBallHistoryMode;
+   std::size_t m_RecallControlIndex;
+
+   ClearAutoControlLocationsModeType m_ClearAutoControlLocationsMode;
+
+   std::vector<AutoControlVertex> m_AutoControlVertices;
+
+   NormalOptions();
+};
+
+struct BallHistory
+{
+public:
+   BallHistory(PinTable &pinTable);
+   void Init(Player &player, int currentTimeMs, bool loadSettings);
+   void UnInit(Player &player);
+   void Process(Player &player, int currentTimeMsec);
+   bool ProcessKeys(Player &player, const DIDEVICEOBJECTDATA *input, int currentTimeMs);
+   void ProcessMouse(Player &player, int currentTimeMs);
+   bool Control();
+   void SetControl(bool control);
+   void ToggleControl();
+   void ToggleRecall();
+   void ResetTrainerRunStartTime();
+
+private:
+   enum NextPreviousByType
+   {
+      eTimeMs,
+      eDistancePixels
+   };
+
+   struct ProfilerRecord
+   {
+      struct ProfilerScope
+      {
+         U64 &m_ProfilerUsec;
+         U64 m_TempUsec;
+
+         ProfilerScope(U64 &usec);
+         virtual ~ProfilerScope();
+      };
+
+      U64 m_ProcessUsec;
+      U64 m_ShowStatusUsec;
+      U64 m_ProcessMenuUsec;
+      U64 m_DrawBallHistoryUsec;
+      U64 m_ProcessModeNormalUsec;
+      U64 m_ProcessModeTrainerUsec;
+      U64 m_DrawTrainerBallsUsec;
+
+      ProfilerRecord();
+      void SetZero();
+   };
+
+   struct DebugFontRecord
+   {
+      static const char *FontTypeFace;
+      static const int FontHeightDefault;
+      static const int FontHeightMax;
+      static const float PlayerTextWidthRatio;
+
+      LPD3DXSPRITE m_Sprite;
+      ID3DXFont *m_Font;
+      INT m_FontHeight;
+
+      DebugFontRecord();
+      virtual ~DebugFontRecord();
+      void Init(Player &player);
+      void UnInit();
+   };
+
+   struct DebugPrintRecord
+   {
+      enum JustificationType
+      {
+         JustificationType_Center,
+         JustificationType_CenterLeft,
+         JustificationType_CenterRight,
+         JustificationType_Left,
+         JustificationType_Right
+      };
+      static const D3DCOLOR NormalMenuColor;
+      static const D3DCOLOR SelectedMenuColor;
+      static const D3DCOLOR ErrorMenuColor;
+      static const float TextYStepPercent;
+
+      Player &m_Player;
+      DebugFontRecord &m_DebugFontRecord;
+
+      DebugPrintRecord(Player &player, DebugFontRecord &debugFontRecord);
+      void SetPosition(float x, float y);
+      void SetPositionPercent(float x, float y);
+      void ToggleReverse();
+      int GetTextWidth(const char *format, ...);
+      void ShowText(const char *format, ...);
+      void ShowMenuTextLeft(const char *format, ...);
+      void ShowMenuTextRight(const char *format, ...);
+      void ShowTextPos(int x, int y, const char *format, ...);
+      void ShowTextTitle(const char *format, ...);
+      void ShowTextWithMenu(bool isMenu, const char *format, ...);
+      void ShowMenuText(const char *format, ...);
+      void ShowMenuTextPos(int x, int y, const char *format, ...);
+      void ShowMenuTextTitle(const char *format, ...);
+      void ShowMenuTextError(const char *format, ...);
+      void ShowMenuTextSelect(bool selected, const char *format, ...);
+
+   private:
+      int m_TextX;
+      int m_TextY;
+      int m_TextYStep;
+      char m_StrBuffer[1024];
+      JustificationType JustificationOverflow;
+
+      void InitTextXY();
+      void SetDebugOutputPosition(const float x, const float y);
+      void DebugPrint(int x, int y, LPCSTR text, JustificationType justification, D3DCOLOR color, ID3DXFont *font);
+   };
+
+   struct Vertex3DColor
+   {
+      D3DVALUE x;
+      D3DVALUE y;
+      D3DVALUE z;
+
+      D3DCOLOR color;
+
+      Vertex3DColor();
+      Vertex3DColor(D3DVALUE x, D3DVALUE y, D3DVALUE z, D3DCOLOR color);
+   };
+
+   struct MenuOptionsRecord
+   {
+      enum MenuActionType
+      {
+         MenuActionType_None,
+         MenuActionType_Toggle,
+         MenuActionType_UpLeft,
+         MenuActionType_DownRight,
+         MenuActionType_Enter,
+         MenuActionType_COUNT
+      };
+
+      enum MenuStateType
+      {
+         MenuStateType_None,
+         MenuStateType_Root_SelectMode,
+         MenuStateType_Normal_SelectModeOptions,
+         MenuStateType_Normal_SelectCurrentBallHistory,
+         MenuStateType_Normal_ConfigureRecallBallHistory,
+         MenuStateType_Normal_SelectRecallBallHistory,
+         MenuStateType_Normal_ManageAutoControlLocations,
+         MenuStateType_Normal_ClearAutoControlLocations,
+         MenuStateType_Trainer_SelectModeOptions,
+         MenuStateType_Trainer_SelectConfigModeOptions,
+         MenuStateType_Trainer_Results,
+         MenuStateType_Trainer_SelectBallStartMode,
+         MenuStateType_Trainer_SelectExistingBallStartLocation,
+         MenuStateType_Trainer_SelectCustomBallStart,
+         MenuStateType_Trainer_SelectCustomBallStartLocation,
+         MenuStateType_Trainer_SelectCustomBallStartAngleVelocityMode,
+         MenuStateType_Trainer_SelectCustomBallStartVelocityStart,
+         MenuStateType_Trainer_SelectCustomBallStartVelocityFinish,
+         MenuStateType_Trainer_SelectCustomBallStartVelocityTotal,
+         MenuStateType_Trainer_SelectCustomBallStartAngleStart,
+         MenuStateType_Trainer_SelectCustomBallStartAngleFinish,
+         MenuStateType_Trainer_SelectCustomBallStartAngleTotal,
+         MenuStateType_Trainer_BallPassComplete,
+         MenuStateType_Trainer_SelectBallPassManage,
+         MenuStateType_Trainer_SelectBallPassLocation,
+         MenuStateType_Trainer_SelectBallPassFinishMode,
+         MenuStateType_Trainer_SelectBallPassDistance,
+         MenuStateType_Trainer_SelectBallPassAssociations,
+         MenuStateType_Trainer_BallFailComplete,
+         MenuStateType_Trainer_SelectBallFailManage,
+         MenuStateType_Trainer_SelectBallFailLocation,
+         MenuStateType_Trainer_SelectBallFailFinishMode,
+         MenuStateType_Trainer_SelectBallFailDistance,
+         MenuStateType_Trainer_SelectBallFailAssociations,
+         MenuStateType_Trainer_SelectBallCorridorComplete,
+         MenuStateType_Trainer_SelectBallCorridorPassLocation,
+         MenuStateType_Trainer_SelectBallCorridorPassWidth,
+         MenuStateType_Trainer_SelectBallCorridorOpeningLeftLocation,
+         MenuStateType_Trainer_SelectBallCorridorOpeningRightLocation,
+         MenuStateType_Trainer_SelectDifficultyOptions,
+         MenuStateType_Trainer_SelectDifficultyGameplayDifficulty,
+         MenuStateType_Trainer_SelectDifficultyVarianceDifficulty,
+         MenuStateType_Trainer_SelectDifficultyGravityVariance,
+         MenuStateType_Trainer_SelectDifficultyGravityVarianceType,
+         MenuStateType_Trainer_SelectDifficultyPlayfieldFrictionVariance,
+         MenuStateType_Trainer_SelectDifficultyPlayfieldFrictionVarianceType,
+         MenuStateType_Trainer_SelectDifficultyFlipperStrengthVariance,
+         MenuStateType_Trainer_SelectDifficultyFlipperStrengthVarianceType,
+         MenuStateType_Trainer_SelectDifficultyFlipperFrictionVariance,
+         MenuStateType_Trainer_SelectDifficultyFlipperFrictionVarianceType,
+         MenuStateType_Trainer_SelectTotalRuns,
+         MenuStateType_Trainer_SelectRunOrderMode,
+         MenuStateType_Trainer_SelectBallKickerBehaviorMode,
+         MenuStateType_Trainer_SelectMaxSecondsPerRun,
+         MenuStateType_Trainer_SelectCountdownSecondsBeforeRun,
+         MenuStateType_Trainer_SelectSoundEffects,
+         MenuStateType_Disabled_Disabled,
+         MenuStateType_COUNT
+      };
+
+      enum ModeType
+      {
+         ModeType_Normal,
+         ModeType_Trainer,
+         ModeType_Disabled,
+         ModeType_COUNT
+      };
+
+      static const int SkipKeyPressHoldMs;
+      static const int SkipKeyIntervalMs;
+      static const S32 SkipKeyStepFactor;
+
+      static const int SkipControlIntervalMs;
+      static const S32 SkipControlStepFactor;
+
+      static const float DefaultBallRadius;
+
+      MenuStateType m_MenuState;
+      ModeType m_ModeType;
+      std::string m_MenuError;
+
+      S32 m_CreateZ;
+
+      NormalOptions m_NormalOptions;
+      TrainerOptions m_TrainerOptions;
+
+      bool m_SkipKeyPressed;
+      int m_SkipKeyPressedMs;
+      bool m_SkipKeyLeft;
+      int m_SkipKeyUsedMs;
+      int m_SkipControlUsedMs;
+      std::size_t m_CurrentBallIndex;
+      std::size_t m_CurrentAssociationIndex;
+      std::size_t m_CurrentCompleteIndex;
+      POINT m_MousePosition2D;
+
+      MenuOptionsRecord();
+   };
+
+   static const VertexElement VertexColorElement[];
+
+   static const std::size_t OneSecondMs;
+
+   static const std::size_t BallHistorySizeDefault;
+   static const NextPreviousByType NextPreviousByDefault;
+   static const std::size_t BallHistoryControlStepMsDefault;
+   static const float BallHistoryControlStepPixelsDefault;
+
+   static const float BallHistoryMinPointSize;
+   static const float BallHistoryMaxPointSize;
+   static const float ControlVerticesDistanceMax;
+
+   static const float DrawAngleVelocityRadiusExtraMinimum;
+   static const float DrawAngleVelocityRadiusArc;
+   static const float DrawAngleVelocityLengthMultiplier;
+   static const float DrawAngleVelocityHeightOffset;
+
+   static const int DrawBallBlinkMs;
+
+   static const D3DCOLOR IntersectionCircleColor;
+
+   static const char *SettingsFileExtension;
+   static const char *SettingsFolderName;
+   static const char SettingsValueDelimeter;
+   static const char *TableInfoSectionName;
+   static const char *FilePathKeyName;
+   static const char *TableNameKeyName;
+   static const char *AuthorKeyName;
+   static const char *VersionKeyName;
+   static const char *DateSavedKeyName;
+   static const char *NormalModeSettingsSectionName;
+   static const char *NormalModeAutoControlVerticesPosition3DKeyName;
+   static const char *TrainerModeSettingsSectionName;
+   static const char *TrainerModeGameplayDifficultyKeyName;
+   static const char *TrainerModeVarianceDifficultyKeyName;
+   static const char *TrainerModeGravityVarianceKeyName;
+   static const char *TrainerModeGravityVarianceModeKeyName;
+   static const char *TrainerModePlayfieldFrictionVarianceKeyName;
+   static const char *TrainerModePlayfieldFrictionVarianceModeKeyName;
+   static const char *TrainerModeFlipperStrengthVarianceKeyName;
+   static const char *TrainerModeFlipperStrengthVarianceModeKeyName;
+   static const char *TrainerModeFlipperFrictionVarianceKeyName;
+   static const char *TrainerModeFlipperFrictionVarianceModeKeyName;
+   static const char *TrainerModeTotalRunsKeyName;
+   static const char *TrainerModeRunOrderModeKeyName;
+   static const char *TrainerModeBallKickerBehaviorModeKeyName;
+   static const char *TrainerModeMaxSecondsPerRunKeyName;
+   static const char *TrainerModeCountdownSecondsBeforeRunKeyName;
+   static const char *TrainerModeSoundEffectsPassEnabledKeyName;
+   static const char *TrainerModeSoundEffectsFailEnabledKeyName;
+   static const char *TrainerModeSoundEffectsTimeLowEnabledKeyName;
+   static const char *TrainerModeSoundEffectsCountdownEnabledKeyName;
+   static const char *TrainerModeBallStartPositionKeyName;
+   static const char *TrainerModeBallStartVelocityKeyName;
+   static const char *TrainerModeBallStartAngularMomentumKeyName;
+   static const char *TrainerModeBallStartAngleStartKeyName;
+   static const char *TrainerModeBallStartAngleFinishKeyName;
+   static const char *TrainerModeBallStartTotalAnglesKeyName;
+   static const char *TrainerModeBallStartVelocityStartKeyName;
+   static const char *TrainerModeBallStartVelocityFinishKeyName;
+   static const char *TrainerModeBallStartTotalVelocitiesKeyName;
+   static const char *TrainerModeBallPassPosition3DKeyName;
+   static const char *TrainerModeBallPassRadiusPercentKeyName;
+   static const char *TrainerModeBallPassAssociationsKeyName;
+   static const char *TrainerModeBallFailPosition3DKeyName;
+   static const char *TrainerModeBallFailRadiusPercentKeyName;
+   static const char *TrainerModeBallFailAssociationsKeyName;
+   static const char *TrainerModeBallCorridorPassPosition3DKeyName;
+   static const char *TrainerModeBallCorridorPassRadiusPercentKeyName;
+   static const char *TrainerModeBallCorridorOpeningPositionLeft3DKeyName;
+   static const char *TrainerModeBallCorridorOpeningPositionRight3DKeyName;
+   
+   std::vector<Ball *> m_ControlVBalls;
+   std::vector<Ball *> m_ControlVBallsPrevious;
+
+   std::vector<Kicker *> m_ActiveBallKickers;
+
+   std::vector<Flipper *> m_Flippers;
+
+   ProfilerRecord m_ProfilerRecord;
+
+   DebugFontRecord m_DebugFontRecordStatus;
+   DebugFontRecord m_DebugFontRecordMenu;
+   DebugFontRecord m_DebugFontRecordPosition;
+
+   bool m_ShowStatus;
+   bool m_Control;
+   bool m_WasControlled;
+   bool m_WasRecalled;
+   std::size_t m_CurrentControlIndex;
+
+   NextPreviousByType m_NextPreviousBy;
+   int m_BallHistoryControlStepMs;
+   float m_BallHistoryControlStepPixels;
+
+   std::vector<BallHistoryRecord> m_BallHistoryRecords;
+   std::size_t m_BallHistoryRecordsHeadIndex;
+   std::size_t m_BallHistoryRecordsSize;
+   float m_MaxBallVelocityPixels;
+
+   VertexDeclaration *m_VertexColorDeclaration;
+
+   Texture *m_AutoControlBallTexture;
+   Texture *m_RecallBallTexture;
+   Texture *m_TrainerBallStartTexture;
+   Texture *m_TrainerBallPassTexture;
+   Texture *m_TrainerBallFailTexture;
+   Texture *m_TrainerBallCorridorPassTexture;
+   Texture *m_TrainerBallCorridorOpeningTexture;
+   Texture *m_ActiveBallKickerTexture;
+   std::map<U32, Texture *> m_ControlHistoryBallTextures;
+
+   int m_UseTrailsForBallsInitialValue;
+
+   MenuOptionsRecord m_MenuOptions;
+
+   std::string m_SettingsFilePath;
+
+   bool GetSettingsFileName(Player &player, std::string &fileName);
+   void LoadSettings(Player &player);
+   void LoadSettingsDifficultyVariance(Player &player, CSimpleIni &iniFile, const char *sectionName, const char *varianceKeyName, S32 &variance, const char *modeKeyName, TrainerOptions::DifficultyVarianceModeType &mode);
+   bool LoadSettingsGetValue(CSimpleIni &iniFile, const char *sectionName, const char *keyName, std::istringstream &value);
+   void SaveSettings(Player &player);
+   void SaveSettingsDifficultyVariance(Player &player, CSimpleIni &iniFile, const char *sectionName, const char *varianceKeyName, S32 variance, const char *modeKeyName, TrainerOptions::DifficultyVarianceModeType mode);
+   void InitBallsDecreased(Player &player);
+   void InitBallsIncreased(Player &player);
+   void InitControlVBalls(Player &player);
+   void InitActiveBallKickers(PinTable &pinTable);
+   void InitFlippers(PinTable &pinTable);
+   void ControlNext();
+   void ControlPrev();
+   void ResetBallHistoryRenderSizes();
+   void DrawBallHistory(Player &player);
+   void DrawFakeBall(Player &player, const Vertex3Ds &m_pos, float radius, Matrix3 m_orientation, Texture *ballColor);
+   void DrawLine(Player &player, const Vertex3Ds &posA, const Vertex3Ds &posB, D3DCOLOR color);
+   void DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float intersectionRadius, D3DCOLOR color);
+   void DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
+   void DrawFakeBall(Player &player, Vertex3Ds &position, float radius, Texture &texture, const Vertex3Ds *lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr);
+   void DrawFakeBall(Player &player, Vertex3Ds &position, Texture &texture, const Vertex3Ds *lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr);
+   bool ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs);
+   bool ShouldDrawTrainerBallPasses(std::size_t index, int currentTimeMs);
+   bool ShouldDrawTrainerBallFails(std::size_t index, int currentTimeMs);
+   bool ShouldDrawTrainerBallCorridor(int currentTimeMs);
+   bool ShouldDrawActiveBallKickers(int currentTimeMs);
+   void DrawPrimitives(Player &player, std::vector<Vertex3DColor> &vertices, D3DPRIMITIVETYPE type);
+   void DrawTrainerBallCorridorPass(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor, Vertex3Ds *overridePosition = nullptr);
+   void DrawTrainerBallCorridorOpeningLeft(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor);
+   void DrawTrainerBallCorridorOpeningRight(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor);
+   void DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
+   void DrawTrainerBallCorridor(Player &player, DebugPrintRecord &dpr);
+   void DrawActiveBallKickers(Player &player, DebugPrintRecord &dpr);
+   void DrawAngleVelocityPreviewHelperAdd(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angle, float velocity, float radius);
+   void DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angleStep, float velocityStep, float radius);
+   void DrawAngleVelocityPreview(Player &player, TrainerOptions::BallStartOptionsRecord &bsor);
+   void CalculateAngleVelocityStep(TrainerOptions::BallStartOptionsRecord &bsor, float &angleStep, float &velocityStep);
+   void UpdateBallState(BallHistoryRecord &ballHistoryRecord);
+   void ShowStatus(Player &player, int currentTimeMs);
+   void ShowRecallBall(Player &player, DebugPrintRecord &dpr);
+   void ShowAutoControlVertices(Player &player, DebugPrintRecord &dpr);
+   void ShowPreviousRunRecord(DebugPrintRecord &dpr);
+   void ShowCurrentRunRecord(DebugPrintRecord &dpr, int currentTimeMs);
+   void ShowBallStartOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallStartOptionsRecord &bsor);
+   void ShowBallEndOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallEndOptionsRecord &beor);
+   void ShowBallCorridorOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor, bool isMenu);
+   void ShowDifficultyTableConstants(DebugPrintRecord &dpr, Player &player);
+   void ShowDifficultyVarianceMode(DebugPrintRecord &dpr, bool isMenu, const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode);
+   void ShowDifficultyVarianceRange(DebugPrintRecord &dpr, bool isMenu, const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, S32 variance, float initial);
+   void ShowDescription(DebugPrintRecord &dpr, const std::vector<std::string> &description);
+   void ShowDifficultyVarianceStatusAll(DebugPrintRecord &dpr, Player &player, bool isMenu);
+   void ShowDifficultyVarianceStatusSingle(DebugPrintRecord &dpr, bool isMenu, const std::string &name, float current, S32 variance, float initial, TrainerOptions::DifficultyVarianceModeType mode);
+   void ShowDifficultyVarianceStatusGravity(DebugPrintRecord &dpr, Player &player, bool isMenu);
+   void ShowDifficultyVarianceStatusPlayfieldFriction(DebugPrintRecord &dpr, Player &player, bool isMenu);
+   void ShowDifficultyVarianceStatusFlipperStrength(DebugPrintRecord &dpr, Player &player, bool isMenu);
+   void ShowDifficultyVarianceStatusFlipperFriction(DebugPrintRecord &dpr, Player &player, bool isMenu);
+   void ShowResult(DebugPrintRecord &dpr, std::size_t total, std::vector<DWORD> &timesMs, const char *type, const char *subType);
+   template <class T> float CalculateStandardDeviation(std::vector<T> &values);
+   float CalculateDifficultyVariance(Player &player, float initial, float current, S32 variance, TrainerOptions::DifficultyVarianceModeType varianceMode);
+   void InitBallStartOptionRecords(DebugPrintRecord &dpr);
+   void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs);
+   void ProcessMode(Player &player, int currentTimeMs);
+   void ProcessModeNormal(Player &player);
+   void ProcessModeTrainer(Player &player, int currentTimeMs);
+   S32 ProcessMenuChangeValue(S32 value, S32 delta, S32 min, S32 max, bool skip);
+   template <class T> void ProcessMenuChangeValueInc(T &value, S32 min, S32 max);
+   template <class T> void ProcessMenuChangeValueIncSkip(T &value, S32 min, S32 max);
+   template <class T> void ProcessMenuChangeValueDec(T &value, S32 min, S32 max);
+   template <class T> void ProcessMenuChangeValueDecSkip(T &value, S32 min, S32 max);
+   template <class T> void ProcessMenuChangeValueSkip(T &value, S32 min, S32 max, int currentTimeMs);
+   template <class T> void ProcessMenuAction(MenuOptionsRecord::MenuActionType menuAction, MenuOptionsRecord::MenuStateType enterMenuState, T &value, S32 minimum, S32 maximum, int currentTimeMs);
+
+   void Add(std::vector<Ball *> &controlVBalls, int currentTimeMsec);
+   BallHistoryRecord &Get(std::size_t index);
+   std::size_t GetTailIndex();
+
+   float GetDefaultBallRadius();
+   Matrix3 GetDefaultBallOrientation();
+   float DistancePixels(POINT &p1, POINT &p2);
+   float DistancePixels(const Vertex3Ds &pos1, const Vertex3Ds &pos2);
+   float DistanceToLineSegment(const Vertex3Ds &lineA, const Vertex3Ds &lineB, const Vertex3Ds &point);
+   float VelocityPixels(const Vertex3Ds &vel);
+   char GetBallHistoryKey(Player &player, EnumAssignKeys enumAssignKey);
+   bool BallsReadyForTrainer();
+   bool BallCorridorReadyForTrainer();
+   POINT Get2DPointFrom3D(Player &player, const Vertex3Ds &vertex);
+   Vertex3Ds Get3DPointFrom2D(Pin3D &pin3d, const POINT &p, float heightZ);
+   Vertex3Ds Get3DPointFromMousePosition(Player &player, float heightZ);
+   bool Get2DMousePosition(Player &player, POINT &mousePosition2D, bool correct = true);
+   Vertex3Ds GetKickerPosition(Kicker &kicker);
+   void SetFlipperStrength(float flipperStrength);
+   float GetFlipperStrength();
+   void SetFlipperFriction(float flipperFriction);
+   float GetFlipperFriction();
+   bool ControlNextMove();
+   bool ControlPrevMove();
+
+   bool BallCountIncreased();
+   bool BallCountDecreased();
+   bool BallChanged();
+
+   bool BallInsideAutoControlVertex(std::vector<Ball *> &controlVBalls);
+
+   std::vector<std::string> Split(const char *str, char delimeter);
+   void CenterMouse(Player &player);
+
+   void InvalidEnumValue(const char *enumName, const int enumValue);
+   void InvalidEnumValue(const char *enumName, const char *enumValue);
+
+   void PlaySound(UINT rcId, bool async = false);
+   void StopSound();
+};
