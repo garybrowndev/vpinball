@@ -1,8 +1,9 @@
 #pragma once
 
-#include "simpleini/SimpleIni.h"
-
 #include <set>
+
+#include "simpleini/SimpleIni.h"
+#include "src\renderer\typedefs3D.h"
 
 struct BallHistoryState
 {
@@ -29,9 +30,9 @@ struct BallHistoryRecord
 
    BallHistoryRecord();
    BallHistoryRecord(int timeMs);
-   void Set(const Ball *controlVBall, BallHistoryState &bhr);
-   void Set(std::vector<Ball *> &controlVBalls, int timeMs);
-   void Insert(const Ball *controlVBall, std::size_t insertIndex);
+   void Set(const HitBall *controlVBall, BallHistoryState &bhr);
+   void Set(std::vector<HitBall *> &controlVBalls, int timeMs);
+   void Insert(const HitBall *controlVBall, std::size_t insertIndex);
 };
 
 class TrainerOptions
@@ -634,7 +635,7 @@ private:
       MenuOptionsRecord();
    };
 
-   static const VertexElement VertexColorElement[];
+   static const D3DVERTEXELEMENT9 VertexColorElement[];
 
    static const std::size_t OneSecondMs;
 
@@ -707,8 +708,8 @@ private:
    static const char *TrainerModeBallCorridorOpeningPositionLeft3DKeyName;
    static const char *TrainerModeBallCorridorOpeningPositionRight3DKeyName;
    
-   std::vector<Ball *> m_ControlVBalls;
-   std::vector<Ball *> m_ControlVBallsPrevious;
+   std::vector<HitBall *> m_ControlVBalls;
+   std::vector<HitBall *> m_ControlVBallsPrevious;
 
    std::vector<Kicker *> m_ActiveBallKickers;
 
@@ -735,7 +736,7 @@ private:
    std::size_t m_BallHistoryRecordsSize;
    float m_MaxBallVelocityPixels;
 
-   VertexDeclaration *m_VertexColorDeclaration;
+   IDirect3DVertexDeclaration9 *m_VertexColorDeclaration;
 
    Texture *m_AutoControlBallTexture;
    Texture *m_RecallBallTexture;
@@ -825,7 +826,7 @@ private:
    template <class T> void ProcessMenuChangeValueSkip(T &value, S32 min, S32 max, int currentTimeMs);
    template <class T> void ProcessMenuAction(MenuOptionsRecord::MenuActionType menuAction, MenuOptionsRecord::MenuStateType enterMenuState, T &value, S32 minimum, S32 maximum, int currentTimeMs);
 
-   void Add(std::vector<Ball *> &controlVBalls, int currentTimeMsec);
+   void Add(std::vector<HitBall *> &controlVBalls, int currentTimeMsec);
    BallHistoryRecord &Get(std::size_t index);
    std::size_t GetTailIndex();
 
@@ -839,7 +840,7 @@ private:
    bool BallsReadyForTrainer();
    bool BallCorridorReadyForTrainer();
    POINT Get2DPointFrom3D(Player &player, const Vertex3Ds &vertex);
-   Vertex3Ds Get3DPointFrom2D(Pin3D &pin3d, const POINT &p, float heightZ);
+   Vertex3Ds Get3DPointFrom2D(const POINT &p, float heightZ);
    Vertex3Ds Get3DPointFromMousePosition(Player &player, float heightZ);
    bool Get2DMousePosition(Player &player, POINT &mousePosition2D, bool correct = true);
    Vertex3Ds GetKickerPosition(Kicker &kicker);
@@ -854,7 +855,7 @@ private:
    bool BallCountDecreased();
    bool BallChanged();
 
-   bool BallInsideAutoControlVertex(std::vector<Ball *> &controlVBalls);
+   bool BallInsideAutoControlVertex(std::vector<HitBall *> &controlVBalls);
 
    std::vector<std::string> Split(const char *str, char delimeter);
    void CenterMouse(Player &player);

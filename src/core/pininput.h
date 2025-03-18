@@ -119,6 +119,8 @@ public:
 
    void GetInputDeviceData(/*const U32 curr_time_msec*/);
 
+   HWND GetFocusHWnd() {return m_focusHWnd;}
+
    #ifdef _WIN32
    #ifdef USE_DINPUT8
    LPDIRECTINPUTDEVICE8 GetJoystick(int index);

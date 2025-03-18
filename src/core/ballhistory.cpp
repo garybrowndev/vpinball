@@ -1,6 +1,6 @@
 #pragma once
 
-#include "stdafx.h"
+#include "core/stdafx.h"
 
 #include <algorithm>
 #include <numeric>
@@ -9,8 +9,8 @@
 #include "freeimage.h"
 
 #include "player.h"
-#include "Shader.h"
-#include "../meshes/ballMesh.h"
+#include "renderer/Shader.h"
+#include "meshes/ballMesh.h"
 
 // ================================================================================================================================================================================================================================================
 
@@ -39,7 +39,7 @@ BallHistoryRecord::BallHistoryRecord(int timeMs) :
 {
 }
 
-void BallHistoryRecord::Set(const Ball *controlVBall, BallHistoryState &bhr)
+void BallHistoryRecord::Set(const HitBall *controlVBall, BallHistoryState &bhr)
 {
    bhr.m_Position = controlVBall->m_d.m_pos;
    bhr.m_Velocity = controlVBall->m_d.m_vel;
@@ -50,18 +50,18 @@ void BallHistoryRecord::Set(const Ball *controlVBall, BallHistoryState &bhr)
    bhr.m_RingCounter_OldPos = controlVBall->m_ringcounter_oldpos;
 }
 
-void BallHistoryRecord::Set(std::vector<Ball *> &controlVBalls, int timeMs)
+void BallHistoryRecord::Set(std::vector<HitBall *> &controlVBalls, int timeMs)
 {
    m_TimeMs = timeMs;
    m_BallHistoryStates.clear();
-   for (std::vector<Ball *>::iterator it = controlVBalls.begin(); it != controlVBalls.end(); ++it)
+   for (std::vector<HitBall *>::iterator it = controlVBalls.begin(); it != controlVBalls.end(); ++it)
    {
       m_BallHistoryStates.push_back(BallHistoryState());
       Set(*it, m_BallHistoryStates.back());
    }
 }
 
-void BallHistoryRecord::Insert(const Ball *controlVBall, std::size_t insertIndex)
+void BallHistoryRecord::Insert(const HitBall *controlVBall, std::size_t insertIndex)
 {
    m_BallHistoryStates.insert(m_BallHistoryStates.begin() + insertIndex, BallHistoryState());
    Set(controlVBall, m_BallHistoryStates[insertIndex]);
@@ -262,7 +262,7 @@ BallHistory::DebugFontRecord::~DebugFontRecord()
 
 void BallHistory::DebugFontRecord::Init(Player &player)
 {
-   IDirect3DDevice9 *coreDevice = player.m_pin3d.m_pd3dPrimaryDevice->GetCoreDevice();
+   IDirect3DDevice9 *coreDevice = player.m_renderer->m_renderDevice->GetCoreDevice();
 
    if (FAILED(D3DXCreateSprite(coreDevice, &m_Sprite)))
    {
@@ -301,7 +301,10 @@ void BallHistory::DebugFontRecord::Init(Player &player)
          tempFont->DrawText(m_Sprite, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", -1, &fontRect, DT_CALCRECT, 0xFFFFFFFF);
          SAFE_RELEASE(tempFont);
 
-         float playerWidthToTextWidthRatio = player.m_width / float(fontRect.right - fontRect.left);
+         int renderWidth = 0;
+         int renderHeight = 0;
+         player.m_renderer->GetRenderSize(renderWidth, renderHeight);
+         float playerWidthToTextWidthRatio = renderWidth / float(fontRect.right - fontRect.left);
          if (playerWidthToTextWidthRatio < PlayerTextWidthRatio)
          {
             break;
@@ -355,15 +358,15 @@ BallHistory::DebugPrintRecord::DebugPrintRecord(Player &player, DebugFontRecord 
 void BallHistory::DebugPrintRecord::SetPosition(float x, float y)
 {
    // input x/y are relative to the table oritentation
-   if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 270.0f)
+   if (m_Player.m_ptable->mViewSetups[m_Player.m_ptable->m_BG_current_set].mViewportRotation == 270.0f)
    {
       SetDebugOutputPosition(x, y - DBG_SPRITE_SIZE);
    }
-   else if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 90.0f)
+   else if (m_Player.m_ptable->mViewSetups[m_Player.m_ptable->m_BG_current_set].mViewportRotation == 90.0f)
    {
       SetDebugOutputPosition(x - DBG_SPRITE_SIZE, y);
    }
-   else if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 180.0f)
+   else if (m_Player.m_ptable->mViewSetups[m_Player.m_ptable->m_BG_current_set].mViewportRotation == 180.0f)
    {
       SetDebugOutputPosition(-x + 260, -y - 300);
    }
@@ -375,22 +378,25 @@ void BallHistory::DebugPrintRecord::SetPosition(float x, float y)
 
 void BallHistory::DebugPrintRecord::SetPositionPercent(float x, float y)
 {
+   int renderWidth = 0;
+   int renderHeight = 0;
+   m_Player.m_renderer->GetRenderSize(renderWidth, renderHeight);
    // input x/y are relative to the table oritentation
-   if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 270.0f)
+   if (m_Player.m_ptable->mViewSetups[m_Player.m_ptable->m_BG_current_set].mViewportRotation == 270.0f)
    {
-      SetPosition(y * m_Player.m_width, m_Player.m_height - (x * m_Player.m_height));
+      SetPosition(y * renderWidth, renderHeight - (x * renderHeight));
    }
-   else if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 90.0f)
+   else if (m_Player.m_ptable->mViewSetups[m_Player.m_ptable->m_BG_current_set].mViewportRotation == 90.0f)
    {
-      SetPosition(m_Player.m_width - (y * m_Player.m_width), x * m_Player.m_height);
+      SetPosition(renderWidth - (y * renderWidth), x * renderHeight);
    }
-   else if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 180.0f)
+   else if (m_Player.m_ptable->mViewSetups[m_Player.m_ptable->m_BG_current_set].mViewportRotation == 180.0f)
    {
-      SetPosition(x * m_Player.m_width, y * m_Player.m_height);
+      SetPosition(x * renderWidth, y * renderHeight);
    }
    else
    {
-      SetPosition(x * m_Player.m_width, y * m_Player.m_height);
+      SetPosition(x * renderWidth, y * renderHeight);
    }
 }
 
@@ -412,22 +418,26 @@ int BallHistory::DebugPrintRecord::GetTextWidth(const char *format, ...)
 
 void BallHistory::DebugPrintRecord::ShowText(const char *format, ...)
 {
+   int renderWidth = 0;
+   int renderHeight = 0;
+   m_Player.m_renderer->GetRenderSize(renderWidth, renderHeight);
+
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
 
    int textYStepNext = m_TextY + (2 * m_TextYStep);
-   if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 270.0f)
+   if (m_Player.m_ptable->mViewSetups[m_Player.m_ptable->m_BG_current_set].mViewportRotation == 270.0f)
    {
-      if (textYStepNext > m_Player.m_width)
+      if (textYStepNext > renderWidth)
       {
          SetPositionPercent(1.00f, 0.00f);
          JustificationOverflow = JustificationType_Right;
       }
    }
-   else if (m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set] == 90.0f)
+   else if (m_Player.m_ptable->mViewSetups[m_Player.m_ptable->m_BG_current_set].mViewportRotation == 90.0f)
    {
-      if (textYStepNext > m_Player.m_width)
+      if (textYStepNext > renderWidth)
       {
          SetPositionPercent(1.00f, 0.00f);
          JustificationOverflow = JustificationType_Right;
@@ -435,7 +445,7 @@ void BallHistory::DebugPrintRecord::ShowText(const char *format, ...)
    }
    else
    {
-      if (textYStepNext > m_Player.m_height)
+      if (textYStepNext > renderHeight)
       {
          SetPositionPercent(1.00f, 0.00f);
          JustificationOverflow = JustificationType_Right;
@@ -554,7 +564,7 @@ void BallHistory::DebugPrintRecord::SetDebugOutputPosition(const float x, const 
    const D3DXVECTOR2 spritePos(x, y);
    const D3DXVECTOR2 spriteCenter(DBG_SPRITE_SIZE / 2, DBG_SPRITE_SIZE / 2);
 
-   const float angle = ANGTORAD(m_Player.m_ptable->m_BG_rotation[m_Player.m_ptable->m_BG_current_set]);
+   const float angle = ANGTORAD(m_Player.m_ptable->mViewSetups[m_Player.m_ptable->m_BG_current_set].mViewportRotation);
    D3DXMATRIX mat;
    D3DXMatrixTransformation2D(&mat, nullptr, 0.0, nullptr, &spriteCenter, angle, &spritePos);
    m_DebugFontRecord.m_Sprite->SetTransform(&mat);
@@ -667,7 +677,7 @@ BallHistory::MenuOptionsRecord::MenuOptionsRecord() :
 
 // ================================================================================================================================================================================================================================================
 
-const VertexElement BallHistory::VertexColorElement[] =
+const D3DVERTEXELEMENT9 BallHistory::VertexColorElement[] =
 {
    { 0, 0 * sizeof(float), D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 }, // pos
    { 0, 3 * sizeof(float), D3DDECLTYPE_D3DCOLOR, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR, 0 },  // color
@@ -788,7 +798,7 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
    m_CurrentControlIndex = 0;
 
    m_MenuOptions.m_NormalOptions.m_RecallControlIndex = NormalOptions::RecallControlIndexDisabled;
-   m_MenuOptions.m_CreateZ = S32(std::max(player.m_ptable->m_tableheight, std::min(float(m_MenuOptions.m_CreateZ), player.m_ptable->m_glassheight)));
+   m_MenuOptions.m_CreateZ = S32(std::max(player.m_ptable->GetHeight(), std::min(float(m_MenuOptions.m_CreateZ), player.m_ptable->m_glassTopHeight)));
 
    m_NextPreviousBy = NextPreviousByDefault;
    m_BallHistoryControlStepMs = BallHistoryControlStepMsDefault;
@@ -803,7 +813,7 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
    {
       RGBQUAD color = { 0x00, 0x00, 0x00, 0x00 }; // black
       FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
-      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false);
+      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false, 0);
       m_AutoControlBallTexture = new Texture(ballTex);
    }
 
@@ -811,7 +821,7 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
    {
       RGBQUAD color = { 0xFF, 0x00, 0x00, 0x00 }; // blue
       FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
-      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false);
+      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false, 0);
       m_RecallBallTexture = new Texture(ballTex);
    }
 
@@ -819,7 +829,7 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
    {
       RGBQUAD color = { 0xFF, 0x00, 0x00, 0x00 }; // blue
       FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
-      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false);
+      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false, 0);
       m_TrainerBallStartTexture = new Texture(ballTex);
    }
 
@@ -827,7 +837,7 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
    {
       RGBQUAD color = { 0x00, 0xFF, 0x00, 0x00 }; // green
       FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
-      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false);
+      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false, 0);
       m_TrainerBallPassTexture = new Texture(ballTex);
    }
 
@@ -835,7 +845,7 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
    {
       RGBQUAD color = { 0x00, 0x00, 0xFF, 0x00 }; // red
       FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
-      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false);
+      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false, 0);
       m_TrainerBallFailTexture = new Texture(ballTex);
    }
 
@@ -843,7 +853,7 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
    {
       RGBQUAD color = { 0x00, 0xFF, 0xFF, 0x00 }; // yellow
       FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
-      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false);
+      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false, 0);
       m_TrainerBallCorridorPassTexture = new Texture(ballTex);
    }
 
@@ -851,7 +861,7 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
    {
       RGBQUAD color = { 0x00, 0x00, 0x00, 0x00 }; // black
       FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
-      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false);
+      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false, 0);
       m_TrainerBallCorridorOpeningTexture = new Texture(ballTex);
    }
 
@@ -859,7 +869,7 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
    {
       RGBQUAD color = { 0xFF, 0xFF, 0xFF, 0x00 }; // white
       FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
-      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false);
+      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false, 0);
       m_ActiveBallKickerTexture = new Texture(ballTex);
    }
 
@@ -880,9 +890,9 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
       }
    }
 
-   m_UseTrailsForBallsInitialValue = player.m_ptable->m_useTrailForBalls;
+   m_UseTrailsForBallsInitialValue = player.m_renderer->m_trailForBalls;
 
-   CHECKD3D(VertexBuffer::m_pd3dPrimaryDevice->CreateVertexDeclaration(VertexColorElement, &m_VertexColorDeclaration));
+   CHECKD3D(player.m_renderer->m_renderDevice->GetCoreDevice()->CreateVertexDeclaration(VertexColorElement, &m_VertexColorDeclaration));
 
    if (loadSettings)
    {
@@ -900,7 +910,7 @@ void BallHistory::UnInit(Player &player)
    m_DebugFontRecordPosition.UnInit();
    delete m_AutoControlBallTexture;
    delete m_RecallBallTexture;
-   for each (std::pair<U32, Texture *> const &controlHistoryBallTexture in m_ControlHistoryBallTextures)
+   for (std::pair<U32, Texture *> const &controlHistoryBallTexture : m_ControlHistoryBallTextures)
    {
       delete controlHistoryBallTexture.second;
    }
@@ -1540,7 +1550,7 @@ void BallHistory::SaveSettings(Player &player)
 
       std::ostringstream autoControlVerticesPosition2D;
       std::ostringstream autoControlVerticesPosition3D;
-      for each (const NormalOptions::AutoControlVertex & acv in m_MenuOptions.m_NormalOptions.m_AutoControlVertices)
+      for (const NormalOptions::AutoControlVertex & acv : m_MenuOptions.m_NormalOptions.m_AutoControlVertices)
       {
          autoControlVerticesPosition3D << acv.m_Position.x << SettingsValueDelimeter << acv.m_Position.y << SettingsValueDelimeter << acv.m_Position.z << SettingsValueDelimeter;
       }
@@ -1671,12 +1681,12 @@ void BallHistory::SaveSettings(Player &player)
       std::ostringstream ballPassOptionsPosition3D;
       std::ostringstream ballPassOptionsRadiusPercent;
       std::ostringstream ballPassOptionsAssociations;
-      for each (const TrainerOptions::BallEndOptionsRecord & bpor in m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords)
+      for (const TrainerOptions::BallEndOptionsRecord & bpor : m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords)
       {
          ballPassOptionsPosition3D << bpor.m_EndPosition.x << SettingsValueDelimeter << bpor.m_EndPosition.y << SettingsValueDelimeter << bpor.m_EndPosition.z << SettingsValueDelimeter;
          ballPassOptionsRadiusPercent << bpor.m_EndRadiusPercent << SettingsValueDelimeter;
          ballPassOptionsAssociations << bpor.m_AssociatedBallStartIndexes.size() << SettingsValueDelimeter;
-         for each (const std::size_t & index in bpor.m_AssociatedBallStartIndexes)
+         for (const std::size_t & index : bpor.m_AssociatedBallStartIndexes)
          {
             ballPassOptionsAssociations << index << SettingsValueDelimeter;
          }
@@ -1692,12 +1702,12 @@ void BallHistory::SaveSettings(Player &player)
       std::ostringstream ballFailOptionsPosition3D;
       std::ostringstream ballFailOptionsRadiusPercent;
       std::ostringstream ballFailOptionsAssociations;
-      for each (const TrainerOptions::BallEndOptionsRecord & bfor in m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords)
+      for (const TrainerOptions::BallEndOptionsRecord & bfor : m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords)
       {
          ballFailOptionsPosition3D << bfor.m_EndPosition.x << SettingsValueDelimeter << bfor.m_EndPosition.y << SettingsValueDelimeter << bfor.m_EndPosition.z << SettingsValueDelimeter;
          ballFailOptionsRadiusPercent << bfor.m_EndRadiusPercent << SettingsValueDelimeter;
          ballFailOptionsAssociations << bfor.m_AssociatedBallStartIndexes.size() << SettingsValueDelimeter;
-         for each (const std::size_t & index in bfor.m_AssociatedBallStartIndexes)
+         for (const std::size_t & index : bfor.m_AssociatedBallStartIndexes)
          {
             ballFailOptionsAssociations << index << SettingsValueDelimeter;
          }
@@ -1756,13 +1766,13 @@ void BallHistory::SaveSettingsDifficultyVariance(Player &player, CSimpleIni &ini
 
 void BallHistory::InitBallsIncreased(Player &player)
 {
-   for each (auto controlVBall in m_ControlVBalls)
+   for (auto controlVBall : m_ControlVBalls)
    {
       std::size_t controlVBallsPreviousIndex = 0;
       std::size_t controlVBallsPreviousInsertIndex = m_ControlVBallsPrevious.size();
       for (; controlVBallsPreviousIndex < m_ControlVBallsPrevious.size(); ++controlVBallsPreviousIndex)
       {
-         const Ball *controlVBallPrevious = m_ControlVBallsPrevious[controlVBallsPreviousIndex];
+         const HitBall *controlVBallPrevious = m_ControlVBallsPrevious[controlVBallsPreviousIndex];
          if (controlVBall < controlVBallPrevious)
          {
             controlVBallsPreviousInsertIndex = controlVBallsPreviousIndex;
@@ -1801,7 +1811,7 @@ void BallHistory::InitBallsIncreased(Player &player)
    }
 
    m_ControlVBallsPrevious.clear();
-   for each (auto controlVBall in m_ControlVBalls)
+   for (auto controlVBall : m_ControlVBalls)
    {
       m_ControlVBallsPrevious.push_back(controlVBall);
    }
@@ -1811,7 +1821,7 @@ void BallHistory::InitBallsDecreased(Player &player)
 {
    for (std::size_t controlVBallsPreviousIndex = 0; controlVBallsPreviousIndex < m_ControlVBallsPrevious.size();)
    {
-      const Ball *controlVBallPrevious = m_ControlVBallsPrevious[controlVBallsPreviousIndex];
+      const HitBall *controlVBallPrevious = m_ControlVBallsPrevious[controlVBallsPreviousIndex];
 
       std::size_t controlVBallIndex = 0;
       for (; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
@@ -1855,7 +1865,7 @@ void BallHistory::InitBallsDecreased(Player &player)
    }
 
    m_ControlVBallsPrevious.clear();
-   for each (auto controlVBall in m_ControlVBalls)
+   for (auto controlVBall : m_ControlVBalls)
    {
       m_ControlVBallsPrevious.push_back(controlVBall);
    }
@@ -1866,9 +1876,9 @@ void BallHistory::InitControlVBalls(Player &player)
    m_ControlVBallsPrevious.resize(m_ControlVBalls.size());
    std::copy(m_ControlVBalls.begin(), m_ControlVBalls.end(), m_ControlVBallsPrevious.begin());
    m_ControlVBalls.clear();
-   for each (Ball * controlVBall in player.m_vball)
+   for (HitBall * controlVBall : player.m_vball)
    {
-      if (!controlVBall->m_d.m_frozen)
+      if (!controlVBall->m_d.m_lockedInKicker)
       {
          m_ControlVBalls.push_back(controlVBall);
       }
@@ -1884,7 +1894,7 @@ void BallHistory::InitControlVBalls(Player &player)
 void BallHistory::InitActiveBallKickers(PinTable &pinTable)
 {
    m_ActiveBallKickers.clear();
-   for each (auto vedit in pinTable.m_vedit)
+   for (auto vedit : pinTable.m_vedit)
    {
       if (vedit && vedit->GetItemType() == ItemTypeEnum::eItemKicker)
       {
@@ -1914,7 +1924,7 @@ void BallHistory::InitActiveBallKickers(PinTable &pinTable)
 void BallHistory::InitFlippers(PinTable &pinTable)
 {
    m_Flippers.clear();
-   for each (auto vedit in pinTable.m_vedit)
+   for (auto vedit : pinTable.m_vedit)
    {
       if (vedit && vedit->GetItemType() == ItemTypeEnum::eItemFlipper)
       {
@@ -2067,7 +2077,7 @@ void BallHistory::DrawBallHistory(Player &player)
       for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < tempCurrentBhr.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
       {
          BallHistoryState &ballHistoryState = tempCurrentBhr.m_BallHistoryStates[ballHistoryStateIndex];
-         Ball *controlVBall = m_ControlVBalls[ballHistoryStateIndex];
+         HitBall *controlVBall = m_ControlVBalls[ballHistoryStateIndex];
 
          if (previousBhr)
          {
@@ -2106,7 +2116,7 @@ void BallHistory::DrawBallHistory(Player &player)
       }
 
       previousBhr = &tempCurrentBhr;
-      for each (const DrawBallHistoryRecord & dbhr in drawBallHistoryRecords)
+      for (const DrawBallHistoryRecord & dbhr : drawBallHistoryRecords)
       {
          if (dbhr.TotalDistancePixelsTraveled >= ControlVerticesDistanceMax)
          {
@@ -2129,7 +2139,7 @@ void BallHistory::DrawBallHistory(Player &player)
          {
             if (tempCurrentIndex == m_CurrentControlIndex)
             {
-               ballHistoryState.m_Texture = player.m_ballImage;
+               ballHistoryState.m_Texture = player.m_renderer->m_ballImage;
             }
             else
             {
@@ -2144,7 +2154,7 @@ void BallHistory::DrawBallHistory(Player &player)
                   if (existingTexture == m_ControlHistoryBallTextures.end())
                   {
                      FIBITMAP *tempFib = FreeImage_AllocateEx(1, 1, 8, &color);
-                     BaseTexture *tempTex = BaseTexture::CreateFromFreeImage(tempFib, false);
+                     BaseTexture *tempTex = BaseTexture::CreateFromFreeImage(tempFib, false, 0);
                      ballHistoryState.m_Texture = new Texture(tempTex);
                      m_ControlHistoryBallTextures.emplace(colorKey, ballHistoryState.m_Texture);
                   }
@@ -2171,9 +2181,9 @@ void BallHistory::DrawBallHistory(Player &player)
    }
 
    // draw the fake balls
-   for each (auto & ballHistoryRecord in m_BallHistoryRecords)
+   for (auto & ballHistoryRecord : m_BallHistoryRecords)
    {
-      for each (auto & ballHistoryState in ballHistoryRecord.m_BallHistoryStates)
+      for (auto & ballHistoryState : ballHistoryRecord.m_BallHistoryStates)
       {
          if (ballHistoryState.m_DrawRadius > 0.0f)
          {
@@ -2211,196 +2221,9 @@ void search_for_nearest_bh(const Vertex3Ds &pos, const vector<Light *> &lights, 
    }
 }
 
-inline float map_bulblight_to_emission_bh(const Light *const l) // magic mapping of bulblight parameters to "real" lightsource emission
-{
-   return l->m_d.m_currentIntensity * clamp(powf(l->m_d.m_falloff * 0.6f, l->m_d.m_falloff_power * 0.6f), 0.f, 23000.f); //!! 0.6f,0.6f = magic, also clamp 23000
-}
-
-void get_ball_aspect_ratio(Player &player, const Vertex3Ds &pos, float radius, Vertex2D &stretch, const float zHeight)
-{
-   // always use lowest detail level for fastest update
-   Vertex3Ds rgvIn[(basicBallLoNumVertices + 1) / 2];
-   Vertex2D rgvOut[(basicBallLoNumVertices + 1) / 2];
-
-   //     rgvIn[0].x = pball->m_pos.x;                    rgvIn[0].y = pball->m_pos.y+pball->m_radius;    rgvIn[0].z = zHeight;
-   //     rgvIn[1].x = pball->m_pos.x + pball->m_radius;  rgvIn[1].y = pball->m_pos.y;                    rgvIn[1].z = zHeight;
-   //     rgvIn[2].x = pball->m_pos.x;                    rgvIn[2].y = pball->m_pos.y - pball->m_radius;  rgvIn[2].z = zHeight;
-   //     rgvIn[3].x = pball->m_pos.x - pball->m_radius;  rgvIn[3].y = pball->m_pos.y;                    rgvIn[3].z = zHeight;
-   //     rgvIn[4].x = pball->m_pos.x;                    rgvIn[4].y = pball->m_pos.y;                    rgvIn[4].z = zHeight + pball->m_radius;
-   //     rgvIn[5].x = pball->m_pos.x;                    rgvIn[5].y = pball->m_pos.y;                    rgvIn[5].z = zHeight - pball->m_radius;
-
-   for (unsigned int i = 0, t = 0; i < basicBallLoNumVertices; i += 2, t++)
-   {
-      rgvIn[t].x = basicBallLo[i].x * radius + pos.x;
-      rgvIn[t].y = basicBallLo[i].y * radius + pos.y;
-      rgvIn[t].z = basicBallLo[i].z * radius + zHeight;
-   }
-
-   player.m_pin3d.m_proj.TransformVertices(rgvIn, nullptr, basicBallLoNumVertices / 2, rgvOut);
-
-   float maxX = -FLT_MAX;
-   float minX = FLT_MAX;
-   float maxY = -FLT_MAX;
-   float minY = FLT_MAX;
-   for (unsigned int i = 0; i < basicBallLoNumVertices / 2; i++)
-   {
-      if (maxX < rgvOut[i].x) maxX = rgvOut[i].x;
-      if (minX > rgvOut[i].x) minX = rgvOut[i].x;
-      if (maxY < rgvOut[i].y) maxY = rgvOut[i].y;
-      if (minY > rgvOut[i].y) minY = rgvOut[i].y;
-   }
-
-   const float midX = maxX - minX;
-   const float midY = maxY - minY;
-   stretch.y = midY / midX;
-   stretch.x = 1.0f; // midX/midY;
-}
-
 void BallHistory::DrawFakeBall(Player &player, const Vertex3Ds &m_pos, float radius, Matrix3 m_orientation, Texture *ballColor)
 {
-   player.m_pin3d.m_pd3dPrimaryDevice->SetRenderStateDepthBias(0.0f);
-   player.m_pin3d.m_pd3dPrimaryDevice->SetRenderState(RenderDevice::BLENDOP, RenderDevice::BLENDOP_ADD);
-   player.m_pin3d.m_pd3dPrimaryDevice->SetRenderStateCulling(RenderDevice::CULL_CCW);
-
-   // collect all lights that can reflect on balls (currently only bulbs and if flag set to do so)
-   vector<Light *> lights;
-   for (size_t i = 0; i < player.m_ptable->m_vedit.size(); i++)
-   {
-      IEditable *const item = player.m_ptable->m_vedit[i];
-      if (item && item->GetItemType() == eItemLight && ((Light *)item)->m_d.m_BulbLight && ((Light *)item)->m_d.m_showReflectionOnBall)
-         lights.push_back((Light *)item);
-   }
-
-   const Material *const playfield_mat = player.m_ptable->GetMaterial(player.m_ptable->m_playfieldMaterial);
-   const vec4 playfield_cBaseF = convertColor(playfield_mat->m_cBase);
-   const float playfield_avg_diffuse = playfield_cBaseF.x * 0.176204f + playfield_cBaseF.y * 0.812985f + playfield_cBaseF.z * 0.0108109f;
-
-   do
-   {
-      float zheight = m_pos.z;
-
-      const float maxz = (radius + player.m_ptable->m_tableheight) + 3.0f;
-      const float minz = (radius + player.m_ptable->m_tableheight) - 0.1f;
-
-      const float inv_tablewidth = 1.0f / (player.m_ptable->m_right - player.m_ptable->m_left);
-      const float inv_tableheight = 1.0f / (player.m_ptable->m_bottom - player.m_ptable->m_top);
-      const vec4 phr(inv_tablewidth, inv_tableheight, player.m_ptable->m_tableheight,
-         player.m_ptable->m_ballPlayfieldReflectionStrength
-         * playfield_avg_diffuse //!! hack: multiply average diffuse from playfield onto strength, as only diffuse lighting is used for reflection
-         * 0.5f                  //!! additional magic correction factor due to everything being wrong in the earlier reflection/lighting implementation
-      );
-      player.m_ballShader->SetVector(SHADER_invTableRes_playfield_height_reflection, &phr);
-
-      if ((zheight > maxz) || (m_pos.z < minz))
-      {
-         // scaling the ball height by the z scale value results in a flying ball over the playfield/ramp
-         // by reducing it with 0.96f (a factor found by trial'n error) the ball is on the ramp again
-         if (player.m_ptable->m_BG_scalez[player.m_ptable->m_BG_current_set] != 1.0f)
-            zheight *= (player.m_ptable->m_BG_scalez[player.m_ptable->m_BG_current_set] * 0.96f);
-      }
-
-      // collect the x nearest lights that can reflect on balls
-      Light *light_nearest[MAX_BALL_LIGHT_SOURCES];
-      search_for_nearest_bh(m_pos, lights, light_nearest);
-
-      struct CLight
-      {
-         float vPos[3];
-         float vEmission[3];
-      };
-      CLight l[MAX_LIGHT_SOURCES + MAX_BALL_LIGHT_SOURCES];
-
-      vec4 emission = convertColor(player.m_ptable->m_Light[0].emission);
-      emission.x *= player.m_ptable->m_lightEmissionScale * player.m_globalEmissionScale;
-      emission.y *= player.m_ptable->m_lightEmissionScale * player.m_globalEmissionScale;
-      emission.z *= player.m_ptable->m_lightEmissionScale * player.m_globalEmissionScale;
-
-      for (unsigned int i2 = 0; i2 < MAX_LIGHT_SOURCES; ++i2)
-      {
-         memcpy(&l[i2].vPos, &player.m_ptable->m_Light[i2].pos, sizeof(float) * 3);
-         memcpy(&l[i2].vEmission, &emission, sizeof(float) * 3);
-      }
-
-      for (unsigned int light_i = 0; light_i < MAX_BALL_LIGHT_SOURCES; ++light_i)
-         if (light_nearest[light_i] != nullptr)
-         {
-            l[light_i + MAX_LIGHT_SOURCES].vPos[0] = light_nearest[light_i]->m_d.m_vCenter.x;
-            l[light_i + MAX_LIGHT_SOURCES].vPos[1] = light_nearest[light_i]->m_d.m_vCenter.y;
-            l[light_i + MAX_LIGHT_SOURCES].vPos[2] = light_nearest[light_i]->m_d.m_meshRadius + light_nearest[light_i]->m_surfaceHeight; //!! z pos
-            const float c = map_bulblight_to_emission_bh(light_nearest[light_i]) * player.m_ptable->m_defaultBulbIntensityScaleOnBall;
-            const vec4 color = convertColor(light_nearest[light_i]->m_d.m_color);
-            l[light_i + MAX_LIGHT_SOURCES].vEmission[0] = color.x * c;
-            l[light_i + MAX_LIGHT_SOURCES].vEmission[1] = color.y * c;
-            l[light_i + MAX_LIGHT_SOURCES].vEmission[2] = color.z * c;
-         }
-         else //!! rather just set the max number of ball lights!?
-         {
-            l[light_i + MAX_LIGHT_SOURCES].vPos[0] = -100000.0f;
-            l[light_i + MAX_LIGHT_SOURCES].vPos[1] = -100000.0f;
-            l[light_i + MAX_LIGHT_SOURCES].vPos[2] = -100000.0f;
-            l[light_i + MAX_LIGHT_SOURCES].vEmission[0] = 0.0f;
-            l[light_i + MAX_LIGHT_SOURCES].vEmission[1] = 0.0f;
-            l[light_i + MAX_LIGHT_SOURCES].vEmission[2] = 0.0f;
-         }
-
-      player.m_ballShader->SetValue("packedLights", l, sizeof(CLight) * (MAX_LIGHT_SOURCES + MAX_BALL_LIGHT_SOURCES));
-
-      // now for a weird hack: make material more rough, depending on how near the nearest lightsource is, to 'emulate' the area of the bulbs (as VP only features point lights so far)
-      float Roughness = 0.8f;
-      if (light_nearest[0] != nullptr)
-      {
-         const float dist = Vertex3Ds(light_nearest[0]->m_d.m_vCenter.x - m_pos.x, light_nearest[0]->m_d.m_vCenter.y - m_pos.y, light_nearest[0]->m_d.m_meshRadius + light_nearest[0]->m_surfaceHeight - m_pos.z).Length(); //!! z pos
-         Roughness = min(max(dist * 0.006f, 0.4f), Roughness);
-      }
-      const vec4 rwem(exp2f(10.0f * Roughness + 1.0f), 0.f, 1.f, 0.05f);
-      player.m_ballShader->SetVector(SHADER_Roughness_WrapL_Edge_Thickness, &rwem);
-
-      // ************************* draw the ball itself ****************************
-      Vertex2D stretch;
-      if (player.m_antiStretchBall && player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] != 0.0f)
-         get_ball_aspect_ratio(player, m_pos, radius, stretch, zheight);
-      else
-         stretch = player.m_BallStretch;
-
-      const vec4 diffuse = convertColor(RGB(0xFF, 0xFF, 0xFF), 1.0f);
-      player.m_ballShader->SetVector(SHADER_cBase_Alpha, &diffuse);
-
-      D3DXMATRIX m(m_orientation.m_d[0][0], m_orientation.m_d[1][0], m_orientation.m_d[2][0], 0.0f,
-         m_orientation.m_d[0][1], m_orientation.m_d[1][1], m_orientation.m_d[2][1], 0.0f,
-         m_orientation.m_d[0][2], m_orientation.m_d[1][2], m_orientation.m_d[2][2], 0.0f,
-         0.f, 0.f, 0.f, 1.f);
-      Matrix3D temp;
-      memcpy(temp.m, m.m, 4 * 4 * sizeof(float));
-      Matrix3D m3D_full;
-      m3D_full.SetScaling(radius * stretch.x, radius * stretch.y, radius);
-      m3D_full.Multiply(temp, m3D_full);
-      temp.SetTranslation(m_pos.x, m_pos.y, zheight);
-      temp.Multiply(m3D_full, m3D_full);
-      memcpy(m.m, m3D_full.m, 4 * 4 * sizeof(float));
-      player.m_ballShader->SetMatrix(SHADER_orientation, &m);
-
-      player.m_ballShader->SetBool(SHADER_disableLighting, player.m_disableLightingForBalls);
-
-      player.m_ballShader->SetTexture(SHADER_Texture0, ballColor, TextureFilter::TEXTURE_MODE_TRILINEAR, false, false, false);
-
-      player.m_ballShader->SetTexture(SHADER_Texture1, &player.m_pin3d.m_pinballEnvTexture, TextureFilter::TEXTURE_MODE_TRILINEAR, false, false, false);
-
-      const bool lowDetailBall = player.m_ptable->GetDetailLevel() < 10;
-
-      player.m_pin3d.m_pd3dPrimaryDevice->SetRenderState(RenderDevice::ZWRITEENABLE, RenderDevice::RS_TRUE);
-
-      if (player.m_cabinetMode)
-         strncpy_s(player.m_ballShaderTechnique, "RenderBall_CabMode", sizeof(player.m_ballShaderTechnique) - 1);
-      else
-         strncpy_s(player.m_ballShaderTechnique, "RenderBall", sizeof(player.m_ballShaderTechnique) - 1);
-
-      player.m_ballShader->SetTechnique(player.m_ballShaderTechnique);
-
-      player.m_ballShader->Begin(0);
-      player.m_pin3d.m_pd3dPrimaryDevice->DrawIndexedPrimitiveVB(RenderDevice::TRIANGLELIST, MY_D3DFVF_NOTEX2_VERTEX, player.m_ballVertexBuffer, 0, lowDetailBall ? basicBallLoNumVertices : basicBallMidNumVertices, player.m_ballIndexBuffer, 0, lowDetailBall ? basicBallLoNumFaces : basicBallMidNumFaces);
-      player.m_ballShader->End();
-
-   } while (0);
+   // TODO GARY Implement
 }
 
 void BallHistory::DrawLine(Player &player, const Vertex3Ds &posA, const Vertex3Ds &posB, D3DCOLOR color)
@@ -2449,10 +2272,10 @@ void BallHistory::DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float i
 void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs)
 {
    Matrix3 orientation;
-   orientation.Identity();
+   orientation.SetIdentity();
    float ballRadius = MenuOptionsRecord::DefaultBallRadius;
 
-   if (Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr)
+   if (HitBall *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr)
    {
       orientation = controlVBall->m_orientation;
       ballRadius = controlVBall->m_d.m_radius;
@@ -2471,7 +2294,7 @@ void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr,
       if (m_MenuOptions.m_NormalOptions.m_RecallControlIndex != NormalOptions::RecallControlIndexDisabled)
       {
          BallHistoryRecord &recallBallHistoryRecord = m_BallHistoryRecords[m_MenuOptions.m_NormalOptions.m_RecallControlIndex];
-         for each (auto & recallBallHistoryState in recallBallHistoryRecord.m_BallHistoryStates)
+         for (auto & recallBallHistoryState : recallBallHistoryRecord.m_BallHistoryStates)
          {
             // TODO GARY Currently the recall ball blinks but is behind the draw history ball
             // figure out a why balls are drawn on top of others, Recall should blink on top
@@ -2678,22 +2501,23 @@ static UINT compute_primitive_count(D3DPRIMITIVETYPE type, const int vertexCount
 void BallHistory::DrawPrimitives(Player &player, std::vector<Vertex3DColor> &vertices, D3DPRIMITIVETYPE type)
 {
    DrawFakeBall(player, Vertex3Ds(), 0.0f, Matrix3(), nullptr);
-   VertexBuffer::m_curVertexBuffer = nullptr;
+   // TODO GARY Fix this
+   //VertexBuffer::m_curVertexBuffer = nullptr;
 
    IDirect3DVertexBuffer9 *vertexBuffer = nullptr;
-   CHECKD3D(VertexBuffer::m_pd3dPrimaryDevice->CreateVertexBuffer(UINT(vertices.size() * sizeof(vertices[0])), USAGE_STATIC, 0, (D3DPOOL)memoryPool::DEFAULT, &vertexBuffer, nullptr));
+   CHECKD3D(player.m_renderer->m_renderDevice->GetCoreDevice()->CreateVertexBuffer(UINT(vertices.size() * sizeof(vertices[0])), D3DUSAGE_WRITEONLY, 0, (D3DPOOL)memoryPool::DEFAULT, &vertexBuffer, nullptr));
    {
       void *buf;
-      CHECKD3D(vertexBuffer->Lock(0, 0, &buf, VertexBuffer::WRITEONLY));
+      CHECKD3D(vertexBuffer->Lock(0, 0, &buf, 0));
       memcpy(buf, vertices.data(), vertices.size() * sizeof(vertices[0]));
       vertexBuffer->Unlock();
 
-      VertexBuffer::m_pd3dPrimaryDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+      player.m_renderer->m_renderDevice->GetCoreDevice()->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 
-      CHECKD3D(VertexBuffer::m_pd3dPrimaryDevice->SetStreamSource(0, vertexBuffer, 0, sizeof(vertices[0])));
+      CHECKD3D(player.m_renderer->m_renderDevice->GetCoreDevice()->SetStreamSource(0, vertexBuffer, 0, sizeof(vertices[0])));
 
-      CHECKD3D(VertexBuffer::m_pd3dPrimaryDevice->SetVertexDeclaration(m_VertexColorDeclaration));
-      CHECKD3D(VertexBuffer::m_pd3dPrimaryDevice->DrawPrimitive((D3DPRIMITIVETYPE)type, 0, compute_primitive_count(type, DWORD(vertices.size()))));
+      CHECKD3D(player.m_renderer->m_renderDevice->GetCoreDevice()->SetVertexDeclaration(m_VertexColorDeclaration));
+      CHECKD3D(player.m_renderer->m_renderDevice->GetCoreDevice()->DrawPrimitive((D3DPRIMITIVETYPE)type, 0, compute_primitive_count(type, DWORD(vertices.size()))));
    }
    SAFE_RELEASE(vertexBuffer);
 }
@@ -2728,7 +2552,7 @@ void BallHistory::DrawTrainerBallCorridorPass(Player &player, TrainerOptions::Ba
 void BallHistory::DrawTrainerBallCorridorOpeningLeft(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor)
 {
    Matrix3 orientation;
-   orientation.Identity();
+   orientation.SetIdentity();
    float passBallRadius = GetDefaultBallRadius();
    float passWidth = passBallRadius * (bcor.m_PassRadiusPercent / 100.0f);
    float openingBallRadius = passBallRadius / 2.0f;
@@ -2756,7 +2580,7 @@ void BallHistory::DrawTrainerBallCorridorOpeningLeft(Player &player, DebugPrintR
 void BallHistory::DrawTrainerBallCorridorOpeningRight(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor)
 {
    Matrix3 orientation;
-   orientation.Identity();
+   orientation.SetIdentity();
    float passBallRadius = GetDefaultBallRadius();
    float passWidth = passBallRadius * (bcor.m_PassRadiusPercent / 100.0f);
    float openingBallRadius = passBallRadius / 2.0f;
@@ -2864,7 +2688,7 @@ void BallHistory::DrawTrainerBallCorridor(Player &player, DebugPrintRecord &dpr)
 void BallHistory::DrawActiveBallKickers(Player &player, DebugPrintRecord &dpr)
 {
    Matrix3 orientation;
-   orientation.Identity();
+   orientation.SetIdentity();
    float ballRadius = GetDefaultBallRadius();
    for (std::size_t activeBallKickerIndex = 0; activeBallKickerIndex < m_ActiveBallKickers.size(); activeBallKickerIndex++)
    {
@@ -2879,8 +2703,8 @@ void BallHistory::DrawActiveBallKickers(Player &player, DebugPrintRecord &dpr)
          int baseKickerTextWidth = dpr.GetTextWidth(baseKickerText.str().c_str());
 
          std::stringstream finalKickerText;
-         int xMax = player.m_width - baseKickerTextWidth;
-         int yMax = player.m_height - dpr.m_DebugFontRecord.m_FontHeight;
+         int xMax = g_pplayer->m_playfieldWnd->GetWidth() - baseKickerTextWidth;
+         int yMax = g_pplayer->m_playfieldWnd->GetHeight() - dpr.m_DebugFontRecord.m_FontHeight;
 
          if (screenPoint.x < 0)
          {
@@ -2938,7 +2762,7 @@ void BallHistory::DrawActiveBallKickers(Player &player, DebugPrintRecord &dpr)
                finalKickerText << "v> " << baseKickerText.str();
                finalKickerTextWidth = dpr.GetTextWidth(finalKickerText.str().c_str());
             }
-            screenPoint.x = player.m_width - finalKickerTextWidth;
+            screenPoint.x = g_pplayer->m_playfieldWnd->GetWidth() - finalKickerTextWidth;
          }
 
          dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
@@ -3372,7 +3196,7 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
 
             for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
             {
-               Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
+               HitBall &controlVBall = *m_ControlVBalls[controlVBallIndex];
                float distance = DistancePixels(bpor.m_EndPosition, controlVBall.m_d.m_pos);
                dpr.ShowText("  Distance Ball %zu = %.2f", controlVBallIndex + 1, distance);
             }
@@ -3433,7 +3257,7 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                dpr.ShowText("  Finish Mode = Distance %.0f%%", bfor.m_EndRadiusPercent);
                for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
                {
-                  Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
+                  HitBall &controlVBall = *m_ControlVBalls[controlVBallIndex];
                   float distance = DistancePixels(bfor.m_EndPosition, controlVBall.m_d.m_pos);
                   dpr.ShowText("  Distance Ball %zu = %.2f", controlVBallIndex + 1, distance);
                }
@@ -3536,7 +3360,7 @@ void BallHistory::ShowRecallBall(Player &player, DebugPrintRecord &dpr)
    {
       dpr.ShowMenuText("Recall Control Index = %zu", m_MenuOptions.m_NormalOptions.m_RecallControlIndex);
       BallHistoryRecord &recallBallHistoryRecord = m_BallHistoryRecords[m_MenuOptions.m_NormalOptions.m_RecallControlIndex];
-      for each (auto & recallBallHistoryState in recallBallHistoryRecord.m_BallHistoryStates)
+      for (auto & recallBallHistoryState : recallBallHistoryRecord.m_BallHistoryStates)
       {
          POINT screenPoint = Get2DPointFrom3D(player, recallBallHistoryState.m_Position);
          dpr.ShowMenuText("Recall Ball %.2f,%.2f,%.2f,%ld,%ld (3x,3y,3z,2x,2y)",
@@ -3585,7 +3409,7 @@ void BallHistory::ShowPreviousRunRecord(DebugPrintRecord &dpr)
       {
       case TrainerOptions::RunRecord::ResultType::ResultType_PassedLocation:
          dpr.ShowMenuText("Pass (Location)");
-         for each (const std::tuple<std::size_t, std::size_t> &startToPassLocationIndex in previousRunRecord.m_StartToPassLocationIndexes)
+         for (const std::tuple<std::size_t, std::size_t> &startToPassLocationIndex : previousRunRecord.m_StartToPassLocationIndexes)
          {
             std::stringstream startToPassLocationIndexes;
             startToPassLocationIndexes << "Start #" << std::get<0>(startToPassLocationIndex) + 1 << " --> Pass #" << std::get<1>(startToPassLocationIndex) + 1;
@@ -3594,7 +3418,7 @@ void BallHistory::ShowPreviousRunRecord(DebugPrintRecord &dpr)
          break;
       case TrainerOptions::RunRecord::ResultType::ResultType_FailedLocation:
          dpr.ShowMenuText("Fail (Location)");
-         for each (const std::tuple<std::size_t, std::size_t> &startToFailLocationIndex in previousRunRecord.m_StartToFailLocationIndexes)
+         for (const std::tuple<std::size_t, std::size_t> &startToFailLocationIndex : previousRunRecord.m_StartToFailLocationIndexes)
          {
             std::stringstream startToFailLocationIndexes;
             startToFailLocationIndexes << "Start #" << std::get<0>(startToFailLocationIndex) + 1 << " --> Fail #" << std::get<1>(startToFailLocationIndex) + 1;
@@ -3816,7 +3640,7 @@ void BallHistory::ShowDescription(DebugPrintRecord &dpr, const std::vector<std::
 {
    dpr.ShowMenuText("");
    dpr.ShowMenuTextTitle("Description");
-   for each (std::string desc in descriptions)
+   for (std::string desc : descriptions)
    {
       dpr.ShowMenuText(desc.c_str());
    }
@@ -4407,8 +4231,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          mousePosition2D.x, mousePosition2D.y);
 
       float ballRadius = GetDefaultBallRadius();
-      S32 heightMinimum = S32(player.m_ptable->m_tableheight + ballRadius);
-      S32 heightMaximum = S32(player.m_ptable->m_glassheight - ballRadius);
+      S32 heightMinimum = S32(player.m_ptable->GetHeight() + ballRadius);
+      S32 heightMaximum = S32(player.m_ptable->m_glassTopHeight - ballRadius);
       m_MenuOptions.m_CreateZ = std::max(std::min(S32(m_MenuOptions.m_CreateZ), heightMaximum), heightMinimum);
       dpr.ShowMenuText("");
       dpr.ShowMenuTextTitle("Ball Height");
@@ -4441,7 +4265,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          for (std::vector<NormalOptions::AutoControlVertex>::iterator autoControlVerticesIt = m_MenuOptions.m_NormalOptions.m_AutoControlVertices.begin(); autoControlVerticesIt < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.end(); autoControlVerticesIt++)
          {
             POINT screenPoint = Get2DPointFrom3D(player, autoControlVerticesIt->m_Position);
-            float checkRadius = std::min(player.m_width, player.m_height) * NormalOptions::ManageAutoControlFindFactor;
+            float checkRadius = std::min(g_pplayer->m_playfieldWnd->GetWidth(), g_pplayer->m_playfieldWnd->GetHeight()) * NormalOptions::ManageAutoControlFindFactor;
             if (DistancePixels(screenPoint, mousePosition2D) < checkRadius)
             {
                m_MenuOptions.m_NormalOptions.m_AutoControlVertices.erase(autoControlVerticesIt);
@@ -5006,6 +4830,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          std::vector<DWORD> totalPassCorridorTimesMs;
          std::vector<DWORD> totalFailCorridorLeftTimesMs;
          std::vector<DWORD> totalFailCorridorRightTimesMs;
+         std::vector<DWORD> totalFailTimeElapsedTimeMs;
          std::vector<DWORD> totalFailKickerTimesMs;
 
          for (std::size_t x = 0; x <= m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord - 1; x++)
@@ -5051,7 +4876,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          ShowResult(dpr, totalFailLocation, totalFailLocationTimesMs, "Fail", "Location");
          ShowResult(dpr, totalFailCorridorLeft, totalFailCorridorLeftTimesMs, "Fail", "Corridor Left");
          ShowResult(dpr, totalFailCorridorRight, totalFailCorridorRightTimesMs, "Fail", "Corridor Right");
-         ShowResult(dpr, totalFailTimeElapsed, std::vector<DWORD>(), "Fail", "Time");
+         ShowResult(dpr, totalFailTimeElapsed, totalFailTimeElapsedTimeMs, "Fail", "Time");
          ShowResult(dpr, totalFailKicker, totalFailKickerTimesMs, "Fail", "Kicker");
       }
       else
@@ -5376,8 +5201,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       dpr.ShowMenuText("Position %.2f,%.2f,%.2f (3x,3y,3z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
 
       float ballRadius = GetDefaultBallRadius();
-      S32 heightMinimum = S32(player.m_ptable->m_tableheight + ballRadius);
-      S32 heightMaximum = S32(player.m_ptable->m_glassheight - ballRadius);
+      S32 heightMinimum = S32(player.m_ptable->GetHeight() + ballRadius);
+      S32 heightMaximum = S32(player.m_ptable->m_glassTopHeight - ballRadius);
       m_MenuOptions.m_CreateZ = std::max(std::min(S32(m_MenuOptions.m_CreateZ), heightMaximum), heightMinimum);
       dpr.ShowMenuText("");
       dpr.ShowMenuText("Ball Height");
@@ -5988,8 +5813,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       }
 
       float ballRadius = GetDefaultBallRadius();
-      S32 heightMinimum = S32(player.m_ptable->m_tableheight + ballRadius);
-      S32 heightMaximum = S32(player.m_ptable->m_glassheight - ballRadius);
+      S32 heightMinimum = S32(player.m_ptable->GetHeight() + ballRadius);
+      S32 heightMaximum = S32(player.m_ptable->m_glassTopHeight - ballRadius);
       m_MenuOptions.m_CreateZ = std::max(std::min(S32(m_MenuOptions.m_CreateZ), heightMaximum), heightMinimum);
       dpr.ShowMenuText("");
       dpr.ShowMenuText("Ball Height");
@@ -6524,8 +6349,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       }
 
       float ballRadius = GetDefaultBallRadius();
-      S32 heightMinimum = S32(player.m_ptable->m_tableheight + ballRadius);
-      S32 heightMaximum = S32(player.m_ptable->m_glassheight - ballRadius);
+      S32 heightMinimum = S32(player.m_ptable->GetHeight() + ballRadius);
+      S32 heightMaximum = S32(player.m_ptable->m_glassTopHeight - ballRadius);
       m_MenuOptions.m_CreateZ = std::max(std::min(S32(m_MenuOptions.m_CreateZ), heightMaximum), heightMinimum);
       dpr.ShowMenuText("");
       dpr.ShowMenuTextTitle("Ball Height");
@@ -6896,8 +6721,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       dpr.ShowMenuText("Position = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
 
       float ballRadius = GetDefaultBallRadius();
-      S32 heightMinimum = S32(player.m_ptable->m_tableheight + ballRadius);
-      S32 heightMaximum = S32(player.m_ptable->m_glassheight - ballRadius);
+      S32 heightMinimum = S32(player.m_ptable->GetHeight() + ballRadius);
+      S32 heightMaximum = S32(player.m_ptable->m_glassTopHeight - ballRadius);
       m_MenuOptions.m_CreateZ = std::max(std::min(S32(m_MenuOptions.m_CreateZ), heightMaximum), heightMinimum);
       dpr.ShowMenuText("");
       dpr.ShowMenuTextTitle("Ball Height");
@@ -6999,8 +6824,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
       dpr.ShowMenuText("Position = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
 
-      S32 heightMinimum = S32(player.m_ptable->m_tableheight);
-      S32 heightMaximum = S32(player.m_ptable->m_glassheight);
+      S32 heightMinimum = S32(player.m_ptable->GetHeight());
+      S32 heightMaximum = S32(player.m_ptable->m_glassTopHeight);
       m_MenuOptions.m_CreateZ = std::max(std::min(S32(m_MenuOptions.m_CreateZ), heightMaximum), heightMinimum);
       dpr.ShowMenuText("");
       dpr.ShowMenuTextTitle("Opening Left Height");
@@ -7062,8 +6887,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
       dpr.ShowMenuText("Position = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
 
-      S32 heightMinimum = S32(player.m_ptable->m_tableheight);
-      S32 heightMaximum = S32(player.m_ptable->m_glassheight);
+      S32 heightMinimum = S32(player.m_ptable->GetHeight());
+      S32 heightMaximum = S32(player.m_ptable->m_glassTopHeight);
       m_MenuOptions.m_CreateZ = std::max(std::min(S32(m_MenuOptions.m_CreateZ), heightMaximum), heightMinimum);
       dpr.ShowMenuText("");
       dpr.ShowMenuTextTitle("Opening Right Height");
@@ -8422,7 +8247,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          }
       }
 
-      player.m_ptable->m_useTrailForBalls = 0;
+      player.m_renderer->m_trailForBalls = 0;
    }
    else if (runElapsedTimeMs < ((m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * S32(OneSecondMs)) + (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * S32(OneSecondMs))))
    {
@@ -8461,7 +8286,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          if (anyVelocityAngularMomentumSet == false)
          {
             m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = false;
-            player.m_ptable->m_useTrailForBalls = m_UseTrailsForBallsInitialValue;
+            player.m_renderer->m_trailForBalls = m_UseTrailsForBallsInitialValue;
          }
       }
 
@@ -8540,7 +8365,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
          std::vector<std::tuple<std::size_t, std::size_t>> startToPassLocationIndexes;
          for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
          {
-            Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
+            HitBall &controlVBall = *m_ControlVBalls[controlVBallIndex];
             bool controlVBallAssociated = false;
             bool anyPassBeor = false;
 
@@ -8625,7 +8450,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
 
          for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
          {
-            Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
+            HitBall &controlVBall = *m_ControlVBalls[controlVBallIndex];
 
             if (failBeor.m_AssociatedBallStartIndexes.find(controlVBallIndex) != failBeor.m_AssociatedBallStartIndexes.end())
             {
@@ -8702,7 +8527,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
             TrainerOptions::RunRecord::ResultType resultType = TrainerOptions::RunRecord::ResultType::ResultType_Unknown;
             for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
             {
-               Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
+               HitBall &controlVBall = *m_ControlVBalls[controlVBallIndex];
                float distanceToPassLine = DistanceToLineSegment(passPositionLeft, passPositionRight, controlVBall.m_d.m_pos);
                if (distanceToPassLine < controlVBall.m_d.m_radius)
                {
@@ -8735,7 +8560,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
             TrainerOptions::RunRecord::ResultType resultType = TrainerOptions::RunRecord::ResultType::ResultType_Unknown;
             for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
             {
-               Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
+               HitBall &controlVBall = *m_ControlVBalls[controlVBallIndex];
 
                float distanceToFailLeft = 0.0f;
                float distanceToFailRight = 0.0f;
@@ -8787,7 +8612,7 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       bool oneKicker = false;
       for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
       {
-         Ball &controlVBall = *m_ControlVBalls[controlVBallIndex];
+         HitBall &controlVBall = *m_ControlVBalls[controlVBallIndex];
          for (std::size_t activeBallKickerIndex = 0; activeBallKickerIndex < m_ActiveBallKickers.size(); activeBallKickerIndex++)
          {
             Vertex3Ds kickerPosition = GetKickerPosition(*m_ActiveBallKickers[activeBallKickerIndex]);
@@ -9001,7 +8826,7 @@ template <class T> void BallHistory::ProcessMenuAction(MenuOptionsRecord::MenuAc
    }
 }
 
-void BallHistory::Add(std::vector<Ball *> &controlVBalls, int currentTimeMs)
+void BallHistory::Add(std::vector<HitBall *> &controlVBalls, int currentTimeMs)
 {
    if (!controlVBalls.empty())
    {
@@ -9032,7 +8857,7 @@ void BallHistory::Add(std::vector<Ball *> &controlVBalls, int currentTimeMs)
       BallHistoryRecord &ballHistoryRecordHead = m_BallHistoryRecords[m_BallHistoryRecordsHeadIndex];
       ballHistoryRecordHead.Set(controlVBalls, currentTimeMs);
 
-      for (std::vector<Ball *>::iterator it = controlVBalls.begin(); it != controlVBalls.end(); ++it)
+      for (std::vector<HitBall *>::iterator it = controlVBalls.begin(); it != controlVBalls.end(); ++it)
       {
          m_MaxBallVelocityPixels = max(VelocityPixels((*it)->m_d.m_vel), m_MaxBallVelocityPixels);
       }
@@ -9081,15 +8906,15 @@ std::size_t BallHistory::GetTailIndex()
 
 float BallHistory::GetDefaultBallRadius()
 {
-   Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr;
+   HitBall *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr;
    return (controlVBall ? controlVBall->m_d.m_radius : MenuOptionsRecord::DefaultBallRadius);
 }
 
 Matrix3 BallHistory::GetDefaultBallOrientation()
 {
    Matrix3 orientation;
-   orientation.Identity();
-   if (Ball *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr)
+   orientation.SetIdentity();
+   if (HitBall *controlVBall = m_ControlVBalls.size() ? m_ControlVBalls[0] : nullptr)
    {
       orientation = controlVBall->m_orientation;
    }
@@ -9186,8 +9011,8 @@ POINT BallHistory::Get2DPointFrom3D(Player &player, const Vertex3Ds &vertex)
 {
    D3DMATRIX viewMatrix;
    D3DMATRIX projectionMatrix;
-   player.m_pin3d.m_pd3dPrimaryDevice->GetTransform(TRANSFORMSTATE_VIEW, &viewMatrix);
-   player.m_pin3d.m_pd3dPrimaryDevice->GetTransform(TRANSFORMSTATE_PROJECTION, &projectionMatrix);
+   player.m_renderer->m_renderDevice->GetCoreDevice()->GetTransform(D3DTS_VIEW, &viewMatrix);
+   player.m_renderer->m_renderDevice->GetCoreDevice()->GetTransform(D3DTS_PROJECTION, &projectionMatrix);
 
    D3DXMATRIX viewProjectionMatrix;
    D3DXVECTOR3 transformedVertex;
@@ -9197,30 +9022,23 @@ POINT BallHistory::Get2DPointFrom3D(Player &player, const Vertex3Ds &vertex)
 
    POINT screenPoint =
    {
-      LONG((transformedVertex.x + 1.0f) * 0.5f * player.m_width),
-      LONG((-transformedVertex.y + 1.0f) * 0.5f * player.m_height)
+      LONG((transformedVertex.x + 1.0f) * 0.5f * g_pplayer->m_playfieldWnd->GetWidth()),
+      LONG((-transformedVertex.y + 1.0f) * 0.5f * g_pplayer->m_playfieldWnd->GetHeight())
    };
 
-   if (player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 180.0f)
+   if (player.m_ptable->mViewSetups[player.m_ptable->m_BG_current_set].mViewportRotation == 180.0f)
    {
-      screenPoint.x = player.m_width - screenPoint.x;
-      screenPoint.y = player.m_height - screenPoint.y;
+      screenPoint.x = g_pplayer->m_playfieldWnd->GetWidth() - screenPoint.x;
+      screenPoint.y = g_pplayer->m_playfieldWnd->GetHeight() - screenPoint.y;
    }
 
    return screenPoint;
 }
 
-Vertex3Ds BallHistory::Get3DPointFrom2D(Pin3D &pin3d, const POINT &p, float heightZ)
+Vertex3Ds BallHistory::Get3DPointFrom2D(const POINT &p, float heightZ)
 {
-   const Vertex3Ds pNear((float)p.x, (float)p.y, pin3d.m_viewPort.MinZ);
-   const Vertex3Ds pFar((float)p.x, (float)p.y, pin3d.m_viewPort.MaxZ);
-   const Vertex3Ds p1 = pin3d.Unproject(pNear);
-   const Vertex3Ds p2 = pin3d.Unproject(pFar);
-   const float wz = heightZ;
-   const float wx = ((wz - p1.z) * (p2.x - p1.x)) / (p2.z - p1.z) + p1.x;
-   const float wy = ((wz - p1.z) * (p2.y - p1.y)) / (p2.z - p1.z) + p1.y;
-   const Vertex3Ds vertex(wx, wy, wz);
-   return vertex;
+   // TODO GARY This is not correct, need to check width/height and add heightZ
+   return g_pplayer->m_renderer->Get3DPointFrom2D(g_pplayer->m_playfieldWnd->GetWidth(), g_pplayer->m_playfieldWnd->GetHeight(), p);
 }
 
 Vertex3Ds BallHistory::Get3DPointFromMousePosition(Player &player, float heightZ)
@@ -9229,7 +9047,7 @@ Vertex3Ds BallHistory::Get3DPointFromMousePosition(Player &player, float heightZ
    POINT mousePosition2D = { 0 };
    if (Get2DMousePosition(player, mousePosition2D, false))
    {
-      point3D = Get3DPointFrom2D(g_pplayer->m_pin3d, mousePosition2D, heightZ);
+      point3D = Get3DPointFrom2D(mousePosition2D, heightZ);
    }
    return point3D;
 }
@@ -9238,12 +9056,12 @@ bool BallHistory::Get2DMousePosition(Player &player, POINT &mousePosition2D, boo
 {
    bool retVal = false;
    if (GetCursorPos(&mousePosition2D) == TRUE &&
-      ScreenToClient(player.m_pininput.m_hwnd, &mousePosition2D) == TRUE)
+      ScreenToClient(player.m_pininput.GetFocusHWnd(), &mousePosition2D) == TRUE)
    {
-      if (correct && player.m_ptable->m_BG_rotation[player.m_ptable->m_BG_current_set] == 180.0f)
+      if (correct && player.m_ptable->mViewSetups[player.m_ptable->m_BG_current_set].mViewportRotation == 180.0f)
       {
-         mousePosition2D.x = player.m_width - mousePosition2D.x;
-         mousePosition2D.y = player.m_height - mousePosition2D.y;
+         mousePosition2D.x = g_pplayer->m_playfieldWnd->GetWidth() - mousePosition2D.x;
+         mousePosition2D.y = g_pplayer->m_playfieldWnd->GetHeight() - mousePosition2D.y;
       }
 
       retVal = true;
@@ -9270,7 +9088,7 @@ Vertex3Ds BallHistory::GetKickerPosition(Kicker &kicker)
 
 void BallHistory::SetFlipperStrength(float flipperStrength)
 {
-   for each (Flipper * flipper in m_Flippers)
+   for (Flipper * flipper : m_Flippers)
    {
       flipper->put_Strength(flipperStrength);
    }
@@ -9289,7 +9107,7 @@ float BallHistory::GetFlipperStrength()
 
 void BallHistory::SetFlipperFriction(float flipperFriction)
 {
-   for each (Flipper * flipper in m_Flippers)
+   for (Flipper * flipper : m_Flippers)
    {
       flipper->put_Friction(flipperFriction);
    }
@@ -9350,11 +9168,11 @@ bool BallHistory::BallChanged()
    return !std::equal(m_ControlVBalls.begin(), m_ControlVBalls.end(), m_ControlVBallsPrevious.begin());
 }
 
-bool BallHistory::BallInsideAutoControlVertex(std::vector<Ball *> &controlVBalls)
+bool BallHistory::BallInsideAutoControlVertex(std::vector<HitBall *> &controlVBalls)
 {
    if (controlVBalls.size())
    {
-      for each (const Ball * controlVBall in controlVBalls)
+      for (const HitBall * controlVBall : controlVBalls)
       {
          for (std::size_t autoControlVertexIndex = 0; autoControlVertexIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); autoControlVertexIndex++)
          {
@@ -9376,7 +9194,7 @@ bool BallHistory::BallInsideAutoControlVertex(std::vector<Ball *> &controlVBalls
          if (!autoControlVertex.Active)
          {
             autoControlVertex.Active = true;
-            for each (const Ball * ball in controlVBalls)
+            for (const HitBall * ball : controlVBalls)
             {
                if (DistancePixels(autoControlVertex.m_Position, ball->m_d.m_pos) < (ball->m_d.m_radius * 3.5f))
                {
@@ -9409,8 +9227,8 @@ std::vector<std::string> BallHistory::Split(const char *str, char delimeter)
 
 void BallHistory::CenterMouse(Player &player)
 {
-   POINT p = { player.m_width / 2, player.m_height / 2 };
-   ClientToScreen(player.m_pininput.m_hwnd, &p);
+   POINT p = { g_pplayer->m_playfieldWnd->GetWidth() / 2, g_pplayer->m_playfieldWnd->GetHeight() / 2 };
+   ClientToScreen(player.m_pininput.GetFocusHWnd(), &p);
    SetCursorPos(p.x, p.y);
 }
 
@@ -9437,5 +9255,4 @@ void BallHistory::StopSound()
 {
    ::PlaySound(NULL, NULL, 0);
 }
-
 // ================================================================================================================================================================================================================================================

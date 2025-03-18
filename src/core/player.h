@@ -161,6 +161,8 @@ static constexpr int regkey_idc[eCKeys] = {
    IDC_BALLHISTORYRECALL
 };
 
+#include "ballhistory.h"
+
 #define MAX_TOUCHREGION 11
 
 static constexpr RECT touchregion[MAX_TOUCHREGION] = { //left,top,right,bottom (in % of screen)
@@ -293,6 +295,8 @@ public:
    HitBall *m_pactiveballDebug = nullptr; // ball the debugger will use as ActiveBall when firing events
    HitBall *m_pactiveballBC = nullptr; // ball that the ball control UI will use
    Vertex3Ds *m_pBCTarget = nullptr; // if non-null, the target location for the ball to roll towards
+
+   BallHistory m_BallHistory;
 
    void FireSyncController();
 

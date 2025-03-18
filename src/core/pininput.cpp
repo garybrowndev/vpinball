@@ -571,7 +571,7 @@ void PinInput::GetInputDeviceData(/*const U32 curr_time_msec*/)
             hr = m_pMouse->GetDeviceState(sizeof(DIMOUSESTATE2), &mouseState);
             if ((hr == S_OK || hr == DI_BUFFEROVERFLOW) && (m_focusHWnd == GetForegroundWindow()))
             {
-               if (!g_pplayer->m_throwBalls && !g_pplayer->m_ballControl)
+               if (!g_pplayer->m_throwBalls && !g_pplayer->m_ballControl && !g_pplayer->m_BallHistory.Control())
                {
                   for (DWORD i = 0; i < 3; i++)
                   {
@@ -1934,7 +1934,7 @@ void PinInput::ProcessKeys(/*const U32 curr_sim_msec,*/ int curr_time_msec) // l
    {
       if (input->dwSequence == APP_MOUSE && g_pplayer && !g_pplayer->m_liveUI->HasMouseCapture())
       {
-         if (!g_pplayer->m_throwBalls && !g_pplayer->m_ballControl)
+         if (!g_pplayer->m_throwBalls && !g_pplayer->m_ballControl && !g_pplayer->m_BallHistory.Control())
          {
             for(int i = 1; i <= 3; ++i)
             {
@@ -2103,6 +2103,10 @@ void PinInput::ProcessKeys(/*const U32 curr_sim_msec,*/ int curr_time_msec) // l
          {
             if (((input->dwData & 0x80) != 0) && g_pvp->m_ptableActive->TournamentModePossible())
                g_pvp->GenerateTournamentFile();
+         }
+         else if (g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, input, curr_time_msec))
+         {
+            // key handled, do nothing
          }
          else
             FireKeyEvent((input->dwData & 0x80) ? DISPID_GameEvents_KeyDown : DISPID_GameEvents_KeyUp, input->dwOfs);

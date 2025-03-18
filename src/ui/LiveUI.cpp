@@ -1592,6 +1592,10 @@ void LiveUI::Update(const int width, const int height)
          }
       }
    }
+   else if (g_pplayer->m_BallHistory.Control())
+   {
+      g_pplayer->m_BallHistory.ProcessMouse(*g_pplayer, tick);
+   }
 
    UpdatePerfOverlay();
 

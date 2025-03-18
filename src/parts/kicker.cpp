@@ -535,6 +535,10 @@ void Kicker::PutCenter(const Vertex2D& pv)
    m_d.m_vCenter = pv;
 }
 
+KickerHitCircle * Kicker::GetKickerHitCircle()
+{
+   return m_phitkickercircle;
+}
 
 HRESULT Kicker::SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool saveForUndo)
 {
@@ -1056,6 +1060,14 @@ float KickerHitCircle::HitTest(const BallS& ball, const float dtime, CollisionEv
 
 // Ported at: VisualPinball.Unity/VisualPinball.Unity/VPT/Kicker/KickerCollider.cs
 
+void KickerHitCircle::Collide(const CollisionEvent& coll)
+{
+   if (!m_collideDisableCollide)
+   {
+      DoCollide(coll.m_ball, coll.m_hitnormal, coll.m_hitflag, false);
+   }
+}
+
 void KickerHitCircle::DoChangeBallVelocity(HitBall *const pball, const Vertex3Ds &hitnormal) const
 {
     float minDist_sqr = FLT_MAX;
@@ -1165,7 +1177,10 @@ void KickerHitCircle::DoCollide(HitBall *const pball, const Vertex3Ds &hitnormal
             if (pball->m_d.m_lockedInKicker)
             {
                pball->m_d.m_vpVolObjs->push_back(m_obj);		// add kicker to ball's volume set
-               m_pHitBall = pball;
+               if (!g_pplayer->m_BallHistory.Control())
+               {
+                  m_pHitBall = pball;
+               }
                m_lastCapturedBall = pball;
                if (pball == g_pplayer->m_pactiveballBC)
                   g_pplayer->m_pactiveballBC = nullptr;

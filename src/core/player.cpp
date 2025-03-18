@@ -164,6 +164,8 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    , m_ptable(live_table)
    , m_scoreviewOutput("Visual Pinball - Score"s, live_table->m_settings, Settings::DMD, "DMD")
    , m_backglassOutput("Visual Pinball - Backglass"s, live_table->m_settings, Settings::Backglass, "Backglass")
+   , m_BallHistory(*m_ptable)
+
 {
    // For the time being, lots of access are made through the global singleton, so ensure we are unique, and define it as soon as needed
    assert(g_pplayer == nullptr);
@@ -718,6 +720,8 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
       PLOGI << "Starting script"; // For profiling
       m_progressDialog.SetProgress("Starting Game Scripts..."s);
 
+      m_BallHistory.Init(*this, 0, true);
+
       m_ptable->m_pcv->Start(); // Hook up to events and start cranking script
 
       // Fire Init event for table object and all 'hitable' parts, also fire Animate event of parts having it since initial setup is considered as the initial animation event
@@ -1023,6 +1027,8 @@ Player::~Player()
    delete m_physics;
    m_physics = nullptr;
 
+   m_BallHistory.UnInit(*this);
+
    for (auto probe : m_ptable->m_vrenderprobe)
       probe->RenderRelease();
    for (auto renderable : m_vhitables)
@@ -1274,6 +1280,8 @@ void Player::ApplyPlayingState(const bool play)
    }
    else
    {
+      m_BallHistory.ResetTrainerRunStartTime();
+
       PauseMusic();
       PLOGI << "Pausing Game";
       if (!IsEditorMode())
@@ -1845,6 +1853,8 @@ void Player::GameLoop(std::function<void()> ProcessOSMessages)
       ProcessOSMessages();
       if (!IsEditorMode())
       {
+         m_BallHistory.Process(*this, (int)(m_startFrameTick / 1000));
+
          m_pininput.ProcessKeys(/*sim_msec,*/ -(int)(m_startFrameTick / 1000)); // Trigger key events to sync with controller
          m_physics->UpdatePhysics(); // Update physics (also triggering events, syncing with controller)
          FireSyncController(); // Trigger script sync event (to sync solenoids back)
