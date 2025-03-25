@@ -2104,7 +2104,7 @@ void PinInput::ProcessKeys(/*const U32 curr_sim_msec,*/ int curr_time_msec) // l
             if (((input->dwData & 0x80) != 0) && g_pvp->m_ptableActive->TournamentModePossible())
                g_pvp->GenerateTournamentFile();
          }
-         else if (g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, input, curr_time_msec))
+         else if (g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, input, curr_time_msec, false))
          {
             // key handled, do nothing
          }

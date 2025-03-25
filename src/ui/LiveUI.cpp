@@ -1592,12 +1592,18 @@ void LiveUI::Update(const int width, const int height)
          }
       }
    }
-   else if (g_pplayer->m_BallHistory.Control())
+   else if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && g_pplayer->m_BallHistory.Control())
    {
       g_pplayer->m_BallHistory.ProcessMouse(*g_pplayer, tick);
    }
 
    UpdatePerfOverlay();
+
+   g_pplayer->m_BallHistory.DrawMenu = true;
+   g_pplayer->m_BallHistory.Process(*g_pplayer, tick);
+   g_pplayer->m_BallHistory.DrawMenu = false;
+
+   g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, nullptr, tick, true);
 
    ImGui::PopFont();
    ImGui::EndFrame();

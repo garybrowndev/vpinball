@@ -929,17 +929,61 @@ Vertex3Ds Renderer::Unproject(const int width, const int height, const Vertex3Ds
    return invMVP * p;
 }
 
-Vertex3Ds Renderer::Get3DPointFrom2D(const int width, const int height, const POINT& p)
+Vertex3Ds Renderer::Get3DPointFrom2D(const int width, const int height, const POINT& p, float z)
 {
    const Vertex3Ds pNear((float)p.x, (float)p.y, 0.f /* MinZ */);
    const Vertex3Ds pFar ((float)p.x, (float)p.y, 1.f /* MaxZ */);
    const Vertex3Ds p1 = Unproject(width, height, pNear);
    const Vertex3Ds p2 = Unproject(width, height, pFar);
-   constexpr float wz = 0.f;
+   const float wz = z;
    const float wx = ((wz - p1.z)*(p2.x - p1.x)) / (p2.z - p1.z) + p1.x;
    const float wy = ((wz - p1.z)*(p2.y - p1.y)) / (p2.z - p1.z) + p1.y;
    return {wx, wy, wz};
 }
+
+POINT Renderer::Get2DPointFrom3D(const int width, const int height, const Vertex3Ds& point3D)
+{
+/*
+    // Get the Model-View-Projection matrix
+    const Matrix3D& mvp = m_mvp->GetModelViewProj(0);
+
+    // Transform the 3D point to 2D
+    Vertex3Ds projectedPoint = mvp * point3D;
+
+    // Perform perspective division
+    if (projectedPoint.z != 0.0f)
+    {
+        projectedPoint.x /= projectedPoint.z;
+        projectedPoint.y /= projectedPoint.z;
+    }
+
+    // Convert normalized device coordinates to screen coordinates
+    POINT point2D;
+    point2D.x = static_cast<LONG>((projectedPoint.x * 0.5f + 0.5f) * width);
+    point2D.y = static_cast<LONG>((1.0f - (projectedPoint.y * 0.5f + 0.5f)) * height);
+
+    return point2D;
+*/
+
+  // First, we need the Model-View-Projection matrix (MVP)
+   Matrix3D mvp = m_mvp->GetModelViewProj(0);
+   
+   // Project the 3D point to the 2D space (normalize and apply MVP transformation)
+   Vertex3Ds projPoint = mvp * point3D;
+
+   // Perform the perspective divide to get normalized 2D coordinates
+   
+   //float w = projPoint.z == 0.0f ? 1.0f : projPoint.z;  // Avoid division by zero
+   //projPoint.x /= w;
+   //projPoint.y /= w;
+
+   // Convert from normalized device coordinates (-1,1) to screen space (0, width) and (0, height)
+   float screenX = (projPoint.x + 1.0f) * 0.5f * static_cast<float>(width);
+   float screenY = (1.0f - projPoint.y) * 0.5f * static_cast<float>(height); // Flip Y-axis
+
+   // Return the 2D screen point
+   return POINT(int(screenX), int(screenY));
+ }
 
 void Renderer::SetupShaders()
 {

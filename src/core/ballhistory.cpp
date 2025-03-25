@@ -69,6 +69,30 @@ void BallHistoryRecord::Insert(const HitBall *controlVBall, std::size_t insertIn
 
 // ================================================================================================================================================================================================================================================
 
+const char *TrainerOptions::BallStartOptionsRecord::ImGuiBallStartLabels[] =
+{
+   "DrawTrainerBallStart00",
+   "DrawTrainerBallStart01",
+   "DrawTrainerBallStart02",
+   "DrawTrainerBallStart03",
+   "DrawTrainerBallStart04",
+   "DrawTrainerBallStart05",
+   "DrawTrainerBallStart06",
+   "DrawTrainerBallStart07",
+   "DrawTrainerBallStart08",
+   "DrawTrainerBallStart09",
+   "DrawTrainerBallStart10",
+   "DrawTrainerBallStart11",
+   "DrawTrainerBallStart12",
+   "DrawTrainerBallStart13",
+   "DrawTrainerBallStart14",
+   "DrawTrainerBallStart15",
+   "DrawTrainerBallStart16",
+   "DrawTrainerBallStart17",
+   "DrawTrainerBallStart18",
+   "DrawTrainerBallStart19",
+};
+
 TrainerOptions::BallStartOptionsRecord::BallStartOptionsRecord() :
    BallStartOptionsRecord(Vertex3Ds(0.0f, 0.0f, 0.0f),
       Vertex3Ds(0.0f, 0.0f, 0.0f),
@@ -104,6 +128,35 @@ bool TrainerOptions::BallStartOptionsRecord::IsZero()
 
 // ================================================================================================================================================================================================================================================
 
+
+const char *TrainerOptions::BallEndOptionsRecord::ImGuiBallPassLabels[] =
+{
+   "DrawTrainerBallPass0",
+   "DrawTrainerBallPass1",
+   "DrawTrainerBallPass2",
+   "DrawTrainerBallPass3",   
+   "DrawTrainerBallPass4",
+   "DrawTrainerBallPass5",
+   "DrawTrainerBallPass6",
+   "DrawTrainerBallPass7",
+   "DrawTrainerBallPass8",
+   "DrawTrainerBallPass9",
+};
+
+const char *TrainerOptions::BallEndOptionsRecord::ImGuiBallFailLabels[] =
+{
+   "DrawTrainerBallFail0",
+   "DrawTrainerBallFail1",
+   "DrawTrainerBallFail2",
+   "DrawTrainerBallFail3",   
+   "DrawTrainerBallFail4",
+   "DrawTrainerBallFail5",
+   "DrawTrainerBallFail6",
+   "DrawTrainerBallFail7",
+   "DrawTrainerBallFail8",
+   "DrawTrainerBallFail9",
+};
+
 const float TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled = -1.0f; // Stop mode is enabled
 
 TrainerOptions::BallEndOptionsRecord::BallEndOptionsRecord() :
@@ -118,6 +171,10 @@ TrainerOptions::BallEndOptionsRecord::BallEndOptionsRecord(const Vertex3Ds &endP
 }
 
 // ================================================================================================================================================================================================================================================
+
+const char * TrainerOptions::BallCorridorOptionsRecord::ImGuiDrawTrainerBallCorridorPassLabel = "DrawTrainerBallCorridorPass";
+const char * TrainerOptions::BallCorridorOptionsRecord::ImGuiDrawTrainerBallCorridorOpeningLeftLabel = "DrawTrainerBallCorridorOpeningLeft";
+const char * TrainerOptions::BallCorridorOptionsRecord::ImGuiDrawTrainerBallCorridorOpeningRightLabel = "DrawTrainerBallCorridorOpeningRight";
 
 TrainerOptions::BallCorridorOptionsRecord::BallCorridorOptionsRecord() :
    BallCorridorOptionsRecord(Vertex3Ds(0.0f, 0.0f, 0.0f),
@@ -201,6 +258,44 @@ TrainerOptions::TrainerOptions() :
 
 // ================================================================================================================================================================================================================================================
 
+const char *NormalOptions::ImGuiDrawAutoControlVertexLabels[] = 
+{
+   "DrawAutoControlVertex0",
+   "DrawAutoControlVertex1",
+   "DrawAutoControlVertex2",
+   "DrawAutoControlVertex3",
+   "DrawAutoControlVertex4",
+   "DrawAutoControlVertex5",
+   "DrawAutoControlVertex6",
+   "DrawAutoControlVertex7",
+   "DrawAutoControlVertex8",
+   "DrawAutoControlVertex9",
+};
+
+const char *NormalOptions::ImGuiDrawRecallVertexLabels[] = 
+{
+   "DrawRecallVertex00",
+   "DrawRecallVertex01",
+   "DrawRecallVertex02",
+   "DrawRecallVertex03",
+   "DrawRecallVertex04",
+   "DrawRecallVertex05",
+   "DrawRecallVertex06",
+   "DrawRecallVertex07",
+   "DrawRecallVertex08",
+   "DrawRecallVertex09",
+   "DrawRecallVertex10",
+   "DrawRecallVertex11",
+   "DrawRecallVertex12",
+   "DrawRecallVertex13",
+   "DrawRecallVertex14",
+   "DrawRecallVertex15",
+   "DrawRecallVertex16",
+   "DrawRecallVertex17",
+   "DrawRecallVertex18",
+   "DrawRecallVertex19",
+};
+
 const float NormalOptions::ManageAutoControlFindFactor = 0.025f;
 
 NormalOptions::NormalOptions() :
@@ -244,136 +339,31 @@ void BallHistory::ProfilerRecord::SetZero()
 
 // ================================================================================================================================================================================================================================================
 
-const char *BallHistory::DebugFontRecord::FontTypeFace = "Lucida Sans Typewriter";
-const int BallHistory::DebugFontRecord::FontHeightDefault = 24;
-const int BallHistory::DebugFontRecord::FontHeightMax = 64;
-const float BallHistory::DebugFontRecord::PlayerTextWidthRatio = 5.5f;
-
-BallHistory::DebugFontRecord::DebugFontRecord() :
-   m_Sprite(nullptr),
-   m_Font(nullptr),
-   m_FontHeight(0)
-{
-}
-
-BallHistory::DebugFontRecord::~DebugFontRecord()
-{
-}
-
-void BallHistory::DebugFontRecord::Init(Player &player)
-{
-   IDirect3DDevice9 *coreDevice = player.m_renderer->m_renderDevice->GetCoreDevice();
-
-   if (FAILED(D3DXCreateSprite(coreDevice, &m_Sprite)))
-   {
-      ShowError("D3DXCreateSprite failed!");
-   }
-
-   m_FontHeight = 1;
-   for (; m_FontHeight < FontHeightMax; m_FontHeight++)
-   {
-      ID3DXFont *tempFont = nullptr;
-      HRESULT hr = D3DXCreateFont(
-         coreDevice,                  //device
-         m_FontHeight,                //font height
-         0,                           //font width
-         FW_BOLD,                     //font weight
-         1,                           //mip levels
-         fFalse,                      //italic
-         DEFAULT_CHARSET,             //charset
-         OUT_DEFAULT_PRECIS,          //output precision
-         DEFAULT_QUALITY,             //quality
-         DEFAULT_PITCH | FF_DONTCARE, //pitch and family
-         "Arial",                     //font name
-         &tempFont                    //font pointer
-      );
-
-      if (FAILED(hr))
-      {
-         ShowError("Unable to create debug font via D3DXCreateFont!");
-         m_FontHeight = FontHeightDefault;
-         break;
-      }
-      else
-      {
-         SIZE size = { 0 };
-         RECT fontRect = { 0 };
-         tempFont->DrawText(m_Sprite, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", -1, &fontRect, DT_CALCRECT, 0xFFFFFFFF);
-         SAFE_RELEASE(tempFont);
-
-         int renderWidth = 0;
-         int renderHeight = 0;
-         player.m_renderer->GetRenderSize(renderWidth, renderHeight);
-         float playerWidthToTextWidthRatio = renderWidth / float(fontRect.right - fontRect.left);
-         if (playerWidthToTextWidthRatio < PlayerTextWidthRatio)
-         {
-            break;
-         }
-      }
-   }
-
-   HRESULT hr = D3DXCreateFont(
-      coreDevice,                  //device
-      m_FontHeight,                //font height
-      0,                           //font width
-      FW_BOLD,                     //font weight
-      1,                           //mip levels
-      fFalse,                      //italic
-      DEFAULT_CHARSET,             //charset
-      OUT_DEFAULT_PRECIS,          //output precision
-      DEFAULT_QUALITY,             //quality
-      DEFAULT_PITCH | FF_DONTCARE, //pitch and family
-      "Arial",                     //font name
-      &m_Font                      //font pointer
-   );
-
-   if (FAILED(hr))
-   {
-      ShowError("Unable to create debug font via D3DXCreateFont!");
-      m_Font = nullptr;
-   }
-}
-
-void BallHistory::DebugFontRecord::UnInit()
-{
-   SAFE_RELEASE(m_Font);
-   SAFE_RELEASE(m_Sprite);
-}
-
-// ================================================================================================================================================================================================================================================
-
 const D3DCOLOR BallHistory::DebugPrintRecord::NormalMenuColor = D3DCOLOR_ARGB(0xFF, 0xD3, 0xD3, 0xD3);
 const D3DCOLOR BallHistory::DebugPrintRecord::SelectedMenuColor = D3DCOLOR_ARGB(0xFF, 0x1E, 0x90, 0xFF); // dodger blue
 const D3DCOLOR BallHistory::DebugPrintRecord::ErrorMenuColor = D3DCOLOR_ARGB(0xFF, 0xFF, 0xCC, 0xCB);
 const float BallHistory::DebugPrintRecord::TextYStepPercent = 0.8f;
 
-BallHistory::DebugPrintRecord::DebugPrintRecord(Player &player, DebugFontRecord &debugFontRecord) :
-   m_Player(player),
-   m_DebugFontRecord(debugFontRecord)
+BallHistory::DebugPrintRecord::DebugPrintRecord(Player &player, const char *name) :
+   m_Player(player)
 {
-   InitTextXY();
-   SetPosition(0.0f, 0.0f);
+   if (BallHistory::DrawMenu)
+   {
+      ImGui::Begin(name, nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoInputs);
+   }
 }
 
-void BallHistory::DebugPrintRecord::SetPosition(float x, float y)
+BallHistory::DebugPrintRecord::~DebugPrintRecord()
 {
-   // input x/y are relative to the table oritentation
-   if (m_Player.m_ptable->mViewSetups[m_Player.m_ptable->m_BG_current_set].mViewportRotation == 270.0f)
+   if (BallHistory::DrawMenu)
    {
-      SetDebugOutputPosition(x, y - DBG_SPRITE_SIZE);
+      ImGui::End();
    }
-   else if (m_Player.m_ptable->mViewSetups[m_Player.m_ptable->m_BG_current_set].mViewportRotation == 90.0f)
-   {
-      SetDebugOutputPosition(x - DBG_SPRITE_SIZE, y);
-   }
-   else if (m_Player.m_ptable->mViewSetups[m_Player.m_ptable->m_BG_current_set].mViewportRotation == 180.0f)
-   {
-      SetDebugOutputPosition(-x + 260, -y - 300);
-   }
-   else
-   {
-      SetDebugOutputPosition(x, y);
-   }
+}
+
+void BallHistory::DebugPrintRecord::SetPosition(int x, int y)
+{
+   SetDebugOutputPosition(float(x), float(y));
 }
 
 void BallHistory::DebugPrintRecord::SetPositionPercent(float x, float y)
@@ -381,28 +371,12 @@ void BallHistory::DebugPrintRecord::SetPositionPercent(float x, float y)
    int renderWidth = 0;
    int renderHeight = 0;
    m_Player.m_renderer->GetRenderSize(renderWidth, renderHeight);
-   // input x/y are relative to the table oritentation
-   if (m_Player.m_ptable->mViewSetups[m_Player.m_ptable->m_BG_current_set].mViewportRotation == 270.0f)
-   {
-      SetPosition(y * renderWidth, renderHeight - (x * renderHeight));
-   }
-   else if (m_Player.m_ptable->mViewSetups[m_Player.m_ptable->m_BG_current_set].mViewportRotation == 90.0f)
-   {
-      SetPosition(renderWidth - (y * renderWidth), x * renderHeight);
-   }
-   else if (m_Player.m_ptable->mViewSetups[m_Player.m_ptable->m_BG_current_set].mViewportRotation == 180.0f)
-   {
-      SetPosition(x * renderWidth, y * renderHeight);
-   }
-   else
-   {
-      SetPosition(x * renderWidth, y * renderHeight);
-   }
+   SetPosition(int(x * renderWidth), int(y * renderHeight));
 }
 
 void BallHistory::DebugPrintRecord::ToggleReverse()
 {
-   m_TextYStep *= -1;
+   assert(0);
 }
 
 int BallHistory::DebugPrintRecord::GetTextWidth(const char *format, ...)
@@ -410,59 +384,24 @@ int BallHistory::DebugPrintRecord::GetTextWidth(const char *format, ...)
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
-
-   RECT fontRect = { 0 };
-   m_DebugFontRecord.m_Font->DrawText(m_DebugFontRecord.m_Sprite, m_StrBuffer, -1, &fontRect, DT_CALCRECT, 0xFFFFFFFF);
-   return fontRect.right - fontRect.left;
+   return int(ImGui::CalcTextSize(m_StrBuffer).x);
 }
 
 void BallHistory::DebugPrintRecord::ShowText(const char *format, ...)
 {
-   int renderWidth = 0;
-   int renderHeight = 0;
-   m_Player.m_renderer->GetRenderSize(renderWidth, renderHeight);
-
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
-
-   int textYStepNext = m_TextY + (2 * m_TextYStep);
-   if (m_Player.m_ptable->mViewSetups[m_Player.m_ptable->m_BG_current_set].mViewportRotation == 270.0f)
-   {
-      if (textYStepNext > renderWidth)
-      {
-         SetPositionPercent(1.00f, 0.00f);
-         JustificationOverflow = JustificationType_Right;
-      }
-   }
-   else if (m_Player.m_ptable->mViewSetups[m_Player.m_ptable->m_BG_current_set].mViewportRotation == 90.0f)
-   {
-      if (textYStepNext > renderWidth)
-      {
-         SetPositionPercent(1.00f, 0.00f);
-         JustificationOverflow = JustificationType_Right;
-      }
-   }
-   else
-   {
-      if (textYStepNext > renderHeight)
-      {
-         SetPositionPercent(1.00f, 0.00f);
-         JustificationOverflow = JustificationType_Right;
-      }
-   }
-
-   DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, JustificationOverflow, NormalMenuColor, m_DebugFontRecord.m_Font);
+   DebugPrint(m_StrBuffer, JustificationType::JustificationType_Center, NormalMenuColor);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuTextLeft(const char *format, ...)
 {
-   m_TextY += m_TextYStep;
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
    std::string tempStr = std::string(m_StrBuffer) + " ";
-   DebugPrint(m_TextX, m_TextY, tempStr.c_str(), JustificationType::JustificationType_CenterLeft, NormalMenuColor, m_DebugFontRecord.m_Font);
+   DebugPrint(tempStr.c_str(), JustificationType::JustificationType_CenterLeft, NormalMenuColor);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuTextRight(const char *format, ...)
@@ -471,7 +410,7 @@ void BallHistory::DebugPrintRecord::ShowMenuTextRight(const char *format, ...)
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
    std::string tempStr = " " + std::string(m_StrBuffer);
-   DebugPrint(m_TextX, m_TextY, tempStr.c_str(), JustificationType::JustificationType_CenterRight, NormalMenuColor, m_DebugFontRecord.m_Font);
+   DebugPrint(tempStr.c_str(), JustificationType::JustificationType_CenterRight, NormalMenuColor);
 }
 
 void BallHistory::DebugPrintRecord::ShowTextPos(int x, int y, const char *format, ...)
@@ -479,7 +418,7 @@ void BallHistory::DebugPrintRecord::ShowTextPos(int x, int y, const char *format
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
-   DebugPrint(x, y, m_StrBuffer, JustificationType::JustificationType_Center, NormalMenuColor, m_DebugFontRecord.m_Font);
+   DebugPrint(m_StrBuffer, JustificationType::JustificationType_Center, NormalMenuColor);
 }
 
 void BallHistory::DebugPrintRecord::ShowTextTitle(const char *format, ...)
@@ -488,7 +427,7 @@ void BallHistory::DebugPrintRecord::ShowTextTitle(const char *format, ...)
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
    std::string tempStr = "-----" + std::string(m_StrBuffer) + "-----";
-   DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), JustificationType::JustificationType_Center, NormalMenuColor, m_DebugFontRecord.m_Font);
+   DebugPrint(tempStr.c_str(), JustificationType::JustificationType_Center, NormalMenuColor);
 }
 
 void BallHistory::DebugPrintRecord::ShowTextWithMenu(bool isMenu, const char *format, ...)
@@ -496,7 +435,7 @@ void BallHistory::DebugPrintRecord::ShowTextWithMenu(bool isMenu, const char *fo
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
-   DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, isMenu ? JustificationType::JustificationType_Center : JustificationType::JustificationType_Left, NormalMenuColor, m_DebugFontRecord.m_Font);
+   DebugPrint(m_StrBuffer, isMenu ? JustificationType::JustificationType_Center : JustificationType::JustificationType_Left, NormalMenuColor);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuText(const char *format, ...)
@@ -504,16 +443,7 @@ void BallHistory::DebugPrintRecord::ShowMenuText(const char *format, ...)
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
-   DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, JustificationType::JustificationType_Center, NormalMenuColor, m_DebugFontRecord.m_Font);
-}
-
-void BallHistory::DebugPrintRecord::ShowMenuTextPos(int x, int y, const char *format, ...)
-{
-   SetPosition(float(x), float(y));
-   va_list formatArgs;
-   va_start(formatArgs, format);
-   vsprintf_s(m_StrBuffer, format, formatArgs);
-   DebugPrint(0, 0, m_StrBuffer, JustificationType::JustificationType_Center, NormalMenuColor, m_DebugFontRecord.m_Font);
+   DebugPrint(m_StrBuffer, JustificationType::JustificationType_Center, NormalMenuColor);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuTextTitle(const char *format, ...)
@@ -522,7 +452,7 @@ void BallHistory::DebugPrintRecord::ShowMenuTextTitle(const char *format, ...)
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
    std::string tempStr = "*****" + std::string(m_StrBuffer) + "*****";
-   DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), JustificationType::JustificationType_Center, NormalMenuColor, m_DebugFontRecord.m_Font);
+   DebugPrint(tempStr.c_str(), JustificationType::JustificationType_Center, NormalMenuColor);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuTextError(const char *format, ...)
@@ -531,7 +461,7 @@ void BallHistory::DebugPrintRecord::ShowMenuTextError(const char *format, ...)
    va_start(formatArgs, format);
    vsprintf_s(m_StrBuffer, format, formatArgs);
    std::string tempStr = "!!!!! ERROR:" + std::string(m_StrBuffer) + "!!!!!";
-   DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), JustificationType::JustificationType_Center, ErrorMenuColor, m_DebugFontRecord.m_Font);
+   DebugPrint(tempStr.c_str(), JustificationType::JustificationType_Center, ErrorMenuColor);
 }
 
 void BallHistory::DebugPrintRecord::ShowMenuTextSelect(bool selected, const char *format, ...)
@@ -542,94 +472,28 @@ void BallHistory::DebugPrintRecord::ShowMenuTextSelect(bool selected, const char
    if (selected)
    {
       std::string tempStr = "-->" + std::string(m_StrBuffer) + "<--";
-      DebugPrint(m_TextX, m_TextY += m_TextYStep, tempStr.c_str(), JustificationType::JustificationType_Center, SelectedMenuColor, m_DebugFontRecord.m_Font);
+      DebugPrint(tempStr.c_str(), JustificationType::JustificationType_Center, SelectedMenuColor);
    }
    else
    {
-      DebugPrint(m_TextX, m_TextY += m_TextYStep, m_StrBuffer, JustificationType::JustificationType_Center, NormalMenuColor, m_DebugFontRecord.m_Font);
+      DebugPrint(m_StrBuffer, JustificationType::JustificationType_Center, NormalMenuColor);
    }
-}
-
-void BallHistory::DebugPrintRecord::InitTextXY()
-{
-   m_TextX = 0;
-   m_TextY = -10;
-   m_TextYStep = int(m_DebugFontRecord.m_FontHeight * TextYStepPercent);
-   memset(m_StrBuffer, 0, sizeof(m_StrBuffer));
-   JustificationOverflow = JustificationType::JustificationType_Left;
 }
 
 void BallHistory::DebugPrintRecord::SetDebugOutputPosition(const float x, const float y)
 {
-   const D3DXVECTOR2 spritePos(x, y);
-   const D3DXVECTOR2 spriteCenter(DBG_SPRITE_SIZE / 2, DBG_SPRITE_SIZE / 2);
-
-   const float angle = ANGTORAD(m_Player.m_ptable->mViewSetups[m_Player.m_ptable->m_BG_current_set].mViewportRotation);
-   D3DXMATRIX mat;
-   D3DXMatrixTransformation2D(&mat, nullptr, 0.0, nullptr, &spriteCenter, angle, &spritePos);
-   m_DebugFontRecord.m_Sprite->SetTransform(&mat);
-
-   InitTextXY();
+   if (BallHistory::DrawMenu)
+   {
+      ImGui::SetWindowPos(ImVec2(x, y));
+   }
+   JustificationOverflow = JustificationType::JustificationType_Left;
 }
 
-void BallHistory::DebugPrintRecord::DebugPrint(int x, int y, LPCSTR text, JustificationType justification, D3DCOLOR color, ID3DXFont *font)
+void BallHistory::DebugPrintRecord::DebugPrint(LPCSTR text, JustificationType justification, D3DCOLOR color)
 {
-   if (font)
+   if (BallHistory::DrawMenu)
    {
-      m_DebugFontRecord.m_Sprite->Begin(D3DXSPRITE_ALPHABLEND | D3DXSPRITE_SORT_TEXTURE);
-      RECT fontRect;
-      SetRect(&fontRect, x, y, 0, 0);
-      font->DrawText(m_DebugFontRecord.m_Sprite, text, -1, &fontRect, DT_CALCRECT, 0xFFFFFFFF);
-
-      switch (justification)
-      {
-      case JustificationType::JustificationType_Center:
-         x = x - (fontRect.right - fontRect.left) / 2;
-         break;
-
-      case JustificationType::JustificationType_CenterLeft:
-         x -= fontRect.right - fontRect.left;
-         break;
-
-      case JustificationType::JustificationType_CenterRight:
-         // do nothing
-         break;
-
-      case JustificationType::JustificationType_Left:
-         x = (x + 5);
-         break;
-
-      case JustificationType::JustificationType_Right:
-         x = (x - 5) - (fontRect.right - fontRect.left);
-         if (text[0] == ' ')
-         {
-            std::string textTemp = text;
-            if (textTemp.find_first_not_of(' ') != std::string::npos)
-            {
-               while (textTemp[0] == ' ')
-               {
-                  textTemp.erase(0, 1);
-                  textTemp.push_back(' ');
-               }
-               memcpy_s((void *)text, strlen(text) * sizeof(*text) + 1, textTemp.c_str(), textTemp.length() + 1);
-            }
-         }
-         break;
-      }
-
-      SetRect(&fontRect, x, y, 0, 0);
-
-      for (unsigned int i = 0; i < 4; ++i)
-      {
-         constexpr int offset = 1;
-         RECT shadowRect;
-         SetRect(&shadowRect, x + ((i == 0) ? -offset : (i == 1) ? offset : 0), y + ((i == 2) ? -offset : (i == 3) ? offset : 0), 0, 0);
-         font->DrawText(m_DebugFontRecord.m_Sprite, text, -1, &shadowRect, DT_NOCLIP, 0xFF000000);
-      }
-
-      font->DrawText(m_DebugFontRecord.m_Sprite, text, -1, &fontRect, DT_NOCLIP, color);
-
-      m_DebugFontRecord.m_Sprite->End();
+      ImGui::TextUnformatted(text);
    }
 }
 
@@ -649,6 +513,8 @@ BallHistory::Vertex3DColor::Vertex3DColor(D3DVALUE xValue, D3DVALUE yValue, D3DV
 }
 
 // ================================================================================================================================================================================================================================================
+
+bool BallHistory::DrawMenu = false;
 
 const int BallHistory::MenuOptionsRecord::SkipKeyPressHoldMs = 2000;
 const int BallHistory::MenuOptionsRecord::SkipKeyIntervalMs = 250;
@@ -676,6 +542,34 @@ BallHistory::MenuOptionsRecord::MenuOptionsRecord() :
 }
 
 // ================================================================================================================================================================================================================================================
+
+const char *BallHistory::ImGuiDrawActiveBallKickersLabels[]
+{
+   "DrawActiveBallKicker00",
+   "DrawActiveBallKicker01",
+   "DrawActiveBallKicker02",
+   "DrawActiveBallKicker03",
+   "DrawActiveBallKicker04",
+   "DrawActiveBallKicker05",
+   "DrawActiveBallKicker06",
+   "DrawActiveBallKicker07",
+   "DrawActiveBallKicker08",
+   "DrawActiveBallKicker09",
+   "DrawActiveBallKicker10",
+   "DrawActiveBallKicker11",
+   "DrawActiveBallKicker12",
+   "DrawActiveBallKicker13",
+   "DrawActiveBallKicker14",
+   "DrawActiveBallKicker15",
+   "DrawActiveBallKicker16",
+   "DrawActiveBallKicker17",
+   "DrawActiveBallKicker18",
+   "DrawActiveBallKicker19",
+};
+
+const char *BallHistory::ImGuiShowStatusLabel = "ShowStatus";
+const char *BallHistory::ImGuiProcessMenuLabel = "ProcessMenu";
+const char *BallHistory::ImGuiProcessModeTrainerLabel = "ProcessModeTrainer";
 
 const D3DVERTEXELEMENT9 BallHistory::VertexColorElement[] =
 {
@@ -756,6 +650,8 @@ const char *BallHistory::TrainerModeBallCorridorOpeningPositionLeft3DKeyName = "
 const char *BallHistory::TrainerModeBallCorridorOpeningPositionRight3DKeyName = "BallCorridorOpeningPositionRight3D";
 
 BallHistory::BallHistory(PinTable &pinTable) :
+   m_PreviousProcessKeysOfs(0),
+   m_PreviousProcessKeysData(0),
    m_ShowStatus(false),
    m_Control(false),
    m_WasControlled(false),
@@ -788,9 +684,6 @@ BallHistory::BallHistory(PinTable &pinTable) :
 
 void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
 {
-   m_DebugFontRecordStatus.Init(player);
-   m_DebugFontRecordMenu.Init(player);
-   m_DebugFontRecordPosition.Init(player);
    SetControl(false);
    m_WasControlled = false;
    m_WasRecalled = false;
@@ -798,7 +691,7 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
    m_CurrentControlIndex = 0;
 
    m_MenuOptions.m_NormalOptions.m_RecallControlIndex = NormalOptions::RecallControlIndexDisabled;
-   m_MenuOptions.m_CreateZ = S32(std::max(player.m_ptable->GetHeight(), std::min(float(m_MenuOptions.m_CreateZ), player.m_ptable->m_glassTopHeight)));
+   m_MenuOptions.m_CreateZ = S32(std::max(0.0f, std::min(float(m_MenuOptions.m_CreateZ), player.m_ptable->m_glassTopHeight)));
 
    m_NextPreviousBy = NextPreviousByDefault;
    m_BallHistoryControlStepMs = BallHistoryControlStepMsDefault;
@@ -905,9 +798,6 @@ void BallHistory::UnInit(Player &player)
    SaveSettings(player);
    m_ActiveBallKickers.clear();
    m_Flippers.clear();
-   m_DebugFontRecordStatus.UnInit();
-   m_DebugFontRecordMenu.UnInit();
-   m_DebugFontRecordPosition.UnInit();
    delete m_AutoControlBallTexture;
    delete m_RecallBallTexture;
    for (std::pair<U32, Texture *> const &controlHistoryBallTexture : m_ControlHistoryBallTextures)
@@ -1037,86 +927,125 @@ void BallHistory::Process(Player &player, int currentTimeMs)
    }
 }
 
-bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA *input, int currentTimeMs)
+bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA *input, int currentTimeMs, bool process)
 {
-   if (input->dwOfs == (DWORD)g_pplayer->m_rgKeys[eBallHistoryMenu])
+   if (input)
    {
-      if (input->dwData & 0x80)
+      m_PreviousProcessKeysOfs = input->dwOfs;
+      m_PreviousProcessKeysData = input->dwData;
+   }
+
+   DWORD dwOfs = m_PreviousProcessKeysOfs;
+   DWORD dwData = m_PreviousProcessKeysData;
+
+   if (process)
+   {
+      m_PreviousProcessKeysOfs = 0;
+      m_PreviousProcessKeysData = 0;
+   }
+
+
+   if (dwOfs == (DWORD)g_pplayer->m_rgKeys[eBallHistoryMenu])
+   {
+      if (dwData & 0x80)
       {
-         ToggleControl();
-         Process(player, currentTimeMs);
+         if (process)
+         {
+            ToggleControl();
+            Process(player, currentTimeMs);
+         }
          return true;
       }
    }
-   if (input->dwOfs == (DWORD)g_pplayer->m_rgKeys[eBallHistoryRecall])
+
+   if (dwOfs == (DWORD)g_pplayer->m_rgKeys[eBallHistoryRecall])
    {
-      if (input->dwData & 0x80)
+      if (dwData & 0x80)
       {
          if (m_Control)
          {
-            m_ShowStatus = !m_ShowStatus;
+            if (process)
+            {
+               m_ShowStatus = !m_ShowStatus;
+            }
             return true;
          }
          else
          {
-            ToggleRecall();
-            Process(player, currentTimeMs);
+            if (process)
+            {
+               ToggleRecall();
+               Process(player, currentTimeMs);
+            }
             return true;
          }
       }
    }
-   else if (m_Control && input->dwOfs == player.m_rgKeys[eLeftFlipperKey])
+   else if (m_Control && dwOfs == player.m_rgKeys[eLeftFlipperKey])
    {
-      if (input->dwData & 0x80)
+      if (dwData & 0x80)
       {
          if (m_Control)
          {
-            ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft, currentTimeMs);
-
-            m_MenuOptions.m_SkipKeyPressed = true;
-            m_MenuOptions.m_SkipKeyPressedMs = currentTimeMs;
-            m_MenuOptions.m_SkipKeyLeft = true;
+            if (process)
+            {
+               ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft, currentTimeMs);
+               m_MenuOptions.m_SkipKeyPressed = true;
+               m_MenuOptions.m_SkipKeyPressedMs = currentTimeMs;
+               m_MenuOptions.m_SkipKeyLeft = true;
+            }
          }
       }
-      else if (input->dwData == 0)
+      else if (dwData == 0)
       {
          if (m_Control)
          {
-            m_MenuOptions.m_SkipKeyPressed = false;
-            m_MenuOptions.m_SkipKeyPressedMs = 0;
+            if (process)
+            {
+               m_MenuOptions.m_SkipKeyPressed = false;
+               m_MenuOptions.m_SkipKeyPressedMs = 0;
+            }
          }
       }
    }
-   else if (m_Control && input->dwOfs == player.m_rgKeys[eRightFlipperKey])
+   else if (m_Control && dwOfs == player.m_rgKeys[eRightFlipperKey])
    {
-      if (input->dwData & 0x80)
+      if (dwData & 0x80)
       {
          if (m_Control)
          {
-            ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_DownRight, currentTimeMs);
-
-            m_MenuOptions.m_SkipKeyPressed = true;
-            m_MenuOptions.m_SkipKeyPressedMs = currentTimeMs;
-            m_MenuOptions.m_SkipKeyLeft = false;
+            if (process)
+            {
+               ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_DownRight, currentTimeMs);
+               m_MenuOptions.m_SkipKeyPressed = true;
+               m_MenuOptions.m_SkipKeyPressedMs = currentTimeMs;
+               m_MenuOptions.m_SkipKeyLeft = false;
+            }
          }
       }
-      else if (input->dwData == 0)
+      else if (dwData == 0)
       {
          if (m_Control)
          {
-            m_MenuOptions.m_SkipKeyPressed = false;
-            m_MenuOptions.m_SkipKeyPressedMs = 0;
+            if (process)
+            {
+               m_MenuOptions.m_SkipKeyPressed = false;
+               m_MenuOptions.m_SkipKeyPressedMs = 0;
+            }
          }
       }
    }
-   else if (input->dwOfs == player.m_rgKeys[ePlungerKey] ||
-      input->dwOfs == player.m_rgKeys[eRightMagnaSave])
+   else if (dwOfs == player.m_rgKeys[ePlungerKey] ||
+      dwOfs == player.m_rgKeys[eRightMagnaSave])
    {
-      if (input->dwData & 0x80)
+      if (dwData & 0x80)
       {
          if (m_Control)
          {
-            ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_Enter, currentTimeMs);
+            if (process)
+            {
+               ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_Enter, currentTimeMs);
+            }
             return true;
          }
       }
@@ -2269,7 +2198,7 @@ void BallHistory::DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float i
    DrawPrimitives(player, vertices, D3DPT_TRIANGLEFAN);
 }
 
-void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs)
+void BallHistory::DrawNormalModeVisuals(Player &player, int currentTimeMs)
 {
    Matrix3 orientation;
    orientation.SetIdentity();
@@ -2288,24 +2217,29 @@ void BallHistory::DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr,
          NormalOptions::AutoControlVertex &acv = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[acvIndex];
          DrawFakeBall(player, acv.m_Position, ballRadius, orientation, m_AutoControlBallTexture);
          POINT screenPoint = Get2DPointFrom3D(player, acv.m_Position);
-         dpr.ShowMenuTextPos(screenPoint.x, screenPoint.y, "%zu", acvIndex + 1);
+         DebugPrintRecord dpr(player, NormalOptions::ImGuiDrawAutoControlVertexLabels[acvIndex]);
+         dpr.SetPosition(screenPoint.x, screenPoint.y);
+         dpr.ShowText("%zu", acvIndex + 1);
       }
 
       if (m_MenuOptions.m_NormalOptions.m_RecallControlIndex != NormalOptions::RecallControlIndexDisabled)
       {
          BallHistoryRecord &recallBallHistoryRecord = m_BallHistoryRecords[m_MenuOptions.m_NormalOptions.m_RecallControlIndex];
-         for (auto & recallBallHistoryState : recallBallHistoryRecord.m_BallHistoryStates)
+         for (std::size_t bhsIndex = 0; bhsIndex < recallBallHistoryRecord.m_BallHistoryStates.size(); bhsIndex++)
          {
             // TODO GARY Currently the recall ball blinks but is behind the draw history ball
             // figure out a why balls are drawn on top of others, Recall should blink on top
+            BallHistoryState &recallBallHistoryState = recallBallHistoryRecord.m_BallHistoryStates[bhsIndex];
             DrawFakeBall(player, recallBallHistoryState.m_Position, ballRadius, orientation, m_RecallBallTexture);
             POINT screenPoint = Get2DPointFrom3D(player, recallBallHistoryState.m_Position);
-            dpr.ShowMenuTextPos(screenPoint.x, screenPoint.y, "RCL");
+            DebugPrintRecord dpr(player, NormalOptions::ImGuiDrawRecallVertexLabels[bhsIndex]);
+            dpr.SetPosition(screenPoint.x, screenPoint.y);
+            dpr.ShowText("RCL");
          }
       }
    }
 
-   DrawActiveBallKickers(player, dpr);
+   DrawActiveBallKickers(player);
 }
 
 void BallHistory::DrawFakeBall(Player &player, Vertex3Ds &position, float radius, Texture &texture, const Vertex3Ds *lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr)
@@ -2543,13 +2477,14 @@ void BallHistory::DrawTrainerBallCorridorPass(Player &player, TrainerOptions::Ba
 
       DrawPrimitives(player, vertices, D3DPT_TRIANGLESTRIP);
 
-      DebugPrintRecord dpr(player, m_DebugFontRecordPosition);
+      DebugPrintRecord dpr(player, TrainerOptions::BallCorridorOptionsRecord::ImGuiDrawTrainerBallCorridorPassLabel);
       POINT screenPoint = Get2DPointFrom3D(player, *position);
-      dpr.ShowMenuTextPos(screenPoint.x, screenPoint.y, "P");
+      dpr.SetPosition(screenPoint.x, screenPoint.y);
+      dpr.ShowText("P");
    }
 }
 
-void BallHistory::DrawTrainerBallCorridorOpeningLeft(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor)
+void BallHistory::DrawTrainerBallCorridorOpeningLeft(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor)
 {
    Matrix3 orientation;
    orientation.SetIdentity();
@@ -2562,7 +2497,9 @@ void BallHistory::DrawTrainerBallCorridorOpeningLeft(Player &player, DebugPrintR
    {
       DrawFakeBall(player, bcor.m_OpeningPositionLeft, openingBallRadius, orientation, m_TrainerBallCorridorOpeningTexture);
       POINT screenPoint = Get2DPointFrom3D(player, bcor.m_OpeningPositionLeft);
-      dpr.ShowMenuTextPos(screenPoint.x, screenPoint.y, "L");
+      DebugPrintRecord dpr(player, TrainerOptions::BallCorridorOptionsRecord::ImGuiDrawTrainerBallCorridorOpeningLeftLabel);
+      dpr.SetPosition(screenPoint.x, screenPoint.y);
+      dpr.ShowText("L");
    }
 
    if (!bcor.m_PassPosition.IsZero() && !bcor.m_OpeningPositionLeft.IsZero())
@@ -2577,7 +2514,7 @@ void BallHistory::DrawTrainerBallCorridorOpeningLeft(Player &player, DebugPrintR
    }
 }
 
-void BallHistory::DrawTrainerBallCorridorOpeningRight(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor)
+void BallHistory::DrawTrainerBallCorridorOpeningRight(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor)
 {
    Matrix3 orientation;
    orientation.SetIdentity();
@@ -2590,7 +2527,9 @@ void BallHistory::DrawTrainerBallCorridorOpeningRight(Player &player, DebugPrint
    {
       DrawFakeBall(player, bcor.m_OpeningPositionRight, openingBallRadius, orientation, m_TrainerBallCorridorOpeningTexture);
       POINT screenPoint = Get2DPointFrom3D(player, bcor.m_OpeningPositionRight);
-      dpr.ShowMenuTextPos(screenPoint.x, screenPoint.y, "R");
+      DebugPrintRecord dpr(player, TrainerOptions::BallCorridorOptionsRecord::ImGuiDrawTrainerBallCorridorOpeningRightLabel);
+      dpr.SetPosition(screenPoint.x, screenPoint.y);
+      dpr.ShowText("R");
    }
 
    if (!bcor.m_PassPosition.IsZero() && !bcor.m_OpeningPositionRight.IsZero())
@@ -2605,7 +2544,7 @@ void BallHistory::DrawTrainerBallCorridorOpeningRight(Player &player, DebugPrint
    }
 }
 
-void BallHistory::DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int currentTimeMs)
+void BallHistory::DrawTrainerModeVisuals(Player &player, int currentTimeMs)
 {
    ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_DrawTrainerBallsUsec);
 
@@ -2622,7 +2561,9 @@ void BallHistory::DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int cu
             DrawFakeBall(player, bsor.m_StartPosition, ballRadius, orientation, m_TrainerBallStartTexture);
             DrawAngleVelocityPreview(player, bsor);
             POINT screenPoint = Get2DPointFrom3D(player, bsor.m_StartPosition);
-            dpr.ShowMenuTextPos(screenPoint.x, screenPoint.y, "S-%zu", bsorIndex + 1);
+            DebugPrintRecord dpr(player, TrainerOptions::BallStartOptionsRecord::ImGuiBallStartLabels[bsorIndex]);
+            dpr.SetPosition(screenPoint.x, screenPoint.y);
+            dpr.ShowText("S-%zu", bsorIndex + 1);
          }
       }
    }
@@ -2640,7 +2581,9 @@ void BallHistory::DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int cu
                DrawIntersectionCircle(player, bpor.m_EndPosition, bpor.m_EndRadiusPercent, IntersectionCircleColor);
             }
             POINT screenPoint = Get2DPointFrom3D(player, bpor.m_EndPosition);
-            dpr.ShowMenuTextPos(screenPoint.x, screenPoint.y, "P-%zu", bporIndex + 1);
+            DebugPrintRecord dpr(player, TrainerOptions::BallEndOptionsRecord::ImGuiBallPassLabels[bporIndex]);
+            dpr.SetPosition(screenPoint.x, screenPoint.y);
+            dpr.ShowText("P-%zu", bporIndex + 1);
          }
       }
    }
@@ -2658,53 +2601,56 @@ void BallHistory::DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int cu
                DrawIntersectionCircle(player, bfor.m_EndPosition, bfor.m_EndRadiusPercent, IntersectionCircleColor);
             }
             POINT screenPoint = Get2DPointFrom3D(player, bfor.m_EndPosition);
-            dpr.ShowMenuTextPos(screenPoint.x, screenPoint.y, "F-%zu", bforIndex + 1);
+            DebugPrintRecord dpr(player, TrainerOptions::BallEndOptionsRecord::ImGuiBallFailLabels[bforIndex]);
+            dpr.SetPosition(screenPoint.x, screenPoint.y);
+            dpr.ShowText("F-%zu", bforIndex + 1);
          }
       }
    }
 
    if (ShouldDrawTrainerBallCorridor(currentTimeMs))
    {
-      DrawTrainerBallCorridor(player, dpr);
+      DrawTrainerBallCorridor(player);
    }
 
    if (ShouldDrawActiveBallKickers(currentTimeMs))
    {
-      DrawActiveBallKickers(player, dpr);
+      DrawActiveBallKickers(player);
    }
 }
 
-void BallHistory::DrawTrainerBallCorridor(Player &player, DebugPrintRecord &dpr)
+void BallHistory::DrawTrainerBallCorridor(Player &player)
 {
    TrainerOptions::BallCorridorOptionsRecord &bcor = m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord;
 
    DrawTrainerBallCorridorPass(player, bcor);
 
-   DrawTrainerBallCorridorOpeningLeft(player, dpr, bcor);
+   DrawTrainerBallCorridorOpeningLeft(player, bcor);
 
-   DrawTrainerBallCorridorOpeningRight(player, dpr, bcor);
+   DrawTrainerBallCorridorOpeningRight(player, bcor);
 }
 
-void BallHistory::DrawActiveBallKickers(Player &player, DebugPrintRecord &dpr)
+void BallHistory::DrawActiveBallKickers(Player &player)
 {
    Matrix3 orientation;
    orientation.SetIdentity();
    float ballRadius = GetDefaultBallRadius();
-   for (std::size_t activeBallKickerIndex = 0; activeBallKickerIndex < m_ActiveBallKickers.size(); activeBallKickerIndex++)
+   for (std::size_t abkIndex = 0; abkIndex < m_ActiveBallKickers.size(); abkIndex++)
    {
-      if (Kicker *kicker = m_ActiveBallKickers[activeBallKickerIndex])
+      if (Kicker *kicker = m_ActiveBallKickers[abkIndex])
       {
          Vertex3Ds kickerPosition = GetKickerPosition(*kicker);
          POINT screenPoint = Get2DPointFrom3D(player, kickerPosition);
-         DebugPrintRecord dpr(player, m_DebugFontRecordPosition);
+         DebugPrintRecord dpr(player, ImGuiDrawActiveBallKickersLabels[abkIndex]);
 
          std::stringstream baseKickerText;
-         baseKickerText << "K-" << (activeBallKickerIndex + 1);
+         baseKickerText << "K-" << (abkIndex + 1);
          int baseKickerTextWidth = dpr.GetTextWidth(baseKickerText.str().c_str());
 
          std::stringstream finalKickerText;
          int xMax = g_pplayer->m_playfieldWnd->GetWidth() - baseKickerTextWidth;
-         int yMax = g_pplayer->m_playfieldWnd->GetHeight() - dpr.m_DebugFontRecord.m_FontHeight;
+         //TODO GARY fix this magic value
+         int yMax = g_pplayer->m_playfieldWnd->GetHeight() - 50;
 
          if (screenPoint.x < 0)
          {
@@ -2765,7 +2711,7 @@ void BallHistory::DrawActiveBallKickers(Player &player, DebugPrintRecord &dpr)
             screenPoint.x = g_pplayer->m_playfieldWnd->GetWidth() - finalKickerTextWidth;
          }
 
-         dpr.SetPosition(float(screenPoint.x), float(screenPoint.y));
+         dpr.SetPosition(screenPoint.x, screenPoint.y);
          dpr.ShowTextPos(0, 0, finalKickerText.str().c_str());
 
          DrawFakeBall(player, kickerPosition, ballRadius, orientation, m_ActiveBallKickerTexture);
@@ -2898,15 +2844,17 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
       return;
    }
 
-   DebugPrintRecord dpr(player, m_DebugFontRecordStatus);
+   DebugPrintRecord dpr(player, ImGuiShowStatusLabel);
    dpr.SetPositionPercent(0.00f, 0.00f);
 
    POINT mousePosition2D = { 0 };
    Get2DMousePosition(player, mousePosition2D);
-   dpr.ShowText("Mouse Position 2D = %ld,%ld (x,y)", mousePosition2D.x, mousePosition2D.y);
+   dpr.ShowText("Mouse Position 2D = %ld,%ld (x,y) (Mouse->Screen)", mousePosition2D.x, mousePosition2D.y);
 
    Vertex3Ds mousePosition3D = Get3DPointFromMousePosition(player, GetDefaultBallRadius());
-   dpr.ShowText("Mouse Position 3D = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
+   dpr.ShowText("Mouse Position 3D = %.2f,%.2f,%.2f (x,y,z) (Screen->3D)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
+   POINT mousePosition2DFrom3D = Get2DPointFrom3D(player, mousePosition3D);
+   dpr.ShowText("Mouse Position 2D = %ld,%ld (x,y) (3D->Screen)", mousePosition2DFrom3D.x, mousePosition2DFrom3D.y);
 
    dpr.ShowText("Ball History Status");
    dpr.ShowText("Process = %.2fms", m_ProfilerRecord.m_ProcessUsec / 1000.0f);
@@ -3833,12 +3781,11 @@ void BallHistory::InitBallStartOptionRecords(DebugPrintRecord &dpr)
 
 // yes i know this is a huuuuge function, so sue me
 // in my defense, this is menu/ui handling and a huge switch statement, which is kinda like many functions
-
 void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs)
 {
    ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_ProcessMenuUsec);
 
-   DebugPrintRecord dpr(player, m_DebugFontRecordMenu);
+   DebugPrintRecord dpr(player, ImGuiProcessMenuLabel);
    dpr.SetPositionPercent(0.50f, 0.25f);
 
    if (!m_MenuOptions.m_MenuError.empty())
@@ -4231,7 +4178,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          mousePosition2D.x, mousePosition2D.y);
 
       float ballRadius = GetDefaultBallRadius();
-      S32 heightMinimum = S32(player.m_ptable->GetHeight() + ballRadius);
+      S32 heightMinimum = S32(ballRadius);
       S32 heightMaximum = S32(player.m_ptable->m_glassTopHeight - ballRadius);
       m_MenuOptions.m_CreateZ = std::max(std::min(S32(m_MenuOptions.m_CreateZ), heightMaximum), heightMinimum);
       dpr.ShowMenuText("");
@@ -4889,8 +4836,9 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Use Plunger to go back to Trainer menu"
          });
 
+      //TODO GART fix hard coded value 0.75f and ToggleReverse
       dpr.SetPositionPercent(0.50f, 1.00f);
-      dpr.ToggleReverse();
+      //dpr.ToggleReverse();
       ShowCurrentRunRecord(dpr, currentTimeMs);
 
       switch (menuAction)
@@ -5201,7 +5149,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       dpr.ShowMenuText("Position %.2f,%.2f,%.2f (3x,3y,3z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
 
       float ballRadius = GetDefaultBallRadius();
-      S32 heightMinimum = S32(player.m_ptable->GetHeight() + ballRadius);
+      S32 heightMinimum = S32(ballRadius);
       S32 heightMaximum = S32(player.m_ptable->m_glassTopHeight - ballRadius);
       m_MenuOptions.m_CreateZ = std::max(std::min(S32(m_MenuOptions.m_CreateZ), heightMaximum), heightMinimum);
       dpr.ShowMenuText("");
@@ -5813,7 +5761,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       }
 
       float ballRadius = GetDefaultBallRadius();
-      S32 heightMinimum = S32(player.m_ptable->GetHeight() + ballRadius);
+      S32 heightMinimum = S32(ballRadius);
       S32 heightMaximum = S32(player.m_ptable->m_glassTopHeight - ballRadius);
       m_MenuOptions.m_CreateZ = std::max(std::min(S32(m_MenuOptions.m_CreateZ), heightMaximum), heightMinimum);
       dpr.ShowMenuText("");
@@ -6349,7 +6297,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       }
 
       float ballRadius = GetDefaultBallRadius();
-      S32 heightMinimum = S32(player.m_ptable->GetHeight() + ballRadius);
+      S32 heightMinimum = S32(ballRadius);
       S32 heightMaximum = S32(player.m_ptable->m_glassTopHeight - ballRadius);
       m_MenuOptions.m_CreateZ = std::max(std::min(S32(m_MenuOptions.m_CreateZ), heightMaximum), heightMinimum);
       dpr.ShowMenuText("");
@@ -6721,7 +6669,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       dpr.ShowMenuText("Position = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
 
       float ballRadius = GetDefaultBallRadius();
-      S32 heightMinimum = S32(player.m_ptable->GetHeight() + ballRadius);
+      S32 heightMinimum = S32(ballRadius);
       S32 heightMaximum = S32(player.m_ptable->m_glassTopHeight - ballRadius);
       m_MenuOptions.m_CreateZ = std::max(std::min(S32(m_MenuOptions.m_CreateZ), heightMaximum), heightMinimum);
       dpr.ShowMenuText("");
@@ -6824,7 +6772,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
       dpr.ShowMenuText("Position = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
 
-      S32 heightMinimum = S32(player.m_ptable->GetHeight());
+      S32 heightMinimum = 0;
       S32 heightMaximum = S32(player.m_ptable->m_glassTopHeight);
       m_MenuOptions.m_CreateZ = std::max(std::min(S32(m_MenuOptions.m_CreateZ), heightMaximum), heightMinimum);
       dpr.ShowMenuText("");
@@ -6887,7 +6835,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
       dpr.ShowMenuText("Position = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
 
-      S32 heightMinimum = S32(player.m_ptable->GetHeight());
+      S32 heightMinimum = 0;
       S32 heightMaximum = S32(player.m_ptable->m_glassTopHeight);
       m_MenuOptions.m_CreateZ = std::max(std::min(S32(m_MenuOptions.m_CreateZ), heightMaximum), heightMinimum);
       dpr.ShowMenuText("");
@@ -7976,10 +7924,10 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
    switch (m_MenuOptions.m_ModeType)
    {
    case MenuOptionsRecord::ModeType::ModeType_Normal:
-      DrawAutoControlVertices(player, dpr, currentTimeMs);
+      DrawNormalModeVisuals(player, currentTimeMs);
       break;
    case MenuOptionsRecord::ModeType::ModeType_Trainer:
-      DrawTrainerBalls(player, dpr, currentTimeMs);
+      DrawTrainerModeVisuals(player, currentTimeMs);
       break;
    case MenuOptionsRecord::ModeType::ModeType_Disabled:
       // do nothing
@@ -8070,9 +8018,10 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       return;
    }
 
-   DebugPrintRecord dpr(player, m_DebugFontRecordMenu);
-   dpr.SetPositionPercent(0.50f, 1.00f);
-   dpr.ToggleReverse();
+   DebugPrintRecord dpr(player, ImGuiProcessModeTrainerLabel);
+   //TODO GARY Fix this hard coded 0.75f value and draw text at bottom of screen
+   dpr.SetPositionPercent(0.50f, 0.75f);
+   //dpr.ToggleReverse();
 
    if (m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs == 0)
    {
@@ -9009,36 +8958,13 @@ bool BallHistory::BallCorridorReadyForTrainer()
 
 POINT BallHistory::Get2DPointFrom3D(Player &player, const Vertex3Ds &vertex)
 {
-   D3DMATRIX viewMatrix;
-   D3DMATRIX projectionMatrix;
-   player.m_renderer->m_renderDevice->GetCoreDevice()->GetTransform(D3DTS_VIEW, &viewMatrix);
-   player.m_renderer->m_renderDevice->GetCoreDevice()->GetTransform(D3DTS_PROJECTION, &projectionMatrix);
-
-   D3DXMATRIX viewProjectionMatrix;
-   D3DXVECTOR3 transformedVertex;
-   D3DXMatrixMultiply(&viewProjectionMatrix, (D3DXMATRIX *)&viewMatrix, (D3DXMATRIX *)&projectionMatrix);
-
-   D3DXVec3TransformCoord(&transformedVertex, (D3DXVECTOR3 *)&vertex, &viewProjectionMatrix);
-
-   POINT screenPoint =
-   {
-      LONG((transformedVertex.x + 1.0f) * 0.5f * g_pplayer->m_playfieldWnd->GetWidth()),
-      LONG((-transformedVertex.y + 1.0f) * 0.5f * g_pplayer->m_playfieldWnd->GetHeight())
-   };
-
-   if (player.m_ptable->mViewSetups[player.m_ptable->m_BG_current_set].mViewportRotation == 180.0f)
-   {
-      screenPoint.x = g_pplayer->m_playfieldWnd->GetWidth() - screenPoint.x;
-      screenPoint.y = g_pplayer->m_playfieldWnd->GetHeight() - screenPoint.y;
-   }
-
-   return screenPoint;
+   return player.m_renderer->Get2DPointFrom3D(player.m_playfieldWnd->GetWidth(), player.m_playfieldWnd->GetHeight(), vertex);
 }
 
 Vertex3Ds BallHistory::Get3DPointFrom2D(const POINT &p, float heightZ)
 {
    // TODO GARY This is not correct, need to check width/height and add heightZ
-   return g_pplayer->m_renderer->Get3DPointFrom2D(g_pplayer->m_playfieldWnd->GetWidth(), g_pplayer->m_playfieldWnd->GetHeight(), p);
+   return g_pplayer->m_renderer->Get3DPointFrom2D(g_pplayer->m_playfieldWnd->GetWidth(), g_pplayer->m_playfieldWnd->GetHeight(), p, heightZ);
 }
 
 Vertex3Ds BallHistory::Get3DPointFromMousePosition(Player &player, float heightZ)
@@ -9069,8 +8995,6 @@ bool BallHistory::Get2DMousePosition(Player &player, POINT &mousePosition2D, boo
    return retVal;
 }
 
-// Generated via ChatGPT (and refactored to fit vpinball style/types) using the prompt:
-// "Write me a function in C++ which converts a 3d vertex in DirectX to screen space x/y coordinate"
 Vertex3Ds BallHistory::GetKickerPosition(Kicker &kicker)
 {
    Vertex3Ds kickerPosition(0.0f, 0.0f, 0.0f);

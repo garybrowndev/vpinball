@@ -170,6 +170,8 @@ public:
 
    struct BallStartOptionsRecord
    {
+      static const char * ImGuiBallStartLabels[];
+
       static const S32 AngleMinimum = 0;
       static const S32 AngleMaximum = 360;
 
@@ -199,6 +201,9 @@ public:
 
    struct BallEndOptionsRecord
    {
+      static const char * ImGuiBallPassLabels[];
+      static const char * ImGuiBallFailLabels[];
+
       static const S32 RadiusPercentMinimum = 1;
       static const S32 RadiusPercentMaximum = 300;
       static const float RadiusPercentDisabled;
@@ -215,6 +220,10 @@ public:
 
    struct BallCorridorOptionsRecord
    {
+      static const char * ImGuiDrawTrainerBallCorridorPassLabel;
+      static const char * ImGuiDrawTrainerBallCorridorOpeningLeftLabel;
+      static const char * ImGuiDrawTrainerBallCorridorOpeningRightLabel;
+
       static const S32 RadiusPercentMinimum = 1;
       static const S32 RadiusPercentMaximum = 300;
 
@@ -384,6 +393,9 @@ public:
       bool Active;
    };
 
+   static const char * ImGuiDrawAutoControlVertexLabels[];
+   static const char * ImGuiDrawRecallVertexLabels[];
+
    static const std::size_t RecallControlIndexDisabled = -1;
    static const std::size_t AutoControlVerticesMax = 256;
 
@@ -404,17 +416,24 @@ public:
 struct BallHistory
 {
 public:
+   //TODO GARY Remove magic/global value
+   static bool DrawMenu;
+
    BallHistory(PinTable &pinTable);
    void Init(Player &player, int currentTimeMs, bool loadSettings);
    void UnInit(Player &player);
    void Process(Player &player, int currentTimeMsec);
-   bool ProcessKeys(Player &player, const DIDEVICEOBJECTDATA *input, int currentTimeMs);
+   bool ProcessKeys(Player &player, const DIDEVICEOBJECTDATA *input, int currentTimeMs, bool process);
    void ProcessMouse(Player &player, int currentTimeMs);
    bool Control();
    void SetControl(bool control);
    void ToggleControl();
    void ToggleRecall();
    void ResetTrainerRunStartTime();
+
+   DWORD m_PreviousProcessKeysOfs;
+   DWORD m_PreviousProcessKeysData;
+
 
 private:
    enum NextPreviousByType
@@ -479,10 +498,11 @@ private:
       static const float TextYStepPercent;
 
       Player &m_Player;
-      DebugFontRecord &m_DebugFontRecord;
 
-      DebugPrintRecord(Player &player, DebugFontRecord &debugFontRecord);
-      void SetPosition(float x, float y);
+      DebugPrintRecord(Player &player, const char * name);
+      virtual ~DebugPrintRecord();
+      void MyShowText(const char * text, float x, float y);
+      void SetPosition(int x, int y);
       void SetPositionPercent(float x, float y);
       void ToggleReverse();
       int GetTextWidth(const char *format, ...);
@@ -493,21 +513,16 @@ private:
       void ShowTextTitle(const char *format, ...);
       void ShowTextWithMenu(bool isMenu, const char *format, ...);
       void ShowMenuText(const char *format, ...);
-      void ShowMenuTextPos(int x, int y, const char *format, ...);
       void ShowMenuTextTitle(const char *format, ...);
       void ShowMenuTextError(const char *format, ...);
       void ShowMenuTextSelect(bool selected, const char *format, ...);
 
    private:
-      int m_TextX;
-      int m_TextY;
-      int m_TextYStep;
       char m_StrBuffer[1024];
       JustificationType JustificationOverflow;
 
-      void InitTextXY();
       void SetDebugOutputPosition(const float x, const float y);
-      void DebugPrint(int x, int y, LPCSTR text, JustificationType justification, D3DCOLOR color, ID3DXFont *font);
+      void DebugPrint(LPCSTR text, JustificationType justification, D3DCOLOR color);
    };
 
    struct Vertex3DColor
@@ -635,6 +650,11 @@ private:
       MenuOptionsRecord();
    };
 
+   static const char * ImGuiDrawActiveBallKickersLabels[];
+   static const char * ImGuiShowStatusLabel;
+   static const char * ImGuiProcessMenuLabel;
+   static const char * ImGuiProcessModeTrainerLabel;
+
    static const D3DVERTEXELEMENT9 VertexColorElement[];
 
    static const std::size_t OneSecondMs;
@@ -717,10 +737,6 @@ private:
 
    ProfilerRecord m_ProfilerRecord;
 
-   DebugFontRecord m_DebugFontRecordStatus;
-   DebugFontRecord m_DebugFontRecordMenu;
-   DebugFontRecord m_DebugFontRecordPosition;
-
    bool m_ShowStatus;
    bool m_Control;
    bool m_WasControlled;
@@ -772,7 +788,7 @@ private:
    void DrawFakeBall(Player &player, const Vertex3Ds &m_pos, float radius, Matrix3 m_orientation, Texture *ballColor);
    void DrawLine(Player &player, const Vertex3Ds &posA, const Vertex3Ds &posB, D3DCOLOR color);
    void DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float intersectionRadius, D3DCOLOR color);
-   void DrawAutoControlVertices(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
+   void DrawNormalModeVisuals(Player &player, int currentTimeMs);
    void DrawFakeBall(Player &player, Vertex3Ds &position, float radius, Texture &texture, const Vertex3Ds *lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr);
    void DrawFakeBall(Player &player, Vertex3Ds &position, Texture &texture, const Vertex3Ds *lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr);
    bool ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs);
@@ -782,11 +798,11 @@ private:
    bool ShouldDrawActiveBallKickers(int currentTimeMs);
    void DrawPrimitives(Player &player, std::vector<Vertex3DColor> &vertices, D3DPRIMITIVETYPE type);
    void DrawTrainerBallCorridorPass(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor, Vertex3Ds *overridePosition = nullptr);
-   void DrawTrainerBallCorridorOpeningLeft(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor);
-   void DrawTrainerBallCorridorOpeningRight(Player &player, DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor);
-   void DrawTrainerBalls(Player &player, DebugPrintRecord &dpr, int currentTimeMs);
-   void DrawTrainerBallCorridor(Player &player, DebugPrintRecord &dpr);
-   void DrawActiveBallKickers(Player &player, DebugPrintRecord &dpr);
+   void DrawTrainerBallCorridorOpeningLeft(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor);
+   void DrawTrainerBallCorridorOpeningRight(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor);
+   void DrawTrainerModeVisuals(Player &player, int currentTimeMs);
+   void DrawTrainerBallCorridor(Player &player);
+   void DrawActiveBallKickers(Player &player);
    void DrawAngleVelocityPreviewHelperAdd(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angle, float velocity, float radius);
    void DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angleStep, float velocityStep, float radius);
    void DrawAngleVelocityPreview(Player &player, TrainerOptions::BallStartOptionsRecord &bsor);
