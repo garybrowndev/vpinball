@@ -18,7 +18,7 @@ struct BallHistoryState
    unsigned int m_RingCounter_OldPos;
 
    float m_DrawRadius;
-   Texture *m_Texture;
+   DWORD m_Color;
 
    BallHistoryState();
 };
@@ -436,6 +436,18 @@ public:
 
 
 private:
+
+   enum Color
+   {
+      Black = 0x00000000,
+      Blue = 0x00FF0000,
+      Green = 0x0000FF00,
+      Red = 0x0000000FF,
+      Yellow = 0x0000FFFF,
+      White = 0x00FFFFFF,
+      Purple = 0x00800080
+   };
+
    enum NextPreviousByType
    {
       eTimeMs,
@@ -675,8 +687,6 @@ private:
 
    static const int DrawBallBlinkMs;
 
-   static const D3DCOLOR IntersectionCircleColor;
-
    static const char *SettingsFileExtension;
    static const char *SettingsFolderName;
    static const char SettingsValueDelimeter;
@@ -752,17 +762,21 @@ private:
    std::size_t m_BallHistoryRecordsSize;
    float m_MaxBallVelocityPixels;
 
+   std::map<std::string, CComObject<Ball>*> m_DrawnBalls;
+   std::map<std::string, CComObject<Light>*> m_DrawnIntersectionCircles;
+   std::map<std::string, CComObject<Rubber>*> m_DrawnLines;
+
    IDirect3DVertexDeclaration9 *m_VertexColorDeclaration;
 
-   Texture *m_AutoControlBallTexture;
-   Texture *m_RecallBallTexture;
-   Texture *m_TrainerBallStartTexture;
-   Texture *m_TrainerBallPassTexture;
-   Texture *m_TrainerBallFailTexture;
-   Texture *m_TrainerBallCorridorPassTexture;
-   Texture *m_TrainerBallCorridorOpeningTexture;
-   Texture *m_ActiveBallKickerTexture;
-   std::map<U32, Texture *> m_ControlHistoryBallTextures;
+   DWORD m_AutoControlBallColor;
+   DWORD m_RecallBallColor;
+   DWORD m_TrainerBallStartColor;
+   DWORD m_TrainerBallPassColor;
+   DWORD m_TrainerBallFailColor;
+   DWORD m_TrainerBallCorridorPassColor;
+   DWORD m_TrainerBallCorridorOpeningWallColor;
+   DWORD m_TrainerBallCorridorOpeningEndColor;
+   DWORD m_ActiveBallKickerColor;
 
    int m_UseTrailsForBallsInitialValue;
 
@@ -785,19 +799,19 @@ private:
    void ControlPrev();
    void ResetBallHistoryRenderSizes();
    void DrawBallHistory(Player &player);
-   void DrawFakeBall(Player &player, const Vertex3Ds &m_pos, float radius, Matrix3 m_orientation, Texture *ballColor);
-   void DrawLine(Player &player, const Vertex3Ds &posA, const Vertex3Ds &posB, D3DCOLOR color);
-   void DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float intersectionRadius, D3DCOLOR color);
+   void DrawFakeBall(Player &player, const char * name, const Vertex3Ds &m_pos, float radius, DWORD color);
+   void DrawFakeBall(Player &player, const char * name, Vertex3Ds &position, float radius, DWORD color, const Vertex3Ds *lineEndPosition, DWORD lineColor, int lineThickness, DebugPrintRecord &dpr);
+   void DrawFakeBall(Player &player, const char * name, Vertex3Ds &position, DWORD color, const Vertex3Ds *lineEndPosition, DWORD lineColor, int lineThickness, DebugPrintRecord &dpr);
+   void DrawLine(Player &player, const char * name, const Vertex3Ds &positionA, const Vertex3Ds &positionB, DWORD color, int thickness);
+   void DrawIntersectionCircle(Player &player, const char * name, Vertex3Ds &position, float intersectionRadius, DWORD color);
    void DrawNormalModeVisuals(Player &player, int currentTimeMs);
-   void DrawFakeBall(Player &player, Vertex3Ds &position, float radius, Texture &texture, const Vertex3Ds *lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr);
-   void DrawFakeBall(Player &player, Vertex3Ds &position, Texture &texture, const Vertex3Ds *lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr);
+   void ClearDraws(Player &player);
    bool ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallPasses(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallFails(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallCorridor(int currentTimeMs);
    bool ShouldDrawActiveBallKickers(int currentTimeMs);
-   void DrawPrimitives(Player &player, std::vector<Vertex3DColor> &vertices, D3DPRIMITIVETYPE type);
-   void DrawTrainerBallCorridorPass(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor, Vertex3Ds *overridePosition = nullptr);
+   void DrawTrainerBallCorridorPass(Player &player, const char * name, TrainerOptions::BallCorridorOptionsRecord &bcor, Vertex3Ds *overridePosition = nullptr);
    void DrawTrainerBallCorridorOpeningLeft(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor);
    void DrawTrainerBallCorridorOpeningRight(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor);
    void DrawTrainerModeVisuals(Player &player, int currentTimeMs);

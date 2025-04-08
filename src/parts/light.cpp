@@ -213,7 +213,7 @@ void Light::UIRenderPass2(Sur * const psur)
 
 void Light::RenderOutline(Sur * const psur)
 {
-   psur->SetBorderColor(RGB(0, 0, 0), false, 0);
+  psur->SetBorderColor(RGB(0, 0, 0), false, 0);
    psur->SetLineColor(RGB(0, 0, 0), false, 0);
    psur->SetFillColor(-1);
    psur->SetObject(this);
@@ -390,7 +390,7 @@ void Light::RenderSetup(RenderDevice *device)
 
    m_iblinkframe = 0;
 
-   m_initSurfaceHeight = m_ptable->GetSurfaceHeight(m_d.m_szSurface, m_d.m_vCenter.x, m_d.m_vCenter.y);
+   m_initSurfaceHeight = m_overrideSurfaceHeight ? m_overrideSurfaceHeight : m_ptable->GetSurfaceHeight(m_d.m_szSurface, m_d.m_vCenter.x, m_d.m_vCenter.y);
    m_surfaceMaterial = m_ptable->GetSurfaceMaterial(m_d.m_szSurface);
    m_surfaceTexture = m_ptable->GetSurfaceImage(m_d.m_szSurface);
 

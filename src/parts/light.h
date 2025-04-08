@@ -157,6 +157,7 @@ public:
    double m_currentFilamentTemperature;
    float m_surfaceHeight;
    bool  m_lockedByLS = false;
+   float m_overrideSurfaceHeight = 0.0f;
 
 private:
    class LightCenter final : public ISelect

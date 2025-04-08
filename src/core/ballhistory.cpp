@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <numeric>
 #include <random>
+#include <array>
 
 #include "freeimage.h"
 
@@ -22,7 +23,7 @@ BallHistoryState::BallHistoryState() :
    m_Orientation(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f),
    m_RingCounter_OldPos(0),
    m_DrawRadius(0.0f),
-   m_Texture(nullptr)
+   m_Color(0x00000000)
 {
    ZeroMemory(&m_OldPos, sizeof(m_OldPos));
 }
@@ -596,8 +597,6 @@ const float BallHistory::DrawAngleVelocityHeightOffset = 2.0f;
 
 const int BallHistory::DrawBallBlinkMs = 200;
 
-const D3DCOLOR BallHistory::IntersectionCircleColor = D3DCOLOR_ARGB(0xFF, 0x00, 0x00, 0xFF);
-
 const char *BallHistory::SettingsFileExtension = "ini";
 const char *BallHistory::SettingsFolderName = "BallHistory";
 const char BallHistory::SettingsValueDelimeter = ',';
@@ -664,14 +663,15 @@ BallHistory::BallHistory(PinTable &pinTable) :
    m_BallHistoryRecordsSize(0),
    m_MaxBallVelocityPixels(0.0f),
    m_VertexColorDeclaration(nullptr),
-   m_AutoControlBallTexture(nullptr),
-   m_RecallBallTexture(nullptr),
-   m_TrainerBallStartTexture(nullptr),
-   m_TrainerBallPassTexture(nullptr),
-   m_TrainerBallFailTexture(nullptr),
-   m_TrainerBallCorridorPassTexture(nullptr),
-   m_TrainerBallCorridorOpeningTexture(nullptr),
-   m_ActiveBallKickerTexture(nullptr),
+   m_AutoControlBallColor(Color::Black),
+   m_RecallBallColor(Color::Blue),
+   m_TrainerBallStartColor(Color::Blue),
+   m_TrainerBallPassColor(Color::Green),
+   m_TrainerBallFailColor(Color::Red),
+   m_TrainerBallCorridorPassColor(Color::Green),
+   m_TrainerBallCorridorOpeningWallColor(Color::Red),
+   m_TrainerBallCorridorOpeningEndColor(Color::Black),
+   m_ActiveBallKickerColor(Color::Purple),
    m_UseTrailsForBallsInitialValue(0)
 {
    m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyInitial = S32(pinTable.GetGlobalDifficulty());
@@ -701,70 +701,6 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
    m_BallHistoryRecordsSize = 0;
    m_BallHistoryRecordsHeadIndex = 0;
    m_MaxBallVelocityPixels = 0.0f;
-
-   if (!m_AutoControlBallTexture)
-   {
-      RGBQUAD color = { 0x00, 0x00, 0x00, 0x00 }; // black
-      FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
-      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false, 0);
-      m_AutoControlBallTexture = new Texture(ballTex);
-   }
-
-   if (!m_RecallBallTexture)
-   {
-      RGBQUAD color = { 0xFF, 0x00, 0x00, 0x00 }; // blue
-      FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
-      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false, 0);
-      m_RecallBallTexture = new Texture(ballTex);
-   }
-
-   if (!m_TrainerBallStartTexture)
-   {
-      RGBQUAD color = { 0xFF, 0x00, 0x00, 0x00 }; // blue
-      FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
-      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false, 0);
-      m_TrainerBallStartTexture = new Texture(ballTex);
-   }
-
-   if (!m_TrainerBallPassTexture)
-   {
-      RGBQUAD color = { 0x00, 0xFF, 0x00, 0x00 }; // green
-      FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
-      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false, 0);
-      m_TrainerBallPassTexture = new Texture(ballTex);
-   }
-
-   if (!m_TrainerBallFailTexture)
-   {
-      RGBQUAD color = { 0x00, 0x00, 0xFF, 0x00 }; // red
-      FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
-      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false, 0);
-      m_TrainerBallFailTexture = new Texture(ballTex);
-   }
-
-   if (!m_TrainerBallCorridorPassTexture)
-   {
-      RGBQUAD color = { 0x00, 0xFF, 0xFF, 0x00 }; // yellow
-      FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
-      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false, 0);
-      m_TrainerBallCorridorPassTexture = new Texture(ballTex);
-   }
-
-   if (!m_TrainerBallCorridorOpeningTexture)
-   {
-      RGBQUAD color = { 0x00, 0x00, 0x00, 0x00 }; // black
-      FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
-      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false, 0);
-      m_TrainerBallCorridorOpeningTexture = new Texture(ballTex);
-   }
-
-   if (!m_ActiveBallKickerTexture)
-   {
-      RGBQUAD color = { 0xFF, 0xFF, 0xFF, 0x00 }; // white
-      FIBITMAP *ballFib = FreeImage_AllocateEx(1, 1, 8, &color);
-      BaseTexture *ballTex = BaseTexture::CreateFromFreeImage(ballFib, false, 0);
-      m_ActiveBallKickerTexture = new Texture(ballTex);
-   }
 
    if (m_SettingsFilePath.empty() == true)
    {
@@ -798,18 +734,6 @@ void BallHistory::UnInit(Player &player)
    SaveSettings(player);
    m_ActiveBallKickers.clear();
    m_Flippers.clear();
-   delete m_AutoControlBallTexture;
-   delete m_RecallBallTexture;
-   for (std::pair<U32, Texture *> const &controlHistoryBallTexture : m_ControlHistoryBallTextures)
-   {
-      delete controlHistoryBallTexture.second;
-   }
-   delete m_TrainerBallStartTexture;
-   delete m_TrainerBallPassTexture;
-   delete m_TrainerBallFailTexture;
-   delete m_TrainerBallCorridorPassTexture;
-   delete m_TrainerBallCorridorOpeningTexture;
-   delete m_ActiveBallKickerTexture;
    SAFE_RELEASE(m_VertexColorDeclaration);
 }
 
@@ -1066,6 +990,8 @@ bool BallHistory::Control()
 
 void BallHistory::SetControl(bool control)
 {
+   ClearDraws(*g_pplayer);
+
    if (m_Control != control)
    {
       m_Control = control;
@@ -1999,6 +1925,7 @@ void BallHistory::DrawBallHistory(Player &player)
 
    ResetBallHistoryRenderSizes();
 
+   std::size_t drawLineIndex = 0;
    // get total of ball history records to draw and fill in size
    while (tempCurrentIndex != tailIndex && !anyMaxDistanceTraveled)
    {
@@ -2031,7 +1958,8 @@ void BallHistory::DrawBallHistory(Player &player)
             ballHistoryState.m_DrawRadius = currentDrawRadius;
             drawBallHistoryRecords[ballHistoryStateIndex].LastDrawnBallHistoryRecord = &tempCurrentBhr;
             drawBallHistoryRecords[ballHistoryStateIndex].TotalToRender++;
-            DrawLine(player, ballHistoryState.m_Position, lastDrawnPos, D3DCOLOR_ARGB(0x00, 0xFF, 0xFF, 0xFF));
+            std::string drawLineName = "DrawBallHistoryLine" + std::to_string(drawLineIndex++);
+            DrawLine(player, drawLineName.c_str(), ballHistoryState.m_Position, lastDrawnPos, m_AutoControlBallColor, 10);
          }
       }
 
@@ -2068,7 +1996,7 @@ void BallHistory::DrawBallHistory(Player &player)
          {
             if (tempCurrentIndex == m_CurrentControlIndex)
             {
-               ballHistoryState.m_Texture = player.m_renderer->m_ballImage;
+               ballHistoryState.m_Color = 0x00000000;
             }
             else
             {
@@ -2077,20 +2005,7 @@ void BallHistory::DrawBallHistory(Player &player)
                   unsigned char red = (unsigned char)(0xFF - drawBallCount * 0xFF / drawBallHistoryRecords[ballHistoryStateIndex].TotalToRender);
                   unsigned char blue = (unsigned char)(drawBallCount * 0xFF / drawBallHistoryRecords[ballHistoryStateIndex].TotalToRender);
 
-                  RGBQUAD color = { blue, 0x00, red, 0 };
-                  U32 colorKey = *(U32 *)&color;
-                  std::map<U32, Texture *>::iterator existingTexture = m_ControlHistoryBallTextures.find(colorKey);
-                  if (existingTexture == m_ControlHistoryBallTextures.end())
-                  {
-                     FIBITMAP *tempFib = FreeImage_AllocateEx(1, 1, 8, &color);
-                     BaseTexture *tempTex = BaseTexture::CreateFromFreeImage(tempFib, false, 0);
-                     ballHistoryState.m_Texture = new Texture(tempTex);
-                     m_ControlHistoryBallTextures.emplace(colorKey, ballHistoryState.m_Texture);
-                  }
-                  else
-                  {
-                     ballHistoryState.m_Texture = existingTexture->second;
-                  }
+                  ballHistoryState.m_Color = 0x00 << 24 | blue << 16 | 0x00 << 8 | red;
 
                   drawBallCount++;
                }
@@ -2110,92 +2025,225 @@ void BallHistory::DrawBallHistory(Player &player)
    }
 
    // draw the fake balls
+   std::size_t ballHistoryRecordIndex = 0;
    for (auto & ballHistoryRecord : m_BallHistoryRecords)
    {
       for (auto & ballHistoryState : ballHistoryRecord.m_BallHistoryStates)
       {
          if (ballHistoryState.m_DrawRadius > 0.0f)
          {
-            DrawFakeBall(player, ballHistoryState.m_Position, ballHistoryState.m_DrawRadius, ballHistoryState.m_Orientation, ballHistoryState.m_Texture);
+            std::string drawBallHistoryFakeBallName = "DrawBallHistoryBall" + std::to_string(ballHistoryRecordIndex++);
+            DrawFakeBall(player, drawBallHistoryFakeBallName.c_str(), ballHistoryState.m_Position, ballHistoryState.m_DrawRadius, ballHistoryState.m_Color);
          }
       }
    }
 }
 
-void search_for_nearest_bh(const Vertex3Ds &pos, const vector<Light *> &lights, Light *light_nearest[MAX_BALL_LIGHT_SOURCES])
+void BallHistory::DrawFakeBall(Player &player, const char * name, const Vertex3Ds &position, float radius, DWORD color)
 {
-   for (unsigned int l = 0; l < MAX_BALL_LIGHT_SOURCES; ++l)
+   CComObject<Ball>* drawnBall = nullptr;
+   auto findIt = m_DrawnBalls.find(name);
+   if (findIt == m_DrawnBalls.end())
    {
-      float min_dist = FLT_MAX;
-      light_nearest[l] = nullptr;
-      for (size_t i = 0; i < lights.size(); ++i)
-      {
-         bool already_processed = false;
-         for (unsigned int i2 = 0; i2 < MAX_BALL_LIGHT_SOURCES - 1; ++i2)
-            if (l > i2 && light_nearest[i2] == lights[i]) {
-               already_processed = true;
-               break;
-            }
-         if (already_processed)
-            continue;
+      CComObject<Ball>::CreateInstance(&drawnBall);
+      drawnBall->AddRef();
+      drawnBall->Init(player.m_ptable, 0.0f, 0.0f, false, false);
+      drawnBall->RenderSetup(player.m_renderer->m_renderDevice);
+      m_DrawnBalls[name] = drawnBall;
+   }
+   else
+   {
+      drawnBall = m_DrawnBalls[name];
+   }
+   
+   drawnBall->m_hitBall.m_d.m_pos = {position.x, position.y, position.z};
+   drawnBall->m_hitBall.m_d.m_mass = 1.0f;
+   drawnBall->m_hitBall.m_d.m_radius = radius;
+   drawnBall->m_hitBall.m_d.m_vel.SetZero();
+   drawnBall->m_d.m_useTableRenderSettings = true;
+   drawnBall->put_Color(color);
+   player.m_vhitables.push_back(drawnBall);
+}
 
-         const float dist = Vertex3Ds(lights[i]->m_d.m_vCenter.x - pos.x, lights[i]->m_d.m_vCenter.y - pos.y, lights[i]->m_d.m_meshRadius + lights[i]->m_surfaceHeight - pos.z).LengthSquared(); //!! z pos
-         //const float contribution = map_bulblight_to_emission(lights[i]) / dist; // could also weight in light color if necessary //!! JF didn't like that, seems like only distance is a measure better suited for the human eye
-         if (dist < min_dist)
-         {
-            min_dist = dist;
-            light_nearest[l] = lights[i];
-         }
-      }
+void BallHistory::DrawFakeBall(Player &player, const char * name, Vertex3Ds &position, float radius, DWORD ballColor, const Vertex3Ds *lineEndPosition, DWORD lineColor, int lineThickness, DebugPrintRecord &dpr)
+{
+   float ballRadius = radius == 0.0f ? GetDefaultBallRadius() : radius;
+
+   DrawFakeBall(player, name, position, ballRadius, ballColor);
+   if (lineEndPosition)
+   {
+      std::string drawLineName = std::string(name) + "Line";
+      DrawLine(player, drawLineName.c_str(), position, *lineEndPosition, lineColor, lineThickness);
    }
 }
 
-void BallHistory::DrawFakeBall(Player &player, const Vertex3Ds &m_pos, float radius, Matrix3 m_orientation, Texture *ballColor)
+void BallHistory::DrawFakeBall(Player &player, const char * name, Vertex3Ds &position, DWORD ballColor, const Vertex3Ds *lineEndPosition, DWORD lineColor, int lineThickness, DebugPrintRecord &dpr)
 {
-   // TODO GARY Implement
+   DrawFakeBall(player, name, position, 0.0f, ballColor, lineEndPosition, lineColor, lineThickness, dpr);
 }
 
-void BallHistory::DrawLine(Player &player, const Vertex3Ds &posA, const Vertex3Ds &posB, D3DCOLOR color)
-{
-   if (!posA.IsZero() && !posB.IsZero())
-   {
-      std::vector<Vertex3DColor> vertices;
-      vertices.push_back({ posA.x, posA.y, posA.z, color });
-      vertices.push_back({ posB.x, posB.y, posB.z, color });
+const float PI = 3.14159265358979323846f;
 
-      DrawPrimitives(player, vertices, D3DPT_LINELIST);
+struct Vec3 {
+    float x, y, z;
+
+    Vec3 operator-(const Vec3& other) const {
+        return {x - other.x, y - other.y, z - other.z};
+    }
+
+    Vec3 operator+(const Vec3& other) const {
+        return {x + other.x, y + other.y, z + other.z};
+    }
+
+    Vec3 operator*(float scalar) const {
+        return {x * scalar, y * scalar, z * scalar};
+    }
+
+    float length() const {
+        return std::sqrt(x*x + y*y + z*z);
+    }
+
+    Vec3 normalize() const {
+        float len = length();
+        if (len == 0) return {0, 0, 0};
+        return {x / len, y / len, z / len};
+    }
+};
+
+// Returns yaw (rotation around Y-axis) and pitch (rotation around X-axis) in radians
+std::array<float, 2> computeRotationAngles(const Vec3& X, float R, const Vec3& A, const Vec3& B, const Vec3& C, const Vec3& D) {
+    Vec3 AB = (A - X).normalize(); // direction vector from X through A
+    Vec3 CD = (C - X).normalize(); // direction vector from X through C
+
+    // To rotate AB to CD, we need to compute the relative rotation
+    // One way is to find the rotation matrix or directly the rotation angles
+
+    // Convert direction vectors to spherical coordinates (theta, phi)
+    auto toSpherical = [](const Vec3& v) -> std::array<float, 2> {
+        float theta = std::atan2(v.z, v.x); // azimuth/yaw
+        float phi = std::asin(v.y);         // elevation/pitch
+        return {theta, phi};
+    };
+
+    auto [yaw1, pitch1] = toSpherical(AB);
+    auto [yaw2, pitch2] = toSpherical(CD);
+
+    float deltaYaw = yaw2 - yaw1;
+    float deltaPitch = pitch2 - pitch1;
+
+    return {deltaYaw, deltaPitch};
+}
+
+void BallHistory::DrawLine(Player &player, const char * name, const Vertex3Ds &posA, const Vertex3Ds &posB, DWORD color, int thickness)
+{
+   std::string imageColorName = "BallHistoryDrawLineRed" + std::to_string(color);
+   Texture *colorTexture = player.m_ptable->GetImage(imageColorName);
+   if (colorTexture == nullptr)
+   {
+      FIBITMAP *dib = FreeImage_Allocate(1, 1, 24);
+
+      RGBQUAD singleColor = {0};
+      singleColor.rgbBlue = (color >> 16) & 0xFF;
+      singleColor.rgbGreen = (color >> 8) & 0xFF;
+      singleColor.rgbRed = color & 0xFF;
+      singleColor.rgbReserved = 0;
+
+      FreeImage_SetPixelColor(dib, 0, 0, &singleColor);
+
+      player.m_ptable->ImportFreeImage(dib, imageColorName);
+   }
+
+   Vertex3Ds midpoint = { (posA.x + posB.x) / 2.0f, (posA.y + posB.y) / 2.0f, (posA.z + posB.z) / 2.0f };
+   float lineLength = BallHistory::DistancePixels(posA, posB);
+   if (lineLength == 0.0f)
+   {
+      return;
+   }
+
+   CComObject<Rubber>* drawnLine = nullptr;
+   auto findIt = m_DrawnLines.find(name);
+   if (findIt == m_DrawnLines.end())
+   {
+      CComObject<Rubber>::CreateInstance(&drawnLine);
+      drawnLine->AddRef();
+      drawnLine->Init(player.m_ptable, 0.0f, 0.0f, false, true);
+      drawnLine->RenderSetup(player.m_renderer->m_renderDevice);
+      m_DrawnLines[name] = drawnLine;
+   }
+   else
+   {
+      drawnLine = m_DrawnLines[name];
+   }
+
+   if (drawnLine)
+   {
+      drawnLine->RenderRelease();
+      drawnLine->ClearForOverwrite();
+
+      drawnLine->AddDragPoint({midpoint.x - (lineLength / 2.0f), midpoint.y, midpoint.z});
+      drawnLine->AddDragPoint({midpoint.x + (lineLength / 2.0f), midpoint.y, midpoint.z});
+
+      drawnLine->m_d.m_height = midpoint.z;
+      drawnLine->m_d.m_thickness = thickness;
+      drawnLine->m_d.m_staticRendering = false;
+      drawnLine->m_d.m_szImage = imageColorName;
+
+      auto [yaw, pitch] = computeRotationAngles(
+         {midpoint.x, midpoint.y, midpoint.z},
+         BallHistory::DistancePixels(posA, posB),
+         {midpoint.x - (lineLength / 2.0f), midpoint.y, midpoint.z},
+         {midpoint.x + (lineLength / 2.0f), midpoint.y, midpoint.z},
+         {posA.x, posA.y, posA.z},
+         {posB.x, posB.y, posB.z}
+       );
+
+      //POINT mousePosition2D = { 0 };
+      //Get2DMousePosition(player, mousePosition2D);
+
+      //drawnLine->m_d.m_rotX = 40.0f;
+      drawnLine->m_d.m_rotY = yaw * (180.0f / PI) * -1;
+      drawnLine->m_d.m_rotZ = pitch * (180.0f / PI) * -1;
+
+      drawnLine->RenderSetup(player.m_renderer-> m_renderDevice);
+
+      player.m_vhitables.push_back(drawnLine);
    }
 }
 
-void BallHistory::DrawIntersectionCircle(Player &player, Vertex3Ds &pos, float intersectionRadiusPercent, D3DCOLOR color)
+void BallHistory::DrawIntersectionCircle(Player &player, const char * name, Vertex3Ds &position, float intersectionRadiusPercent, DWORD color)
 {
-   static const std::size_t NumTriangles = 36;
-
-   float ballRadius = GetDefaultBallRadius();
-   float intersectionRadius = ballRadius * intersectionRadiusPercent / 100.0f;
-
-   float heightZ = intersectionRadius >= ballRadius ? pos.z : pos.z + ballRadius;
-
-   std::vector<Vertex3DColor> vertices;
-   vertices.push_back({ pos.x, pos.y, heightZ, color });
-
-   float angleStep = (2.0f * float(M_PI)) / NumTriangles;
-   float currentAngle = 0.0f;
-   for (std::size_t triangleIndex = 0; triangleIndex < NumTriangles; triangleIndex++)
+   CComObject<Light>* drawnIntersectionCircle = nullptr;
+   auto findIt = m_DrawnIntersectionCircles.find(name);
+   if (findIt == m_DrawnIntersectionCircles.end())
    {
-      currentAngle += angleStep;
-      vertices.push_back(
-         {
-            pos.x + intersectionRadius * std::cosf(currentAngle),
-            pos.y + intersectionRadius * std::sinf(currentAngle),
-            heightZ,
-            color
-         });
+      CComObject<Light>::CreateInstance(&drawnIntersectionCircle);
+      drawnIntersectionCircle->AddRef();
+      drawnIntersectionCircle->Init(player.m_ptable, 0.0f, 0.0f, false, true);
+      drawnIntersectionCircle->RenderSetup(player.m_renderer->m_renderDevice);
+      m_DrawnIntersectionCircles[name] = drawnIntersectionCircle;
    }
+   else
+   {
+      drawnIntersectionCircle = m_DrawnIntersectionCircles[name];
+   }
+   if (drawnIntersectionCircle)
+   {
+      drawnIntersectionCircle->RenderRelease();
+      drawnIntersectionCircle->Init(player.m_ptable, position.x, position.y, false, true);
 
-   vertices.push_back(vertices[1]);
+      drawnIntersectionCircle->ClearForOverwrite();
+      float ballRadius = GetDefaultBallRadius();
+      float intersectionRadius = ballRadius * intersectionRadiusPercent / 100.0f;
+      drawnIntersectionCircle->m_d.m_falloff = intersectionRadius;
+      drawnIntersectionCircle->InitShape();
 
-   DrawPrimitives(player, vertices, D3DPT_TRIANGLEFAN);
+      drawnIntersectionCircle->m_overrideSurfaceHeight = position.z - ballRadius;
+      drawnIntersectionCircle->put_Color(color);
+
+      drawnIntersectionCircle->RenderSetup(player.m_renderer-> m_renderDevice);
+
+      player.m_vhitables.push_back(drawnIntersectionCircle);
+   }
 }
 
 void BallHistory::DrawNormalModeVisuals(Player &player, int currentTimeMs)
@@ -2215,7 +2263,8 @@ void BallHistory::DrawNormalModeVisuals(Player &player, int currentTimeMs)
       for (std::size_t acvIndex = 0; acvIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); acvIndex++)
       {
          NormalOptions::AutoControlVertex &acv = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[acvIndex];
-         DrawFakeBall(player, acv.m_Position, ballRadius, orientation, m_AutoControlBallTexture);
+         std::string autoControlFakeBallName = "AutoControlBall" + std::to_string(acvIndex);
+         DrawFakeBall(player, autoControlFakeBallName.c_str(), acv.m_Position, ballRadius, m_AutoControlBallColor);
          POINT screenPoint = Get2DPointFrom3D(player, acv.m_Position);
          DebugPrintRecord dpr(player, NormalOptions::ImGuiDrawAutoControlVertexLabels[acvIndex]);
          dpr.SetPosition(screenPoint.x, screenPoint.y);
@@ -2227,10 +2276,9 @@ void BallHistory::DrawNormalModeVisuals(Player &player, int currentTimeMs)
          BallHistoryRecord &recallBallHistoryRecord = m_BallHistoryRecords[m_MenuOptions.m_NormalOptions.m_RecallControlIndex];
          for (std::size_t bhsIndex = 0; bhsIndex < recallBallHistoryRecord.m_BallHistoryStates.size(); bhsIndex++)
          {
-            // TODO GARY Currently the recall ball blinks but is behind the draw history ball
-            // figure out a why balls are drawn on top of others, Recall should blink on top
             BallHistoryState &recallBallHistoryState = recallBallHistoryRecord.m_BallHistoryStates[bhsIndex];
-            DrawFakeBall(player, recallBallHistoryState.m_Position, ballRadius, orientation, m_RecallBallTexture);
+            std::string recallBallFakeBallName = "RecallBall" + std::to_string(bhsIndex);
+            DrawFakeBall(player, recallBallFakeBallName.c_str(), recallBallHistoryState.m_Position, ballRadius, m_RecallBallColor);
             POINT screenPoint = Get2DPointFrom3D(player, recallBallHistoryState.m_Position);
             DebugPrintRecord dpr(player, NormalOptions::ImGuiDrawRecallVertexLabels[bhsIndex]);
             dpr.SetPosition(screenPoint.x, screenPoint.y);
@@ -2242,21 +2290,55 @@ void BallHistory::DrawNormalModeVisuals(Player &player, int currentTimeMs)
    DrawActiveBallKickers(player);
 }
 
-void BallHistory::DrawFakeBall(Player &player, Vertex3Ds &position, float radius, Texture &texture, const Vertex3Ds *lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr)
+void BallHistory::ClearDraws(Player &player)
 {
-   float ballRadius = radius == 0.0f ? GetDefaultBallRadius() : radius;
-   Matrix3 orientation = GetDefaultBallOrientation();
-
-   DrawFakeBall(player, position, ballRadius, orientation, &texture);
-   if (lineEndPosition)
+   for (auto drawnBall : m_DrawnBalls)
    {
-      DrawLine(player, position, *lineEndPosition, lineColor);
+      for (std::size_t hitableIndex = 0; hitableIndex < player.m_vhitables.size(); )
+      {
+         Hitable *hitable = player.m_vhitables[hitableIndex];
+         if (hitable == drawnBall.second)
+         {
+            player.m_vhitables.erase(player.m_vhitables.begin() + hitableIndex);
+         }
+         else
+         {
+            hitableIndex++;
+         }
+      }
    }
-}
 
-void BallHistory::DrawFakeBall(Player &player, Vertex3Ds &position, Texture &texture, const Vertex3Ds *lineEndPosition, D3DCOLOR lineColor, DebugPrintRecord &dpr)
-{
-   DrawFakeBall(player, position, 0.0f, texture, lineEndPosition, lineColor, dpr);
+   for (auto drawnIntersectionCircle : m_DrawnIntersectionCircles)
+   {
+      for (std::size_t hitableIndex = 0; hitableIndex < player.m_vhitables.size(); )
+      {
+         Hitable *hitable = player.m_vhitables[hitableIndex];
+         if (hitable == drawnIntersectionCircle.second)
+         {
+            player.m_vhitables.erase(player.m_vhitables.begin() + hitableIndex);
+         }
+         else
+         {
+            hitableIndex++;
+         }
+      }
+   }
+
+   for (auto drawnLines : m_DrawnLines)
+   {
+      for (std::size_t hitableIndex = 0; hitableIndex < player.m_vhitables.size(); )
+      {
+         Hitable *hitable = player.m_vhitables[hitableIndex];
+         if (hitable == drawnLines.second)
+         {
+            player.m_vhitables.erase(player.m_vhitables.begin() + hitableIndex);
+         }
+         else
+         {
+            hitableIndex++;
+         }
+      }
+   }
 }
 
 bool BallHistory::ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs)
@@ -2272,7 +2354,6 @@ bool BallHistory::ShouldDrawTrainerBallStarts(std::size_t index, int currentTime
          return true;
       }
       break;
-   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartLocation:
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartAngleVelocityMode:
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartAngleStart:
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartAngleFinish:
@@ -2311,7 +2392,6 @@ bool BallHistory::ShouldDrawTrainerBallPasses(std::size_t index, int currentTime
          return true;
       }
       break;
-   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassLocation:
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassManage:
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassFinishMode:
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallPassDistance:
@@ -2345,7 +2425,6 @@ bool BallHistory::ShouldDrawTrainerBallFails(std::size_t index, int currentTimeM
          return true;
       }
       break;
-   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailLocation:
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailManage:
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailFinishMode:
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallFailDistance:
@@ -2361,32 +2440,6 @@ bool BallHistory::ShouldDrawTrainerBallFails(std::size_t index, int currentTimeM
       default:
          return true;
       }
-   default:
-      return true;
-   }
-}
-
-bool BallHistory::ShouldDrawTrainerBallCorridor(int currentTimeMs)
-{
-   switch (m_MenuOptions.m_MenuState)
-   {
-   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectConfigModeOptions:
-      switch (m_MenuOptions.m_TrainerOptions.m_ConfigModeState)
-      {
-      case TrainerOptions::ConfigModeStateType::ConfigModeStateType_BallCorridor:
-         return (currentTimeMs % OneSecondMs) >= DrawBallBlinkMs;
-      default:
-         return true;
-      }
-      break;
-
-   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorComplete:
-   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorPassLocation:
-   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorPassWidth:
-   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorOpeningRightLocation:
-   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorOpeningLeftLocation:
-      return (currentTimeMs % OneSecondMs) >= DrawBallBlinkMs;
-
    default:
       return true;
    }
@@ -2432,31 +2485,7 @@ static UINT compute_primitive_count(D3DPRIMITIVETYPE type, const int vertexCount
    }
 }
 
-void BallHistory::DrawPrimitives(Player &player, std::vector<Vertex3DColor> &vertices, D3DPRIMITIVETYPE type)
-{
-   DrawFakeBall(player, Vertex3Ds(), 0.0f, Matrix3(), nullptr);
-   // TODO GARY Fix this
-   //VertexBuffer::m_curVertexBuffer = nullptr;
-
-   IDirect3DVertexBuffer9 *vertexBuffer = nullptr;
-   CHECKD3D(player.m_renderer->m_renderDevice->GetCoreDevice()->CreateVertexBuffer(UINT(vertices.size() * sizeof(vertices[0])), D3DUSAGE_WRITEONLY, 0, (D3DPOOL)memoryPool::DEFAULT, &vertexBuffer, nullptr));
-   {
-      void *buf;
-      CHECKD3D(vertexBuffer->Lock(0, 0, &buf, 0));
-      memcpy(buf, vertices.data(), vertices.size() * sizeof(vertices[0]));
-      vertexBuffer->Unlock();
-
-      player.m_renderer->m_renderDevice->GetCoreDevice()->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-
-      CHECKD3D(player.m_renderer->m_renderDevice->GetCoreDevice()->SetStreamSource(0, vertexBuffer, 0, sizeof(vertices[0])));
-
-      CHECKD3D(player.m_renderer->m_renderDevice->GetCoreDevice()->SetVertexDeclaration(m_VertexColorDeclaration));
-      CHECKD3D(player.m_renderer->m_renderDevice->GetCoreDevice()->DrawPrimitive((D3DPRIMITIVETYPE)type, 0, compute_primitive_count(type, DWORD(vertices.size()))));
-   }
-   SAFE_RELEASE(vertexBuffer);
-}
-
-void BallHistory::DrawTrainerBallCorridorPass(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor, Vertex3Ds *overridePosition)
+void BallHistory::DrawTrainerBallCorridorPass(Player &player, const char * name, TrainerOptions::BallCorridorOptionsRecord &bcor, Vertex3Ds *overridePosition)
 {
    Vertex3Ds *position = overridePosition;
    if (overridePosition == nullptr)
@@ -2466,18 +2495,16 @@ void BallHistory::DrawTrainerBallCorridorPass(Player &player, TrainerOptions::Ba
 
    if (!position->IsZero())
    {
+
       float passBallRadius = GetDefaultBallRadius();
       float passWidth = passBallRadius * (bcor.m_PassRadiusPercent / 100.0f);
-      D3DCOLOR green = D3DCOLOR_ARGB(0xFF, 0x00, 0xFF, 0x00);
-      std::vector<Vertex3DColor> vertices;
-      vertices.push_back(Vertex3DColor(position->x - passWidth, position->y, position->z + passBallRadius, green));
-      vertices.push_back(Vertex3DColor(position->x + passWidth, position->y, position->z + passBallRadius, green));
-      vertices.push_back(Vertex3DColor(position->x - passWidth, position->y, position->z - passBallRadius, green));
-      vertices.push_back(Vertex3DColor(position->x + passWidth, position->y, position->z - passBallRadius, green));
 
-      DrawPrimitives(player, vertices, D3DPT_TRIANGLESTRIP);
+      DrawLine(player, name,
+         {position->x - passWidth, position->y, position->z},
+         {position->x + passWidth, position->y, position->z},
+         m_TrainerBallCorridorPassColor, int(passBallRadius));
 
-      DebugPrintRecord dpr(player, TrainerOptions::BallCorridorOptionsRecord::ImGuiDrawTrainerBallCorridorPassLabel);
+      DebugPrintRecord dpr(player, name);
       POINT screenPoint = Get2DPointFrom3D(player, *position);
       dpr.SetPosition(screenPoint.x, screenPoint.y);
       dpr.ShowText("P");
@@ -2486,16 +2513,13 @@ void BallHistory::DrawTrainerBallCorridorPass(Player &player, TrainerOptions::Ba
 
 void BallHistory::DrawTrainerBallCorridorOpeningLeft(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor)
 {
-   Matrix3 orientation;
-   orientation.SetIdentity();
    float passBallRadius = GetDefaultBallRadius();
    float passWidth = passBallRadius * (bcor.m_PassRadiusPercent / 100.0f);
    float openingBallRadius = passBallRadius / 2.0f;
-   D3DCOLOR red = D3DCOLOR_ARGB(0xFF, 0xFF, 0x00, 0x00);
 
    if (!bcor.m_OpeningPositionLeft.IsZero())
    {
-      DrawFakeBall(player, bcor.m_OpeningPositionLeft, openingBallRadius, orientation, m_TrainerBallCorridorOpeningTexture);
+      DrawFakeBall(player, "DrawTrainerBallCorridorOpeningLeft", bcor.m_OpeningPositionLeft, openingBallRadius, m_TrainerBallCorridorOpeningEndColor);
       POINT screenPoint = Get2DPointFrom3D(player, bcor.m_OpeningPositionLeft);
       DebugPrintRecord dpr(player, TrainerOptions::BallCorridorOptionsRecord::ImGuiDrawTrainerBallCorridorOpeningLeftLabel);
       dpr.SetPosition(screenPoint.x, screenPoint.y);
@@ -2504,44 +2528,36 @@ void BallHistory::DrawTrainerBallCorridorOpeningLeft(Player &player, TrainerOpti
 
    if (!bcor.m_PassPosition.IsZero() && !bcor.m_OpeningPositionLeft.IsZero())
    {
-      std::vector<Vertex3DColor> vertices;
-      vertices.push_back(Vertex3DColor(bcor.m_PassPosition.x - passWidth, bcor.m_PassPosition.y, bcor.m_PassPosition.z + passBallRadius, red));
-      vertices.push_back(Vertex3DColor(bcor.m_OpeningPositionLeft.x, bcor.m_OpeningPositionLeft.y, bcor.m_OpeningPositionLeft.z + passBallRadius, red));
-      vertices.push_back(Vertex3DColor(bcor.m_PassPosition.x - passWidth, bcor.m_PassPosition.y, bcor.m_PassPosition.z - passBallRadius, red));
-      vertices.push_back(Vertex3DColor(bcor.m_OpeningPositionLeft.x, bcor.m_OpeningPositionLeft.y, bcor.m_OpeningPositionLeft.z - passBallRadius, red));
-
-      DrawPrimitives(player, vertices, D3DPT_TRIANGLESTRIP);
+      DrawLine(player, "BallCorridorOpeningLeftWall",
+         {bcor.m_PassPosition.x - passWidth, bcor.m_PassPosition.y, bcor.m_PassPosition.z},
+         bcor.m_OpeningPositionLeft,
+         Color::Red, int(passBallRadius));
    }
 }
 
 void BallHistory::DrawTrainerBallCorridorOpeningRight(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor)
 {
-   Matrix3 orientation;
-   orientation.SetIdentity();
    float passBallRadius = GetDefaultBallRadius();
    float passWidth = passBallRadius * (bcor.m_PassRadiusPercent / 100.0f);
    float openingBallRadius = passBallRadius / 2.0f;
-   D3DCOLOR red = D3DCOLOR_ARGB(0xFF, 0xFF, 0x00, 0x00);
 
    if (!bcor.m_OpeningPositionRight.IsZero())
    {
-      DrawFakeBall(player, bcor.m_OpeningPositionRight, openingBallRadius, orientation, m_TrainerBallCorridorOpeningTexture);
+      DrawFakeBall(player, "DrawTrainerBallCorridorOpeningRight", bcor.m_OpeningPositionRight, openingBallRadius, m_TrainerBallCorridorOpeningEndColor);
       POINT screenPoint = Get2DPointFrom3D(player, bcor.m_OpeningPositionRight);
       DebugPrintRecord dpr(player, TrainerOptions::BallCorridorOptionsRecord::ImGuiDrawTrainerBallCorridorOpeningRightLabel);
       dpr.SetPosition(screenPoint.x, screenPoint.y);
-      dpr.ShowText("R");
+      dpr.ShowText("L");
    }
 
    if (!bcor.m_PassPosition.IsZero() && !bcor.m_OpeningPositionRight.IsZero())
    {
-      std::vector<Vertex3DColor> vertices;
-      vertices.push_back(Vertex3DColor(bcor.m_PassPosition.x + passWidth, bcor.m_PassPosition.y, bcor.m_PassPosition.z + passBallRadius, red));
-      vertices.push_back(Vertex3DColor(bcor.m_OpeningPositionRight.x, bcor.m_OpeningPositionRight.y, bcor.m_OpeningPositionRight.z + passBallRadius, red));
-      vertices.push_back(Vertex3DColor(bcor.m_PassPosition.x + passWidth, bcor.m_PassPosition.y, bcor.m_PassPosition.z - passBallRadius, red));
-      vertices.push_back(Vertex3DColor(bcor.m_OpeningPositionRight.x, bcor.m_OpeningPositionRight.y, bcor.m_OpeningPositionRight.z - passBallRadius, red));
-
-      DrawPrimitives(player, vertices, D3DPT_TRIANGLESTRIP);
+      DrawLine(player, "BallCorridorOpeningRightWall",
+         {bcor.m_PassPosition.x + passWidth, bcor.m_PassPosition.y, bcor.m_PassPosition.z},
+         bcor.m_OpeningPositionRight,
+         Color::Red, int(passBallRadius));
    }
+
 }
 
 void BallHistory::DrawTrainerModeVisuals(Player &player, int currentTimeMs)
@@ -2558,7 +2574,8 @@ void BallHistory::DrawTrainerModeVisuals(Player &player, int currentTimeMs)
          TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
          if (!bsor.m_StartPosition.IsZero())
          {
-            DrawFakeBall(player, bsor.m_StartPosition, ballRadius, orientation, m_TrainerBallStartTexture);
+            std::string ballStartFakeBallName = "BallStart" + std::to_string(bsorIndex);
+            DrawFakeBall(player, ballStartFakeBallName.c_str(), bsor.m_StartPosition, ballRadius, m_TrainerBallStartColor);
             DrawAngleVelocityPreview(player, bsor);
             POINT screenPoint = Get2DPointFrom3D(player, bsor.m_StartPosition);
             DebugPrintRecord dpr(player, TrainerOptions::BallStartOptionsRecord::ImGuiBallStartLabels[bsorIndex]);
@@ -2575,10 +2592,12 @@ void BallHistory::DrawTrainerModeVisuals(Player &player, int currentTimeMs)
          TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[bporIndex];
          if (!bpor.m_EndPosition.IsZero())
          {
-            DrawFakeBall(player, bpor.m_EndPosition, ballRadius, orientation, m_TrainerBallPassTexture);
+            std::string ballPassFakeBallName = "BallPass" + std::to_string(bporIndex);
+            DrawFakeBall(player, ballPassFakeBallName.c_str(), bpor.m_EndPosition, ballRadius, m_TrainerBallPassColor);
             if (bpor.m_EndRadiusPercent != TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
             {
-               DrawIntersectionCircle(player, bpor.m_EndPosition, bpor.m_EndRadiusPercent, IntersectionCircleColor);
+               std::string ballPassIntersectionCircleName = "BallPassIntersectionCircle" + std::to_string(bporIndex);
+               DrawIntersectionCircle(player, ballPassIntersectionCircleName.c_str(), bpor.m_EndPosition, bpor.m_EndRadiusPercent, Color::Blue);
             }
             POINT screenPoint = Get2DPointFrom3D(player, bpor.m_EndPosition);
             DebugPrintRecord dpr(player, TrainerOptions::BallEndOptionsRecord::ImGuiBallPassLabels[bporIndex]);
@@ -2595,10 +2614,12 @@ void BallHistory::DrawTrainerModeVisuals(Player &player, int currentTimeMs)
          TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[bforIndex];
          if (!bfor.m_EndPosition.IsZero())
          {
-            DrawFakeBall(player, bfor.m_EndPosition, ballRadius, orientation, m_TrainerBallFailTexture);
+            std::string ballFailFakeBallName = "BallFail" + std::to_string(bforIndex);
+            DrawFakeBall(player, ballFailFakeBallName.c_str(), bfor.m_EndPosition, ballRadius, m_TrainerBallFailColor);
             if (bfor.m_EndRadiusPercent != TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
             {
-               DrawIntersectionCircle(player, bfor.m_EndPosition, bfor.m_EndRadiusPercent, IntersectionCircleColor);
+               std::string ballFailIntersectionCircleName = "BallFailIntersectionCircle" + std::to_string(bforIndex);
+               DrawIntersectionCircle(player, ballFailIntersectionCircleName.c_str(), bfor.m_EndPosition, bfor.m_EndRadiusPercent, Color::Blue);
             }
             POINT screenPoint = Get2DPointFrom3D(player, bfor.m_EndPosition);
             DebugPrintRecord dpr(player, TrainerOptions::BallEndOptionsRecord::ImGuiBallFailLabels[bforIndex]);
@@ -2608,10 +2629,7 @@ void BallHistory::DrawTrainerModeVisuals(Player &player, int currentTimeMs)
       }
    }
 
-   if (ShouldDrawTrainerBallCorridor(currentTimeMs))
-   {
-      DrawTrainerBallCorridor(player);
-   }
+   DrawTrainerBallCorridor(player);
 
    if (ShouldDrawActiveBallKickers(currentTimeMs))
    {
@@ -2623,7 +2641,7 @@ void BallHistory::DrawTrainerBallCorridor(Player &player)
 {
    TrainerOptions::BallCorridorOptionsRecord &bcor = m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord;
 
-   DrawTrainerBallCorridorPass(player, bcor);
+   DrawTrainerBallCorridorPass(player, "DrawTrainerBallCorridorPass", bcor);
 
    DrawTrainerBallCorridorOpeningLeft(player, bcor);
 
@@ -2632,8 +2650,6 @@ void BallHistory::DrawTrainerBallCorridor(Player &player)
 
 void BallHistory::DrawActiveBallKickers(Player &player)
 {
-   Matrix3 orientation;
-   orientation.SetIdentity();
    float ballRadius = GetDefaultBallRadius();
    for (std::size_t abkIndex = 0; abkIndex < m_ActiveBallKickers.size(); abkIndex++)
    {
@@ -2714,7 +2730,8 @@ void BallHistory::DrawActiveBallKickers(Player &player)
          dpr.SetPosition(screenPoint.x, screenPoint.y);
          dpr.ShowTextPos(0, 0, finalKickerText.str().c_str());
 
-         DrawFakeBall(player, kickerPosition, ballRadius, orientation, m_ActiveBallKickerTexture);
+         std::string activeBallKickerFakeBallName = "ActiveBallKicker" + std::to_string(abkIndex);
+         DrawFakeBall(player, activeBallKickerFakeBallName.c_str(), kickerPosition, ballRadius, m_ActiveBallKickerColor);
       }
    }
 }
@@ -2774,7 +2791,7 @@ void BallHistory::DrawAngleVelocityPreview(Player &player, TrainerOptions::BallS
 
    if (vertices.size() > 1)
    {
-      DrawPrimitives(player, vertices, D3DPT_TRIANGLEFAN);
+      //DrawPrimitives(player, vertices, D3DPT_TRIANGLEFAN);
    }
 }
 
@@ -3785,6 +3802,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 {
    ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_ProcessMenuUsec);
 
+   ClearDraws(player);
+
    DebugPrintRecord dpr(player, ImGuiProcessMenuLabel);
    dpr.SetPositionPercent(0.50f, 0.25f);
 
@@ -4198,7 +4217,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             "Plunger returns to previous menu"
          });
 
-      DrawFakeBall(player, mousePosition3D, *m_AutoControlBallTexture, nullptr, 0, dpr);
+      DrawFakeBall(player, "ManageAutoControlLocations", mousePosition3D, m_AutoControlBallColor, nullptr, 0, 0, dpr);
 
       switch (menuAction)
       {
@@ -5156,7 +5175,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       dpr.ShowMenuText("Ball Height");
       dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_CreateZ, heightMaximum);
 
-      DrawFakeBall(player, mousePosition3D, *m_TrainerBallStartTexture, &bsor.m_StartPosition, D3DCOLOR_ARGB(0x00, 0x00, 0x00, 0xFF), dpr);
+      DrawFakeBall(player, "CustomBallStartLocation", mousePosition3D, m_TrainerBallStartColor, &bsor.m_StartPosition, Color::Blue, 10, dpr);
 
       dpr.ShowMenuText("");
       dpr.ShowMenuTextTitle("Current Configuration");
@@ -5769,8 +5788,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_CreateZ, heightMaximum);
 
       float intersectionRadiusPercent = bpor.m_EndRadiusPercent != TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled ? bpor.m_EndRadiusPercent : 0.0f;
-      DrawFakeBall(player, mousePosition3D, *m_TrainerBallPassTexture, &bpor.m_EndPosition, D3DCOLOR_ARGB(0x00, 0x00, 0xFF, 0x00), dpr);
-      DrawIntersectionCircle(player, mousePosition3D, intersectionRadiusPercent, IntersectionCircleColor);
+      DrawFakeBall(player, "BallPassLocation", mousePosition3D, m_TrainerBallPassColor, &bpor.m_EndPosition, Color::Green, 10, dpr);
+      DrawIntersectionCircle(player, "BallPassIntersection", mousePosition3D, intersectionRadiusPercent, Color::Blue);
 
       dpr.ShowMenuText("");
       dpr.ShowMenuTextTitle("Current Configuration");
@@ -6305,8 +6324,8 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_CreateZ, heightMaximum);
 
       float intersectionRadius = bfor.m_EndRadiusPercent != TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled ? bfor.m_EndRadiusPercent : 0.0f;
-      DrawFakeBall(player, mousePosition3D, *m_TrainerBallFailTexture, &bfor.m_EndPosition, D3DCOLOR_ARGB(0x00, 0xFF, 0x00, 0x00), dpr);
-      DrawIntersectionCircle(player, mousePosition3D, intersectionRadius, IntersectionCircleColor);
+      DrawFakeBall(player, "BallFailLocation", mousePosition3D, m_TrainerBallFailColor, &bfor.m_EndPosition, Color::Red, 10, dpr);
+      DrawIntersectionCircle(player, "BallFailIntersection", mousePosition3D, intersectionRadius, Color::Blue);
 
       dpr.ShowMenuText("");
       dpr.ShowMenuTextTitle("Current Configuration");
@@ -6676,11 +6695,17 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       dpr.ShowMenuTextTitle("Ball Height");
       dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_CreateZ, heightMaximum);
 
-      DrawTrainerBallCorridorPass(player, bcor, &mousePosition3D);
+      float passBallRadius = GetDefaultBallRadius();
+      float passWidth = passBallRadius * (bcor.m_PassRadiusPercent / 100.0f);
+      Vertex3Ds passPositionLeft = {mousePosition3D.x - passWidth, mousePosition3D.y, mousePosition3D.z};
+      Vertex3Ds passPositionRight = {mousePosition3D.x + passWidth, mousePosition3D.y, mousePosition3D.z};
+      DrawLine(player, "BallCorridorPassLocationLeft", passPositionLeft, bcor.m_OpeningPositionLeft, Color::Red, int(passBallRadius));
+      DrawLine(player, "BallCorridorPassLocationRight", passPositionRight, bcor.m_OpeningPositionRight, Color::Red, int(passBallRadius));
+      DrawTrainerBallCorridorPass(player, "BallCorridorPassLocation", bcor, &mousePosition3D);
 
       dpr.ShowMenuText("");
       dpr.ShowMenuTextTitle("Current Configuration");
-      ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, true);
+      ShowBallCorridorOptionsRecord(dpr, bcor, true);
 
       ShowDescription(dpr,
          {
@@ -6779,11 +6804,14 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       dpr.ShowMenuTextTitle("Opening Left Height");
       dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_CreateZ, heightMaximum);
 
-      DrawFakeBall(player, mousePosition3D, GetDefaultBallRadius() / 2.0f, *m_TrainerBallCorridorOpeningTexture, &bcor.m_OpeningPositionLeft, D3DCOLOR_ARGB(0x00, 0xFF, 0x00, 0x00), dpr);
+      float passBallRadius = GetDefaultBallRadius();
+      float passWidth = passBallRadius * (bcor.m_PassRadiusPercent / 100.0f);
+      Vertex3Ds passPositionLeft = {bcor.m_PassPosition.x - passWidth, bcor.m_PassPosition.y, bcor.m_PassPosition.z};
+      DrawFakeBall(player, "BallCorridorOpeningLeft", mousePosition3D, GetDefaultBallRadius() / 2.0f, m_TrainerBallCorridorOpeningEndColor, &passPositionLeft, Color::Red, int(GetDefaultBallRadius()), dpr);
 
       dpr.ShowMenuText("");
       dpr.ShowMenuTextTitle("Current Configuration");
-      ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, true);
+      ShowBallCorridorOptionsRecord(dpr, bcor, true);
 
       ShowDescription(dpr,
          {
@@ -6842,11 +6870,14 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       dpr.ShowMenuTextTitle("Opening Right Height");
       dpr.ShowMenuText("(minimum)%d <-- %d --> %d(maximum)", heightMinimum, m_MenuOptions.m_CreateZ, heightMaximum);
 
-      DrawFakeBall(player, mousePosition3D, GetDefaultBallRadius() / 2.0f, *m_TrainerBallCorridorOpeningTexture, &bcor.m_OpeningPositionRight, D3DCOLOR_ARGB(0x00, 0xFF, 0x00, 0x00), dpr);
+      float passBallRadius = GetDefaultBallRadius();
+      float passWidth = passBallRadius * (bcor.m_PassRadiusPercent / 100.0f);
+      Vertex3Ds passPositionRight = {bcor.m_PassPosition.x + passWidth, bcor.m_PassPosition.y, bcor.m_PassPosition.z};
+      DrawFakeBall(player, "BallCorridorOpeningRight", mousePosition3D, GetDefaultBallRadius() / 2.0f, m_TrainerBallCorridorOpeningEndColor, &passPositionRight, Color::Red, int(GetDefaultBallRadius()), dpr);
 
       dpr.ShowMenuText("");
       dpr.ShowMenuTextTitle("Current Configuration");
-      ShowBallCorridorOptionsRecord(dpr, m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord, true);
+      ShowBallCorridorOptionsRecord(dpr, bcor, true);
 
       ShowDescription(dpr,
          {
