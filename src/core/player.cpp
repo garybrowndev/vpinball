@@ -720,8 +720,6 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
       PLOGI << "Starting script"; // For profiling
       m_progressDialog.SetProgress("Starting Game Scripts..."s);
 
-      m_BallHistory.Init(*this, 0, true);
-
       m_ptable->m_pcv->Start(); // Hook up to events and start cranking script
 
       // Fire Init event for table object and all 'hitable' parts, also fire Animate event of parts having it since initial setup is considered as the initial animation event
@@ -754,6 +752,8 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    // We need to initialize the perf counter before creating the UI which uses it
    wintimer_init();
    m_liveUI = new LiveUI(m_renderer->m_renderDevice);
+
+   m_BallHistory.Init(*this, 0, true);
 
    // Signal plugins before performing static prerendering. The only thing not fully initialized is the physics (is this ok ?)
    m_getDmdSrcMsgId = VPXPluginAPIImpl::GetInstance().GetMsgID(CTLPI_NAMESPACE, CTLPI_GETDMD_SRC_MSG);

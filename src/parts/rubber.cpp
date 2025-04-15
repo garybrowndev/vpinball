@@ -664,6 +664,20 @@ void Rubber::AddPoint(int x, int y, const bool smooth)
     STOPUNDO
 }
 
+void Rubber::AddDragPoint(const Vertex3Ds& dragPoint)
+{
+   CComObject<DragPoint> *pdp;
+   CComObject<DragPoint>::CreateInstance(&pdp);
+   if (pdp)
+   {
+      pdp->AddRef();
+
+      pdp->Init(this, dragPoint.x, dragPoint.y, 0.0f, true);
+      pdp->m_calcHeight = dragPoint.z;
+
+      m_vdpoint.push_back(pdp);
+   }
+}
 
 #pragma region Rendering
 

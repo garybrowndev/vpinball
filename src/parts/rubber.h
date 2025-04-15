@@ -89,6 +89,7 @@ public:
    void Scale(const float scalex, const float scaley, const Vertex2D& pvCenter, const bool useElementCenter) final;
    void Translate(const Vertex2D &pvOffset) final;
    void AddPoint(int x, int y, const bool smooth) final;
+   void AddDragPoint(const Vertex3Ds& dragPoint);
 
    Vertex2D GetCenter() const final { return GetPointCenter(); }
    void PutCenter(const Vertex2D& pv) final { PutPointCenter(pv); }

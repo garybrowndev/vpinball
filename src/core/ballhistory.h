@@ -477,76 +477,48 @@ private:
       void SetZero();
    };
 
-   struct DebugFontRecord
+   struct PrintScreenRecord
    {
-      static const char *FontTypeFace;
-      static const int FontHeightDefault;
-      static const int FontHeightMax;
-      static const float PlayerTextWidthRatio;
-
-      LPD3DXSPRITE m_Sprite;
-      ID3DXFont *m_Font;
-      INT m_FontHeight;
-
-      DebugFontRecord();
-      virtual ~DebugFontRecord();
-      void Init(Player &player);
-      void UnInit();
-   };
-
-   struct DebugPrintRecord
-   {
-      enum JustificationType
-      {
-         JustificationType_Center,
-         JustificationType_CenterLeft,
-         JustificationType_CenterRight,
-         JustificationType_Left,
-         JustificationType_Right
-      };
-      static const D3DCOLOR NormalMenuColor;
-      static const D3DCOLOR SelectedMenuColor;
-      static const D3DCOLOR ErrorMenuColor;
-      static const float TextYStepPercent;
-
-      Player &m_Player;
-
-      DebugPrintRecord(Player &player, const char * name);
-      virtual ~DebugPrintRecord();
-      void MyShowText(const char * text, float x, float y);
-      void SetPosition(int x, int y);
-      void SetPositionPercent(float x, float y);
-      void ToggleReverse();
-      int GetTextWidth(const char *format, ...);
-      void ShowText(const char *format, ...);
-      void ShowMenuTextLeft(const char *format, ...);
-      void ShowMenuTextRight(const char *format, ...);
-      void ShowTextPos(int x, int y, const char *format, ...);
-      void ShowTextTitle(const char *format, ...);
-      void ShowTextWithMenu(bool isMenu, const char *format, ...);
-      void ShowMenuText(const char *format, ...);
-      void ShowMenuTextTitle(const char *format, ...);
-      void ShowMenuTextError(const char *format, ...);
-      void ShowMenuTextSelect(bool selected, const char *format, ...);
+   public:
+      static void Init();
+      static void ShowText(const char *name, float positionX, float positionY, const char *format, ...);
+      static void MenuTitleText(const char *format, ...);
+      static void MenuText(bool selected, const char *format, ...);
+      static void ActiveMenuText(const char *format, ...);
+      static void StatusText(const char *format, ...);
+      static void ErrorText(const char *format, ...);
 
    private:
-      char m_StrBuffer[1024];
-      JustificationType JustificationOverflow;
+      static const char *ImGuiShowStatusLabel;
+      static const char *ImGuiProcessMenuLabel;
+      static const char *ImGuiActiveMenuLabel;
+      static const char *ImGuiErrorLabel;
 
-      void SetDebugOutputPosition(const float x, const float y);
-      void DebugPrint(LPCSTR text, JustificationType justification, D3DCOLOR color);
-   };
+      static const float ShowTextFontSize;
+      static const float MenuTitleTextFontSize;
+      static const float MenuTextFontSize;
+      static const float MenuSelectedTextFontSize;
+      static const float ActiveMenuTextFontSize;
+      static const float StatusTextFontSize;
+      static const float ErrorTextFontSize;
 
-   struct Vertex3DColor
-   {
-      D3DVALUE x;
-      D3DVALUE y;
-      D3DVALUE z;
+      static const ImU32 ShowTextColor;
+      static const ImU32 MenuTitleTextColor;
+      static const ImU32 MenuTextColor;
+      static const ImU32 MenuSelectedTextColor;
+      static const ImU32 ActiveMenuTextColor;
+      static const ImU32 StatusTextColor;
+      static const ImU32 ErrorTextColor;
 
-      D3DCOLOR color;
+      static ImFont *m_ShowTextFont;
+      static ImFont *m_MenuTitleTextFont;
+      static ImFont *m_MenuTextFont;
+      static ImFont *m_MenuSelectedTextFont;
+      static ImFont *m_ActiveMenuTextFont;
+      static ImFont *m_StatusTextFont;
+      static ImFont *m_ErrorTextFont;
 
-      Vertex3DColor();
-      Vertex3DColor(D3DVALUE x, D3DVALUE y, D3DVALUE z, D3DCOLOR color);
+      static void Show(const char *name, ImFont *font, ImU32 color, float positionX, float positionY, bool center, const char *str);
    };
 
    struct MenuOptionsRecord
@@ -663,11 +635,8 @@ private:
    };
 
    static const char * ImGuiDrawActiveBallKickersLabels[];
-   static const char * ImGuiShowStatusLabel;
-   static const char * ImGuiProcessMenuLabel;
    static const char * ImGuiProcessModeTrainerLabel;
-
-   static const D3DVERTEXELEMENT9 VertexColorElement[];
+   static const char * ImGuiCurrentRunRecordLabel;
 
    static const std::size_t OneSecondMs;
 
@@ -686,6 +655,9 @@ private:
    static const float DrawAngleVelocityHeightOffset;
 
    static const int DrawBallBlinkMs;
+
+   static const char *DescriptionSectionTitle;
+   static const char *SummarySectionTitle;
 
    static const char *SettingsFileExtension;
    static const char *SettingsFolderName;
@@ -800,8 +772,9 @@ private:
    void ResetBallHistoryRenderSizes();
    void DrawBallHistory(Player &player);
    void DrawFakeBall(Player &player, const char * name, const Vertex3Ds &m_pos, float radius, DWORD color);
-   void DrawFakeBall(Player &player, const char * name, Vertex3Ds &position, float radius, DWORD color, const Vertex3Ds *lineEndPosition, DWORD lineColor, int lineThickness, DebugPrintRecord &dpr);
-   void DrawFakeBall(Player &player, const char * name, Vertex3Ds &position, DWORD color, const Vertex3Ds *lineEndPosition, DWORD lineColor, int lineThickness, DebugPrintRecord &dpr);
+   void DrawFakeBall(Player &player, const char * name, Vertex3Ds &position, float radius, DWORD color, const Vertex3Ds *lineEndPosition, DWORD lineColor, int lineThickness);
+   void DrawFakeBall(Player &player, const char * name, Vertex3Ds &position, DWORD color, const Vertex3Ds *lineEndPosition, DWORD lineColor, int lineThickness);
+   void DrawLineRotate(Rubber &drawnLine, const Vertex3Ds& center, const Vertex3Ds& start, const Vertex3Ds& end);
    void DrawLine(Player &player, const char * name, const Vertex3Ds &positionA, const Vertex3Ds &positionB, DWORD color, int thickness);
    void DrawIntersectionCircle(Player &player, const char * name, Vertex3Ds &position, float intersectionRadius, DWORD color);
    void DrawNormalModeVisuals(Player &player, int currentTimeMs);
@@ -817,33 +790,33 @@ private:
    void DrawTrainerModeVisuals(Player &player, int currentTimeMs);
    void DrawTrainerBallCorridor(Player &player);
    void DrawActiveBallKickers(Player &player);
-   void DrawAngleVelocityPreviewHelperAdd(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angle, float velocity, float radius);
-   void DrawAngleVelocityPreviewHelper(std::vector<Vertex3DColor> &testVertices, TrainerOptions::BallStartOptionsRecord &bsor, float angleStep, float velocityStep, float radius);
+   void DrawAngleVelocityPreviewHelperAdd(Player &player, TrainerOptions::BallStartOptionsRecord &bsor, float angle, float velocity, float radius);
+   void DrawAngleVelocityPreviewHelper(Player &player, TrainerOptions::BallStartOptionsRecord &bsor, float angleStep, float velocityStep, float radius);
    void DrawAngleVelocityPreview(Player &player, TrainerOptions::BallStartOptionsRecord &bsor);
    void CalculateAngleVelocityStep(TrainerOptions::BallStartOptionsRecord &bsor, float &angleStep, float &velocityStep);
    void UpdateBallState(BallHistoryRecord &ballHistoryRecord);
    void ShowStatus(Player &player, int currentTimeMs);
-   void ShowRecallBall(Player &player, DebugPrintRecord &dpr);
-   void ShowAutoControlVertices(Player &player, DebugPrintRecord &dpr);
-   void ShowPreviousRunRecord(DebugPrintRecord &dpr);
-   void ShowCurrentRunRecord(DebugPrintRecord &dpr, int currentTimeMs);
-   void ShowBallStartOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallStartOptionsRecord &bsor);
-   void ShowBallEndOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallEndOptionsRecord &beor);
-   void ShowBallCorridorOptionsRecord(DebugPrintRecord &dpr, TrainerOptions::BallCorridorOptionsRecord &bcor, bool isMenu);
-   void ShowDifficultyTableConstants(DebugPrintRecord &dpr, Player &player);
-   void ShowDifficultyVarianceMode(DebugPrintRecord &dpr, bool isMenu, const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode);
-   void ShowDifficultyVarianceRange(DebugPrintRecord &dpr, bool isMenu, const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, S32 variance, float initial);
-   void ShowDescription(DebugPrintRecord &dpr, const std::vector<std::string> &description);
-   void ShowDifficultyVarianceStatusAll(DebugPrintRecord &dpr, Player &player, bool isMenu);
-   void ShowDifficultyVarianceStatusSingle(DebugPrintRecord &dpr, bool isMenu, const std::string &name, float current, S32 variance, float initial, TrainerOptions::DifficultyVarianceModeType mode);
-   void ShowDifficultyVarianceStatusGravity(DebugPrintRecord &dpr, Player &player, bool isMenu);
-   void ShowDifficultyVarianceStatusPlayfieldFriction(DebugPrintRecord &dpr, Player &player, bool isMenu);
-   void ShowDifficultyVarianceStatusFlipperStrength(DebugPrintRecord &dpr, Player &player, bool isMenu);
-   void ShowDifficultyVarianceStatusFlipperFriction(DebugPrintRecord &dpr, Player &player, bool isMenu);
-   void ShowResult(DebugPrintRecord &dpr, std::size_t total, std::vector<DWORD> &timesMs, const char *type, const char *subType);
+   void ShowRecallBall(Player &player);
+   void ShowAutoControlVertices(Player &player);
+   void ShowPreviousRunRecord();
+   void ShowCurrentRunRecord(int currentTimeMs);
+   void ShowBallStartOptionsRecord(TrainerOptions::BallStartOptionsRecord &bsor);
+   void ShowBallEndOptionsRecord(TrainerOptions::BallEndOptionsRecord &beor);
+   void ShowBallCorridorOptionsRecord(TrainerOptions::BallCorridorOptionsRecord &bcor);
+   void ShowDifficultyTableConstants(Player &player);
+   void ShowDifficultyVarianceMode(bool isMenu, const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode);
+   void ShowDifficultyVarianceRange(bool isMenu, const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, S32 variance, float initial);
+   void ShowSection(const char *title, const std::vector<std::string> &description);
+   void ShowDifficultyVarianceStatusAll(bool isMenu, Player &player);
+   void ShowDifficultyVarianceStatusSingle(bool isMenu, const std::string &name, float current, S32 variance, float initial, TrainerOptions::DifficultyVarianceModeType mode);
+   void ShowDifficultyVarianceStatusGravity(bool isMenu, Player &player);
+   void ShowDifficultyVarianceStatusPlayfieldFriction(bool isMenu, Player &player);
+   void ShowDifficultyVarianceStatusFlipperStrength(bool isMenu, Player &player);
+   void ShowDifficultyVarianceStatusFlipperFriction(bool isMenu, Player &player);
+   void ShowResult(std::size_t total, std::vector<DWORD> &timesMs, const char *type, const char *subType);
    template <class T> float CalculateStandardDeviation(std::vector<T> &values);
    float CalculateDifficultyVariance(Player &player, float initial, float current, S32 variance, TrainerOptions::DifficultyVarianceModeType varianceMode);
-   void InitBallStartOptionRecords(DebugPrintRecord &dpr);
+   void InitBallStartOptionRecords();
    void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs);
    void ProcessMode(Player &player, int currentTimeMs);
    void ProcessModeNormal(Player &player);
