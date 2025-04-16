@@ -481,13 +481,13 @@ private:
    {
    public:
       static void Init();
-      static void ShowTable(const char *name, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs);
-      static void ShowText(const char *name, float positionX, float positionY, const char *format, ...);
+      static void Text(const char *name, float positionX, float positionY, const char *format, ...);
       static void MenuTitleText(const char *format, ...);
       static void MenuText(bool selected, const char *format, ...);
       static void ActiveMenuText(const char *format, ...);
       static void StatusText(const char *format, ...);
       static void ErrorText(const char *format, ...);
+      static void Results(const char *name, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs);
 
    private:
       static const char *ImGuiShowStatusLabel;
@@ -495,31 +495,36 @@ private:
       static const char *ImGuiActiveMenuLabel;
       static const char *ImGuiErrorLabel;
 
-      static const float ShowTextFontSize;
+      static const float TextFontSize;
       static const float MenuTitleTextFontSize;
       static const float MenuTextFontSize;
       static const float MenuSelectedTextFontSize;
       static const float ActiveMenuTextFontSize;
       static const float StatusTextFontSize;
       static const float ErrorTextFontSize;
+      static const float ResultsFontSize;
 
-      static const ImU32 ShowTextColor;
-      static const ImU32 MenuTitleTextColor;
-      static const ImU32 MenuTextColor;
-      static const ImU32 MenuSelectedTextColor;
-      static const ImU32 ActiveMenuTextColor;
-      static const ImU32 StatusTextColor;
-      static const ImU32 ErrorTextColor;
+      static const ImU32 TextFontColor;
+      static const ImU32 MenuTitleTextFontColor;
+      static const ImU32 MenuTextFontColor;
+      static const ImU32 MenuSelectedTextFontColor;
+      static const ImU32 ActiveMenuTextFontColor;
+      static const ImU32 StatusTextFontColor;
+      static const ImU32 ErrorTextFontColor;
+      static const ImU32 ResultsFontColor;
 
-      static ImFont *m_ShowTextFont;
-      static ImFont *m_MenuTitleTextFont;
-      static ImFont *m_MenuTextFont;
-      static ImFont *m_MenuSelectedTextFont;
-      static ImFont *m_ActiveMenuTextFont;
-      static ImFont *m_StatusTextFont;
-      static ImFont *m_ErrorTextFont;
+      static ImFont *TextFont;
+      static ImFont *MenuTitleTextFont;
+      static ImFont *MenuTextFont;
+      static ImFont *MenuSelectedTextFont;
+      static ImFont *ActiveMenuTextFont;
+      static ImFont *StatusTextFont;
+      static ImFont *ErrorTextFont;
+      static ImFont *ResultsFont;
 
-      static void Show(const char *name, ImFont *font, ImU32 color, float positionX, float positionY, bool center, const char *str);
+      static void ShowText(const char *name, ImFont *font, ImU32 fontColor, float positionX, float positionY, bool center, const char *str);
+      static void ShowNameValueTable(const char *name, ImFont *font, ImU32 fontColor, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs);
+      static void TransformPosition(float &positionX, float &positionY);
    };
 
    struct MenuOptionsRecord

@@ -325,127 +325,86 @@ const char *BallHistory::PrintScreenRecord::ImGuiActiveMenuLabel = "ActiveMenu";
 const char *BallHistory::PrintScreenRecord::ImGuiShowStatusLabel = "ShowStatus";
 const char *BallHistory::PrintScreenRecord::ImGuiErrorLabel = "Error";
 
-const float BallHistory::PrintScreenRecord::ShowTextFontSize = 14.0f;
+const float BallHistory::PrintScreenRecord::TextFontSize = 14.0f;
 const float BallHistory::PrintScreenRecord::MenuTitleTextFontSize = 14.0f;
 const float BallHistory::PrintScreenRecord::MenuTextFontSize = 12.0f;
 const float BallHistory::PrintScreenRecord::MenuSelectedTextFontSize = 12.0f;
 const float BallHistory::PrintScreenRecord::ActiveMenuTextFontSize = 12.0f;
 const float BallHistory::PrintScreenRecord::StatusTextFontSize = 12.0f;
 const float BallHistory::PrintScreenRecord::ErrorTextFontSize = 20.0f;
+const float BallHistory::PrintScreenRecord::ResultsFontSize = 12.0f;
 
-ImFont *BallHistory::PrintScreenRecord::m_ShowTextFont = nullptr;
-ImFont *BallHistory::PrintScreenRecord::m_MenuTitleTextFont = nullptr;
-ImFont *BallHistory::PrintScreenRecord::m_MenuTextFont = nullptr;
-ImFont *BallHistory::PrintScreenRecord::m_MenuSelectedTextFont = nullptr;
-ImFont *BallHistory::PrintScreenRecord::m_ActiveMenuTextFont = nullptr;
-ImFont *BallHistory::PrintScreenRecord::m_StatusTextFont = nullptr;
-ImFont *BallHistory::PrintScreenRecord::m_ErrorTextFont = nullptr;
+ImFont *BallHistory::PrintScreenRecord::TextFont = nullptr;
+ImFont *BallHistory::PrintScreenRecord::MenuTitleTextFont = nullptr;
+ImFont *BallHistory::PrintScreenRecord::MenuTextFont = nullptr;
+ImFont *BallHistory::PrintScreenRecord::MenuSelectedTextFont = nullptr;
+ImFont *BallHistory::PrintScreenRecord::ActiveMenuTextFont = nullptr;
+ImFont *BallHistory::PrintScreenRecord::StatusTextFont = nullptr;
+ImFont *BallHistory::PrintScreenRecord::ErrorTextFont = nullptr;
+ImFont *BallHistory::PrintScreenRecord::ResultsFont = nullptr;
 
-const ImU32 BallHistory::PrintScreenRecord::ShowTextColor = IM_COL32_WHITE;
-const ImU32 BallHistory::PrintScreenRecord::MenuTitleTextColor = IM_COL32_WHITE;
-const ImU32 BallHistory::PrintScreenRecord::MenuTextColor = IM_COL32_WHITE;
-const ImU32 BallHistory::PrintScreenRecord::MenuSelectedTextColor = IM_COL32_WHITE;
-const ImU32 BallHistory::PrintScreenRecord::ActiveMenuTextColor = IM_COL32(0x00, 0xFF, 0x00, 0xFF); // green
-const ImU32 BallHistory::PrintScreenRecord::StatusTextColor = IM_COL32_WHITE;
-const ImU32 BallHistory::PrintScreenRecord::ErrorTextColor = IM_COL32(0xFF, 0x00, 0x00, 0xFF); // red
+const ImU32 BallHistory::PrintScreenRecord::TextFontColor = IM_COL32_WHITE;
+const ImU32 BallHistory::PrintScreenRecord::MenuTitleTextFontColor = IM_COL32_WHITE;
+const ImU32 BallHistory::PrintScreenRecord::MenuTextFontColor = IM_COL32_WHITE;
+const ImU32 BallHistory::PrintScreenRecord::MenuSelectedTextFontColor = IM_COL32_WHITE;
+const ImU32 BallHistory::PrintScreenRecord::ActiveMenuTextFontColor = IM_COL32(0x00, 0xFF, 0x00, 0xFF); // green
+const ImU32 BallHistory::PrintScreenRecord::StatusTextFontColor = IM_COL32_WHITE;
+const ImU32 BallHistory::PrintScreenRecord::ErrorTextFontColor = IM_COL32(0xFF, 0x00, 0x00, 0xFF); // red
+const ImU32 BallHistory::PrintScreenRecord::ResultsFontColor = IM_COL32_WHITE;
 
 void BallHistory::PrintScreenRecord::Init()
 {
    ImGuiIO &io = ImGui::GetIO();
 
-   if (m_ShowTextFont == nullptr)
+   if (TextFont == nullptr)
    {
-      m_ShowTextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, ShowTextFontSize);
+      TextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, TextFontSize);
    }
 
-   if (m_MenuTitleTextFont == nullptr)
+   if (MenuTitleTextFont == nullptr)
    {
-      m_MenuTitleTextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, MenuTitleTextFontSize);
+      MenuTitleTextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, MenuTitleTextFontSize);
    }
 
-   if (m_MenuTextFont == nullptr)
+   if (MenuTextFont == nullptr)
    {
-      m_MenuTextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, MenuTextFontSize);
+      MenuTextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, MenuTextFontSize);
    }
 
-   if (m_MenuSelectedTextFont == nullptr)
+   if (MenuSelectedTextFont == nullptr)
    {
-      m_MenuSelectedTextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, MenuSelectedTextFontSize);
+      MenuSelectedTextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, MenuSelectedTextFontSize);
    }
 
-   if (m_ActiveMenuTextFont == nullptr)
+   if (ActiveMenuTextFont == nullptr)
    {
-      m_ActiveMenuTextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, ActiveMenuTextFontSize);
+      ActiveMenuTextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, ActiveMenuTextFontSize);
    }
 
-   if (m_StatusTextFont == nullptr)
+   if (StatusTextFont == nullptr)
    {
-      m_StatusTextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, StatusTextFontSize);
+      StatusTextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, StatusTextFontSize);
    }
 
-   if (m_ErrorTextFont == nullptr)
+   if (ErrorTextFont == nullptr)
    {
-      m_ErrorTextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, ErrorTextFontSize);
+      ErrorTextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, ErrorTextFontSize);
+   }
+
+   if (ResultsFont == nullptr)
+   {
+      ResultsFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, ResultsFontSize);
    }
 }
 
-void BallHistory::PrintScreenRecord::ShowTable(const char *name, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs)
-{
-   // Begin the ImGui window
-   ImGuiIO &io = ImGui::GetIO();
-   if (positionX > -1.0f && positionX < 1.0f)
-   {
-      positionX *= io.DisplaySize.x;
-   }
-   if (positionY > -1.0f && positionY < 1.0f)
-   {
-      positionY *= io.DisplaySize.y;
-   }
-
-   ImGui::SetNextWindowPos(ImVec2(positionX, positionY));
-   ImGui::Begin(name, nullptr, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize);
-
-   // Calculate the table width
-   float tableWidth = ImGui::GetContentRegionAvail().x; // Available width in the window
-   float tableHeight = 0.0f; // Optional: Calculate height if needed
-
-   // Center the table horizontally
-   float windowWidth = ImGui::GetWindowSize().x;
-   float cursorPosX = (windowWidth - tableWidth) / 2.0f;
-   ImGui::SetCursorPosX(cursorPosX);
-
-   // Create the table with two columns: Name and Value
-   if (ImGui::BeginTable("Table", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
-   {
-      // Set column headers
-      ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-      ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-      ImGui::TableHeadersRow();
-
-      // Populate the table with rows
-      for (const auto &row : nameValuePairs)
-      {
-         ImGui::TableNextRow();
-         ImGui::TableSetColumnIndex(0);
-         ImGui::TextUnformatted(row.first.c_str());
-         ImGui::TableSetColumnIndex(1);
-         ImGui::TextUnformatted(row.second.c_str());
-      }
-
-      ImGui::EndTable();
-   }
-
-   ImGui::End();
-}
-
-void BallHistory::PrintScreenRecord::ShowText(const char *name, float positionX, float positionY, const char *format, ...)
+void BallHistory::PrintScreenRecord::Text(const char *name, float positionX, float positionY, const char *format, ...)
 {
    char strBuffer[1024] = { 0 };
    va_list formatArgs;
    va_start(formatArgs, format);
    vsprintf_s(strBuffer, format, formatArgs);
 
-   Show(name, m_ShowTextFont, ShowTextColor, positionX, positionY, false, strBuffer);
+   ShowText(name, TextFont, TextFontColor, positionX, positionY, false, strBuffer);
 }
 
 void BallHistory::PrintScreenRecord::MenuTitleText(const char *format, ...)
@@ -456,7 +415,7 @@ void BallHistory::PrintScreenRecord::MenuTitleText(const char *format, ...)
    vsprintf_s(strBuffer, format, formatArgs);
 
    std::string tempStr = "*****" + std::string(strBuffer) + "*****";
-   Show(ImGuiProcessMenuLabel, m_MenuTitleTextFont, MenuTitleTextColor, 0.50f, 0.25f, true, tempStr.c_str());
+   ShowText(ImGuiProcessMenuLabel, MenuTitleTextFont, MenuTitleTextFontColor, 0.50f, 0.25f, true, tempStr.c_str());
 }
 
 void BallHistory::PrintScreenRecord::MenuText(bool selected, const char *format, ...)
@@ -469,11 +428,11 @@ void BallHistory::PrintScreenRecord::MenuText(bool selected, const char *format,
    if (selected)
    {
       std::string tempStr = "-->" + std::string(strBuffer) + "<--";
-      Show(ImGuiProcessMenuLabel, m_MenuSelectedTextFont, MenuSelectedTextColor, 0.50f, 0.25f, true, tempStr.c_str());
+      ShowText(ImGuiProcessMenuLabel, MenuSelectedTextFont, MenuSelectedTextFontColor, 0.50f, 0.25f, true, tempStr.c_str());
    }
    else
    {
-      Show(ImGuiProcessMenuLabel, m_MenuTextFont, MenuTextColor, 0.50f, 0.25f, true, strBuffer);
+      ShowText(ImGuiProcessMenuLabel, MenuTextFont, MenuTextFontColor, 0.50f, 0.25f, true, strBuffer);
    }
 }
 
@@ -484,7 +443,7 @@ void BallHistory::PrintScreenRecord::PrintScreenRecord::ActiveMenuText(const cha
    va_start(formatArgs, format);
    vsprintf_s(strBuffer, format, formatArgs);
 
-   Show(ImGuiActiveMenuLabel, m_ActiveMenuTextFont, ActiveMenuTextColor, 0.50f, 1.00f, false, strBuffer);
+   ShowText(ImGuiActiveMenuLabel, ActiveMenuTextFont, ActiveMenuTextFontColor, 0.50f, 1.00f, false, strBuffer);
 }
 
 void BallHistory::PrintScreenRecord::StatusText(const char *format, ...)
@@ -494,7 +453,7 @@ void BallHistory::PrintScreenRecord::StatusText(const char *format, ...)
    va_start(formatArgs, format);
    vsprintf_s(strBuffer, format, formatArgs);
 
-   Show(ImGuiShowStatusLabel, m_StatusTextFont, StatusTextColor, 0.0f, 0.0f, false, strBuffer);
+   ShowText(ImGuiShowStatusLabel, StatusTextFont, StatusTextFontColor, 0.0f, 0.0f, false, strBuffer);
 }
 
 void BallHistory::PrintScreenRecord::ErrorText(const char *format, ...)
@@ -505,28 +464,33 @@ void BallHistory::PrintScreenRecord::ErrorText(const char *format, ...)
    vsprintf_s(strBuffer, format, formatArgs);
 
    std::string tempStr = "!!!!! ERROR:" + std::string(strBuffer) + "!!!!!";
-   Show(ImGuiErrorLabel, m_ErrorTextFont, ErrorTextColor, 0.75f, 0.50f, true, tempStr.c_str());
+   ShowText(ImGuiErrorLabel, ErrorTextFont, ErrorTextFontColor, 0.75f, 0.50f, true, tempStr.c_str());
 }
 
-void BallHistory::PrintScreenRecord::Show(const char *name, ImFont *font, ImU32 color, float positionX, float positionY, bool center, const char *str)
+void BallHistory::PrintScreenRecord::Results(const char *name, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs)\
 {
-   ImGuiIO &io = ImGui::GetIO();
-   if (positionX >= -1.0f && positionX <= 1.0f)
-   {
-      positionX *= io.DisplaySize.x;
-   }
-   if (positionY >= -1.0f && positionY <= 1.0f)
-   {
-      positionY *= io.DisplaySize.y;
-   }
+   ShowNameValueTable(name, ResultsFont, ResultsFontColor, positionX, positionY, nameValuePairs);
+}
+
+void BallHistory::PrintScreenRecord::ShowText(const char *name, ImFont *font, ImU32 fontColor, float positionX, float positionY, bool center, const char *str)
+{
+   TransformPosition(positionX, positionY);
 
    if (BallHistory::DrawMenu)
    {
-      ImGui::Begin(name, nullptr, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize);
+      ImGui::SetNextWindowBgAlpha(0.25f);
+
+      ImGui::Begin(name, nullptr,
+         ImGuiWindowFlags_NoNav |
+         ImGuiWindowFlags_NoDecoration |
+         ImGuiWindowFlags_NoInputs |
+         ImGuiWindowFlags_NoMove |
+         ImGuiWindowFlags_AlwaysAutoResize
+      );
 
       ImGui::PushFont(font);
 
-      ImGui::PushStyleColor(ImGuiCol_Text, color);
+      ImGui::PushStyleColor(ImGuiCol_Text, fontColor);
 
       if (center)
       {
@@ -545,11 +509,74 @@ void BallHistory::PrintScreenRecord::Show(const char *name, ImFont *font, ImU32 
       ImVec2 windowSize = ImGui::GetWindowSize();
       ImVec2 adjustedPosition = ImVec2(positionX - (windowSize.x / 2.0f), positionY);
 
-      ImVec2 clampedPosition = { std::clamp(adjustedPosition.x, 0.0f, io.DisplaySize.x - windowSize.x), std::clamp(adjustedPosition.y, 0.0f, io.DisplaySize.y - windowSize.y) };
+      ImGuiIO &io = ImGui::GetIO();
+      ImVec2 clampedPosition = {
+         std::clamp(adjustedPosition.x, 0.0f, io.DisplaySize.x - windowSize.x),
+         std::clamp(adjustedPosition.y, 0.0f, io.DisplaySize.y - windowSize.y)
+      };
 
       ImGui::SetWindowPos(clampedPosition);
 
       ImGui::End();
+   }
+}
+
+void BallHistory::PrintScreenRecord::ShowNameValueTable(const char *name, ImFont *font, ImU32 fontColor, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs)
+{
+   TransformPosition(positionX, positionY);
+
+   ImGui::Begin(name, nullptr,
+       ImGuiWindowFlags_NoNav |
+       ImGuiWindowFlags_NoDecoration |
+       ImGuiWindowFlags_NoInputs |
+       ImGuiWindowFlags_NoMove |
+       ImGuiWindowFlags_AlwaysAutoResize);
+
+   ImGui::PushStyleColor(ImGuiCol_TableRowBg, ImVec4(0.2f, 0.2f, 0.2f, 0.5f)); // Slightly opaque gray
+   ImGui::PushStyleColor(ImGuiCol_TableRowBgAlt, ImVec4(0.3f, 0.3f, 0.3f, 0.5f)); // Alternate row color
+    
+   if (ImGui::BeginTable("Table", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+   {
+      ImGui::PushFont(font);
+
+      ImGui::PushStyleColor(ImGuiCol_Text, fontColor);
+
+      ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+      ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed);
+      ImGui::TableHeadersRow();
+
+      for (const auto &row : nameValuePairs)
+      {
+         ImGui::TableNextRow();
+         ImGui::TableSetColumnIndex(0);
+         ImGui::TextUnformatted(row.first.c_str());
+         ImGui::TableSetColumnIndex(1);
+         ImGui::TextUnformatted(row.second.c_str());
+      }
+
+      ImGui::PopStyleColor();
+
+      ImGui::PopFont();
+
+      ImGui::EndTable();
+   }
+
+   ImGui::PopStyleColor();
+   ImGui::PopStyleColor();
+
+   ImGui::End();
+}
+
+void BallHistory::PrintScreenRecord::TransformPosition(float &positionX, float &positionY)
+{
+   ImGuiIO &io = ImGui::GetIO();
+   if (positionX >= -1.0f && positionX <= 1.0f)
+   {
+      positionX *= io.DisplaySize.x;
+   }
+   if (positionY >= -1.0f && positionY <= 1.0f)
+   {
+      positionY *= io.DisplaySize.y;
    }
 }
 
@@ -2197,7 +2224,7 @@ void BallHistory::DrawNormalModeVisuals(Player &player, int currentTimeMs)
          std::string autoControlFakeBallName = "AutoControlBall" + std::to_string(acvIndex);
          DrawFakeBall(player, autoControlFakeBallName.c_str(), acv.m_Position, ballRadius, m_AutoControlBallColor);
          POINT screenPoint = Get2DPointFrom3D(player, acv.m_Position);
-         PrintScreenRecord::ShowText(NormalOptions::ImGuiDrawAutoControlVertexLabels[acvIndex], float(screenPoint.x), float(screenPoint.y), "%zu", acvIndex + 1);
+         PrintScreenRecord::Text(NormalOptions::ImGuiDrawAutoControlVertexLabels[acvIndex], float(screenPoint.x), float(screenPoint.y), "%zu", acvIndex + 1);
       }
 
       if (m_MenuOptions.m_NormalOptions.m_RecallControlIndex != NormalOptions::RecallControlIndexDisabled)
@@ -2209,7 +2236,7 @@ void BallHistory::DrawNormalModeVisuals(Player &player, int currentTimeMs)
             std::string recallBallFakeBallName = "RecallBall" + std::to_string(bhsIndex);
             DrawFakeBall(player, recallBallFakeBallName.c_str(), recallBallHistoryState.m_Position, ballRadius, m_RecallBallColor);
             POINT screenPoint = Get2DPointFrom3D(player, recallBallHistoryState.m_Position);
-            PrintScreenRecord::ShowText(NormalOptions::ImGuiDrawRecallVertexLabels[bhsIndex], float(screenPoint.x), float(screenPoint.y), "RCL");
+            PrintScreenRecord::Text(NormalOptions::ImGuiDrawRecallVertexLabels[bhsIndex], float(screenPoint.x), float(screenPoint.y), "RCL");
          }
       }
    }
@@ -2396,7 +2423,7 @@ void BallHistory::DrawTrainerBallCorridorPass(Player &player, const char *name, 
          player, name, { position->x - passWidth, position->y, position->z }, { position->x + passWidth, position->y, position->z }, m_TrainerBallCorridorPassColor, int(passBallRadius));
 
       POINT screenPoint = Get2DPointFrom3D(player, *position);
-      PrintScreenRecord::ShowText(name, float(screenPoint.x), float(screenPoint.y), "P");
+      PrintScreenRecord::Text(name, float(screenPoint.x), float(screenPoint.y), "P");
    }
 }
 
@@ -2410,7 +2437,7 @@ void BallHistory::DrawTrainerBallCorridorOpeningLeft(Player &player, TrainerOpti
    {
       DrawFakeBall(player, "DrawTrainerBallCorridorOpeningLeft", bcor.m_OpeningPositionLeft, openingBallRadius, m_TrainerBallCorridorOpeningEndColor);
       POINT screenPoint = Get2DPointFrom3D(player, bcor.m_OpeningPositionLeft);
-      PrintScreenRecord::ShowText(TrainerOptions::BallCorridorOptionsRecord::ImGuiDrawTrainerBallCorridorOpeningLeftLabel, float(screenPoint.x), float(screenPoint.y), "L");
+      PrintScreenRecord::Text(TrainerOptions::BallCorridorOptionsRecord::ImGuiDrawTrainerBallCorridorOpeningLeftLabel, float(screenPoint.x), float(screenPoint.y), "L");
    }
 
    if (!bcor.m_PassPosition.IsZero() && !bcor.m_OpeningPositionLeft.IsZero())
@@ -2430,7 +2457,7 @@ void BallHistory::DrawTrainerBallCorridorOpeningRight(Player &player, TrainerOpt
    {
       DrawFakeBall(player, "DrawTrainerBallCorridorOpeningRight", bcor.m_OpeningPositionRight, openingBallRadius, m_TrainerBallCorridorOpeningEndColor);
       POINT screenPoint = Get2DPointFrom3D(player, bcor.m_OpeningPositionRight);
-      PrintScreenRecord::ShowText(TrainerOptions::BallCorridorOptionsRecord::ImGuiDrawTrainerBallCorridorOpeningRightLabel, float(screenPoint.x), float(screenPoint.y), "R");
+      PrintScreenRecord::Text(TrainerOptions::BallCorridorOptionsRecord::ImGuiDrawTrainerBallCorridorOpeningRightLabel, float(screenPoint.x), float(screenPoint.y), "R");
    }
 
    if (!bcor.m_PassPosition.IsZero() && !bcor.m_OpeningPositionRight.IsZero())
@@ -2458,7 +2485,7 @@ void BallHistory::DrawTrainerModeVisuals(Player &player, int currentTimeMs)
             DrawFakeBall(player, ballStartFakeBallName.c_str(), bsor.m_StartPosition, ballRadius, m_TrainerBallStartColor);
             DrawAngleVelocityPreview(player, bsor);
             POINT screenPoint = Get2DPointFrom3D(player, bsor.m_StartPosition);
-            PrintScreenRecord::ShowText(TrainerOptions::BallStartOptionsRecord::ImGuiBallStartLabels[bsorIndex], float(screenPoint.x), float(screenPoint.y), "S-%zu", bsorIndex + 1);
+            PrintScreenRecord::Text(TrainerOptions::BallStartOptionsRecord::ImGuiBallStartLabels[bsorIndex], float(screenPoint.x), float(screenPoint.y), "S-%zu", bsorIndex + 1);
          }
       }
    }
@@ -2478,7 +2505,7 @@ void BallHistory::DrawTrainerModeVisuals(Player &player, int currentTimeMs)
                DrawIntersectionCircle(player, ballPassIntersectionCircleName.c_str(), bpor.m_EndPosition, bpor.m_EndRadiusPercent, Color::Blue);
             }
             POINT screenPoint = Get2DPointFrom3D(player, bpor.m_EndPosition);
-            PrintScreenRecord::ShowText(TrainerOptions::BallEndOptionsRecord::ImGuiBallPassLabels[bporIndex], float(screenPoint.x), float(screenPoint.y), "P-%zu", bporIndex + 1);
+            PrintScreenRecord::Text(TrainerOptions::BallEndOptionsRecord::ImGuiBallPassLabels[bporIndex], float(screenPoint.x), float(screenPoint.y), "P-%zu", bporIndex + 1);
          }
       }
    }
@@ -2498,7 +2525,7 @@ void BallHistory::DrawTrainerModeVisuals(Player &player, int currentTimeMs)
                DrawIntersectionCircle(player, ballFailIntersectionCircleName.c_str(), bfor.m_EndPosition, bfor.m_EndRadiusPercent, Color::Blue);
             }
             POINT screenPoint = Get2DPointFrom3D(player, bfor.m_EndPosition);
-            PrintScreenRecord::ShowText(TrainerOptions::BallEndOptionsRecord::ImGuiBallFailLabels[bforIndex], float(screenPoint.x), float(screenPoint.y), "F-%zu", bforIndex + 1);
+            PrintScreenRecord::Text(TrainerOptions::BallEndOptionsRecord::ImGuiBallFailLabels[bforIndex], float(screenPoint.x), float(screenPoint.y), "F-%zu", bforIndex + 1);
          }
       }
    }
@@ -2583,7 +2610,7 @@ void BallHistory::DrawActiveBallKickers(Player &player)
             }
          }
 
-         PrintScreenRecord::ShowText(ImGuiDrawActiveBallKickersLabels[abkIndex], float(screenPoint.x), float(screenPoint.y), kickerText.c_str());
+         PrintScreenRecord::Text(ImGuiDrawActiveBallKickersLabels[abkIndex], float(screenPoint.x), float(screenPoint.y), kickerText.c_str());
 
          std::string activeBallKickerFakeBallName = "ActiveBallKicker" + std::to_string(abkIndex);
          DrawFakeBall(player, activeBallKickerFakeBallName.c_str(), kickerPosition, ballRadius, m_ActiveBallKickerColor);
@@ -2707,6 +2734,10 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
 
    POINT mousePosition2D = { 0 };
    Get2DMousePosition(player, mousePosition2D);
+
+   std::vector<std::pair<std::string, std::string>> status;
+   status.push_back({ "Mouse Position 2D", "%ld,%ld (x,y) (Mouse->Screen)"});//, mousePosition2D.x, mousePosition2D.y);
+
    PrintScreenRecord::StatusText("Mouse Position 2D = %ld,%ld (x,y) (Mouse->Screen)", mousePosition2D.x, mousePosition2D.y);
 
    Vertex3Ds mousePosition3D = Get3DPointFromMousePosition(player, GetDefaultBallRadius());
@@ -3158,7 +3189,7 @@ void BallHistory::ShowPreviousRunRecord()
       case TrainerOptions::RunRecord::ResultType::ResultType_FailedKicker: printScreenTexts.push_back(std::format("Fail (kicker)")); break;
       default: InvalidEnumValue("TrainerOptions::RunRecord::ResultType", previousRunRecord.m_Result); break;
       }
-      printScreenTexts.push_back(std::format("%.2f seconds", float(previousRunRecord.m_TotalTimeMs) / 1000));
+      printScreenTexts.push_back(std::format("{:.2f} seconds", float(previousRunRecord.m_TotalTimeMs) / 1000));
 
       for (const std::string &text : printScreenTexts)
       {
@@ -3431,7 +3462,7 @@ void BallHistory::ShowResult(std::size_t total, std::vector<DWORD> &timesMs, con
    });
    if (currentRunCount)
    {
-      results.push_back({ std::format("{} {} Percent", type, subType), std::format("{:06.2f}%", float(total) / currentRunCount * 100.0f) });
+      results.push_back({ std::format("{} {} Percent", type, subType), std::format("{:.2f}%", float(total) / currentRunCount * 100.0f) });
    }
    else
    {
@@ -3443,7 +3474,7 @@ void BallHistory::ShowResult(std::size_t total, std::vector<DWORD> &timesMs, con
    {
       if (total)
       {
-         results.push_back({ std::format("{} {} Average Time", type, subType), std::format("{:06.2f}", float(totalMs) / total / 1000.0f) });
+         results.push_back({ std::format("{} {} Average Time", type, subType), std::format("{:.2f}", float(totalMs) / total / 1000.0f) });
       }
       else
       {
@@ -3452,7 +3483,7 @@ void BallHistory::ShowResult(std::size_t total, std::vector<DWORD> &timesMs, con
 
       if (total)
       {
-         results.push_back({ std::format("{} {} StdDev Time", type, subType), std::format("{:06.2f}", CalculateStandardDeviation(timesMs) / 1000.f) });
+         results.push_back({ std::format("{} {} StdDev Time", type, subType), std::format("{:.2f}", CalculateStandardDeviation(timesMs) / 1000.f) });
       }
       else
       {
@@ -4365,8 +4396,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          ShowResult(totalFailCorridorRight, totalFailCorridorRightTimesMs, "Fail", "Corridor Right", results);
          ShowResult(totalFailTimeElapsed, totalFailTimeElapsedTimeMs, "Fail", "Time", results);
          ShowResult(totalFailKicker, totalFailKickerTimesMs, "Fail", "Kicker", results);
-         PrintScreenRecord::ShowTable("ProcessMenu", 0.50f, 0.25f, results);
-         //ShowDifficultyVarianceStatusesMenu(results);
+         PrintScreenRecord::Results("ProcessMenu", 0.50f, 0.25f, results);
       }
       else
       {
