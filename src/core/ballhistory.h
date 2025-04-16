@@ -481,6 +481,7 @@ private:
    {
    public:
       static void Init();
+      static void ShowTable(const char *name, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs);
       static void ShowText(const char *name, float positionX, float positionY, const char *format, ...);
       static void MenuTitleText(const char *format, ...);
       static void MenuText(bool selected, const char *format, ...);
@@ -803,17 +804,18 @@ private:
    void ShowBallStartOptionsRecord(TrainerOptions::BallStartOptionsRecord &bsor);
    void ShowBallEndOptionsRecord(TrainerOptions::BallEndOptionsRecord &beor);
    void ShowBallCorridorOptionsRecord(TrainerOptions::BallCorridorOptionsRecord &bcor);
-   void ShowDifficultyTableConstants(Player &player);
-   void ShowDifficultyVarianceMode(bool isMenu, const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode);
-   void ShowDifficultyVarianceRange(bool isMenu, const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, S32 variance, float initial);
    void ShowSection(const char *title, const std::vector<std::string> &description);
-   void ShowDifficultyVarianceStatusAll(bool isMenu, Player &player);
-   void ShowDifficultyVarianceStatusSingle(bool isMenu, const std::string &name, float current, S32 variance, float initial, TrainerOptions::DifficultyVarianceModeType mode);
-   void ShowDifficultyVarianceStatusGravity(bool isMenu, Player &player);
-   void ShowDifficultyVarianceStatusPlayfieldFriction(bool isMenu, Player &player);
-   void ShowDifficultyVarianceStatusFlipperStrength(bool isMenu, Player &player);
-   void ShowDifficultyVarianceStatusFlipperFriction(bool isMenu, Player &player);
-   void ShowResult(std::size_t total, std::vector<DWORD> &timesMs, const char *type, const char *subType);
+   void ShowDifficultyTableConstants(Player &player);
+   void ShowDifficultyVarianceStatusesMenu(std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses);
+   void ShowDifficultyVarianceMode(const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses);
+   void ShowDifficultyVarianceRange(const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, S32 variance, float initial, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses);
+   void ShowDifficultyVarianceStatusAll(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses);
+   void ShowDifficultyVarianceStatusSingle(const std::string &name, float current, S32 variance, float initial, TrainerOptions::DifficultyVarianceModeType mode, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses);
+   void ShowDifficultyVarianceStatusGravity(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses);
+   void ShowDifficultyVarianceStatusPlayfieldFriction(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses);
+   void ShowDifficultyVarianceStatusFlipperStrength(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses);
+   void ShowDifficultyVarianceStatusFlipperFriction(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses);
+   void ShowResult(std::size_t total, std::vector<DWORD> &timesMs, const char *type, const char *subType, std::vector<std::pair<std::string, std::string>> &results);
    template <class T> float CalculateStandardDeviation(std::vector<T> &values);
    float CalculateDifficultyVariance(Player &player, float initial, float current, S32 variance, TrainerOptions::DifficultyVarianceModeType varianceMode);
    void InitBallStartOptionRecords();
