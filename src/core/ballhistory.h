@@ -485,12 +485,12 @@ private:
       static void MenuTitleText(const char *format, ...);
       static void MenuText(bool selected, const char *format, ...);
       static void ActiveMenuText(const char *format, ...);
-      static void StatusText(const char *format, ...);
       static void ErrorText(const char *format, ...);
-      static void Results(const char *name, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs);
+      static void Results(const std::vector<std::pair<std::string, std::string>> &nameValuePairs);
+      static void Status(const std::vector<std::pair<std::string, std::string>> &nameValuePairs);
 
    private:
-      static const char *ImGuiShowStatusLabel;
+      static const char *ImGuiStatusLabel;
       static const char *ImGuiProcessMenuLabel;
       static const char *ImGuiActiveMenuLabel;
       static const char *ImGuiErrorLabel;
@@ -500,7 +500,7 @@ private:
       static const float MenuTextFontSize;
       static const float MenuSelectedTextFontSize;
       static const float ActiveMenuTextFontSize;
-      static const float StatusTextFontSize;
+      static const float StatusFontSize;
       static const float ErrorTextFontSize;
       static const float ResultsFontSize;
 
@@ -509,7 +509,7 @@ private:
       static const ImU32 MenuTextFontColor;
       static const ImU32 MenuSelectedTextFontColor;
       static const ImU32 ActiveMenuTextFontColor;
-      static const ImU32 StatusTextFontColor;
+      static const ImU32 StatusFontColor;
       static const ImU32 ErrorTextFontColor;
       static const ImU32 ResultsFontColor;
 
@@ -518,7 +518,7 @@ private:
       static ImFont *MenuTextFont;
       static ImFont *MenuSelectedTextFont;
       static ImFont *ActiveMenuTextFont;
-      static ImFont *StatusTextFont;
+      static ImFont *StatusFont;
       static ImFont *ErrorTextFont;
       static ImFont *ResultsFont;
 
@@ -812,14 +812,14 @@ private:
    void ShowSection(const char *title, const std::vector<std::string> &description);
    void ShowDifficultyTableConstants(Player &player);
    void ShowDifficultyVarianceStatusesMenu(std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses);
-   void ShowDifficultyVarianceMode(const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses);
-   void ShowDifficultyVarianceRange(const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, S32 variance, float initial, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses);
-   void ShowDifficultyVarianceStatusAll(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses);
-   void ShowDifficultyVarianceStatusSingle(const std::string &name, float current, S32 variance, float initial, TrainerOptions::DifficultyVarianceModeType mode, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses);
-   void ShowDifficultyVarianceStatusGravity(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses);
-   void ShowDifficultyVarianceStatusPlayfieldFriction(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses);
-   void ShowDifficultyVarianceStatusFlipperStrength(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses);
-   void ShowDifficultyVarianceStatusFlipperFriction(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses);
+   void ShowDifficultyVarianceMode(const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
+   void ShowDifficultyVarianceRange(const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, S32 variance, float initial, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
+   void ShowDifficultyVarianceStatusAll(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
+   void ShowDifficultyVarianceStatusSingle(const std::string &name, float current, S32 variance, float initial, TrainerOptions::DifficultyVarianceModeType mode, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
+   void ShowDifficultyVarianceStatusGravity(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
+   void ShowDifficultyVarianceStatusPlayfieldFriction(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
+   void ShowDifficultyVarianceStatusFlipperStrength(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
+   void ShowDifficultyVarianceStatusFlipperFriction(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
    void ShowResult(std::size_t total, std::vector<DWORD> &timesMs, const char *type, const char *subType, std::vector<std::pair<std::string, std::string>> &results);
    template <class T> float CalculateStandardDeviation(std::vector<T> &values);
    float CalculateDifficultyVariance(Player &player, float initial, float current, S32 variance, TrainerOptions::DifficultyVarianceModeType varianceMode);

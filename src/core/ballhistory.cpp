@@ -1,4 +1,4 @@
-b #pragma once
+#pragma once
 
 #include "core/stdafx.h"
 
@@ -322,7 +322,7 @@ void BallHistory::ProfilerRecord::SetZero()
 
 const char *BallHistory::PrintScreenRecord::ImGuiProcessMenuLabel = "ProcessMenu";
 const char *BallHistory::PrintScreenRecord::ImGuiActiveMenuLabel = "ActiveMenu";
-const char *BallHistory::PrintScreenRecord::ImGuiShowStatusLabel = "ShowStatus";
+const char *BallHistory::PrintScreenRecord::ImGuiStatusLabel = "Status";
 const char *BallHistory::PrintScreenRecord::ImGuiErrorLabel = "Error";
 
 const float BallHistory::PrintScreenRecord::TextFontSize = 14.0f;
@@ -330,7 +330,7 @@ const float BallHistory::PrintScreenRecord::MenuTitleTextFontSize = 14.0f;
 const float BallHistory::PrintScreenRecord::MenuTextFontSize = 12.0f;
 const float BallHistory::PrintScreenRecord::MenuSelectedTextFontSize = 12.0f;
 const float BallHistory::PrintScreenRecord::ActiveMenuTextFontSize = 12.0f;
-const float BallHistory::PrintScreenRecord::StatusTextFontSize = 12.0f;
+const float BallHistory::PrintScreenRecord::StatusFontSize = 12.0f;
 const float BallHistory::PrintScreenRecord::ErrorTextFontSize = 20.0f;
 const float BallHistory::PrintScreenRecord::ResultsFontSize = 12.0f;
 
@@ -339,7 +339,7 @@ ImFont *BallHistory::PrintScreenRecord::MenuTitleTextFont = nullptr;
 ImFont *BallHistory::PrintScreenRecord::MenuTextFont = nullptr;
 ImFont *BallHistory::PrintScreenRecord::MenuSelectedTextFont = nullptr;
 ImFont *BallHistory::PrintScreenRecord::ActiveMenuTextFont = nullptr;
-ImFont *BallHistory::PrintScreenRecord::StatusTextFont = nullptr;
+ImFont *BallHistory::PrintScreenRecord::StatusFont = nullptr;
 ImFont *BallHistory::PrintScreenRecord::ErrorTextFont = nullptr;
 ImFont *BallHistory::PrintScreenRecord::ResultsFont = nullptr;
 
@@ -348,7 +348,7 @@ const ImU32 BallHistory::PrintScreenRecord::MenuTitleTextFontColor = IM_COL32_WH
 const ImU32 BallHistory::PrintScreenRecord::MenuTextFontColor = IM_COL32_WHITE;
 const ImU32 BallHistory::PrintScreenRecord::MenuSelectedTextFontColor = IM_COL32_WHITE;
 const ImU32 BallHistory::PrintScreenRecord::ActiveMenuTextFontColor = IM_COL32(0x00, 0xFF, 0x00, 0xFF); // green
-const ImU32 BallHistory::PrintScreenRecord::StatusTextFontColor = IM_COL32_WHITE;
+const ImU32 BallHistory::PrintScreenRecord::StatusFontColor = IM_COL32_WHITE;
 const ImU32 BallHistory::PrintScreenRecord::ErrorTextFontColor = IM_COL32(0xFF, 0x00, 0x00, 0xFF); // red
 const ImU32 BallHistory::PrintScreenRecord::ResultsFontColor = IM_COL32_WHITE;
 
@@ -381,9 +381,9 @@ void BallHistory::PrintScreenRecord::Init()
       ActiveMenuTextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, ActiveMenuTextFontSize);
    }
 
-   if (StatusTextFont == nullptr)
+   if (StatusFont == nullptr)
    {
-      StatusTextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, StatusTextFontSize);
+      StatusFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, StatusFontSize);
    }
 
    if (ErrorTextFont == nullptr)
@@ -446,16 +446,6 @@ void BallHistory::PrintScreenRecord::PrintScreenRecord::ActiveMenuText(const cha
    ShowText(ImGuiActiveMenuLabel, ActiveMenuTextFont, ActiveMenuTextFontColor, 0.50f, 1.00f, false, strBuffer);
 }
 
-void BallHistory::PrintScreenRecord::StatusText(const char *format, ...)
-{
-   char strBuffer[1024] = { 0 };
-   va_list formatArgs;
-   va_start(formatArgs, format);
-   vsprintf_s(strBuffer, format, formatArgs);
-
-   ShowText(ImGuiShowStatusLabel, StatusTextFont, StatusTextFontColor, 0.0f, 0.0f, false, strBuffer);
-}
-
 void BallHistory::PrintScreenRecord::ErrorText(const char *format, ...)
 {
    char strBuffer[1024] = { 0 };
@@ -464,12 +454,17 @@ void BallHistory::PrintScreenRecord::ErrorText(const char *format, ...)
    vsprintf_s(strBuffer, format, formatArgs);
 
    std::string tempStr = "!!!!! ERROR:" + std::string(strBuffer) + "!!!!!";
-   ShowText(ImGuiErrorLabel, ErrorTextFont, ErrorTextFontColor, 0.75f, 0.50f, true, tempStr.c_str());
+   ShowText(ImGuiErrorLabel, ErrorTextFont, ErrorTextFontColor, 0.50f, 0.50f, true, tempStr.c_str());
 }
 
-void BallHistory::PrintScreenRecord::Results(const char *name, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs)\
+void BallHistory::PrintScreenRecord::Results(const std::vector<std::pair<std::string, std::string>> &nameValuePairs)
 {
-   ShowNameValueTable(name, ResultsFont, ResultsFontColor, positionX, positionY, nameValuePairs);
+   ShowNameValueTable(ImGuiProcessMenuLabel, ResultsFont, ResultsFontColor, 0.0f, 0.0f, nameValuePairs);
+}
+
+void BallHistory::PrintScreenRecord::Status(const std::vector<std::pair<std::string, std::string>> &nameValuePairs)
+{
+   ShowNameValueTable(ImGuiStatusLabel, StatusFont, StatusFontColor, 1.01f, 1.01f, nameValuePairs);
 }
 
 void BallHistory::PrintScreenRecord::ShowText(const char *name, ImFont *font, ImU32 fontColor, float positionX, float positionY, bool center, const char *str)
@@ -481,12 +476,11 @@ void BallHistory::PrintScreenRecord::ShowText(const char *name, ImFont *font, Im
       ImGui::SetNextWindowBgAlpha(0.25f);
 
       ImGui::Begin(name, nullptr,
-         ImGuiWindowFlags_NoNav |
-         ImGuiWindowFlags_NoDecoration |
-         ImGuiWindowFlags_NoInputs |
+         ImGuiWindowFlags_NoTitleBar |
+         ImGuiWindowFlags_NoResize |
+         ImGuiWindowFlags_NoCollapse |
          ImGuiWindowFlags_NoMove |
-         ImGuiWindowFlags_AlwaysAutoResize
-      );
+         ImGuiWindowFlags_AlwaysAutoResize);
 
       ImGui::PushFont(font);
 
@@ -510,10 +504,7 @@ void BallHistory::PrintScreenRecord::ShowText(const char *name, ImFont *font, Im
       ImVec2 adjustedPosition = ImVec2(positionX - (windowSize.x / 2.0f), positionY);
 
       ImGuiIO &io = ImGui::GetIO();
-      ImVec2 clampedPosition = {
-         std::clamp(adjustedPosition.x, 0.0f, io.DisplaySize.x - windowSize.x),
-         std::clamp(adjustedPosition.y, 0.0f, io.DisplaySize.y - windowSize.y)
-      };
+      ImVec2 clampedPosition = { std::clamp(adjustedPosition.x, 0.0f, io.DisplaySize.x - windowSize.x), std::clamp(adjustedPosition.y, 0.0f, io.DisplaySize.y - windowSize.y) };
 
       ImGui::SetWindowPos(clampedPosition);
 
@@ -525,46 +516,83 @@ void BallHistory::PrintScreenRecord::ShowNameValueTable(const char *name, ImFont
 {
    TransformPosition(positionX, positionY);
 
-   ImGui::Begin(name, nullptr,
-       ImGuiWindowFlags_NoNav |
-       ImGuiWindowFlags_NoDecoration |
-       ImGuiWindowFlags_NoInputs |
-       ImGuiWindowFlags_NoMove |
-       ImGuiWindowFlags_AlwaysAutoResize);
-
-   ImGui::PushStyleColor(ImGuiCol_TableRowBg, ImVec4(0.2f, 0.2f, 0.2f, 0.5f)); // Slightly opaque gray
-   ImGui::PushStyleColor(ImGuiCol_TableRowBgAlt, ImVec4(0.3f, 0.3f, 0.3f, 0.5f)); // Alternate row color
-    
-   if (ImGui::BeginTable("Table", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+   float maxX = 0;
+   bool beginWindowTable = true;
+   for (std::size_t nameValuePairsIndex = 0; nameValuePairsIndex < nameValuePairs.size(); nameValuePairsIndex++)
    {
-      ImGui::PushFont(font);
+      if (beginWindowTable)
+      {
+         beginWindowTable = false;
 
-      ImGui::PushStyleColor(ImGuiCol_Text, fontColor);
+         ImGui::SetNextWindowPos({positionX, positionY});
+         ImGui::SetNextWindowBgAlpha(0.25f);
 
-      ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-      ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed);
-      ImGui::TableHeadersRow();
+         std::string windowName = name + std::to_string(nameValuePairsIndex);
+         ImGui::Begin(windowName.c_str(), nullptr,
+            ImGuiWindowFlags_NoTitleBar |
+            ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoScrollbar |
+            ImGuiWindowFlags_NoScrollWithMouse |
+            ImGuiWindowFlags_NoCollapse |
+            ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_AlwaysAutoResize);
 
-      for (const auto &row : nameValuePairs)
+         std::string tableName = "Table_" + std::to_string(nameValuePairsIndex);
+         ImGui::BeginTable(tableName.c_str(), 2, ImGuiTableFlags_Borders);
+         ImGui::PushFont(font);
+         ImGui::PushStyleColor(ImGuiCol_Text, fontColor);
+
+         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed);
+      }
+
+      auto &row = nameValuePairs[nameValuePairsIndex];
+
+      auto cursorScreenPos = ImGui::GetCursorScreenPos();
+      ImGuiIO &io = ImGui::GetIO();
+      auto rowHeight = std::max(ImGui::CalcTextSize(row.first.c_str()).y, ImGui::CalcTextSize(row.second.c_str()).y);
+      if ((cursorScreenPos.y + rowHeight) > io.DisplaySize.y)
+      {
+         positionX += ImGui::GetWindowSize().x;
+         ImGui::PopStyleColor();
+         ImGui::PopFont();
+         ImGui::EndTable();
+         ImGui::End();
+         beginWindowTable = true;
+         nameValuePairsIndex--;
+      }
+      else
       {
          ImGui::TableNextRow();
          ImGui::TableSetColumnIndex(0);
          ImGui::TextUnformatted(row.first.c_str());
          ImGui::TableSetColumnIndex(1);
          ImGui::TextUnformatted(row.second.c_str());
+
+         if (row.second.empty())
+         {
+            ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32(0x11, 0x11, 0x11, 0x40));
+         }
+         else
+         {
+            ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, (nameValuePairsIndex % 2) == 0 ? IM_COL32(0xAA, 0xAA, 0xAA, 0x40) : IM_COL32(0x99, 0x99, 0x99, 0x40));
+         }
       }
-
-      ImGui::PopStyleColor();
-
-      ImGui::PopFont();
-
-      ImGui::EndTable();
    }
 
-   ImGui::PopStyleColor();
-   ImGui::PopStyleColor();
+   if (!beginWindowTable)
+   {
+      ImGui::PopStyleColor();
+      ImGui::PopFont();
+      ImGui::EndTable();
+      ImGui::End();
+   }
 
-   ImGui::End();
+   if (positionX != 0.0f && positionY != 0.0f)
+   {
+      ImGui::SetWindowPos({ positionX, positionY });
+   }
+
 }
 
 void BallHistory::PrintScreenRecord::TransformPosition(float &positionX, float &positionY)
@@ -2733,243 +2761,158 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
    }
 
    POINT mousePosition2D = { 0 };
+
+   std::vector<std::pair<std::string, std::string>> statuses;
+
+   statuses.push_back({ "BALL HISTORY", ""});
+   statuses.push_back({ "Mouse Positions", ""});
+
    Get2DMousePosition(player, mousePosition2D);
-
-   std::vector<std::pair<std::string, std::string>> status;
-   status.push_back({ "Mouse Position 2D", "%ld,%ld (x,y) (Mouse->Screen)"});//, mousePosition2D.x, mousePosition2D.y);
-
-   PrintScreenRecord::StatusText("Mouse Position 2D = %ld,%ld (x,y) (Mouse->Screen)", mousePosition2D.x, mousePosition2D.y);
+   statuses.push_back({ "2D\n(Mse->Scr)", std::format("{}x\n{}y", mousePosition2D.x, mousePosition2D.y)});
 
    Vertex3Ds mousePosition3D = Get3DPointFromMousePosition(player, GetDefaultBallRadius());
-   PrintScreenRecord::StatusText("Mouse Position 3D = %.2f,%.2f,%.2f (x,y,z) (Screen->3D)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
+   statuses.push_back({ "3D\n(Scr->3D)", std::format("{:.1f}x\n{:.1f}y\n{:.1f}z", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z)});
    POINT mousePosition2DFrom3D = Get2DPointFrom3D(player, mousePosition3D);
-   PrintScreenRecord::StatusText("Mouse Position 2D = %ld,%ld (x,y) (3D->Screen)", mousePosition2DFrom3D.x, mousePosition2DFrom3D.y);
+   statuses.push_back({ "2D\n(3D->Scr)", std::format("{}x\n{}y", mousePosition2DFrom3D.x, mousePosition2DFrom3D.y)});
 
-   PrintScreenRecord::StatusText("Ball History Status");
-   PrintScreenRecord::StatusText("Process = %.2fms", m_ProfilerRecord.m_ProcessUsec / 1000.0f);
-   PrintScreenRecord::StatusText("  Show Status = %.2fms", m_ProfilerRecord.m_ShowStatusUsec / 1000.0f);
-   PrintScreenRecord::StatusText("  Process Menu = %.2fms", m_ProfilerRecord.m_ProcessMenuUsec / 1000.0f);
-   PrintScreenRecord::StatusText("  Draw Ball History = %.2fms", m_ProfilerRecord.m_DrawBallHistoryUsec / 1000.0f);
-   PrintScreenRecord::StatusText("  Process Mode Normal = %.2fms", m_ProfilerRecord.m_ProcessModeNormalUsec / 1000.0f);
-   PrintScreenRecord::StatusText("  Process Mode Trainer = %.2fms", m_ProfilerRecord.m_ProcessModeTrainerUsec / 1000.0f);
-   PrintScreenRecord::StatusText("  Draw Trainer Balls = %.2fms", m_ProfilerRecord.m_DrawTrainerBallsUsec / 1000.0f);
+   statuses.push_back({ "Render Times", "" });
+   statuses.push_back({ "Process", std::format("{:.1f}ms", m_ProfilerRecord.m_ProcessUsec / 1000.0f) });
+   statuses.push_back({ "Show Status", std::format("{:.1f}ms", m_ProfilerRecord.m_ShowStatusUsec / 1000.0f) });
+   statuses.push_back({ "Process Menu", std::format("{:.1f}ms", m_ProfilerRecord.m_ProcessMenuUsec / 1000.0f) });
+   statuses.push_back({ "Draw Ball\nHistory", std::format("{:.1f}ms", m_ProfilerRecord.m_DrawBallHistoryUsec / 1000.0f) });
+   statuses.push_back({ "Process Mode\nNormal", std::format("{:.1f}ms", m_ProfilerRecord.m_ProcessModeNormalUsec / 1000.0f) });
+   statuses.push_back({ "Process Mode\nTrainer", std::format("{:.1f}ms", m_ProfilerRecord.m_ProcessModeTrainerUsec / 1000.0f) });
+   statuses.push_back({ "Draw Trainer\nBalls", std::format("{:.1f}ms", m_ProfilerRecord.m_DrawTrainerBallsUsec / 1000.0f) });
 
    m_ProfilerRecord.SetZero();
-
-   if (!m_MenuOptions.m_MenuError.empty())
-   {
-      PrintScreenRecord::StatusText("Error = %s", m_MenuOptions.m_MenuError.c_str());
-   }
 
    switch (m_MenuOptions.m_ModeType)
    {
    case MenuOptionsRecord::ModeType::ModeType_Normal:
-      PrintScreenRecord::StatusText("Mode = Normal");
-      PrintScreenRecord::StatusText("Control = %s", m_Control ? "true" : "false");
-      PrintScreenRecord::StatusText("CurrentControlIndex = %zu", m_CurrentControlIndex);
+      statuses.push_back({ "Normal Options", "" });
+      statuses.push_back({ "Control", std::format("{}", m_Control ? "true" : "false") });
+      statuses.push_back({ "Current Control\nIndex", std::format("{}", m_CurrentControlIndex) });
+
+      statuses.push_back({ "BH Records\nHeadIndex", std::format("{}", m_BallHistoryRecordsHeadIndex) });
+      statuses.push_back({ "BH Records\nSize (Size)", std::format("{}", m_BallHistoryRecords.size()) });
+      statuses.push_back({ "BH Records\nSize (Max)", std::format("{}", m_BallHistoryRecordsSize) });
       if (m_BallHistoryRecordsSize)
       {
+         statuses.push_back({ "Balls", "" });
+         statuses.push_back({ "Total", std::format("{}", m_BallHistoryRecordsSize ? m_BallHistoryRecords[m_CurrentControlIndex].m_BallHistoryStates.size() : 0u) });
          BallHistoryRecord &ballHistoryRecord = m_BallHistoryRecords[m_CurrentControlIndex];
          for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < ballHistoryRecord.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
          {
             BallHistoryState &ballHistoryState = ballHistoryRecord.m_BallHistoryStates[ballHistoryStateIndex];
-            PrintScreenRecord::StatusText(
-               "  Ball %zu Pos = %.2f,%.2f,%.2f (x,y,z)", ballHistoryStateIndex + 1, ballHistoryState.m_Position.x, ballHistoryState.m_Position.y, ballHistoryState.m_Position.z);
-            PrintScreenRecord::StatusText(
-               "  Ball %zu Vel = %.2f,%.2f,%.2f (x,y,z)", ballHistoryStateIndex + 1, ballHistoryState.m_Velocity.x, ballHistoryState.m_Velocity.y, ballHistoryState.m_Velocity.z);
-            PrintScreenRecord::StatusText("  Ball %zu Mom = %.2f,%.2f,%.2f (x,y,z)", ballHistoryStateIndex + 1, ballHistoryState.m_AngularMomentum.x, ballHistoryState.m_AngularMomentum.y,
-               ballHistoryState.m_AngularMomentum.z);
+            statuses.push_back({ std::format("({})-Position", ballHistoryStateIndex + 1), std::format("{:.1f}x\n{:.1f}y\n{:.1f}z", ballHistoryState.m_Position.x, ballHistoryState.m_Position.y, ballHistoryState.m_Position.z) });
+            statuses.push_back({ std::format("({})-Velocity", ballHistoryStateIndex + 1), std::format("{:.1f}x\n{:.1f}y\n{:.1f}z", ballHistoryState.m_Velocity.x, ballHistoryState.m_Velocity.y, ballHistoryState.m_Velocity.z) });
+            statuses.push_back({ std::format("({})-Momentum", ballHistoryStateIndex + 1), std::format("{:.1f}x\n{:.1f}y\n{:.1f}z", ballHistoryState.m_AngularMomentum.x, ballHistoryState.m_AngularMomentum.y, ballHistoryState.m_AngularMomentum.z) });
          }
       }
 
-      PrintScreenRecord::StatusText("AutoControlPoints Count = %zu", m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size());
+      statuses.push_back({ "Auto Control\nPoints (ACPs)", "" });
+      statuses.push_back({ "Total", std::format("{}", m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size()) });
       for (std::size_t autoControlVerticesIndex = 0; autoControlVerticesIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); ++autoControlVerticesIndex)
       {
          NormalOptions::AutoControlVertex &autoControlVertex = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[autoControlVerticesIndex];
-         PrintScreenRecord::StatusText("  Auto Control Point %zu %.2f,%.2f,%.2f,%s (3x,3y,3z,active)", autoControlVerticesIndex + 1, autoControlVertex.m_Position.x,
-            autoControlVertex.m_Position.y, autoControlVertex.m_Position.z, autoControlVertex.Active ? "true" : "false");
+         statuses.push_back({ std::format("({})-Position", autoControlVerticesIndex + 1), std::format("{:.1f}x\n{:.1f}y\n{:.1f}z", autoControlVertex.m_Position.x, autoControlVertex.m_Position.y, autoControlVertex.m_Position.z) });
+         statuses.push_back({ std::format("({})-Active", autoControlVerticesIndex + 1), std::format("{}", autoControlVertex.Active ? "true" : "false") });
       }
 
+      statuses.push_back({ "Recall Control", "" });
       if (m_MenuOptions.m_NormalOptions.m_RecallControlIndex == NormalOptions::RecallControlIndexDisabled)
       {
-         PrintScreenRecord::StatusText("Recall Control Index = <disabled>");
+         statuses.push_back({ "Index", "<disabled>" });
       }
       else
       {
-         PrintScreenRecord::StatusText("Recall Control Index = %zu", m_MenuOptions.m_NormalOptions.m_RecallControlIndex);
+         statuses.push_back({ "Index", std::format("{}", m_MenuOptions.m_NormalOptions.m_RecallControlIndex) });
       }
 
-      PrintScreenRecord::StatusText("BallHistoryRecords Size = %zu", m_BallHistoryRecords.size());
-      PrintScreenRecord::StatusText("Ball Count = %zu", m_BallHistoryRecordsSize ? m_BallHistoryRecords[m_CurrentControlIndex].m_BallHistoryStates.size() : 0u);
-      PrintScreenRecord::StatusText("MaxBallVelocityPixels = %.2f", m_MaxBallVelocityPixels);
+      statuses.push_back({ "Navigation", "" });
+      statuses.push_back({ "Ball Velocity\nPixels (Max)", std::format("{:.1f}wu", m_MaxBallVelocityPixels) });
 
       switch (m_NextPreviousBy)
       {
-      case NextPreviousByType::eTimeMs: PrintScreenRecord::StatusText("NextPreviousBy = TimeMs"); break;
-      case NextPreviousByType::eDistancePixels: PrintScreenRecord::StatusText("NextPreviousBy = DistancePixel"); break;
-      default: PrintScreenRecord::StatusText("NextPreviousBy = **UNKNOWN**"); break;
+      case NextPreviousByType::eTimeMs: statuses.push_back({ "Next Previous By", "TimeMs" }); break;
+      case NextPreviousByType::eDistancePixels: statuses.push_back({ "Next Previous By", "DistancePixel" }); break;
+      default: statuses.push_back({ "Next Previous By", "**UNKNOWN**" }); break;
       };
 
-      PrintScreenRecord::StatusText("BallHistoryControlStepMs = %d", m_BallHistoryControlStepMs);
-      PrintScreenRecord::StatusText("BallHistoryControlStepPixels = %.2f", m_BallHistoryControlStepPixels);
-      PrintScreenRecord::StatusText("BallHistoryRecordsSize = %zu", m_BallHistoryRecordsSize);
-      PrintScreenRecord::StatusText("BallHistoryRecordsHeadIndex = %zu", m_BallHistoryRecordsHeadIndex);
-
-      PrintScreenRecord::StatusText("ActiveBallKickers Count = %zu", m_ActiveBallKickers.size());
-      for (std::size_t activeBallKickerIndex = 0; activeBallKickerIndex < m_ActiveBallKickers.size(); activeBallKickerIndex++)
-      {
-         if (Kicker *kicker = m_ActiveBallKickers[activeBallKickerIndex])
-         {
-            Vertex3Ds kickerPosition = GetKickerPosition(*kicker);
-            PrintScreenRecord::StatusText("  Active Ball Kicker %zu %.2f,%.2f,%.2f (3x,3y,3z)", activeBallKickerIndex + 1, kickerPosition.x, kickerPosition.y, kickerPosition.z);
-         }
-      }
-
-      PrintScreenRecord::StatusText("Flippers Count = %zu", m_Flippers.size());
-      for (std::size_t flipperIndex = 0; flipperIndex < m_Flippers.size(); flipperIndex++)
-      {
-         if (Flipper *flipper = m_Flippers[flipperIndex])
-         {
-            PrintScreenRecord::StatusText("  Flipper %zu %s", flipperIndex + 1, flipper->GetName());
-         }
-      }
+      statuses.push_back({ "BH Control\nStep Ms", std::format("{}ms", m_BallHistoryControlStepMs) });
+      statuses.push_back({ "BH Control\nStep Pixels", std::format("{:.1f}wu", m_BallHistoryControlStepPixels) });
       break;
    case MenuOptionsRecord::ModeType::ModeType_Trainer:
    {
-      PrintScreenRecord::StatusText("Mode = Trainer");
-      switch (m_MenuOptions.m_TrainerOptions.m_ModeState)
-      {
-      case TrainerOptions::ModeStateType::ModeStateType_Start: PrintScreenRecord::StatusText("Mode State = Start"); break;
-      case TrainerOptions::ModeStateType::ModeStateType_Resume: PrintScreenRecord::StatusText("Mode State = Resume"); break;
-      case TrainerOptions::ModeStateType::ModeStateType_Results: PrintScreenRecord::StatusText("Mode State = Results"); break;
-      case TrainerOptions::ModeStateType::ModeStateType_Config: PrintScreenRecord::StatusText("Mode State = Config"); break;
-      case TrainerOptions::ModeStateType::ModeStateType_GoBack: PrintScreenRecord::StatusText("Mode State = Go Back"); break;
-      default: PrintScreenRecord::StatusText("Mode State = **UNKNOWN**"); break;
-      }
-
-      switch (m_MenuOptions.m_TrainerOptions.m_ConfigModeState)
-      {
-      case TrainerOptions::ConfigModeStateType::ConfigModeStateType_Wizard: PrintScreenRecord::StatusText("Config Mode State = Wizard"); break;
-      case TrainerOptions::ConfigModeStateType::ConfigModeStateType_BallStart: PrintScreenRecord::StatusText("Config Mode State = Ball Start"); break;
-      case TrainerOptions::ConfigModeStateType::ConfigModeStateType_BallPass: PrintScreenRecord::StatusText("Config Mode State = Ball Pass"); break;
-      case TrainerOptions::ConfigModeStateType::ConfigModeStateType_BallFail: PrintScreenRecord::StatusText("Config Mode State = Ball Fail"); break;
-      case TrainerOptions::ConfigModeStateType::ConfigModeStateType_Difficulty: PrintScreenRecord::StatusText("Config Mode State = Difficulty"); break;
-      case TrainerOptions::ConfigModeStateType::ConfigModeStateType_TotalRuns: PrintScreenRecord::StatusText("Config Mode State = Total Runs"); break;
-      case TrainerOptions::ConfigModeStateType::ConfigModeStateType_RunOrder: PrintScreenRecord::StatusText("Config Mode State = Run Order"); break;
-      case TrainerOptions::ConfigModeStateType::ConfigModeStateType_BallKickerBehavior: PrintScreenRecord::StatusText("Config Mode State = Ball Kicker Behavior"); break;
-      case TrainerOptions::ConfigModeStateType::ConfigModeStateType_MaxSecondsPerRun: PrintScreenRecord::StatusText("Config Mode State = Time Per Run"); break;
-      case TrainerOptions::ConfigModeStateType::ConfigModeStateType_CountdownSecondsBeforeRun: PrintScreenRecord::StatusText("Config Mode State = Countdown Before Run"); break;
-      case TrainerOptions::ConfigModeStateType::ConfigModeStateType_SoundEffects: PrintScreenRecord::StatusText("Config Mode State = Sound Effects"); break;
-      case TrainerOptions::ConfigModeStateType::ConfigModeStateType_GoBack: PrintScreenRecord::StatusText("Config Mode State = Go Back"); break;
-      default: PrintScreenRecord::StatusText("Config Mode State = **UNKNOWN**"); break;
-      }
-
-      PrintScreenRecord::StatusText("Current Run Record = %zu", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1);
-      PrintScreenRecord::StatusText("Run Start Time (ms) = %d", m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs);
-      PrintScreenRecord::StatusText("Countdown Sound Played = %d", m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed);
-      PrintScreenRecord::StatusText("Time Low Sound Playing = %s", m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying ? "true" : "false");
-      PrintScreenRecord::StatusText("Current Time (ms) = %d", currentTimeMs);
-
-      switch (m_MenuOptions.m_TrainerOptions.m_BallStartMode)
-      {
-      case TrainerOptions::BallStartModeType::BallStartModeType_Accept: PrintScreenRecord::StatusText("Ball Start Mode = Accept"); break;
-      case TrainerOptions::BallStartModeType::BallStartModeType_Existing: PrintScreenRecord::StatusText("Ball Start Mode = Configure Existing"); break;
-      case TrainerOptions::BallStartModeType::BallStartModeType_Custom: PrintScreenRecord::StatusText("Ball Start Mode = Configure Custom"); break;
-      default: PrintScreenRecord::StatusText("Ball Start Mode = **UNKNOWN**"); break;
-      }
-
-      PrintScreenRecord::StatusText("Gameplay Difficulty = %d", m_MenuOptions.m_TrainerOptions.m_GameplayDifficulty);
-      PrintScreenRecord::StatusText("Gameplay Difficulty Initial = %d", m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyInitial);
-      PrintScreenRecord::StatusText("Variance Difficulty = %d", m_MenuOptions.m_TrainerOptions.m_VarianceDifficulty);
-
-      std::vector<std::pair<std::string, std::string>> difficultyVarianceStatuses;
-      ShowDifficultyVarianceStatusAll(player, difficultyVarianceStatuses);
-
-      PrintScreenRecord::StatusText("Total Runs = %d", m_MenuOptions.m_TrainerOptions.m_TotalRuns);
-      PrintScreenRecord::StatusText("Time Per Run = %d (seconds)", m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun);
-      PrintScreenRecord::StatusText("Countdown Before Run = %d (seconds)", m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun);
-
-      switch (m_MenuOptions.m_TrainerOptions.m_RunOrderMode)
-      {
-      case TrainerOptions::RunOrderModeType::RunOrderModeType_InOrder: PrintScreenRecord::StatusText("Run Order Mode = In Order"); break;
-      case TrainerOptions::RunOrderModeType::RunOrderModeType_Random: PrintScreenRecord::StatusText("Run Order Mode = Random"); break;
-      default: PrintScreenRecord::StatusText("Run Order Mode = **UNKNOWN**"); break;
-      }
-
-      switch (m_MenuOptions.m_TrainerOptions.m_BallKickerBehaviorMode)
-      {
-      case TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_Reset: PrintScreenRecord::StatusText("Ball Kicker Behavior = Reset"); break;
-      case TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_Fail: PrintScreenRecord::StatusText("Ball Kicker Behavior = Fail"); break;
-      default: PrintScreenRecord::StatusText("Ball Kicker Behavior = **UNKNOWN**"); break;
-      }
-
-      PrintScreenRecord::StatusText("Countdown Before Run = %d (seconds)", m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun);
-
-      PrintScreenRecord::StatusText("Sound Effects Pass = (%s)", m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled ? "X" : "O");
-      PrintScreenRecord::StatusText("Sound Effects Fail = (%s)", m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled ? "X" : "O");
-      PrintScreenRecord::StatusText("Sound Effects Time Low = (%s)", m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled ? "X" : "O");
-      PrintScreenRecord::StatusText("Sound Effects Countdown = (%s)", m_MenuOptions.m_TrainerOptions.m_SoundEffectsCountdownEnabled ? "X" : "O");
+      statuses.push_back({ "Trainer Options", "" });
 
       if (m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size() == 0)
       {
-         PrintScreenRecord::StatusText("Ball Start (None)");
+         statuses.push_back({ "(None)", " " });
       }
       else
       {
          for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords.size(); bsorIndex++)
          {
             TrainerOptions::BallStartOptionsRecord &bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
+            statuses.push_back({ std::format("Ball Start {}", bsorIndex + 1), "" });
             if (bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize)
             {
-               PrintScreenRecord::StatusText("Ball Start %zu", bsorIndex + 1);
+               statuses.push_back({ "Status", "Enabled" });
             }
             else
             {
-               PrintScreenRecord::StatusText("Ball Start %zu (frozen)", bsorIndex + 1);
+               statuses.push_back({ "Status", "Frozen" });
             }
 
-            PrintScreenRecord::StatusText("  Pos|Vel|Mom = %.2f,%.2f,%.2f|%.2f,%.2f,%.2f|%.2f,%.2f,%.2f|(x,y,z)", bsor.m_StartPosition.x, bsor.m_StartPosition.y, bsor.m_StartPosition.z,
-               bsor.m_StartVelocity.x, bsor.m_StartVelocity.y, bsor.m_StartVelocity.z, bsor.m_StartAngularMomentum.x, bsor.m_StartAngularMomentum.y, bsor.m_StartAngularMomentum.z);
-            PrintScreenRecord::StatusText("  VelocOps|AngleOps = %.2f,%.2f,%u|%.2f,%.2f,%u|(start,finish,total)", bsor.m_VelocityRangeStart, bsor.m_VelocityRangeFinish,
-               bsor.m_TotalRangeVelocities, bsor.m_AngleRangeStart, bsor.m_AngleRangeFinish, bsor.m_TotalRangeAngles);
+            statuses.push_back({ "Position", std::format("{:.1f}x\n{:.1f}y\n{:.1f}z", bsor.m_StartPosition.x, bsor.m_StartPosition.y, bsor.m_StartPosition.z) });
+            statuses.push_back({ "Velocity", std::format("{:.1f}x\n{:.1f}y\n{:.1f}z", bsor.m_StartVelocity.x, bsor.m_StartVelocity.y, bsor.m_StartVelocity.z) });
+            statuses.push_back({ "Momentum", std::format("{:.1f}x\n{:.1f}y\n{:.1f}z", bsor.m_StartAngularMomentum.x, bsor.m_StartAngularMomentum.y, bsor.m_StartAngularMomentum.z) });
+            statuses.push_back({ "Velocity Start", std::format("{:.0f}", bsor.m_VelocityRangeStart) });
+            statuses.push_back({ "Velocity Finish", std::format("{:.0f}", bsor.m_VelocityRangeFinish) });
+            statuses.push_back({ "Velocity Total", std::format("{}", bsor.m_TotalRangeVelocities) });
+            statuses.push_back({ "Angle Start", std::format("{:.0f}", bsor.m_AngleRangeStart) });
+            statuses.push_back({ "Angle Finish", std::format("{:.0f}", bsor.m_AngleRangeFinish) });
+            statuses.push_back({ "Angle Total", std::format("{}", bsor.m_TotalRangeAngles) });
          }
       }
 
       if (m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size() == 0)
       {
-         PrintScreenRecord::StatusText("Ball Pass (None)");
+         statuses.push_back({ "Ball Pass N/A", "" });
+         statuses.push_back({ " ", " " });
       }
       else
       {
          for (std::size_t bporIndex = 0; bporIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); bporIndex++)
          {
             TrainerOptions::BallEndOptionsRecord &bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[bporIndex];
-            PrintScreenRecord::StatusText("Ball Pass %zu", bporIndex + 1);
-            PrintScreenRecord::StatusText("  Position = %.2f,%.2f,%.2f (x,y,z)", bpor.m_EndPosition.x, bpor.m_EndPosition.y, bpor.m_EndPosition.z);
+            statuses.push_back({ std::format("Ball Pass {}", bporIndex + 1), "" });
+            statuses.push_back({ "Position", std::format("{:.1f}x\n{:.1f}y\n{:.1f}z", bpor.m_EndPosition.x, bpor.m_EndPosition.y, bpor.m_EndPosition.z) });
 
             if (bpor.m_EndRadiusPercent == 0.0f)
             {
-               PrintScreenRecord::StatusText("  Finish Mode = <Not Set>");
+               statuses.push_back({ "Finish Mode", "<Not Set>" });
             }
             else if (bpor.m_EndRadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
             {
-               PrintScreenRecord::StatusText("  Finish Mode = Stop");
+               statuses.push_back({ "Finish Mode", "Stop" });
             }
             else
             {
-               PrintScreenRecord::StatusText("  Finish Mode = Distance %.0f%%", bpor.m_EndRadiusPercent);
+               statuses.push_back({ "Finish Mode", std::format("Distance\n{}%", bpor.m_EndRadiusPercent) });
             }
 
             for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
             {
                HitBall &controlVBall = *m_ControlVBalls[controlVBallIndex];
                float distance = DistancePixels(bpor.m_EndPosition, controlVBall.m_d.m_pos);
-               PrintScreenRecord::StatusText("  Distance Ball %zu = %.2f", controlVBallIndex + 1, distance);
+               statuses.push_back({ std::format("Distance Ball {}", controlVBallIndex + 1), std::format("{:.1f}wu", distance) });
             }
 
             if (bpor.m_AssociatedBallStartIndexes.size() == 0)
             {
-               PrintScreenRecord::StatusText("  Associations = **None - Ball End Ignored**");
+               statuses.push_back({ "Associations", "<None>\n(Ignored!)" });
             }
             else
             {
@@ -2979,12 +2922,12 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                   associatedBallStartIndexesOutput += std::to_string(associatedBallStartIndex + 1) + ",";
                }
                associatedBallStartIndexesOutput = associatedBallStartIndexesOutput.substr(0, associatedBallStartIndexesOutput.length() - 1);
-               PrintScreenRecord::StatusText("  Associations = %s", associatedBallStartIndexesOutput.c_str());
+               statuses.push_back({ "Associations", std::format("{}", associatedBallStartIndexesOutput.c_str()) });
             }
 
             if (bpor.m_StopBallsTracker.size() == 0)
             {
-               PrintScreenRecord::StatusText("  Stop Ball <None>");
+               statuses.push_back({ "Stop Ball", "<None>" });
             }
             else
             {
@@ -2992,7 +2935,7 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                {
                   int stopBallMs = std::get<0>(bpor.m_StopBallsTracker[stopBallTrackerIndex]);
                   Vertex3Ds &stopBallPos = std::get<1>(bpor.m_StopBallsTracker[stopBallTrackerIndex]);
-                  PrintScreenRecord::StatusText("  Stop Ball %zu (ms,x,y,z) = %d,%.2f,%.2f,%.2f", stopBallTrackerIndex + 1, stopBallMs, stopBallPos.x, stopBallPos.y, stopBallPos.z);
+                  statuses.push_back({ std::format("Stop Ball {}", stopBallTrackerIndex + 1), std::format("{}ms,{:.1f}x,{:.1f}y,{:.1f}z", stopBallMs, stopBallPos.x, stopBallPos.y, stopBallPos.z) });
                }
             }
          }
@@ -3000,38 +2943,46 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
 
       if (m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size() == 0)
       {
-         PrintScreenRecord::StatusText("Ball Fail (None)");
+         statuses.push_back({ "Ball Fail N/A", "" });
+         statuses.push_back({ " ", " " });
       }
       else
       {
          for (std::size_t bforIndex = 0; bforIndex < m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size(); bforIndex++)
          {
             TrainerOptions::BallEndOptionsRecord &bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[bforIndex];
-            PrintScreenRecord::StatusText("Ball Fail %zu", bforIndex + 1);
-            PrintScreenRecord::StatusText("  Position = %.2f,%.2f,%.2f (x,y,z)", bfor.m_EndPosition.x, bfor.m_EndPosition.y, bfor.m_EndPosition.z);
+            statuses.push_back({ std::format("Ball Fail {}", bforIndex + 1), "" });
+            statuses.push_back({ "Position", std::format("{:.1f}x\n{:.1f}y\n{:.1f}z", bfor.m_EndPosition.x, bfor.m_EndPosition.y, bfor.m_EndPosition.z) });
 
             if (bfor.m_EndRadiusPercent == 0.0f)
             {
-               PrintScreenRecord::StatusText("  Finish Mode = <Not Set>");
+               statuses.push_back({ "Finish Mode", "<Not Set>" });
             }
             else if (bfor.m_EndRadiusPercent == TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
             {
-               PrintScreenRecord::StatusText("  Finish Mode = Stop");
+               statuses.push_back({ "Finish Mode", "Stop" });
             }
             else
             {
-               PrintScreenRecord::StatusText("  Finish Mode = Distance %.0f%%", bfor.m_EndRadiusPercent);
+               statuses.push_back({ "Finish Mode", std::format("Distance\n{}", bfor.m_EndRadiusPercent) });
                for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
                {
                   HitBall &controlVBall = *m_ControlVBalls[controlVBallIndex];
                   float distance = DistancePixels(bfor.m_EndPosition, controlVBall.m_d.m_pos);
-                  PrintScreenRecord::StatusText("  Distance Ball %zu = %.2f", controlVBallIndex + 1, distance);
+                  statuses.push_back({ std::format("Distance Ball {}", controlVBallIndex + 1), std::format("{:.1f}", distance) });
                }
+            }
+
+            for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
+            {
+               HitBall &controlVBall = *m_ControlVBalls[controlVBallIndex];
+               float distance = DistancePixels(bfor.m_EndPosition, controlVBall.m_d.m_pos);
+               statuses.push_back({ std::format("Distance Ball {}", controlVBallIndex + 1), std::format("{:.1f}wu", distance) });
             }
 
             if (bfor.m_AssociatedBallStartIndexes.size() == 0)
             {
-               PrintScreenRecord::StatusText("  Associations = **None - Ball End Ignored**");
+               statuses.push_back({ "Associations", "**None - Ball End Ignored**" });
             }
             else
             {
@@ -3041,12 +2992,12 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                   associatedBallStartIndexesOutput += std::to_string(associatedBallStartIndex + 1) + ",";
                }
                associatedBallStartIndexesOutput = associatedBallStartIndexesOutput.substr(0, associatedBallStartIndexesOutput.length() - 1);
-               PrintScreenRecord::StatusText("  Associations = %s", associatedBallStartIndexesOutput.c_str());
+               statuses.push_back({ "Associations", std::format("{}", associatedBallStartIndexesOutput.c_str()) });
             }
 
             if (bfor.m_StopBallsTracker.size() == 0)
             {
-               PrintScreenRecord::StatusText("  Stop Ball <None>");
+               statuses.push_back({ "Stop Ball", "<None>" });
             }
             else
             {
@@ -3054,56 +3005,92 @@ void BallHistory::ShowStatus(Player &player, int currentTimeMs)
                {
                   int stopBallMs = std::get<0>(bfor.m_StopBallsTracker[stopBallTrackerIndex]);
                   Vertex3Ds &stopBallPos = std::get<1>(bfor.m_StopBallsTracker[stopBallTrackerIndex]);
-                  PrintScreenRecord::StatusText("  Stop Ball %zu (ms,x,y,z) = %d,%.2f,%.2f,%.2f", stopBallTrackerIndex + 1, stopBallMs, stopBallPos.x, stopBallPos.y, stopBallPos.z);
+                  statuses.push_back({ std::format("Stop Ball {}", stopBallTrackerIndex + 1), std::format("{}ms,{:.1f}x,{:.1f}y,{:.1f}z", stopBallMs, stopBallPos.x, stopBallPos.y, stopBallPos.z) });
                }
             }
          }
       }
 
       TrainerOptions::BallCorridorOptionsRecord &bcor = m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord;
-      PrintScreenRecord::StatusText("Ball Corridor");
-      PrintScreenRecord::StatusText("  Pass = %.2f,%.2f,%.2f (x,y,z)", bcor.m_PassPosition.x, bcor.m_PassPosition.y, bcor.m_PassPosition.z);
-      PrintScreenRecord::StatusText("  Pass Radius = %.0f%%", bcor.m_PassRadiusPercent);
-      PrintScreenRecord::StatusText("  Opening Left = %.2f,%.2f,%.2f (x,y,z)", bcor.m_OpeningPositionLeft.x, bcor.m_OpeningPositionLeft.y, bcor.m_OpeningPositionLeft.z);
-      PrintScreenRecord::StatusText("  Opening Right = %.2f,%.2f,%.2f (x,y,z)", bcor.m_OpeningPositionRight.x, bcor.m_OpeningPositionRight.y, bcor.m_OpeningPositionRight.z);
+      statuses.push_back({ "Ball Corridor (BC)", "" });
+      statuses.push_back({ "Pass", std::format("{:.1f}x\n{:.1f}y\n{:.1f}z", bcor.m_PassPosition.x, bcor.m_PassPosition.y, bcor.m_PassPosition.z) });
+      statuses.push_back({ "Pass Radius", std::format("{}%", bcor.m_PassRadiusPercent) });
+      statuses.push_back({ "Opening Left", std::format("{:.1f}x\n{:.1f}y\n{:.1f}z", bcor.m_OpeningPositionLeft.x, bcor.m_OpeningPositionLeft.y, bcor.m_OpeningPositionLeft.z) });
+      statuses.push_back({ "Opening Right", std::format("{:.1f}x\n{:.1f}y\n{:.1f}z", bcor.m_OpeningPositionRight.x, bcor.m_OpeningPositionRight.y, bcor.m_OpeningPositionRight.z) });
 
       Vertex3Ds passPosition1 = bcor.m_PassPosition - Vertex3Ds(GetDefaultBallRadius(), 0.0f, 0.0f);
       Vertex3Ds passPosition2 = bcor.m_PassPosition + Vertex3Ds(GetDefaultBallRadius(), 0.0f, 0.0f);
-      PrintScreenRecord::StatusText("Distance PassL<-->PassR = %.2f", DistanceToLineSegment(passPosition1, passPosition2, mousePosition3D));
+      statuses.push_back({ "Distance\nPassL<->PassR", std::format("{:.1f}wu", DistanceToLineSegment(passPosition1, passPosition2, mousePosition3D)) });
       if (bcor.m_OpeningPositionLeft.x < bcor.m_OpeningPositionRight.x)
       {
-         PrintScreenRecord::StatusText("Distance PassL<-->OpeningL = %.2f", DistanceToLineSegment(passPosition1, bcor.m_OpeningPositionLeft, mousePosition3D));
-         PrintScreenRecord::StatusText("Distance PassR<-->OpeningR = %.2f", DistanceToLineSegment(passPosition2, bcor.m_OpeningPositionRight, mousePosition3D));
+         statuses.push_back({ "Distance\nPassL<->OpeningL", std::format("{:.1f}wu", DistanceToLineSegment(passPosition1, bcor.m_OpeningPositionLeft, mousePosition3D)) });
+         statuses.push_back({ "Distance\nPassR<->OpeningR", std::format("{:.1f}wu", DistanceToLineSegment(passPosition2, bcor.m_OpeningPositionRight, mousePosition3D)) });
       }
       else
       {
-         PrintScreenRecord::StatusText("Distance PassL<-->OpeningR = %.2f", DistanceToLineSegment(passPosition1, bcor.m_OpeningPositionRight, mousePosition3D));
-         PrintScreenRecord::StatusText("Distance PassR<-->OpeningL = %.2f", DistanceToLineSegment(passPosition2, bcor.m_OpeningPositionLeft, mousePosition3D));
+         statuses.push_back({ "Distance\nPassL<->OpeningR", std::format("{:.1f}wu", DistanceToLineSegment(passPosition1, bcor.m_OpeningPositionRight, mousePosition3D)) });
+         statuses.push_back({ "Distance\nPassR<->OpeningL", std::format("{:.1f}wu", DistanceToLineSegment(passPosition2, bcor.m_OpeningPositionLeft, mousePosition3D)) });
       }
 
-      PrintScreenRecord::StatusText("ActiveBallKickers Count = %zu", m_ActiveBallKickers.size());
-      for (std::size_t activeBallKickerIndex = 0; activeBallKickerIndex < m_ActiveBallKickers.size(); activeBallKickerIndex++)
+      statuses.push_back({ "Difficulty", "" });
+      statuses.push_back({ "Gameplay", std::format("{}", m_MenuOptions.m_TrainerOptions.m_GameplayDifficulty) });
+      statuses.push_back({ "Gameplay\nInitial", std::format("{}", m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyInitial) });
+      statuses.push_back({ "Variance", std::format("{}", m_MenuOptions.m_TrainerOptions.m_VarianceDifficulty) });
+
+      ShowDifficultyVarianceStatusAll(player, statuses, true);
+
+      statuses.push_back({ "Run Options", "" });
+      statuses.push_back({ "Total", std::format("{}", m_MenuOptions.m_TrainerOptions.m_TotalRuns) });
+      switch (m_MenuOptions.m_TrainerOptions.m_RunOrderMode)
       {
-         if (Kicker *kicker = m_ActiveBallKickers[activeBallKickerIndex])
-         {
-            Vertex3Ds kickerPosition = GetKickerPosition(*kicker);
-            PrintScreenRecord::StatusText("  Active Ball Kicker %zu %.2f,%.2f,%.2f (3x,3y,3z)", activeBallKickerIndex + 1, kickerPosition.x, kickerPosition.y, kickerPosition.z);
-         }
+      case TrainerOptions::RunOrderModeType::RunOrderModeType_InOrder: statuses.push_back({ "Run Order Mode", "In Order" }); break;
+      case TrainerOptions::RunOrderModeType::RunOrderModeType_Random: statuses.push_back({ "Run Order Mode", "Random" }); break;
+      default: statuses.push_back({ "Order Mode", "**UNKNOWN**" }); break;
       }
 
-      PrintScreenRecord::StatusText("Flippers Count = %zu", m_Flippers.size());
-      for (std::size_t flipperIndex = 0; flipperIndex < m_Flippers.size(); flipperIndex++)
+      statuses.push_back({ "Time", std::format("{}s", m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun) });
+      statuses.push_back({ "Countdown", std::format("{}s", m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun) });
+
+      switch (m_MenuOptions.m_TrainerOptions.m_BallKickerBehaviorMode)
       {
-         if (Flipper *flipper = m_Flippers[flipperIndex])
-         {
-            PrintScreenRecord::StatusText("  Flipper %zu %s", flipperIndex + 1, flipper->GetName());
-         }
+      case TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_Reset: statuses.push_back({ "Kicker Behavior", "Reset" }); break;
+      case TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_Fail: statuses.push_back({ "Kicker Behavior", "Fail" }); break;
+      default: statuses.push_back({ "Kicker Behavior", "**UNKNOWN**" }); break;
       }
+
+      statuses.push_back({ "Sound Effects", "" });
+      statuses.push_back({ "Pass", std::format("({})", m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled ? "X" : "O") });
+      statuses.push_back({ "Fail", std::format("({})", m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled ? "X" : "O") });
+      statuses.push_back({ "Time Low", std::format("({})", m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled ? "X" : "O") });
+      statuses.push_back({ "Countdown", std::format("({})", m_MenuOptions.m_TrainerOptions.m_SoundEffectsCountdownEnabled ? "X" : "O") });
       break;
    }
-   case MenuOptionsRecord::ModeType::ModeType_Disabled: PrintScreenRecord::StatusText("Mode = Disabled"); break;
+   case MenuOptionsRecord::ModeType::ModeType_Disabled: statuses.push_back({ "Mode", "Disabled" }); break;
    default: InvalidEnumValue("MenuOptionsRecord::ModeType", m_MenuOptions.m_ModeType); break;
    }
+
+   statuses.push_back({ "Active Ball\nKickers (ABKs)", "" });
+   statuses.push_back({ "Total", std::format("{}", m_ActiveBallKickers.size()) });
+   for (std::size_t activeBallKickerIndex = 0; activeBallKickerIndex < m_ActiveBallKickers.size(); activeBallKickerIndex++)
+   {
+      if (Kicker *kicker = m_ActiveBallKickers[activeBallKickerIndex])
+      {
+         Vertex3Ds kickerPosition = GetKickerPosition(*kicker);
+         statuses.push_back({ std::format("ABK {}", activeBallKickerIndex + 1), std::format("{:.1f}x\n{:.1f}y\n{:.1f}z", kickerPosition.x, kickerPosition.y, kickerPosition.z) });
+      }
+   }
+
+   statuses.push_back({ "Flippers", "" });
+   statuses.push_back({ "Total", std::format("{}", m_Flippers.size()) });
+   for (std::size_t flipperIndex = 0; flipperIndex < m_Flippers.size(); flipperIndex++)
+   {
+      if (Flipper *flipper = m_Flippers[flipperIndex])
+      {
+         statuses.push_back({ std::format("Flipper {}", flipperIndex + 1), std::format("{}", flipper->GetName()) });
+      }
+   }
+
+   PrintScreenRecord::Status(statuses);
 }
 
 void BallHistory::ShowRecallBall(Player &player)
@@ -3160,7 +3147,7 @@ void BallHistory::ShowPreviousRunRecord()
          for (const std::tuple<std::size_t, std::size_t> &startToPassLocationIndex : previousRunRecord.m_StartToPassLocationIndexes)
          {
             std::stringstream startToPassLocationIndexes;
-            startToPassLocationIndexes << "Start #" << std::get<0>(startToPassLocationIndex) + 1 << " --> Pass #" << std::get<1>(startToPassLocationIndex) + 1;
+            startToPassLocationIndexes << "Start #" << std::get<0>(startToPassLocationIndex) + 1 << " -> Pass #" << std::get<1>(startToPassLocationIndex) + 1;
             printScreenTexts.push_back(startToPassLocationIndexes.str());
          }
          break;
@@ -3169,21 +3156,21 @@ void BallHistory::ShowPreviousRunRecord()
          for (const std::tuple<std::size_t, std::size_t> &startToFailLocationIndex : previousRunRecord.m_StartToFailLocationIndexes)
          {
             std::stringstream startToFailLocationIndexes;
-            startToFailLocationIndexes << "Start #" << std::get<0>(startToFailLocationIndex) + 1 << " --> Fail #" << std::get<1>(startToFailLocationIndex) + 1;
+            startToFailLocationIndexes << "Start #" << std::get<0>(startToFailLocationIndex) + 1 << " -> Fail #" << std::get<1>(startToFailLocationIndex) + 1;
             printScreenTexts.push_back(startToFailLocationIndexes.str());
          }
          break;
       case TrainerOptions::RunRecord::ResultType::ResultType_PassedCorridor:
          printScreenTexts.push_back(std::format("Pass (Corridor)"));
-         printScreenTexts.push_back(std::format("Start #{} <--> Pass Corridor", previousRunRecord.m_StartToPassCorridorIndex));
+         printScreenTexts.push_back(std::format("Start #{} <-> Pass Corridor", previousRunRecord.m_StartToPassCorridorIndex));
          break;
       case TrainerOptions::RunRecord::ResultType::ResultType_FailedCorridorLeft:
          printScreenTexts.push_back(std::format("Fail (Corridor Left)"));
-         printScreenTexts.push_back(std::format("Start #{} <--> Fail Corridor Left", previousRunRecord.m_StartToFailCorridorIndex));
+         printScreenTexts.push_back(std::format("Start #{} <-> Fail Corridor Left", previousRunRecord.m_StartToFailCorridorIndex));
          break;
       case TrainerOptions::RunRecord::ResultType::ResultType_FailedCorridorRight:
          printScreenTexts.push_back(std::format("Fail (Corridor Right)"));
-         printScreenTexts.push_back(std::format("Start #{} <--> Fail Corridor Right", previousRunRecord.m_StartToFailCorridorIndex));
+         printScreenTexts.push_back(std::format("Start #{} <-> Fail Corridor Right", previousRunRecord.m_StartToFailCorridorIndex));
          break;
       case TrainerOptions::RunRecord::ResultType::ResultType_FailedTimeElapsed: printScreenTexts.push_back(std::format("Fail (time elapsed)")); break;
       case TrainerOptions::RunRecord::ResultType::ResultType_FailedKicker: printScreenTexts.push_back(std::format("Fail (kicker)")); break;
@@ -3359,97 +3346,100 @@ void BallHistory::ShowDifficultyVarianceStatusesMenu(std::vector<std::pair<std::
    }
 }
 
-void BallHistory::ShowDifficultyVarianceMode(
-   const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses)
+void BallHistory::ShowDifficultyVarianceMode(const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines)
 {
+   std::string separator = newlines ? "\n" : " ";
    switch (varianceMode)
    {
    case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow:
-      difficultyVarianceStatuses.push_back({ difficultyVarianceName + " Variance Mode", "Above and Below" });
+      difficultyVarianceStatuses.push_back({ difficultyVarianceName + separator + "Variance Mode", "Above +" + separator + "Below" });
       break;
    case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly:
-      difficultyVarianceStatuses.push_back({ difficultyVarianceName + " Variance Mode", "Above Only" });
+      difficultyVarianceStatuses.push_back({ difficultyVarianceName + separator + "Variance Mode", "Above" + separator + "Only" });
       break;
    case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly:
-      difficultyVarianceStatuses.push_back({ difficultyVarianceName + " Variance Mode", "Below Only" });
+      difficultyVarianceStatuses.push_back({ difficultyVarianceName + separator + "Variance Mode", "Below" + separator + "Only" });
       break;
    default:
-      difficultyVarianceStatuses.push_back({ difficultyVarianceName + " Variance Mode", "**UNKNOWN**" });
+      difficultyVarianceStatuses.push_back({ difficultyVarianceName + separator + "Variance Mode", "**UNKNOWN**" });
       InvalidEnumValue("TrainerModeOptions::DifficultyVarianceModeType", varianceMode);
       break;
    }
 }
 
 void BallHistory::ShowDifficultyVarianceRange(const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, S32 variance, float initial,
-   std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses)
+   std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines)
 {
+   std::string nameSeparator = newlines ? "\n" : " ";
+   std::string valueSeparator = newlines ? "\n" : ",";
    float varianceDiff = initial * (variance / 100.0f);
    float varianceAbove = initial + varianceDiff;
    float varianceBelow = initial - varianceDiff;
    switch (varianceMode)
    {
    case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow:
-      difficultyVarianceStatuses.push_back({ difficultyVarianceName + " Range", std::format("[{:.4f}, {:.4f}]", varianceBelow, varianceAbove) });
+      difficultyVarianceStatuses.push_back({ difficultyVarianceName + nameSeparator + "Range", std::format("[{:.3f}{}{:.3f}]", varianceBelow, valueSeparator, varianceAbove) });
       break;
    case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly:
-      difficultyVarianceStatuses.push_back({ difficultyVarianceName + " Range", std::format("[{:.4f}, {:.4f}]", initial, varianceAbove) });
+      difficultyVarianceStatuses.push_back({ difficultyVarianceName + nameSeparator + "Range", std::format("[{:.3f}{}{:.3f}]", initial, valueSeparator, varianceAbove) });
       break;
    case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly:
-      difficultyVarianceStatuses.push_back({ difficultyVarianceName + " Range", std::format("[{:.4f}, {:.4f}]", varianceBelow, initial) });
+      difficultyVarianceStatuses.push_back({ difficultyVarianceName + nameSeparator + "Range", std::format("[{:.3f}{}{:.3f}]", varianceBelow, valueSeparator, initial) });
       break;
    default:
-      difficultyVarianceStatuses.push_back({ difficultyVarianceName + " Range", "**UNKNOWN**" });
+      difficultyVarianceStatuses.push_back({ difficultyVarianceName + nameSeparator + "Range", "**UNKNOWN**" });
       InvalidEnumValue("TrainerModeOptions::DifficultyVarianceModeType", varianceMode);
       break;
    }
 }
 
-void BallHistory::ShowDifficultyVarianceStatusAll(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses)
+void BallHistory::ShowDifficultyVarianceStatusAll(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines)
 {
-   ShowDifficultyVarianceStatusGravity(player, difficultyVarianceStatuses);
-   ShowDifficultyVarianceStatusPlayfieldFriction(player, difficultyVarianceStatuses);
-   ShowDifficultyVarianceStatusFlipperStrength(player, difficultyVarianceStatuses);
-   ShowDifficultyVarianceStatusFlipperFriction(player, difficultyVarianceStatuses);
+   ShowDifficultyVarianceStatusGravity(player, difficultyVarianceStatuses, newlines);
+   ShowDifficultyVarianceStatusPlayfieldFriction(player, difficultyVarianceStatuses, newlines);
+   ShowDifficultyVarianceStatusFlipperStrength(player, difficultyVarianceStatuses, newlines);
+   ShowDifficultyVarianceStatusFlipperFriction(player, difficultyVarianceStatuses, newlines);
 }
 
 void BallHistory::ShowDifficultyVarianceStatusSingle(const std::string &name, float current, S32 variance, float initial, TrainerOptions::DifficultyVarianceModeType mode,
-   std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses)
+   std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines)
 {
-   difficultyVarianceStatuses.push_back({ name + " Variance", std::format("{}%%", variance) });
-   ShowDifficultyVarianceMode(name, mode, difficultyVarianceStatuses);
-   ShowDifficultyVarianceRange(name, mode, variance, initial, difficultyVarianceStatuses);
-   difficultyVarianceStatuses.push_back({ name + " Current", std::format("{:.4f}", current) });
-   difficultyVarianceStatuses.push_back({ name + " Initial", std::format("{:.4f}", initial) });
+   std::string separator = newlines ? "\n" : " ";
+   difficultyVarianceStatuses.push_back({ name + separator + "Variance", std::format("{}%", variance) });
+   ShowDifficultyVarianceMode(name, mode, difficultyVarianceStatuses, newlines);
+   ShowDifficultyVarianceRange(name, mode, variance, initial, difficultyVarianceStatuses, newlines);
+   difficultyVarianceStatuses.push_back({ name + separator + "Current", std::format("{:.3f}", current) });
+   difficultyVarianceStatuses.push_back({ name + separator + "Initial", std::format("{:.3f}", initial) });
 }
 
-void BallHistory::ShowDifficultyVarianceStatusGravity(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses)
+void BallHistory::ShowDifficultyVarianceStatusGravity(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines)
 {
    float gravityCurrent = 0.0f;
    player.m_ptable->get_Gravity(&gravityCurrent);
    ShowDifficultyVarianceStatusSingle("Gravity", gravityCurrent, m_MenuOptions.m_TrainerOptions.m_GravityVariance, m_MenuOptions.m_TrainerOptions.m_GravityInitial,
-      m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode, difficultyVarianceStatuses);
+      m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode, difficultyVarianceStatuses, newlines);
 }
 
-void BallHistory::ShowDifficultyVarianceStatusPlayfieldFriction(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses)
+void BallHistory::ShowDifficultyVarianceStatusPlayfieldFriction(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines)
 {
    float playfieldFrictionCurrent = 0.0f;
    player.m_ptable->get_Friction(&playfieldFrictionCurrent);
    ShowDifficultyVarianceStatusSingle("Playfield Friction", playfieldFrictionCurrent, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVariance,
-      m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionInitial, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVarianceMode, difficultyVarianceStatuses);
+      m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionInitial, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVarianceMode, difficultyVarianceStatuses, newlines);
 }
 
-void BallHistory::ShowDifficultyVarianceStatusFlipperStrength(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses)
+void BallHistory::ShowDifficultyVarianceStatusFlipperStrength(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines)
 {
    float flipperStrengthCurrent = GetFlipperStrength();
    ShowDifficultyVarianceStatusSingle("Flipper Strength", flipperStrengthCurrent, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVariance,
-      m_MenuOptions.m_TrainerOptions.m_FlipperStrengthInitial, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode, difficultyVarianceStatuses);
+      m_MenuOptions.m_TrainerOptions.m_FlipperStrengthInitial, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode, difficultyVarianceStatuses, newlines);
 }
 
-void BallHistory::ShowDifficultyVarianceStatusFlipperFriction(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses)
+void BallHistory::ShowDifficultyVarianceStatusFlipperFriction(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines)
 {
    float flipperFrictionCurrent = GetFlipperFriction();
    ShowDifficultyVarianceStatusSingle("Flipper Friction", flipperFrictionCurrent, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVariance,
-      m_MenuOptions.m_TrainerOptions.m_FlipperFrictionInitial, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode, difficultyVarianceStatuses);
+      m_MenuOptions.m_TrainerOptions.m_FlipperFrictionInitial, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode, difficultyVarianceStatuses, newlines);
 }
 
 void BallHistory::ShowResult(std::size_t total, std::vector<DWORD> &timesMs, const char *type, const char *subType, std::vector<std::pair<std::string, std::string>> &results)
@@ -4160,7 +4150,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          difficultyVarianceStatuses.push_back({ "Gameplay Difficulty Initial", std::format("{}", m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyInitial) });
          difficultyVarianceStatuses.push_back({ "Variance Difficulty", std::format("{}", m_MenuOptions.m_TrainerOptions.m_VarianceDifficulty) });
 
-         ShowDifficultyVarianceStatusAll(player, difficultyVarianceStatuses);
+         ShowDifficultyVarianceStatusAll(player, difficultyVarianceStatuses, false);
          ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
 
          ShowSection(DescriptionSectionTitle,
@@ -4334,7 +4324,6 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
 
       ShowPreviousRunRecord();
 
-      PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuText(
          false, "%s:", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord == m_MenuOptions.m_TrainerOptions.m_RunRecords.size() ? "Final Run Results" : "Current Run Results");
       if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord > 0)
@@ -4389,14 +4378,35 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
 
          std::vector<std::pair<std::string, std::string>> results;
-         ShowResult(totalPassLocation, totalPassLocationTimesMs, "Pass", "Location", results);
-         ShowResult(totalPassCorridor, totalPassCorridorTimesMs, "Pass", "Corridor", results);
-         ShowResult(totalFailLocation, totalFailLocationTimesMs, "Fail", "Location", results);
-         ShowResult(totalFailCorridorLeft, totalFailCorridorLeftTimesMs, "Fail", "Corridor Left", results);
-         ShowResult(totalFailCorridorRight, totalFailCorridorRightTimesMs, "Fail", "Corridor Right", results);
+         results.push_back({ "Pass Results", "" });
+         if (m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size() > 0)
+         {
+            ShowResult(totalPassLocation, totalPassLocationTimesMs, "Pass", "Location", results);
+         }
+         if (!m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord.m_PassPosition.IsZero())
+         {
+            ShowResult(totalPassCorridor, totalPassCorridorTimesMs, "Pass", "Corridor", results);
+         }
+
+         results.push_back({ "Fail Results", "" });
+         if (m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size() > 0)
+         {
+            ShowResult(totalFailLocation, totalFailLocationTimesMs, "Fail", "Location", results);
+         }
+         if (!m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord.m_OpeningPositionLeft.IsZero())
+         {
+            ShowResult(totalFailCorridorLeft, totalFailCorridorLeftTimesMs, "Fail", "Corridor Left", results);
+         }
+         if (!m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord.m_OpeningPositionRight.IsZero())
+         {
+            ShowResult(totalFailCorridorRight, totalFailCorridorRightTimesMs, "Fail", "Corridor Right", results);
+         }
          ShowResult(totalFailTimeElapsed, totalFailTimeElapsedTimeMs, "Fail", "Time", results);
-         ShowResult(totalFailKicker, totalFailKickerTimesMs, "Fail", "Kicker", results);
-         PrintScreenRecord::Results("ProcessMenu", 0.50f, 0.25f, results);
+         if (m_MenuOptions.m_TrainerOptions.m_BallKickerBehaviorMode == TrainerOptions::BallKickerBehaviorModeType::BallKickerBehaviorModeType_Fail)
+         {
+            ShowResult(totalFailKicker, totalFailKickerTimesMs, "Fail", "Kicker", results);
+         }
+         PrintScreenRecord::Results(results);
       }
       else
       {
@@ -6196,7 +6206,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
          }
       case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_GravityVariance:
          difficultyVarianceStatuses.push_back({ "Gravity Variance", std::format("{}", m_MenuOptions.m_TrainerOptions.m_GravityVariance) });
-         ShowDifficultyVarianceStatusGravity(player, difficultyVarianceStatuses);
+         ShowDifficultyVarianceStatusGravity(player, difficultyVarianceStatuses, false);
          ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
 
          if (!acceptMode)
@@ -6207,7 +6217,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             break;
          }
       case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_PlayfieldFrictionVariance:
-         ShowDifficultyVarianceStatusPlayfieldFriction(player, difficultyVarianceStatuses);
+         ShowDifficultyVarianceStatusPlayfieldFriction(player, difficultyVarianceStatuses, false);
          ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
 
          if (!acceptMode)
@@ -6218,7 +6228,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             break;
          }
       case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_FlipperStrengthVariance:
-         ShowDifficultyVarianceStatusFlipperStrength(player, difficultyVarianceStatuses);
+         ShowDifficultyVarianceStatusFlipperStrength(player, difficultyVarianceStatuses, false);
          ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
 
          if (!acceptMode)
@@ -6229,7 +6239,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
             break;
          }
       case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_FlipperFrictionVariance:
-         ShowDifficultyVarianceStatusFlipperFriction(player, difficultyVarianceStatuses);
+         ShowDifficultyVarianceStatusFlipperFriction(player, difficultyVarianceStatuses, false);
          ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
 
          if (!acceptMode)
@@ -6336,7 +6346,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
       std::vector<std::pair<std::string, std::string>> difficultyVarianceStatuses;
-      ShowDifficultyVarianceStatusGravity(player, difficultyVarianceStatuses);
+      ShowDifficultyVarianceStatusGravity(player, difficultyVarianceStatuses, false);
       ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
 
       ShowSection(DescriptionSectionTitle,
@@ -6359,7 +6369,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
       std::vector<std::pair<std::string, std::string>> difficultyVarianceStatuses;
-      ShowDifficultyVarianceStatusGravity(player, difficultyVarianceStatuses);
+      ShowDifficultyVarianceStatusGravity(player, difficultyVarianceStatuses, false);
       ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
 
       switch (m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode)
@@ -6417,7 +6427,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
       std::vector<std::pair<std::string, std::string>> difficultyVarianceStatuses;
-      ShowDifficultyVarianceStatusPlayfieldFriction(player, difficultyVarianceStatuses);
+      ShowDifficultyVarianceStatusPlayfieldFriction(player, difficultyVarianceStatuses, false);
       ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
 
       ShowSection(DescriptionSectionTitle,
@@ -6442,7 +6452,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
       std::vector<std::pair<std::string, std::string>> difficultyVarianceStatuses;
-      ShowDifficultyVarianceStatusPlayfieldFriction(player, difficultyVarianceStatuses);
+      ShowDifficultyVarianceStatusPlayfieldFriction(player, difficultyVarianceStatuses, false);
       ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
 
       switch (m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVarianceMode)
@@ -6500,7 +6510,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
       std::vector<std::pair<std::string, std::string>> difficultyVarianceStatuses;
-      ShowDifficultyVarianceStatusFlipperStrength(player, difficultyVarianceStatuses);
+      ShowDifficultyVarianceStatusFlipperStrength(player, difficultyVarianceStatuses, false);
       ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
 
       ShowSection(DescriptionSectionTitle,
@@ -6525,7 +6535,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
       std::vector<std::pair<std::string, std::string>> difficultyVarianceStatuses;
-      ShowDifficultyVarianceStatusFlipperStrength(player, difficultyVarianceStatuses);
+      ShowDifficultyVarianceStatusFlipperStrength(player, difficultyVarianceStatuses, false);
       ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
 
       switch (m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode)
@@ -6583,7 +6593,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
       std::vector<std::pair<std::string, std::string>> difficultyVarianceStatuses;
-      ShowDifficultyVarianceStatusFlipperFriction(player, difficultyVarianceStatuses);
+      ShowDifficultyVarianceStatusFlipperFriction(player, difficultyVarianceStatuses, false);
       ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
 
       ShowSection(DescriptionSectionTitle,
@@ -6608,7 +6618,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
       std::vector<std::pair<std::string, std::string>> difficultyVarianceStatuses;
-      ShowDifficultyVarianceStatusFlipperFriction(player, difficultyVarianceStatuses);
+      ShowDifficultyVarianceStatusFlipperFriction(player, difficultyVarianceStatuses, false);
       ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
 
       switch (m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode)
