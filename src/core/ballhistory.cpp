@@ -301,11 +301,17 @@ BallHistory::ProfilerRecord::ProfilerScope::ProfilerScope(U64 &profilerUsec)
    m_TempUsec = usec();
 }
 
-BallHistory::ProfilerRecord::ProfilerScope::~ProfilerScope() { m_ProfilerUsec = usec() - m_TempUsec; }
+BallHistory::ProfilerRecord::ProfilerScope::~ProfilerScope()
+{
+   m_ProfilerUsec = usec() - m_TempUsec;
+}
 
 // ================================================================================================================================================================================================================================================
 
-BallHistory::ProfilerRecord::ProfilerRecord() { SetZero(); }
+BallHistory::ProfilerRecord::ProfilerRecord()
+{
+   SetZero();
+}
 
 void BallHistory::ProfilerRecord::SetZero()
 {
@@ -397,6 +403,18 @@ void BallHistory::PrintScreenRecord::Init()
    }
 }
 
+void BallHistory::PrintScreenRecord::UnInit()
+{
+   TextFont = nullptr;
+   MenuTitleTextFont = nullptr;
+   MenuTextFont = nullptr;
+   MenuSelectedTextFont = nullptr;
+   ActiveMenuTextFont = nullptr;
+   StatusFont = nullptr;
+   ErrorTextFont = nullptr;
+   ResultsFont = nullptr;
+}
+
 void BallHistory::PrintScreenRecord::Text(const char *name, float positionX, float positionY, const char *format, ...)
 {
    char strBuffer[1024] = { 0 };
@@ -434,6 +452,8 @@ void BallHistory::PrintScreenRecord::MenuText(bool selected, const char *format,
    {
       ShowText(ImGuiProcessMenuLabel, MenuTextFont, MenuTextFontColor, 0.50f, 0.25f, true, strBuffer);
    }
+
+   ImGui::SetWindowFocus(ImGuiProcessMenuLabel);
 }
 
 void BallHistory::PrintScreenRecord::PrintScreenRecord::ActiveMenuText(const char *format, ...)
@@ -459,61 +479,68 @@ void BallHistory::PrintScreenRecord::ErrorText(const char *format, ...)
 
 void BallHistory::PrintScreenRecord::Results(const std::vector<std::pair<std::string, std::string>> &nameValuePairs)
 {
-   ShowNameValueTable(ImGuiProcessMenuLabel, ResultsFont, ResultsFontColor, 0.0f, 0.0f, nameValuePairs);
+   ShowNameValueTable(ImGuiProcessMenuLabel, ResultsFont, ResultsFontColor, 0.0f, 0.0f, nameValuePairs, false);
 }
 
 void BallHistory::PrintScreenRecord::Status(const std::vector<std::pair<std::string, std::string>> &nameValuePairs)
 {
-   ShowNameValueTable(ImGuiStatusLabel, StatusFont, StatusFontColor, 1.01f, 1.01f, nameValuePairs);
+   ShowNameValueTable(ImGuiStatusLabel, StatusFont, StatusFontColor, 1.01f, 1.01f, nameValuePairs, true);
 }
 
 void BallHistory::PrintScreenRecord::ShowText(const char *name, ImFont *font, ImU32 fontColor, float positionX, float positionY, bool center, const char *str)
 {
+   if (!BallHistory::DrawMenu)
+   {
+      return;
+   }
+
    TransformPosition(positionX, positionY);
 
-   if (BallHistory::DrawMenu)
+   ImGui::SetNextWindowBgAlpha(0.25f);
+
+   ImGui::Begin(name, nullptr,
+      ImGuiWindowFlags_NoTitleBar |
+      ImGuiWindowFlags_NoResize |
+      ImGuiWindowFlags_NoCollapse |
+      ImGuiWindowFlags_NoMove |
+      ImGuiWindowFlags_AlwaysAutoResize);
+
+   ImGui::PushFont(font);
+
+   ImGui::PushStyleColor(ImGuiCol_Text, fontColor);
+
+   if (center)
    {
-      ImGui::SetNextWindowBgAlpha(0.25f);
-
-      ImGui::Begin(name, nullptr,
-         ImGuiWindowFlags_NoTitleBar |
-         ImGuiWindowFlags_NoResize |
-         ImGuiWindowFlags_NoCollapse |
-         ImGuiWindowFlags_NoMove |
-         ImGuiWindowFlags_AlwaysAutoResize);
-
-      ImGui::PushFont(font);
-
-      ImGui::PushStyleColor(ImGuiCol_Text, fontColor);
-
-      if (center)
-      {
-         ImVec2 textSize = ImGui::CalcTextSize(str);
-         float windowWidth = ImGui::GetWindowSize().x;
-         float textPosX = (windowWidth - textSize.x) / 2.0f;
-         ImGui::SetCursorPosX(textPosX);
-      }
-
-      ImGui::TextUnformatted(str);
-
-      ImGui::PopStyleColor();
-
-      ImGui::PopFont();
-
-      ImVec2 windowSize = ImGui::GetWindowSize();
-      ImVec2 adjustedPosition = ImVec2(positionX - (windowSize.x / 2.0f), positionY);
-
-      ImGuiIO &io = ImGui::GetIO();
-      ImVec2 clampedPosition = { std::clamp(adjustedPosition.x, 0.0f, io.DisplaySize.x - windowSize.x), std::clamp(adjustedPosition.y, 0.0f, io.DisplaySize.y - windowSize.y) };
-
-      ImGui::SetWindowPos(clampedPosition);
-
-      ImGui::End();
+      ImVec2 textSize = ImGui::CalcTextSize(str);
+      float windowWidth = ImGui::GetWindowSize().x;
+      float textPosX = (windowWidth - textSize.x) / 2.0f;
+      ImGui::SetCursorPosX(textPosX);
    }
+
+   ImGui::TextUnformatted(str);
+
+   ImGui::PopStyleColor();
+
+   ImGui::PopFont();
+
+   ImVec2 windowSize = ImGui::GetWindowSize();
+   ImVec2 adjustedPosition = ImVec2(positionX - (windowSize.x / 2.0f), positionY);
+
+   ImGuiIO &io = ImGui::GetIO();
+   ImVec2 clampedPosition = { std::clamp(adjustedPosition.x, 0.0f, io.DisplaySize.x - windowSize.x), std::clamp(adjustedPosition.y, 0.0f, io.DisplaySize.y - windowSize.y) };
+
+   ImGui::SetWindowPos(clampedPosition);
+
+   ImGui::End();
 }
 
-void BallHistory::PrintScreenRecord::ShowNameValueTable(const char *name, ImFont *font, ImU32 fontColor, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs)
+void BallHistory::PrintScreenRecord::ShowNameValueTable(const char *name, ImFont *font, ImU32 fontColor, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs, bool useWindow)
 {
+   if (!BallHistory::DrawMenu)
+   {
+      return;
+   }
+
    TransformPosition(positionX, positionY);
 
    float maxX = 0;
@@ -524,10 +551,14 @@ void BallHistory::PrintScreenRecord::ShowNameValueTable(const char *name, ImFont
       {
          beginWindowTable = false;
 
-         ImGui::SetNextWindowPos({positionX, positionY});
+         if (positionX != 0.0f && positionY != 0.0f)
+         {
+            ImGui::SetNextWindowPos({positionX, positionY});
+         }
+
          ImGui::SetNextWindowBgAlpha(0.25f);
 
-         std::string windowName = name + std::to_string(nameValuePairsIndex);
+         std::string windowName = useWindow ? name + std::to_string(nameValuePairsIndex) : name;
          ImGui::Begin(windowName.c_str(), nullptr,
             ImGuiWindowFlags_NoTitleBar |
             ImGuiWindowFlags_NoResize |
@@ -537,7 +568,7 @@ void BallHistory::PrintScreenRecord::ShowNameValueTable(const char *name, ImFont
             ImGuiWindowFlags_NoMove |
             ImGuiWindowFlags_AlwaysAutoResize);
 
-         std::string tableName = "Table_" + std::to_string(nameValuePairsIndex);
+         std::string tableName = windowName + "_Table_" + std::to_string(nameValuePairsIndex);
          ImGui::BeginTable(tableName.c_str(), 2, ImGuiTableFlags_Borders);
          ImGui::PushFont(font);
          ImGui::PushStyleColor(ImGuiCol_Text, fontColor);
@@ -821,6 +852,7 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
 void BallHistory::UnInit(Player &player)
 {
    SaveSettings(player);
+   PrintScreenRecord::UnInit();
    m_ActiveBallKickers.clear();
    m_Flippers.clear();
 }
@@ -1063,9 +1095,15 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA *input, i
    return false;
 }
 
-void BallHistory::ProcessMouse(Player &player, int currentTimeMs) { ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_Toggle, currentTimeMs); }
+void BallHistory::ProcessMouse(Player &player, int currentTimeMs)
+{
+   ProcessMenu(player, MenuOptionsRecord::MenuActionType::MenuActionType_Toggle, currentTimeMs);
+}
 
-bool BallHistory::Control() { return m_Control; }
+bool BallHistory::Control()
+{
+   return m_Control;
+}
 
 void BallHistory::SetControl(bool control)
 {
@@ -1093,7 +1131,10 @@ void BallHistory::SetControl(bool control)
    }
 }
 
-void BallHistory::ToggleControl() { SetControl(!m_Control); }
+void BallHistory::ToggleControl()
+{
+   SetControl(!m_Control);
+}
 
 void BallHistory::ToggleRecall()
 {
@@ -2447,8 +2488,7 @@ void BallHistory::DrawTrainerBallCorridorPass(Player &player, const char *name, 
       float passBallRadius = GetDefaultBallRadius();
       float passWidth = passBallRadius * (bcor.m_PassRadiusPercent / 100.0f);
 
-      DrawLine(
-         player, name, { position->x - passWidth, position->y, position->z }, { position->x + passWidth, position->y, position->z }, m_TrainerBallCorridorPassColor, int(passBallRadius));
+      DrawLine(player, name, { position->x - passWidth, position->y, position->z }, { position->x + passWidth, position->y, position->z }, m_TrainerBallCorridorPassColor, int(passBallRadius));
 
       POINT screenPoint = Get2DPointFrom3D(player, *position);
       PrintScreenRecord::Text(name, float(screenPoint.x), float(screenPoint.y), "P");
@@ -2470,8 +2510,7 @@ void BallHistory::DrawTrainerBallCorridorOpeningLeft(Player &player, TrainerOpti
 
    if (!bcor.m_PassPosition.IsZero() && !bcor.m_OpeningPositionLeft.IsZero())
    {
-      DrawLine(player, "BallCorridorOpeningLeftWall", { bcor.m_PassPosition.x - passWidth, bcor.m_PassPosition.y, bcor.m_PassPosition.z }, bcor.m_OpeningPositionLeft, Color::Red,
-         int(passBallRadius));
+      DrawLine(player, "BallCorridorOpeningLeftWall", { bcor.m_PassPosition.x - passWidth, bcor.m_PassPosition.y, bcor.m_PassPosition.z }, bcor.m_OpeningPositionLeft, Color::Red, int(passBallRadius));
    }
 }
 
@@ -7926,7 +7965,10 @@ void BallHistory::Add(std::vector<HitBall *> &controlVBalls, int currentTimeMs)
    }
 }
 
-BallHistoryRecord &BallHistory::Get(std::size_t index) { return m_BallHistoryRecords[index]; }
+BallHistoryRecord &BallHistory::Get(std::size_t index)
+{
+   return m_BallHistoryRecords[index];
+}
 
 std::size_t BallHistory::GetTailIndex()
 {
@@ -7959,9 +8001,15 @@ Matrix3 BallHistory::GetDefaultBallOrientation()
    return orientation;
 }
 
-float BallHistory::DistancePixels(POINT &p1, POINT &p2) { return sqrtf(float(powl(p1.x - p2.x, 2)) + float(powl(p1.y - p2.y, 2))); }
+float BallHistory::DistancePixels(POINT &p1, POINT &p2)
+{
+   return sqrtf(float(powl(p1.x - p2.x, 2)) + float(powl(p1.y - p2.y, 2)));
+}
 
-float BallHistory::DistancePixels(const Vertex3Ds &pos1, const Vertex3Ds &pos2) { return sqrtf(powf((pos1.x - pos2.x), 2) + powf((pos1.y - pos2.y), 2) + powf((pos1.z - pos2.z), 2)); }
+float BallHistory::DistancePixels(const Vertex3Ds &pos1, const Vertex3Ds &pos2)
+{
+   return sqrtf(powf((pos1.x - pos2.x), 2) + powf((pos1.y - pos2.y), 2) + powf((pos1.z - pos2.z), 2));
+}
 
 float BallHistory::DistanceToLineSegment(const Vertex3Ds &lineA, const Vertex3Ds &lineB, const Vertex3Ds &point)
 {
@@ -7992,9 +8040,15 @@ float BallHistory::DistanceToLineSegment(const Vertex3Ds &lineA, const Vertex3Ds
    }
 }
 
-float BallHistory::VelocityPixels(const Vertex3Ds &vel) { return sqrtf(powf(vel.x, 2) + powf(vel.y, 2) + powf(vel.z, 2)); }
+float BallHistory::VelocityPixels(const Vertex3Ds &vel)
+{
+   return sqrtf(powf(vel.x, 2) + powf(vel.y, 2) + powf(vel.z, 2));
+}
 
-char BallHistory::GetBallHistoryKey(Player &player, EnumAssignKeys enumAssignKey) { return get_vk(player.m_rgKeys[enumAssignKey]); }
+char BallHistory::GetBallHistoryKey(Player &player, EnumAssignKeys enumAssignKey)
+{
+   return get_vk(player.m_rgKeys[enumAssignKey]);
+}
 
 bool BallHistory::BallsReadyForTrainer()
 {
@@ -8147,11 +8201,20 @@ bool BallHistory::ControlPrevMove()
    return true;
 }
 
-bool BallHistory::BallCountIncreased() { return m_ControlVBalls.size() > m_ControlVBallsPrevious.size(); }
+bool BallHistory::BallCountIncreased()
+{
+   return m_ControlVBalls.size() > m_ControlVBallsPrevious.size();
+}
 
-bool BallHistory::BallCountDecreased() { return m_ControlVBalls.size() < m_ControlVBallsPrevious.size(); }
+bool BallHistory::BallCountDecreased()
+{
+   return m_ControlVBalls.size() < m_ControlVBallsPrevious.size();
+}
 
-bool BallHistory::BallChanged() { return !std::equal(m_ControlVBalls.begin(), m_ControlVBalls.end(), m_ControlVBallsPrevious.begin()); }
+bool BallHistory::BallChanged()
+{
+   return !std::equal(m_ControlVBalls.begin(), m_ControlVBalls.end(), m_ControlVBallsPrevious.begin());
+}
 
 bool BallHistory::BallInsideAutoControlVertex(std::vector<HitBall *> &controlVBalls)
 {
@@ -8231,7 +8294,14 @@ void BallHistory::InvalidEnumValue(const char *enumName, const char *enumValue)
    m_MenuOptions.m_MenuError = errorMessage.str();
 }
 
-void BallHistory::PlaySound(UINT rcId, bool async) { ::PlaySound(MAKEINTRESOURCE(rcId), ::GetModuleHandle(NULL), SND_RESOURCE | (async ? SND_ASYNC : SND_SYNC)); }
+void BallHistory::PlaySound(UINT rcId, bool async)
+{
+   ::PlaySound(MAKEINTRESOURCE(rcId), ::GetModuleHandle(NULL), SND_RESOURCE | (async ? SND_ASYNC : SND_SYNC));
+}
 
-void BallHistory::StopSound() { ::PlaySound(NULL, NULL, 0); }
+void BallHistory::StopSound()
+{
+   ::PlaySound(NULL, NULL, 0);
+}
+
 // ================================================================================================================================================================================================================================================

@@ -434,7 +434,6 @@ public:
    DWORD m_PreviousProcessKeysOfs;
    DWORD m_PreviousProcessKeysData;
 
-
 private:
 
    enum Color
@@ -480,7 +479,19 @@ private:
    struct PrintScreenRecord
    {
    public:
+      enum Color
+      {
+         Black = IM_COL32_BLACK,
+         Blue = IM_COL32(0x00, 0x00, 0xFF, 0xFF),
+         Green = IM_COL32(0x00, 0xFF, 0x00, 0xFF),
+         Red = IM_COL32(0xFF, 0x00, 0x00, 0xFF),
+         Yellow = IM_COL32(0xFF, 0xFF, 0x00, 0xFF),
+         White = IM_COL32_WHITE,
+         Purple = IM_COL32(0x80, 0x00, 0x80, 0xFF)
+      };
+
       static void Init();
+      static void UnInit();
       static void Text(const char *name, float positionX, float positionY, const char *format, ...);
       static void MenuTitleText(const char *format, ...);
       static void MenuText(bool selected, const char *format, ...);
@@ -523,7 +534,7 @@ private:
       static ImFont *ResultsFont;
 
       static void ShowText(const char *name, ImFont *font, ImU32 fontColor, float positionX, float positionY, bool center, const char *str);
-      static void ShowNameValueTable(const char *name, ImFont *font, ImU32 fontColor, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs);
+      static void ShowNameValueTable(const char *name, ImFont *font, ImU32 fontColor, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs, bool useWindow);
       static void TransformPosition(float &positionX, float &positionY);
    };
 
