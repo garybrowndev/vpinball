@@ -329,90 +329,52 @@ void BallHistory::ProfilerRecord::SetZero()
 const char *BallHistory::PrintScreenRecord::ImGuiProcessMenuLabel = "ProcessMenu";
 const char *BallHistory::PrintScreenRecord::ImGuiActiveMenuLabel = "ActiveMenu";
 const char *BallHistory::PrintScreenRecord::ImGuiStatusLabel = "Status";
+const char *BallHistory::PrintScreenRecord::ImGuiCurrentRunRecordLabel = "CurrentRunRecord";
 const char *BallHistory::PrintScreenRecord::ImGuiErrorLabel = "Error";
 
-const float BallHistory::PrintScreenRecord::TextFontSize = 14.0f;
-const float BallHistory::PrintScreenRecord::MenuTitleTextFontSize = 14.0f;
-const float BallHistory::PrintScreenRecord::MenuTextFontSize = 12.0f;
-const float BallHistory::PrintScreenRecord::MenuSelectedTextFontSize = 12.0f;
-const float BallHistory::PrintScreenRecord::ActiveMenuTextFontSize = 12.0f;
-const float BallHistory::PrintScreenRecord::StatusFontSize = 12.0f;
-const float BallHistory::PrintScreenRecord::ErrorTextFontSize = 20.0f;
-const float BallHistory::PrintScreenRecord::ResultsFontSize = 12.0f;
-
-ImFont *BallHistory::PrintScreenRecord::TextFont = nullptr;
-ImFont *BallHistory::PrintScreenRecord::MenuTitleTextFont = nullptr;
-ImFont *BallHistory::PrintScreenRecord::MenuTextFont = nullptr;
-ImFont *BallHistory::PrintScreenRecord::MenuSelectedTextFont = nullptr;
-ImFont *BallHistory::PrintScreenRecord::ActiveMenuTextFont = nullptr;
-ImFont *BallHistory::PrintScreenRecord::StatusFont = nullptr;
-ImFont *BallHistory::PrintScreenRecord::ErrorTextFont = nullptr;
-ImFont *BallHistory::PrintScreenRecord::ResultsFont = nullptr;
-
-const ImU32 BallHistory::PrintScreenRecord::TextFontColor = IM_COL32_WHITE;
-const ImU32 BallHistory::PrintScreenRecord::MenuTitleTextFontColor = IM_COL32_WHITE;
-const ImU32 BallHistory::PrintScreenRecord::MenuTextFontColor = IM_COL32_WHITE;
-const ImU32 BallHistory::PrintScreenRecord::MenuSelectedTextFontColor = IM_COL32_WHITE;
-const ImU32 BallHistory::PrintScreenRecord::ActiveMenuTextFontColor = IM_COL32(0x00, 0xFF, 0x00, 0xFF); // green
-const ImU32 BallHistory::PrintScreenRecord::StatusFontColor = IM_COL32_WHITE;
-const ImU32 BallHistory::PrintScreenRecord::ErrorTextFontColor = IM_COL32(0xFF, 0x00, 0x00, 0xFF); // red
-const ImU32 BallHistory::PrintScreenRecord::ResultsFontColor = IM_COL32_WHITE;
+ImFont *BallHistory::PrintScreenRecord::Normal12Font = nullptr;
+ImFont *BallHistory::PrintScreenRecord::Normal14Font = nullptr;
+ImFont *BallHistory::PrintScreenRecord::Bold12Font = nullptr;
+ImFont *BallHistory::PrintScreenRecord::Bold14Font = nullptr;
+ImFont *BallHistory::PrintScreenRecord::Bold20Font = nullptr;
 
 void BallHistory::PrintScreenRecord::Init()
 {
    ImGuiIO &io = ImGui::GetIO();
 
-   if (TextFont == nullptr)
+   if (Normal12Font == nullptr)
    {
-      TextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, TextFontSize);
+      Normal12Font = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, 12.0f);
    }
 
-   if (MenuTitleTextFont == nullptr)
+   if (Normal14Font == nullptr)
    {
-      MenuTitleTextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, MenuTitleTextFontSize);
+      Normal14Font = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, 14.0f);
    }
 
-   if (MenuTextFont == nullptr)
+   if (Bold12Font == nullptr)
    {
-      MenuTextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, MenuTextFontSize);
+      Bold12Font = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, 12.0f);
    }
 
-   if (MenuSelectedTextFont == nullptr)
+   if (Bold14Font == nullptr)
    {
-      MenuSelectedTextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, MenuSelectedTextFontSize);
+      Bold14Font = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, 14.0f);
    }
 
-   if (ActiveMenuTextFont == nullptr)
+   if (Bold20Font == nullptr)
    {
-      ActiveMenuTextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, ActiveMenuTextFontSize);
-   }
-
-   if (StatusFont == nullptr)
-   {
-      StatusFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, StatusFontSize);
-   }
-
-   if (ErrorTextFont == nullptr)
-   {
-      ErrorTextFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, ErrorTextFontSize);
-   }
-
-   if (ResultsFont == nullptr)
-   {
-      ResultsFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, ResultsFontSize);
+      Bold20Font = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, 20.0f);
    }
 }
 
 void BallHistory::PrintScreenRecord::UnInit()
 {
-   TextFont = nullptr;
-   MenuTitleTextFont = nullptr;
-   MenuTextFont = nullptr;
-   MenuSelectedTextFont = nullptr;
-   ActiveMenuTextFont = nullptr;
-   StatusFont = nullptr;
-   ErrorTextFont = nullptr;
-   ResultsFont = nullptr;
+   Normal12Font = nullptr;
+   Normal14Font = nullptr;
+   Bold12Font = nullptr;
+   Bold14Font = nullptr;
+   Bold20Font = nullptr;
 }
 
 void BallHistory::PrintScreenRecord::Text(const char *name, float positionX, float positionY, const char *format, ...)
@@ -422,7 +384,7 @@ void BallHistory::PrintScreenRecord::Text(const char *name, float positionX, flo
    va_start(formatArgs, format);
    vsprintf_s(strBuffer, format, formatArgs);
 
-   ShowText(name, TextFont, TextFontColor, positionX, positionY, false, strBuffer);
+   ShowText(name, Bold14Font, Color::White, positionX, positionY, false, strBuffer);
 }
 
 void BallHistory::PrintScreenRecord::MenuTitleText(const char *format, ...)
@@ -433,7 +395,7 @@ void BallHistory::PrintScreenRecord::MenuTitleText(const char *format, ...)
    vsprintf_s(strBuffer, format, formatArgs);
 
    std::string tempStr = "*****" + std::string(strBuffer) + "*****";
-   ShowText(ImGuiProcessMenuLabel, MenuTitleTextFont, MenuTitleTextFontColor, 0.50f, 0.25f, true, tempStr.c_str());
+   ShowText(ImGuiProcessMenuLabel, Bold14Font, Color::White, 0.50f, 0.25f, true, tempStr.c_str());
 }
 
 void BallHistory::PrintScreenRecord::MenuText(bool selected, const char *format, ...)
@@ -446,11 +408,11 @@ void BallHistory::PrintScreenRecord::MenuText(bool selected, const char *format,
    if (selected)
    {
       std::string tempStr = "-->" + std::string(strBuffer) + "<--";
-      ShowText(ImGuiProcessMenuLabel, MenuSelectedTextFont, MenuSelectedTextFontColor, 0.50f, 0.25f, true, tempStr.c_str());
+      ShowText(ImGuiProcessMenuLabel, Bold12Font, Color::White, 0.50f, 0.25f, true, tempStr.c_str());
    }
    else
    {
-      ShowText(ImGuiProcessMenuLabel, MenuTextFont, MenuTextFontColor, 0.50f, 0.25f, true, strBuffer);
+      ShowText(ImGuiProcessMenuLabel, Normal12Font, Color::White, 0.50f, 0.25f, true, strBuffer);
    }
 
    ImGui::SetWindowFocus(ImGuiProcessMenuLabel);
@@ -463,7 +425,7 @@ void BallHistory::PrintScreenRecord::PrintScreenRecord::ActiveMenuText(const cha
    va_start(formatArgs, format);
    vsprintf_s(strBuffer, format, formatArgs);
 
-   ShowText(ImGuiActiveMenuLabel, ActiveMenuTextFont, ActiveMenuTextFontColor, 0.50f, 1.00f, false, strBuffer);
+   ShowText(ImGuiActiveMenuLabel, Normal12Font, Color::White, 0.50f, 0.99f, false, strBuffer);
 }
 
 void BallHistory::PrintScreenRecord::ErrorText(const char *format, ...)
@@ -474,20 +436,25 @@ void BallHistory::PrintScreenRecord::ErrorText(const char *format, ...)
    vsprintf_s(strBuffer, format, formatArgs);
 
    std::string tempStr = "!!!!! ERROR:" + std::string(strBuffer) + "!!!!!";
-   ShowText(ImGuiErrorLabel, ErrorTextFont, ErrorTextFontColor, 0.50f, 0.50f, true, tempStr.c_str());
+   ShowText(ImGuiErrorLabel, Bold20Font, Color::Red, 0.50f, 0.50f, true, tempStr.c_str());
 }
 
 void BallHistory::PrintScreenRecord::Results(const std::vector<std::pair<std::string, std::string>> &nameValuePairs)
 {
-   ShowNameValueTable(ImGuiProcessMenuLabel, ResultsFont, ResultsFontColor, 0.0f, 0.0f, nameValuePairs, false);
+   ShowNameValueTable(ImGuiProcessMenuLabel, Normal12Font, Color::White, Bold12Font, Color::White, 0.00f, 0.00f, nameValuePairs, false, true);
 }
 
 void BallHistory::PrintScreenRecord::Status(const std::vector<std::pair<std::string, std::string>> &nameValuePairs)
 {
-   ShowNameValueTable(ImGuiStatusLabel, StatusFont, StatusFontColor, 1.01f, 1.01f, nameValuePairs, true);
+   ShowNameValueTable(ImGuiStatusLabel, Normal12Font, Color::White, Bold12Font, Color::White, 0.0f, 0.0f, nameValuePairs, true, false);
 }
 
-void BallHistory::PrintScreenRecord::ShowText(const char *name, ImFont *font, ImU32 fontColor, float positionX, float positionY, bool center, const char *str)
+void BallHistory::PrintScreenRecord::ActiveMenu(const std::vector<std::pair<std::string, std::string>> &nameValuePairs)
+{
+   ShowNameValueTable(ImGuiActiveMenuLabel, Normal12Font, Color::White, Bold12Font, Color::White, 0.80f, 1.00f, nameValuePairs, false, true);
+}
+
+void BallHistory::PrintScreenRecord::ShowText(const char *name, ImFont *font, const ImU32 &fontColor, float positionX, float positionY, bool center, const char *str)
 {
    if (!BallHistory::DrawMenu)
    {
@@ -524,17 +491,13 @@ void BallHistory::PrintScreenRecord::ShowText(const char *name, ImFont *font, Im
    ImGui::PopFont();
 
    ImVec2 windowSize = ImGui::GetWindowSize();
-   ImVec2 adjustedPosition = ImVec2(positionX - (windowSize.x / 2.0f), positionY);
 
-   ImGuiIO &io = ImGui::GetIO();
-   ImVec2 clampedPosition = { std::clamp(adjustedPosition.x, 0.0f, io.DisplaySize.x - windowSize.x), std::clamp(adjustedPosition.y, 0.0f, io.DisplaySize.y - windowSize.y) };
-
-   ImGui::SetWindowPos(clampedPosition);
+   SetWindowPosClamped(name, { positionX, positionY }, windowSize, center);
 
    ImGui::End();
 }
 
-void BallHistory::PrintScreenRecord::ShowNameValueTable(const char *name, ImFont *font, ImU32 fontColor, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs, bool useWindow)
+void BallHistory::PrintScreenRecord::ShowNameValueTable(const char *name, ImFont *rowFont, const ImU32 &rowFontColor, ImFont *headerFont, const ImU32 &headerFontColor, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs, bool overflow, bool center)
 {
    if (!BallHistory::DrawMenu)
    {
@@ -543,6 +506,7 @@ void BallHistory::PrintScreenRecord::ShowNameValueTable(const char *name, ImFont
 
    TransformPosition(positionX, positionY);
 
+   std::string windowName;
    float maxX = 0;
    bool beginWindowTable = true;
    for (std::size_t nameValuePairsIndex = 0; nameValuePairsIndex < nameValuePairs.size(); nameValuePairsIndex++)
@@ -551,14 +515,9 @@ void BallHistory::PrintScreenRecord::ShowNameValueTable(const char *name, ImFont
       {
          beginWindowTable = false;
 
-         if (positionX != 0.0f && positionY != 0.0f)
-         {
-            ImGui::SetNextWindowPos({positionX, positionY});
-         }
-
          ImGui::SetNextWindowBgAlpha(0.25f);
 
-         std::string windowName = useWindow ? name + std::to_string(nameValuePairsIndex) : name;
+         windowName = overflow ? name + std::to_string(nameValuePairsIndex) : name;
          ImGui::Begin(windowName.c_str(), nullptr,
             ImGuiWindowFlags_NoTitleBar |
             ImGuiWindowFlags_NoResize |
@@ -570,8 +529,6 @@ void BallHistory::PrintScreenRecord::ShowNameValueTable(const char *name, ImFont
 
          std::string tableName = windowName + "_Table_" + std::to_string(nameValuePairsIndex);
          ImGui::BeginTable(tableName.c_str(), 2, ImGuiTableFlags_Borders);
-         ImGui::PushFont(font);
-         ImGui::PushStyleColor(ImGuiCol_Text, fontColor);
 
          ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
          ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed);
@@ -582,18 +539,33 @@ void BallHistory::PrintScreenRecord::ShowNameValueTable(const char *name, ImFont
       auto cursorScreenPos = ImGui::GetCursorScreenPos();
       ImGuiIO &io = ImGui::GetIO();
       auto rowHeight = std::max(ImGui::CalcTextSize(row.first.c_str()).y, ImGui::CalcTextSize(row.second.c_str()).y);
-      if ((cursorScreenPos.y + rowHeight) > io.DisplaySize.y)
+      if (overflow && (cursorScreenPos.y + rowHeight) > io.DisplaySize.y)
       {
-         positionX += ImGui::GetWindowSize().x;
-         ImGui::PopStyleColor();
-         ImGui::PopFont();
          ImGui::EndTable();
+
+         ImVec2 windowSize = ImGui::GetWindowSize();
+
          ImGui::End();
+
+         SetWindowPosClamped(windowName.c_str(), { positionX, positionY}, windowSize, center);
+
+         positionX += windowSize.x;
          beginWindowTable = true;
          nameValuePairsIndex--;
       }
       else
       {
+         if (row.second.empty())
+         {
+            ImGui::PushFont(headerFont);
+            ImGui::PushStyleColor(ImGuiCol_Text, headerFontColor);
+         }
+         else
+         {
+            ImGui::PushFont(rowFont);
+            ImGui::PushStyleColor(ImGuiCol_Text, rowFontColor);
+         }
+
          ImGui::TableNextRow();
          ImGui::TableSetColumnIndex(0);
          ImGui::TextUnformatted(row.first.c_str());
@@ -608,22 +580,23 @@ void BallHistory::PrintScreenRecord::ShowNameValueTable(const char *name, ImFont
          {
             ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, (nameValuePairsIndex % 2) == 0 ? IM_COL32(0xAA, 0xAA, 0xAA, 0x40) : IM_COL32(0x99, 0x99, 0x99, 0x40));
          }
+
+         ImGui::PopStyleColor();
+         ImGui::PopFont();
       }
    }
 
    if (!beginWindowTable)
    {
-      ImGui::PopStyleColor();
-      ImGui::PopFont();
       ImGui::EndTable();
+
+      ImVec2 windowSize = ImGui::GetWindowSize();
+
       ImGui::End();
-   }
 
-   if (positionX != 0.0f && positionY != 0.0f)
-   {
-      ImGui::SetWindowPos({ positionX, positionY });
-   }
+      SetWindowPosClamped(windowName.c_str(), { positionX, positionY}, windowSize, center);
 
+   }
 }
 
 void BallHistory::PrintScreenRecord::TransformPosition(float &positionX, float &positionY)
@@ -637,6 +610,24 @@ void BallHistory::PrintScreenRecord::TransformPosition(float &positionX, float &
    {
       positionY *= io.DisplaySize.y;
    }
+}
+
+void BallHistory::PrintScreenRecord::SetWindowPosClamped(const char * name, const ImVec2 &position, const ImVec2 &size, bool center)
+{
+   ImVec2 adjustedPosition =
+   {
+      position.x - (center ? size.x / 2.0f : 0.0f),
+      position.y
+   };
+
+   ImGuiIO &io = ImGui::GetIO();
+   ImVec2 clampedPosition =
+   {
+      std::clamp(adjustedPosition.x, 0.0f, io.DisplaySize.x - size.x),
+      std::clamp(adjustedPosition.y, 0.0f, io.DisplaySize.y - size.y)
+   };
+
+   ImGui::SetWindowPos(name, clampedPosition);
 }
 
 // ================================================================================================================================================================================================================================================
@@ -3170,86 +3161,15 @@ void BallHistory::ShowAutoControlVertices(Player &player)
    }
 }
 
-void BallHistory::ShowPreviousRunRecord()
+void BallHistory::ShowRemainingRunInfo()
 {
-   if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord > 0)
-   {
-      std::vector<std::string> printScreenTexts;
-
-      TrainerOptions::RunRecord &previousRunRecord = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord - 1];
-      printScreenTexts.push_back(std::format("Previous Run ({}) Result", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord));
-
-      switch (previousRunRecord.m_Result)
-      {
-      case TrainerOptions::RunRecord::ResultType::ResultType_PassedLocation:
-         printScreenTexts.push_back(std::format("Pass (Location)"));
-         for (const std::tuple<std::size_t, std::size_t> &startToPassLocationIndex : previousRunRecord.m_StartToPassLocationIndexes)
-         {
-            std::stringstream startToPassLocationIndexes;
-            startToPassLocationIndexes << "Start #" << std::get<0>(startToPassLocationIndex) + 1 << " -> Pass #" << std::get<1>(startToPassLocationIndex) + 1;
-            printScreenTexts.push_back(startToPassLocationIndexes.str());
-         }
-         break;
-      case TrainerOptions::RunRecord::ResultType::ResultType_FailedLocation:
-         printScreenTexts.push_back(std::format("Fail (Location)"));
-         for (const std::tuple<std::size_t, std::size_t> &startToFailLocationIndex : previousRunRecord.m_StartToFailLocationIndexes)
-         {
-            std::stringstream startToFailLocationIndexes;
-            startToFailLocationIndexes << "Start #" << std::get<0>(startToFailLocationIndex) + 1 << " -> Fail #" << std::get<1>(startToFailLocationIndex) + 1;
-            printScreenTexts.push_back(startToFailLocationIndexes.str());
-         }
-         break;
-      case TrainerOptions::RunRecord::ResultType::ResultType_PassedCorridor:
-         printScreenTexts.push_back(std::format("Pass (Corridor)"));
-         printScreenTexts.push_back(std::format("Start #{} <-> Pass Corridor", previousRunRecord.m_StartToPassCorridorIndex));
-         break;
-      case TrainerOptions::RunRecord::ResultType::ResultType_FailedCorridorLeft:
-         printScreenTexts.push_back(std::format("Fail (Corridor Left)"));
-         printScreenTexts.push_back(std::format("Start #{} <-> Fail Corridor Left", previousRunRecord.m_StartToFailCorridorIndex));
-         break;
-      case TrainerOptions::RunRecord::ResultType::ResultType_FailedCorridorRight:
-         printScreenTexts.push_back(std::format("Fail (Corridor Right)"));
-         printScreenTexts.push_back(std::format("Start #{} <-> Fail Corridor Right", previousRunRecord.m_StartToFailCorridorIndex));
-         break;
-      case TrainerOptions::RunRecord::ResultType::ResultType_FailedTimeElapsed: printScreenTexts.push_back(std::format("Fail (time elapsed)")); break;
-      case TrainerOptions::RunRecord::ResultType::ResultType_FailedKicker: printScreenTexts.push_back(std::format("Fail (kicker)")); break;
-      default: InvalidEnumValue("TrainerOptions::RunRecord::ResultType", previousRunRecord.m_Result); break;
-      }
-      printScreenTexts.push_back(std::format("{:.2f} seconds", float(previousRunRecord.m_TotalTimeMs) / 1000));
-
-      for (const std::string &text : printScreenTexts)
-      {
-         PrintScreenRecord::ActiveMenuText(text.c_str());
-      }
-   }
-}
-
-void BallHistory::ShowCurrentRunRecord(int currentTimeMs)
-{
-   DWORD runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
+   std::vector<std::pair<std::string, std::string>> printScreenTexts;
 
    std::size_t runsRemaining = m_MenuOptions.m_TrainerOptions.m_RunRecords.size() - m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord;
    float runsRemainingPercent = runsRemaining / float(m_MenuOptions.m_TrainerOptions.m_RunRecords.size());
 
-   if (runsRemaining > 0)
-   {
-      PrintScreenRecord::ActiveMenuText("Run %zu of %zu (%zu or %.2f%% remaining)", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_RunRecords.size(),
-         runsRemaining, runsRemainingPercent * 100);
-   }
-   else
-   {
-      PrintScreenRecord::ActiveMenuText("Run <n/a> of %zu (%zu or %.2f%% remaining)", m_MenuOptions.m_TrainerOptions.m_RunRecords.size(), runsRemaining, runsRemainingPercent * 100);
-   }
-
-   if (m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs > 0)
-   {
-      PrintScreenRecord::ActiveMenuText("%.2f seconds remaining for current run",
-         ((m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * OneSecondMs) - runElapsedTimeMs + (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs)) / 1000.0f);
-   }
-   else
-   {
-      PrintScreenRecord::ActiveMenuText("<n/a> seconds remaining for current run");
-   }
+   printScreenTexts.push_back({ "Remaining", "" });
+   printScreenTexts.push_back({ "Runs", std::format("{} ({:.2f}%)", runsRemaining, runsRemainingPercent * 100) });
 
    DWORD totalRunsMs = 0;
    for (std::size_t x = 0; x < m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord; x++)
@@ -3263,12 +3183,105 @@ void BallHistory::ShowCurrentRunRecord(int currentTimeMs)
       TrainerOptions::RunRecord &rr = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord];
       float averageRunMs = totalRunsMs / float(m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord);
       float approximateRemainingMs = averageRunMs * runsRemaining;
-      PrintScreenRecord::ActiveMenuText("Approximately %.2f seconds for remaining runs", approximateRemainingMs / 1000.0f);
+      printScreenTexts.push_back({ "Time" , std::format("{:.2f}s", approximateRemainingMs / 1000.0f) });
    }
    else
    {
-      PrintScreenRecord::ActiveMenuText("Approximately <n/a> seconds for remaining runs");
+      printScreenTexts.push_back({ "Time", "N/A" });
    }
+   PrintScreenRecord::ActiveMenu(printScreenTexts);
+ }
+ 
+ void BallHistory::ShowPreviousRunRecord()
+{
+   if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord > 0)
+   {
+      std::vector<std::pair<std::string, std::string>> printScreenTexts;
+
+      TrainerOptions::RunRecord &previousRunRecord = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord - 1];
+      printScreenTexts.push_back({ "Previous", "" });
+      printScreenTexts.push_back({ "Run #", std::format("{}", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord) });
+
+      switch (previousRunRecord.m_Result)
+      {
+      case TrainerOptions::RunRecord::ResultType::ResultType_PassedLocation:
+         {
+         std::stringstream startToPassLocationIndexes;
+         for (const std::tuple<std::size_t, std::size_t> &startToPassLocationIndex : previousRunRecord.m_StartToPassLocationIndexes)
+         {
+            startToPassLocationIndexes << "Start #" << std::get<0>(startToPassLocationIndex) + 1 << "->Pass #" << std::get<1>(startToPassLocationIndex) + 1 << std::endl;
+         }
+
+         printScreenTexts.push_back({ "Result", "Pass" });
+         printScreenTexts.push_back({ "Reason", startToPassLocationIndexes.str() });
+
+         }
+         break;
+      case TrainerOptions::RunRecord::ResultType::ResultType_FailedLocation:
+         {
+         std::stringstream startToFailLocationIndexes;
+         for (const std::tuple<std::size_t, std::size_t> &startToFailLocationIndex : previousRunRecord.m_StartToFailLocationIndexes)
+         {
+            startToFailLocationIndexes << "Start #" << std::get<0>(startToFailLocationIndex) + 1 << "->Fail #" << std::get<1>(startToFailLocationIndex) + 1 << std::endl;
+         }
+
+         printScreenTexts.push_back({ "Result", "Fail" });
+         printScreenTexts.push_back({ "Reason", startToFailLocationIndexes.str() });
+         }
+         break;
+      case TrainerOptions::RunRecord::ResultType::ResultType_PassedCorridor:
+         printScreenTexts.push_back({ "Result", "Pass" });
+         printScreenTexts.push_back({ "Reason", std::format("Start #{}->\nPass Corridor", previousRunRecord.m_StartToPassCorridorIndex) });
+         break;
+      case TrainerOptions::RunRecord::ResultType::ResultType_FailedCorridorLeft:
+         printScreenTexts.push_back({ "Result", "Fail" });
+         printScreenTexts.push_back({ "Reason", std::format("Start #{}->\nFail Corridor Left", previousRunRecord.m_StartToFailCorridorIndex) });
+         break;
+      case TrainerOptions::RunRecord::ResultType::ResultType_FailedCorridorRight:
+         printScreenTexts.push_back({ "Result", "Fail" });
+         printScreenTexts.push_back({ "Reason", std::format("Start #{}->\nFail Corridor Right", previousRunRecord.m_StartToFailCorridorIndex) });
+         break;
+      case TrainerOptions::RunRecord::ResultType::ResultType_FailedTimeElapsed:
+         printScreenTexts.push_back({ "Result", "Fail" });
+         printScreenTexts.push_back({ "Reason", "Time Elapsed" });
+         break;
+      case TrainerOptions::RunRecord::ResultType::ResultType_FailedKicker:
+         printScreenTexts.push_back({ "Result", "Fail" });
+         printScreenTexts.push_back({ "Reason", "Kicker" });
+         break;
+      default:
+         InvalidEnumValue("TrainerOptions::RunRecord::ResultType", previousRunRecord.m_Result);
+         break;
+      }
+      printScreenTexts.push_back({"Length", std::format("{:.2f}s", float(previousRunRecord.m_TotalTimeMs) / 1000) });
+
+      PrintScreenRecord::ActiveMenu(printScreenTexts);
+   }
+}
+
+void BallHistory::ShowCurrentRunRecord(int currentTimeMs)
+{
+   std::vector<std::pair<std::string, std::string>> printScreenTexts;
+   DWORD runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
+
+   std::size_t runsRemaining = m_MenuOptions.m_TrainerOptions.m_RunRecords.size() - m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord;
+   float runsRemainingPercent = runsRemaining / float(m_MenuOptions.m_TrainerOptions.m_RunRecords.size());
+
+   printScreenTexts.push_back({ "Current", "" });
+   printScreenTexts.push_back({ "Run #", std::format("{} of {}",
+      runsRemaining > 0 ? std::to_string(m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1) : "N/A",
+      m_MenuOptions.m_TrainerOptions.m_RunRecords.size())});
+
+   if (m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs > 0)
+   {
+      printScreenTexts.push_back({ "Time", std::format("{:.2f}s", ((m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * OneSecondMs) - runElapsedTimeMs + (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs)) / 1000.0f) });
+   }
+   else
+   {
+      printScreenTexts.push_back({ "Time", "N/A"} );
+   }
+
+   PrintScreenRecord::ActiveMenu(printScreenTexts);
 }
 
 void BallHistory::ShowBallStartOptionsRecord(TrainerOptions::BallStartOptionsRecord &bsor)
@@ -3495,7 +3508,7 @@ void BallHistory::ShowResult(std::size_t total, std::vector<DWORD> &timesMs, con
    }
    else
    {
-      results.push_back({ std::format("{} {} Percent", type, subType), "<n/a>" });
+      results.push_back({ std::format("{} {} Percent", type, subType), "N/A" });
    }
 
    std::size_t totalMs = std::accumulate(timesMs.begin(), timesMs.end(), 0);
@@ -3507,7 +3520,7 @@ void BallHistory::ShowResult(std::size_t total, std::vector<DWORD> &timesMs, con
       }
       else
       {
-         results.push_back({ std::format("{} {} Average Time", type, subType), "<n/a>" });
+         results.push_back({ std::format("{} {} Average Time", type, subType), "N/A" });
       }
 
       if (total)
@@ -3516,7 +3529,7 @@ void BallHistory::ShowResult(std::size_t total, std::vector<DWORD> &timesMs, con
       }
       else
       {
-         results.push_back({ std::format("{} {} StdDev Time", type, subType), "<n/a>" });
+         results.push_back({ std::format("{} {} StdDev Time", type, subType), "N/A" });
       }
    }
 }
@@ -4360,6 +4373,7 @@ void BallHistory::ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType 
       // TODO GARY if you start a table and do nothing other than go into control menu,
       // select Trainer Mode, Results and then toggle out of control menu
       // Simply being on the results view causes this and it should not work this way
+      ShowRemainingRunInfo();
 
       ShowPreviousRunRecord();
 
@@ -7313,6 +7327,8 @@ void BallHistory::ProcessModeTrainer(Player &player, int currentTimeMs)
       m_MenuOptions.m_TrainerOptions.m_ModeState = TrainerOptions::ModeStateType::ModeStateType_Results;
       return;
    }
+
+   ShowRemainingRunInfo();
 
    TrainerOptions::RunRecord &currentRunRecord = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord];
    S32 runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;

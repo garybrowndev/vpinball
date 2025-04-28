@@ -224,7 +224,7 @@ public:
       static const char * ImGuiDrawTrainerBallCorridorOpeningLeftLabel;
       static const char * ImGuiDrawTrainerBallCorridorOpeningRightLabel;
 
-      static const S32 RadiusPercentMinimum = 1;
+      static const S32 RadiusPercentMinimum = 0;
       static const S32 RadiusPercentMaximum = 300;
 
       Vertex3Ds m_PassPosition;
@@ -499,43 +499,25 @@ private:
       static void ErrorText(const char *format, ...);
       static void Results(const std::vector<std::pair<std::string, std::string>> &nameValuePairs);
       static void Status(const std::vector<std::pair<std::string, std::string>> &nameValuePairs);
+      static void ActiveMenu(const std::vector<std::pair<std::string, std::string>> &nameValuePairs);
 
    private:
-      static const char *ImGuiStatusLabel;
       static const char *ImGuiProcessMenuLabel;
       static const char *ImGuiActiveMenuLabel;
+      static const char *ImGuiStatusLabel;
+      static const char *ImGuiCurrentRunRecordLabel;
       static const char *ImGuiErrorLabel;
 
-      static const float TextFontSize;
-      static const float MenuTitleTextFontSize;
-      static const float MenuTextFontSize;
-      static const float MenuSelectedTextFontSize;
-      static const float ActiveMenuTextFontSize;
-      static const float StatusFontSize;
-      static const float ErrorTextFontSize;
-      static const float ResultsFontSize;
+      static ImFont *Normal12Font;
+      static ImFont *Normal14Font;
+      static ImFont *Bold12Font;
+      static ImFont *Bold14Font;
+      static ImFont *Bold20Font;
 
-      static const ImU32 TextFontColor;
-      static const ImU32 MenuTitleTextFontColor;
-      static const ImU32 MenuTextFontColor;
-      static const ImU32 MenuSelectedTextFontColor;
-      static const ImU32 ActiveMenuTextFontColor;
-      static const ImU32 StatusFontColor;
-      static const ImU32 ErrorTextFontColor;
-      static const ImU32 ResultsFontColor;
-
-      static ImFont *TextFont;
-      static ImFont *MenuTitleTextFont;
-      static ImFont *MenuTextFont;
-      static ImFont *MenuSelectedTextFont;
-      static ImFont *ActiveMenuTextFont;
-      static ImFont *StatusFont;
-      static ImFont *ErrorTextFont;
-      static ImFont *ResultsFont;
-
-      static void ShowText(const char *name, ImFont *font, ImU32 fontColor, float positionX, float positionY, bool center, const char *str);
-      static void ShowNameValueTable(const char *name, ImFont *font, ImU32 fontColor, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs, bool useWindow);
+      static void ShowText(const char *name, ImFont *font, const ImU32 &fontColor, float positionX, float positionY, bool center, const char *str);
+      static void ShowNameValueTable(const char *name, ImFont *rowFont, const ImU32 &rowFontColor, ImFont *headerFont, const ImU32 &headerFontColor, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs, bool overflow, bool center);
       static void TransformPosition(float &positionX, float &positionY);
+      static void SetWindowPosClamped(const char * name, const ImVec2 &position, const ImVec2 &size, bool center);
    };
 
    struct MenuOptionsRecord
@@ -815,6 +797,7 @@ private:
    void ShowStatus(Player &player, int currentTimeMs);
    void ShowRecallBall(Player &player);
    void ShowAutoControlVertices(Player &player);
+   void ShowRemainingRunInfo();
    void ShowPreviousRunRecord();
    void ShowCurrentRunRecord(int currentTimeMs);
    void ShowBallStartOptionsRecord(TrainerOptions::BallStartOptionsRecord &bsor);
