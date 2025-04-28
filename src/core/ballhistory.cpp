@@ -3231,15 +3231,15 @@ void BallHistory::ShowRemainingRunInfo()
          break;
       case TrainerOptions::RunRecord::ResultType::ResultType_PassedCorridor:
          printScreenTexts.push_back({ "Result", "Pass" });
-         printScreenTexts.push_back({ "Reason", std::format("Start #{}->\nPass Corridor", previousRunRecord.m_StartToPassCorridorIndex) });
+         printScreenTexts.push_back({ "Reason", std::format("Start #{}->\nPass Corridor", previousRunRecord.m_StartToPassCorridorIndex + 1) });
          break;
       case TrainerOptions::RunRecord::ResultType::ResultType_FailedCorridorLeft:
          printScreenTexts.push_back({ "Result", "Fail" });
-         printScreenTexts.push_back({ "Reason", std::format("Start #{}->\nFail Corridor Left", previousRunRecord.m_StartToFailCorridorIndex) });
+         printScreenTexts.push_back({ "Reason", std::format("Start #{}->\nFail Corridor Left", previousRunRecord.m_StartToFailCorridorIndex + 1) });
          break;
       case TrainerOptions::RunRecord::ResultType::ResultType_FailedCorridorRight:
          printScreenTexts.push_back({ "Result", "Fail" });
-         printScreenTexts.push_back({ "Reason", std::format("Start #{}->\nFail Corridor Right", previousRunRecord.m_StartToFailCorridorIndex) });
+         printScreenTexts.push_back({ "Reason", std::format("Start #{}->\nFail Corridor Right", previousRunRecord.m_StartToFailCorridorIndex + 1) });
          break;
       case TrainerOptions::RunRecord::ResultType::ResultType_FailedTimeElapsed:
          printScreenTexts.push_back({ "Result", "Fail" });
