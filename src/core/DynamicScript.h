@@ -4,7 +4,7 @@
 
 #include <variant>
 #include "plugins/ScriptablePlugin.h"
-#include "robin_hood.h"
+#include "unordered_dense.h"
 
 class DynamicDispatch;
 
@@ -13,14 +13,14 @@ class DynamicTypeLibrary final
 public:
    DynamicTypeLibrary();
    ~DynamicTypeLibrary();
-   
+
    void RegisterScriptClass(ScriptClassDef *classDef);
    void RegisterScriptTypeAlias(const char *name, const char *aliasedType);
    void RegisterScriptArray(ScriptArrayDef *arrayDef);
    void ResolveAllClasses();
 
    // FIXME allow to unregister
-   
+
    ScriptClassDef *ResolveClass(const char * name) const;
    int ResolveMemberId(const ScriptClassDef *classDef, const char *memberName) const;
 
@@ -38,7 +38,7 @@ private:
    struct ClassDef {
       ScriptClassDef * classDef;
       std::vector<std::vector<int>> members; // DispID (index in vector, corresponding to a case insensitive member name) to list of members (allowing overloads)
-      robin_hood::unordered_map<string, int> memberMap; // Name to DispID map
+      ankerl::unordered_dense::map<string, int> memberMap; // Name to DispID map
    };
    struct TypeDef {
       enum {
@@ -57,7 +57,7 @@ private:
       };
    };
    std::vector<TypeDef> m_types; // id (index in vector, corresponding to a case insensitive type name) to type definition
-   robin_hood::unordered_map<string, int> m_typenames; // Name to type id map
+   ankerl::unordered_dense::map<string, int> m_typenames; // Name to type id map
 };
 
 
@@ -65,10 +65,10 @@ class DynamicDispatch final : public IDispatch
 {
 public:
    DynamicDispatch(const DynamicTypeLibrary* typeLibrary, const ScriptClassDef* classDef, void * nativeObject)
-      : m_classDef(classDef)
+      : m_refCount(1)
+      , m_classDef(classDef)
       , m_typeLibrary(typeLibrary)
       , m_nativeObject(nativeObject)
-      , m_refCount(1)
    {
       #ifdef DEBUG
       assert(classDef == typeLibrary->ResolveClass(classDef->name.name));

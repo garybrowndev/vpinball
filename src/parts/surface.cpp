@@ -15,7 +15,6 @@ Surface::Surface()
    m_d.m_slingshotAnimation = true;
    m_d.m_inner = true;
    m_d.m_isBottomSolid = false;
-   m_d.m_overwritePhysics = true;
 }
 
 Surface::~Surface()
@@ -919,6 +918,7 @@ void Surface::RenderRelease()
 void Surface::Render(const unsigned int renderMask)
 {
    assert(m_rd != nullptr);
+   assert(!m_backglass);
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
    const bool isReflectionPass = renderMask & Renderer::REFLECTION_PASS;
@@ -926,15 +926,15 @@ void Surface::Render(const unsigned int renderMask)
 
    if (isReflectionPass && !m_d.m_reflectionEnabled)
       return;
-   
+
    RenderSlingshots();
-   
+
    if (isStaticOnly && !StaticRendering())
       return;
-   
+
    if (isDynamicOnly && StaticRendering())
       return;
-   
+
    if (!m_isDropped || StaticRendering())
    {
       RenderWallsAtHeight(false, isReflectionPass);

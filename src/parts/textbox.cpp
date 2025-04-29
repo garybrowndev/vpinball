@@ -9,6 +9,7 @@
 
 Textbox::Textbox()
 {
+   m_backglass = true; // Textbox is always located on backdrop
 }
 
 Textbox::~Textbox()
@@ -50,8 +51,6 @@ void Textbox::SetDefaults(const bool fromMouseClick)
 {
 #define regKey Settings::DefaultPropsTextBox
 
-   //Textbox is always located on backdrop
-   m_backglass = true;
    m_d.m_visible = true;
 
 #ifndef __STANDALONE__
@@ -160,7 +159,7 @@ void Textbox::WriteRegDefaults()
    const size_t charCnt = wcslen(fd.lpstrName) + 1;
    char * const strTmp = new char[2 * charCnt];
    WideCharToMultiByteNull(CP_ACP, 0, fd.lpstrName, -1, strTmp, (int)(2 * charCnt), nullptr, nullptr);
-   g_pvp->m_settings.SaveValue(regKey, "FontName"s, strTmp);
+   g_pvp->m_settings.SaveValue(regKey, "FontName"s, string(strTmp));
    delete[] strTmp;
    const int weight = fd.sWeight;
    const int charset = fd.sCharset;
@@ -462,17 +461,15 @@ void Textbox::UpdateAnimation(const float diff_time_msec)
 void Textbox::Render(const unsigned int renderMask)
 {
    assert(m_rd != nullptr);
+   assert(m_backglass);
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
    const bool isReflectionPass = renderMask & Renderer::REFLECTION_PASS;
-   const bool isNoBackdrop = renderMask & Renderer::DISABLE_BACKDROP;
    TRACE_FUNCTION();
 
    const bool is_dmd = m_d.m_isDMD || StrStrI(m_d.m_sztext.c_str(), "DMD") != nullptr; //!! second part is VP10.0 legacy
    if (isStaticOnly
       || !m_d.m_visible
-      || (m_backglass && isReflectionPass)
-      || (m_backglass && isNoBackdrop)
       || (!is_dmd && m_texture == nullptr))
       return;
 
@@ -895,7 +892,7 @@ TTF_Font* Textbox::LoadFont()
 
    string szPath;
    for (const auto& szStyle : styles) {
-      szPath = find_path_case_insensitive(g_pvp->m_currentTablePath + szFontName + szStyle + ".ttf");
+      szPath = find_case_insensitive_file_path(g_pvp->m_currentTablePath + szFontName + szStyle + ".ttf");
       if (!szPath.empty()) {
          pFont = TTF_OpenFont(szPath.c_str(), m_fontSize);
          if (pFont) {

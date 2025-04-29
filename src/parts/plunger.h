@@ -27,7 +27,7 @@ public:
    string m_szSurface;
    float m_scatterVelocity;
    float m_momentumXfer;
-   char m_szTipShape[MAXTIPSHAPE];
+   string m_szTipShape;
    float m_rodDiam;
    float m_ringGap;
    float m_ringDiam;
@@ -115,7 +115,7 @@ public:
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
-   virtual HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) override;
+   HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) override;
 #endif
    BEGIN_COM_MAP(Plunger)
       COM_INTERFACE_ENTRY(IDispatch)

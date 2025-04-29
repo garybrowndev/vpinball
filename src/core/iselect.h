@@ -30,6 +30,7 @@ enum ItemTypeEnum : unsigned int
    eItemHitTarget,
    //eItemLightSeqCenter,
    eItemBall,
+   eItemPartGroup,
    eItemTypeCount,
    eItemInvalid = 0xffffffff // Force enum to be 32 bits
 };
@@ -65,10 +66,10 @@ public:
     float m_scatter;
     float m_threshold;
     bool  m_collidable;
-    bool  m_hitEvent;
-    bool  m_overwritePhysics;
-    bool  m_reflectionEnabled;
-    bool  m_visible;
+    bool  m_hitEvent = false;
+    bool  m_overwritePhysics = true;
+    bool  m_reflectionEnabled = true;
+    bool  m_visible = true;
 };
 
 // ISelect is the subclass for anything that can be manipulated with the mouse.
@@ -81,13 +82,13 @@ public:
 
    virtual void OnLButtonDown(int x, int y);
    virtual void OnLButtonUp(int x, int y);
-   virtual void OnRButtonDown(int x, int y, HWND hwnd);
-   virtual void OnRButtonUp(int x, int y);
+   virtual void OnRButtonDown(int x, int y, HWND hwnd) { }
+   virtual void OnRButtonUp(int x, int y) { }
    virtual void OnMouseMove(int x, int y);
 
    // Things to override
-   virtual void MoveOffset(const float dx, const float dy);
-   virtual void EditMenu(CMenu &menu);
+   virtual void MoveOffset(const float dx, const float dy) { } // Implement in child class to enable dragging
+   virtual void EditMenu(CMenu &menu) { }
    virtual void DoCommand(int icmd, int x, int y);
    virtual void SetObjectPos();
 
@@ -98,7 +99,7 @@ public:
    virtual PinTable *GetPTable() = 0;
    virtual const PinTable *GetPTable() const = 0;
 
-   virtual HRESULT GetTypeName(BSTR *pVal);
+   virtual HRESULT GetTypeName(BSTR *pVal) const;
    void GetTypeNameForType(const ItemTypeEnum type, WCHAR * const buf) const;
 
    virtual IDispatch *GetDispatch() = 0;
@@ -141,21 +142,16 @@ public:
    virtual void AddPoint(int x, int y, const bool smooth) {}
    virtual void UpdateStatusBarInfo();
 
-   POINT m_ptLast;
-
-   SelectState m_selectstate;
-
-   int m_menuid; // context menu to use
-
-   string m_layerName;
-
-   bool m_dragging;
-   bool m_markedForUndo;
-   bool m_locked; // Can not be dragged in the editor
-   bool m_isVisible;
-
-   unsigned char m_oldLayerIndex; //!! deprecated, leave it here for compatibility reasons. To load old tables to new layer handling
+   SelectState m_selectstate = eNotSelected;
+   int m_menuid = -1; // context menu to use
+   bool m_dragging = false;
+   bool m_locked = false; // Can not be dragged in the editor
+   bool m_isVisible = true; // UI visibility (not the same as rendering visibility which is a member of part data)
 
 protected:
-   VPinball *m_vpinball;
+   VPinball *m_vpinball = nullptr;
+
+private:
+   bool m_markedForUndo = false; // Flag set when dragged to enable undo
+   POINT m_ptLast {}; // Last point when dragging
 };

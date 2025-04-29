@@ -3,7 +3,6 @@
 #include "core/stdafx.h"
 #include "ui/resource.h"
 #include "WhereUsedDialog.h"
-#include "core/vpversion.h"
 #include "atlconv.h"
 
 typedef struct _tagSORTDATA
@@ -126,16 +125,13 @@ INT_PTR WhereUsedDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
          for (const WhereUsedInfo &where : vWhereUsed)
          {
             //Create Listview Item
-            LPSTR srcImage;
-            LPSTR usedByObject;
-            LPSTR usedByPropertyName;
-            srcImage = LPSTR(where.searchObjectName.c_str());
+            LPSTR srcImage = LPSTR(where.searchObjectName.c_str());
 
             // Convert the string into an ANSI string
             CW2A szUsedByObject(where.whereUsedObjectname);
             // Now Convert it to a LPSTR
-            usedByObject = LPSTR(szUsedByObject);
-            usedByPropertyName = LPSTR(where.whereUsedPropertyName.c_str());
+            LPSTR usedByObject = LPSTR(szUsedByObject);
+            LPSTR usedByPropertyName = LPSTR(where.whereUsedPropertyName.c_str());
 
             LVITEM lvitem;
             lvitem.mask = LVIF_DI_SETITEM | LVIF_TEXT | LVIF_PARAM;
@@ -365,7 +361,7 @@ void WhereUsedDialog::AddToolTip(const char *const text, HWND parentHwnd, HWND t
    toolInfo.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
    toolInfo.uId = (UINT_PTR)controlHwnd;
    toolInfo.lpszText = (char *)text;
-   SendMessage(toolTipHwnd, TTM_ADDTOOL, 0, (LPARAM)&toolInfo);
+   ::SendMessage(toolTipHwnd, TTM_ADDTOOL, 0, (LPARAM)&toolInfo);
 }
 
 void WhereUsedDialog::EditObject(HWND hWhereListView)

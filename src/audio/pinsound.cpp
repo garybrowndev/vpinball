@@ -2,10 +2,9 @@
 
 #include "core/stdafx.h"
 
-#include <SDL3_mixer/SDL_mixer.h>
+#include <iomanip>
 
-// Retrieve settings from the VPinball.ini file
-Settings PinSound::m_settings;
+#include <SDL3_mixer/SDL_mixer.h>
 
 // SDL Sound Device Id for each output 
 int PinSound::m_sdl_STD_idx = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;  // the table sounds
@@ -43,21 +42,20 @@ SoundConfigTypes PinSound::m_SoundMode3D;
 PinSound::PinSound(const Settings& settings)
 {
    {
-   const std::lock_guard<std::mutex> lg(m_SDLAudioInitMutex);
+      const std::lock_guard<std::mutex> lg(m_SDLAudioInitMutex);
 
-   if (!isSDLAudioInitialized) {
-      m_settings = settings;
+      if (!isSDLAudioInitialized) {
+         PinSound::initSDLAudio(settings);
+         isSDLAudioInitialized = true;
+         const char* pdriverName = SDL_GetCurrentAudioDriver();
+        
+         // Set the output devices AudioSpec
+         Mix_QuerySpec(&m_mixEffectsData.outputFrequency, &m_mixEffectsData.outputFormat, &m_mixEffectsData.outputChannels); // the struct that gets passed to the MixEffect callbacks.
+         Mix_QuerySpec(&m_audioSpecOutput.freq, &m_audioSpecOutput.format, &m_audioSpecOutput.channels);
 
-      PinSound::initSDLAudio();
-      isSDLAudioInitialized = true;
-
-      // Set the output devices AudioSpec
-      Mix_QuerySpec(&m_mixEffectsData.outputFrequency, &m_mixEffectsData.outputFormat, &m_mixEffectsData.outputChannels); // the struct that gets passed to the MixEffect callbacks.
-      Mix_QuerySpec(&m_audioSpecOutput.freq, &m_audioSpecOutput.format, &m_audioSpecOutput.channels);
-
-      PLOGI << "Output Device Settings: " << "Freq: " << m_audioSpecOutput.freq << " Format (SDL_AudioFormat): " << m_audioSpecOutput.format
-      << " channels: " << m_audioSpecOutput.channels;
-   }
+         PLOGI << "Output Device Settings: " << "Freq: " << m_audioSpecOutput.freq << " Format (SDL_AudioFormat): " << m_audioSpecOutput.format
+         << " channels: " << m_audioSpecOutput.channels << ", driver: " << (pdriverName ? pdriverName : "NULL") ;
+      }
    }
 
    // set the MixEffects output params that are used for resampling the incoming stream to callback.
@@ -91,12 +89,12 @@ PinSound::~PinSound()
  *
  * @see SDL_InitSubSystem(SDL_INIT_AUDIO), Mix_OpenAudio(), SDL_GetAudioDeviceFormat(), Mix_AllocateChannels()
  */
-void PinSound::initSDLAudio()
+void PinSound::initSDLAudio(const Settings& settings)
 {
    string soundDeviceName;
    string soundDeviceBGName;
-   const bool good = m_settings.LoadValue(Settings::Player, "SoundDevice"s, soundDeviceName);
-   const bool good2 = m_settings.LoadValue(Settings::Player, "SoundDeviceBG"s, soundDeviceBGName);
+   const bool good = settings.LoadValue(Settings::Player, "SoundDevice"s, soundDeviceName);
+   const bool good2 = settings.LoadValue(Settings::Player, "SoundDeviceBG"s, soundDeviceBGName);
 
     if (!good && !good2) // use the default SDL audio device
     {
@@ -128,7 +126,7 @@ void PinSound::initSDLAudio()
       }
     }
 
-   PinSound::m_SoundMode3D = (SoundConfigTypes) m_settings.LoadValueWithDefault(Settings::Player, "Sound3D"s, (int)SNDCFG_SND3D2CH);
+   PinSound::m_SoundMode3D = static_cast<SoundConfigTypes>(settings.LoadValueUInt(Settings::Player, "Sound3D"s));
 
    if (!SDL_WasInit(SDL_INIT_AUDIO))
       if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) {
@@ -242,19 +240,19 @@ void PinSound::UpdateVolume()
       else if (m_pstream != nullptr)
       {
          // Backglass stream use stream volume (requested volume is stored in the mix effect as for other sounds)
-         SDL_SetAudioStreamGain(m_pstream, m_streamVolume * static_cast<float>(g_pplayer->m_MusicVolume) / 100.f);
+         SDL_SetAudioStreamGain(m_pstream, m_streamVolume * (g_pplayer ? dequantizeSignedPercent(g_pplayer->m_MusicVolume) : 1.f));
       }
       else if (m_assignedChannel != -1)
       {
          // Backglass sound use mixer volume (requested volume is stored in the mix effect as for other sounds)
-         const int nVolume = static_cast<int>(m_mixEffectsData.volume * (static_cast<float>(g_pplayer->m_MusicVolume) / 100.f) * static_cast<float>(MIX_MAX_VOLUME));
+         const int nVolume = static_cast<int>(m_mixEffectsData.volume * (g_pplayer ? dequantizeSignedPercent(g_pplayer->m_MusicVolume) : 1.f) * static_cast<float>(MIX_MAX_VOLUME));
          Mix_Volume(m_assignedChannel, nVolume);
       }
    }
    else
    {
       // Playfield sounds use volume stored in m_mixEffectsData when rendering
-      const float newSoundVolume = static_cast<float>(g_pplayer->m_SoundVolume) / 100.f;
+      const float newSoundVolume = g_pplayer ? dequantizeSignedPercent(g_pplayer->m_SoundVolume) : 1.f;
       if (m_mixEffectsData.globalTableVolume == 0.f)
          m_mixEffectsData.nVolume = m_mixEffectsData.volume * newSoundVolume;
       else
@@ -310,32 +308,30 @@ void PinSound::Play(float volume, const float randompitch, const int pitch,
 
    // Clamp volume
    constexpr float minVol = .08f;  // some table sounds like rolling are extremely low.  Set a minimum or you cant hear it.
-   float nVolume = clamp(volume+minVol, 0.0f, 1.0f);
 
    // setup the struct for the effects processing
-   m_mixEffectsData.pitch = static_cast<float>(pitch);
-   m_mixEffectsData.randompitch = randompitch;
+   //m_mixEffectsData.pitch = static_cast<float>(pitch);
+   //m_mixEffectsData.randompitch = randompitch;
    m_mixEffectsData.front_rear_fade = front_rear_fade;
    m_mixEffectsData.pan = pan;
-   m_mixEffectsData.volume = volume;
+   m_mixEffectsData.volume = clamp(volume, 0.0f, 1.0f);
 
    // BG Sound is handled differently then table sounds.  These are BG sounds stored in the table (vpx file).
    if (m_outputTarget == SNDOUT_BACKGLASS)
    {
       // adjust volume against the tables global sound setting
-      PlayBGSound(nVolume, loopcount, usesame, restart);
+      PlayBGSound(clamp(volume * (g_pplayer ? dequantizeSignedPercent(g_pplayer->m_MusicVolume) : 1.0f) + minVol, 0.0f, 1.0f), loopcount, usesame, restart);
       return;
    }
 
    // adjust volume against the tables global sound setting
-   m_mixEffectsData.globalTableVolume = static_cast<float>(g_pplayer->m_SoundVolume) / 100.f;
-   nVolume *= m_mixEffectsData.globalTableVolume;
-   m_mixEffectsData.nVolume = nVolume;
+   m_mixEffectsData.globalTableVolume = g_pplayer ? dequantizeSignedPercent(g_pplayer->m_SoundVolume) : 1.0f;
+   m_mixEffectsData.nVolume = clamp(volume * m_mixEffectsData.globalTableVolume + minVol, 0.0f, 1.0f);
 
    switch(PinSound::m_SoundMode3D)
    {
       case SNDCFG_SND3D2CH:
-         Play_SNDCFG_SND3D2CH(nVolume, randompitch, pitch, pan, front_rear_fade, loopcount, usesame, restart);
+         Play_SNDCFG_SND3D2CH(m_mixEffectsData.nVolume, randompitch, pitch, pan, front_rear_fade, loopcount, usesame, restart);
          break;
       case SNDCFG_SND3DALLREAR:
          if (m_mixEffectsData.outputChannels < 4) // channel count must be at least 4.  Front and Rear
@@ -343,7 +339,7 @@ void PinSound::Play(float volume, const float randompitch, const int pitch,
             PLOGE << "Your sound device does not have the required number of channels (4+) to support this mode. <SND3DALLREAR>";
             break;
          }
-         Play_SNDCFG_SND3DALLREAR(nVolume, randompitch, pitch, pan, front_rear_fade, loopcount, usesame, restart);
+         Play_SNDCFG_SND3DALLREAR(m_mixEffectsData.nVolume, randompitch, pitch, pan, front_rear_fade, loopcount, usesame, restart);
          break;
       case SNDCFG_SND3DFRONTISREAR:
          PLOGI << "Sound Mode SNDCFG_SND3DFRONTISREAR not implemented yet.";
@@ -359,7 +355,7 @@ void PinSound::Play(float volume, const float randompitch, const int pitch,
             PLOGE << "Your sound device does not have the required number of channels (8) to support this mode. <SNDCFG_SND3DSSF>";
             break;
          }
-         Play_SNDCFG_SND3DSSF(nVolume, randompitch, pitch, pan, front_rear_fade, loopcount, usesame, restart);
+         Play_SNDCFG_SND3DSSF(m_mixEffectsData.nVolume, randompitch, pitch, pan, front_rear_fade, loopcount, usesame, restart);
          break;
       default:
          PLOGE << "Invalid setting for 'Sound3D' in VPinball.ini...";
@@ -396,17 +392,17 @@ void PinSound::PlayBGSound(float volume, const int loopcount, const bool usesame
    if (m_assignedChannel == -1)
       return;
 
-   const int nVolume = static_cast<int>(volume * (static_cast<float>(g_pplayer->m_MusicVolume) / 100.f) * static_cast<float>(MIX_MAX_VOLUME));
+   const int nVolume = static_cast<int>(volume * static_cast<float>(MIX_MAX_VOLUME));
    if (Mix_Playing(m_assignedChannel)) {
       if (restart || !usesame) // stop and reload
          Mix_HaltChannel(m_assignedChannel);
       Mix_Volume(m_assignedChannel, nVolume);
       if (restart || !usesame) // stop and reload
-         Mix_PlayChannel(m_assignedChannel, m_pMixChunkOrg, 0);
+         Mix_PlayChannel(m_assignedChannel, m_pMixChunkOrg, loopcount > 0 ? loopcount -1 : loopcount);
    }
    else { // not playing
       Mix_Volume(m_assignedChannel, nVolume);
-      Mix_PlayChannel(m_assignedChannel, m_pMixChunkOrg, 0);
+      Mix_PlayChannel(m_assignedChannel, m_pMixChunkOrg, loopcount > 0 ? loopcount -1 : loopcount);
    }
 }
 
@@ -453,7 +449,7 @@ void PinSound::setPitch(int pitch, float randompitch)
       {
          const float rndh = rand_mt_01();
          const float rndl = rand_mt_01();
-         int freq = (int)(m_mixEffectsData.outputFrequency + (m_mixEffectsData.outputFrequency * randompitch * rndh * rndh) - (m_mixEffectsData.outputFrequency * 
+         int freq = (int)((float)m_mixEffectsData.outputFrequency + ((float)m_mixEffectsData.outputFrequency * randompitch * rndh * rndh) - ((float)m_mixEffectsData.outputFrequency * 
            randompitch * rndl * rndl * 0.5f));
          newFreq = freq + pitch; // add the normal pitch in if its set
          //PLOGI << " random: new freq = " << newFreq;
@@ -516,14 +512,14 @@ void PinSound::Play_SNDCFG_SND3DALLREAR(float nVolume, const float randompitch, 
          setPitch(pitch, randompitch);
          // register the effects.  must do this each time before PlayChannel and once the sound is done its unregistered automatically
          Mix_RegisterEffect(m_assignedChannel, PinSound::MoveFrontToRearEffect, nullptr, &m_mixEffectsData);
-         Mix_PlayChannel(m_assignedChannel, m_pMixChunk, 0);
+         Mix_PlayChannel(m_assignedChannel, m_pMixChunk, loopcount > 0 ? loopcount -1 : loopcount);
       }
    }
    else { // not playing
       setPitch(pitch, randompitch);
       // register the effects.  must do this each time before PlayChannel and once the sound is done its unregistered automatically
       Mix_RegisterEffect(m_assignedChannel, PinSound::MoveFrontToRearEffect, nullptr, &m_mixEffectsData);
-      Mix_PlayChannel(m_assignedChannel, m_pMixChunk, 0);
+      Mix_PlayChannel(m_assignedChannel, m_pMixChunk, loopcount > 0 ? loopcount -1 : loopcount);
    }
 }
 
@@ -562,16 +558,16 @@ void PinSound::Play_SNDCFG_SND3D2CH(float nVolume, const float randompitch, cons
       if (restart || !usesame){ // stop and reload
          Mix_HaltChannel(m_assignedChannel);
          setPitch(pitch, randompitch);
-         // register the effects.  must do this each time before PlayChannel and once the sound is done its unregistered automaticly
+         // register the effects.  must do this each time before PlayChannel and once the sound is done its unregistered automatically
          Mix_RegisterEffect(m_assignedChannel, PinSound::Pan2ChannelEffect, nullptr, &m_mixEffectsData);
-         Mix_PlayChannel(m_assignedChannel, m_pMixChunk, 0);
+         Mix_PlayChannel(m_assignedChannel, m_pMixChunk, loopcount > 0 ? loopcount -1 : loopcount);
       }
    }
    else { // not playing
       setPitch(pitch, randompitch);
-      // register the effects.  must do this each time before PlayChannel and once the sound is done its unregistered automaticly
+      // register the effects.  must do this each time before PlayChannel and once the sound is done its unregistered automatically
       Mix_RegisterEffect(m_assignedChannel, PinSound::Pan2ChannelEffect, nullptr, &m_mixEffectsData);
-      Mix_PlayChannel(m_assignedChannel, m_pMixChunk, 0);
+      Mix_PlayChannel(m_assignedChannel, m_pMixChunk, loopcount > 0 ? loopcount -1 : loopcount);
    }
 }
 
@@ -612,16 +608,16 @@ void PinSound::Play_SNDCFG_SND3DSSF(float nVolume, const float randompitch, cons
       if (restart || !usesame){ // stop and reload  
          Mix_HaltChannel(m_assignedChannel);
          setPitch(pitch, randompitch);
-         // register the effects.  must do this each time before PlayChannel.  When the sound is done playing its automaticlly unregisted.
+         // register the effects.  must do this each time before PlayChannel.  When the sound is done playing its automatically unregistered.
          Mix_RegisterEffect(m_assignedChannel, PinSound::SSFEffect, nullptr, &m_mixEffectsData);
-         Mix_PlayChannel(m_assignedChannel, m_pMixChunk, 0);
+         Mix_PlayChannel(m_assignedChannel, m_pMixChunk, loopcount > 0 ? loopcount -1 : loopcount);
       }
    }
    else { // not playing
       setPitch(pitch, randompitch);
-      // register the pitch effect.  must do this each time before PlayChannel.  When the sound is done playing its automaticlly unregisted.
+      // register the pitch effect.  must do this each time before PlayChannel.  When the sound is done playing its automatically unregistered.
       Mix_RegisterEffect(m_assignedChannel, PinSound::SSFEffect, nullptr, &m_mixEffectsData);
-      Mix_PlayChannel(m_assignedChannel, m_pMixChunk, 0);
+      Mix_PlayChannel(m_assignedChannel, m_pMixChunk, loopcount > 0 ? loopcount -1 : loopcount);
    }
 }
 
@@ -653,8 +649,14 @@ bool PinSound::SetMusicFile(const string& szFileName)
    if(m_pMixMusic != nullptr)
       Mix_FreeMusic(m_pMixMusic);
 
-   if(!(m_pMixMusic = Mix_LoadMUS(szFileName.c_str())))
-   {
+   string path = find_case_insensitive_file_path(szFileName);
+   if (path.empty()) {
+      PLOGE << "Failed to find music file: " << szFileName;
+      return false;
+   }
+
+   m_pMixMusic = Mix_LoadMUS(path.c_str());
+   if (!m_pMixMusic) {
       PLOGE << "Failed to load sound: " << SDL_GetError();
       return false;
    }
@@ -677,18 +679,14 @@ bool PinSound::SetMusicFile(const string& szFileName)
  * 
  * @return True if the music was successfully loaded and started, false otherwise.
  * 
- * @note Loads Music file from the table script when it uses 'PlayMusic'. These are typcially
+ * @note Loads Music file from the table script when it uses 'PlayMusic'. These are typically
  *       in the music folder.
  */
 bool PinSound::MusicInit(const string& szFileName, const float volume)
 {
    m_outputTarget = SNDOUT_BACKGLASS;
 
-   #ifndef __STANDALONE__
-      const string& filename = szFileName;
-   #else
-      const string filename = normalize_path_separators(szFileName);
-   #endif
+   const string& filename = szFileName;
 
    if(m_pMixMusic != nullptr)
       Mix_FreeMusic(m_pMixMusic);
@@ -699,12 +697,17 @@ bool PinSound::MusicInit(const string& szFileName, const float volume)
       string path;
       switch (i)
       {
-      case 0: path = filename; break;
-      case 1: path = g_pvp->m_szMyPath + "music" + PATH_SEPARATOR_CHAR + filename; break;
-      case 2: path = g_pvp->m_currentTablePath + filename; break;
-      case 3: path = g_pvp->m_currentTablePath + "music" + PATH_SEPARATOR_CHAR + filename; break;
-      case 4: path = PATH_MUSIC + filename; break;
+      case 0: break;
+      case 1: path = g_pvp->m_szMyPath + "music" + PATH_SEPARATOR_CHAR; break;
+      case 2: path = g_pvp->m_currentTablePath; break;
+      case 3: path = g_pvp->m_currentTablePath + "music" + PATH_SEPARATOR_CHAR; break;
+      case 4: path = PATH_MUSIC; break;
       }
+      path += filename;
+
+      #ifdef __STANDALONE__
+      path = find_case_insensitive_file_path(path);
+      #endif
 
       if ((m_pMixMusic = Mix_LoadMUS(path.c_str())))
       {
@@ -759,10 +762,10 @@ void PinSound::SetMusicPosition(double seconds)
    Mix_SetMusicPosition(seconds);
 }
 
-// Volume, range in 0-1, without global music volume applied (as teh function apply it)
+// Volume, range in 0-1, without global music volume applied (as the function apply it)
 void PinSound::MusicVolume(const float volume)
 {
-   const int nVolume = static_cast<int>(volume * (static_cast<float>(g_pplayer->m_MusicVolume) / 100.f) * static_cast<float>(MIX_MAX_VOLUME));
+   const int nVolume = static_cast<int>(volume * (g_pplayer ? dequantizeSignedPercent(g_pplayer->m_MusicVolume) : 1.f) * static_cast<float>(MIX_MAX_VOLUME));
    Mix_VolumeMusic(nVolume);
 }
 
@@ -796,7 +799,7 @@ bool PinSound::StreamInit(DWORD frequency, int channels, const float volume)
    if (m_pstream)
    {
       m_streamVolume = volume;
-      SDL_SetAudioStreamGain(m_pstream, volume * static_cast<float>(g_pplayer->m_MusicVolume) / 100.f);
+      SDL_SetAudioStreamGain(m_pstream, volume * (g_pplayer ? dequantizeSignedPercent(g_pplayer->m_MusicVolume) : 1.f));
       SDL_ResumeAudioStreamDevice(m_pstream); // it always stops paused
       return true;
    }
@@ -847,7 +850,7 @@ void PinSound::StreamVolume(const float volume)
    //PLOGI << "STREAM VOL";
    if (m_streamVolume != volume)
    {
-      SDL_SetAudioStreamGain(m_pstream, volume * static_cast<float>(g_pplayer->m_MusicVolume) / 100.f);
+      SDL_SetAudioStreamGain(m_pstream, volume * (g_pplayer ? dequantizeSignedPercent(g_pplayer->m_MusicVolume) : 1.f));
       m_streamVolume = volume;
    }
 }
@@ -1450,7 +1453,7 @@ uint16_t PinSound::getChannelCountWav() const
     uint16_t bitsPerSample;    // Bits per sample
    };
    // Check that the data is at least the size of the WavHeader
-   if (m_cdata < sizeof(WavHeader)) {
+   if (m_cdata < (int)sizeof(WavHeader)) {
       throw std::runtime_error("Invalid WAV data: too small to contain a valid header.");
    }
    const WavHeader* header = reinterpret_cast<const WavHeader*>(m_pdata);

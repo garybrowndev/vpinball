@@ -5,7 +5,7 @@
 #pragma once
 
 #include "ui/resource.h"
-#include "robin_hood.h"
+#include "unordered_dense.h"
 
 class RubberData final : public BaseProperty
 {
@@ -43,7 +43,7 @@ public:
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
-   virtual HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) override;
+   HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
    Rubber();
    virtual ~Rubber();
@@ -110,7 +110,7 @@ public:
    RubberData m_d;
 
 private:
-   void AddHitEdge(class PhysicsEngine *physics, robin_hood::unordered_set<robin_hood::pair<unsigned, unsigned>> &addedEdges, const unsigned i, const unsigned j, const bool isUI);
+   void AddHitEdge(class PhysicsEngine *physics, ankerl::unordered_dense::set<std::pair<unsigned, unsigned>> &addedEdges, const unsigned i, const unsigned j, const bool isUI);
    void SetupHitObject(class PhysicsEngine *physics, HitObject *obj, const bool isUI);
 
    PinTable *m_ptable;

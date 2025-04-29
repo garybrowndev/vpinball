@@ -31,10 +31,12 @@
    #if defined(ENABLE_VR) || defined(ENABLE_XR)
       #include "ui/dialogs/VROptionsDialog.h"
    #endif
-#endif
 
-#ifdef __STANDALONE__
+   #define OVERRIDE override
+#else
    #include "standalone/inc/webserver/WebServer.h"
+
+   #define OVERRIDE
 #endif
 
 class PinTable;
@@ -56,9 +58,9 @@ public:
         PASTE = 1,
         PASTE_AT = 2
     };
-    
+
    VPinball();
-   virtual ~VPinball();
+   ~VPinball() OVERRIDE;
 
    void ShowSubDialog(CDialog& dlg, const bool show);
 
@@ -176,7 +178,7 @@ public:
     }
 
 #ifndef __STANDALONE__
-    SendMessage(m_hwndStatusBar, SB_SETTEXT, 5 | 0, (size_t)textBuf.c_str());
+    ::SendMessage(m_hwndStatusBar, SB_SETTEXT, 5 | 0, (size_t)textBuf.c_str());
 #endif
    }
 
@@ -195,10 +197,9 @@ public:
       m_dockNotes = nullptr;
    }
    void CreateDocker();
-   LayersListDialog *GetLayersListDialog() const
-   {
-       return m_layersListDialog;
-   }
+   #ifndef __STANDALONE__
+   LayersListDialog* GetLayersListDialog() { return GetLayersDocker()->GetContainLayers()->GetLayersDialog(); }
+   #endif
    bool IsClosing() const { return m_closing; }
 
    ULONG m_cref;
@@ -220,24 +221,22 @@ public:
 
    int m_palettescroll;
 
-   //SmartBrowser m_sb;
-
    vector<IStream*> m_vstmclipboard;
 
    PinSound m_ps;
 
-   int m_ToolCur; // Palette button currently pressed
+   int m_ToolCur; // palette button currently pressed
 
    int m_NextTableID; // counter to create next unique table name
 
-   CodeViewer *m_pcv; // Currently active code window
+   CodeViewer *m_pcv; // currently active code window
 
-   bool m_backglassView; // Whether viewing the playfield or screen layout
+   bool m_backglassView; // whether viewing the playfield or screen layout
 
    bool m_alwaysDrawDragPoints;
    bool m_alwaysDrawLightCenters;
    int m_gridSize;
-   int m_convertToUnit; //0=Inches, 1=Millimeters, 2=VPUnits
+   int m_convertToUnit; // 0=Inches, 1=Millimeters, 2=VPUnits
 
    int m_securitylevel;
 
@@ -266,8 +265,8 @@ public:
    bool m_primaryDisplay; // force use of pixel(0,0) monitor
    bool m_table_played_via_command_line;
    volatile bool m_table_played_via_SelectTableOnStart;
-   bool m_bgles; // override global emission scale by m_fgles below?
-   float m_fgles;
+   bool m_bgles = false; // override global emission scale by m_fgles below?
+   float m_fgles = 0.f;
    WCHAR *m_customParameters[MAX_CUSTOM_PARAM_INDEX];
 
    HBITMAP m_hbmInPlayMode;
@@ -279,25 +278,24 @@ public:
 #endif
 
 protected:
-   virtual void PreCreate(CREATESTRUCT& cs);
-   virtual void PreRegisterClass(WNDCLASS& wc);
-   virtual void OnClose();
-   virtual void OnDestroy();
-   virtual int  OnCreate(CREATESTRUCT& cs);
-   virtual LRESULT OnPaint(UINT msg, WPARAM wparam, LPARAM lparam);
-   virtual void OnInitialUpdate();
-   virtual BOOL OnCommand(WPARAM wparam, LPARAM lparam);
-   virtual LRESULT WndProc(UINT uMsg, WPARAM wParam, LPARAM lParam);
-   virtual LRESULT OnMDIActivated(UINT msg, WPARAM wparam, LPARAM lparam);
-   virtual LRESULT OnMDIDestroyed(UINT msg, WPARAM wparam, LPARAM lparam);
+   void PreCreate(CREATESTRUCT& cs) override;
+   void PreRegisterClass(WNDCLASS& wc) override;
+   void OnClose() override;
+   void OnDestroy() OVERRIDE;
+   int  OnCreate(CREATESTRUCT& cs) override;
+   LRESULT OnPaint(UINT msg, WPARAM wparam, LPARAM lparam) OVERRIDE;
+   void OnInitialUpdate() override;
+   BOOL OnCommand(WPARAM wparam, LPARAM lparam) override;
+   LRESULT WndProc(UINT uMsg, WPARAM wParam, LPARAM lParam) override;
+   LRESULT OnMDIActivated(UINT msg, WPARAM wparam, LPARAM lparam) OVERRIDE;
+   LRESULT OnMDIDestroyed(UINT msg, WPARAM wparam, LPARAM lparam) OVERRIDE;
 #ifndef __STANDALONE__
-   virtual DockPtr NewDockerFromID(int id);
+   DockPtr NewDockerFromID(int id) override;
 #endif
 
 private:
 
    CDockProperty *GetDefaultPropertiesDocker();
-   CDockLayers *GetDefaultLayersDocker();
    CDockToolbar *GetDefaultToolbarDocker();
    CDockNotes *GetDefaultNotesDocker();
 
@@ -330,7 +328,6 @@ private:
    PropertyDialog *m_propertyDialog = nullptr;
    CDockToolbar *m_dockToolbar = nullptr;
    CDockProperty *m_dockProperties = nullptr;
-   LayersListDialog *m_layersListDialog = nullptr;
    CDockLayers *m_dockLayers = nullptr;
    NotesDialog *m_notesDialog = nullptr;
    CDockNotes* m_dockNotes = nullptr;

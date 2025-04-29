@@ -6,12 +6,13 @@
 #include "math/ModelViewProj.h"
 #include "renderer/RenderDevice.h"
 #include "renderer/Texture.h"
-#include "parts/backGlass.h"
+#include "Backglass.h"
 #include "plugins/CorePlugin.h"
+#include "parts/PartGroup.h"
 
 class Renderable;
 
-class Renderer
+class Renderer final
 {
 public:
    Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncMode, const StereoMode stereo3D);
@@ -34,9 +35,8 @@ public:
    void UpdateStereoShaderState();
 
    void DisableStaticPrePass(const bool disable) { bool wasUsingStaticPrepass = IsUsingStaticPrepass(); m_disableStaticPrepass += disable ? 1 : -1; m_isStaticPrepassDirty |= wasUsingStaticPrepass != IsUsingStaticPrepass(); }
-   bool IsUsingStaticPrepass() const { return m_disableStaticPrepass <= 0; }
+   bool IsUsingStaticPrepass() const { return (m_disableStaticPrepass <= 0) && (m_stereo3D != STEREO_VR); }
    unsigned int GetNPrerenderTris() const { return m_statsDrawnStaticTriangles; }
-   void RenderStaticPrepass();
 
    void RenderFrame();
 
@@ -54,7 +54,7 @@ public:
       Bally,
       Atari,
    };
-   void SetupSegmentRenderer(int profile, const bool isBackdrop, const vec3& color, const float brightness, const SegmentFamily family, const SegElementType type, float* segs, const float alpha, const ColorSpace colorSpace, Vertex3D_NoTex2* vertices,
+   void SetupSegmentRenderer(int profile, const bool isBackdrop, const vec3& color, const float brightness, const SegmentFamily family, const SegElementType type, float* segs, const ColorSpace colorSpace, Vertex3D_NoTex2* vertices,
       const vec4& emitterPad, const vec3& glassTint, const float glassRougness, Texture* const glassTex, const vec4& glassArea, const vec3& glassAmbient);
    void SetupDMDRender(int profile, const bool isBackdrop, const vec3& color, const float brightness, BaseTexture* dmd, const float alpha, const ColorSpace colorSpace, Vertex3D_NoTex2 *vertices,
       const vec4& emitterPad, const vec3& glassTint, const float glassRougness, Texture* const glassTex, const vec4& glassArea, const vec3& glassAmbient);
@@ -115,10 +115,9 @@ public:
       LIGHT_BUFFER = 1 << 2,      // Transmitted light rendering
       REFLECTION_PASS = 1 << 3,   // Reflection pass, only render reflected elements
       DISABLE_LIGHTMAPS = 1 << 4, // Disable lightmaps, usefull for reflection probe parallel to lightmap ot avoid doubling them
-      DISABLE_BACKDROP = 1 << 5,  // Disable backdrop, used for VR and cabinet rendering (background is just black for these)
    };
    unsigned int m_render_mask = DEFAULT; // Active pass render bit mask
-   inline bool IsRenderPass(const RenderMask pass_mask) const { return (m_render_mask & pass_mask) != 0; }
+   bool IsRenderPass(const RenderMask pass_mask) const { return (m_render_mask & pass_mask) != 0; }
 
    ToneMapper m_toneMapper = TM_AGX;
    bool m_HDRforceDisableToneMapper = true;
@@ -144,6 +143,8 @@ public:
    RenderTarget* GetBackBufferTexture() const { return m_pOffscreenBackBufferTexture1; } // Main render target, with MSAA resolved if any, also may have stereo output (2 viewports)
 
 private:
+   void RenderItem(IEditable* renderable, bool isNoBackdrop);
+   void RenderStaticPrepass();
    void RenderDynamics();
    void DrawBackground();
    void DrawBulbLightBuffer();
@@ -194,12 +195,16 @@ private:
    PinTable* const m_table;
 
    ModelViewProj* m_mvp = nullptr; // Store the active Model / View / Projection
+   PartGroupData::SpaceReference m_mvpSpaceReference = PartGroupData::SpaceReference::SR_PLAYFIELD;
 
    bool m_isStaticPrepassDirty = true;
    int m_disableStaticPrepass = 0;
    RenderTarget* m_staticPrepassRT = nullptr;
    unsigned int m_statsDrawnStaticTriangles = 0;
    RenderProbe::ReflectionMode m_maxReflectionMode;
+   
+   bool m_noBackdrop = false;
+   unsigned int m_visibilityMask = 0xFFFF;
 
    vector<Renderable*> m_renderableToInit;
 
@@ -210,7 +215,13 @@ private:
    Texture m_aoDitherTexture; // loaded from assets folder
 
    bool m_ss_refl;
+
+public:
+   bool m_vrApplyColorKey = false;
+private:
    bool m_vrPreviewShrink = false;
+   vec4 m_vrColorKey = vec4(0.f, 0.f, 0.f, 0.f);
+
    Vertex2D m_ScreenOffset = Vertex2D(0.f, 0.f); // for screen shake effect during nudge
 
    Texture* m_tonemapLUT = nullptr;

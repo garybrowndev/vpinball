@@ -43,18 +43,6 @@
 #include "imguizmo/ImGuizmo.h"
 #include "imgui_markdown/imgui_markdown.h"
 
-#ifdef __STANDALONE__
-#include <unordered_map>
-#endif
-
-#if !defined(__clang__)
-#define stable_sort std::ranges::stable_sort
-#define sort std::ranges::sort
-#else
-#define stable_sort std::stable_sort
-#define sort std::sort
-#endif
-
 #ifndef __STANDALONE__
 #include "BAM/BAMView.h"
 #endif
@@ -119,8 +107,8 @@ static constexpr ImGuiKey dikToImGuiKeys[] = {
    ImGuiKey_I,         //DIK_I               0x17
    ImGuiKey_O,         //DIK_O               0x18
    ImGuiKey_P,         //DIK_P               0x19
-   ImGuiKey_LeftBracket, //DIK_LBRACKET        0x1A
-   ImGuiKey_RightBracket, //DIK_RBRACKET        0x1B
+   ImGuiKey_LeftBracket, //DIK_LBRACKET      0x1A
+   ImGuiKey_RightBracket, //DIK_RBRACKET     0x1B
    ImGuiKey_Enter,     //DIK_RETURN          0x1C    /* Enter on main keyboard */
    ImGuiKey_LeftCtrl,  //DIK_LCONTROL        0x1D
    ImGuiKey_A,         //DIK_A               0x1E
@@ -134,7 +122,7 @@ static constexpr ImGuiKey dikToImGuiKeys[] = {
    ImGuiKey_L,         //DIK_L               0x26
    ImGuiKey_Semicolon, //DIK_SEMICOLON       0x27
    ImGuiKey_Apostrophe,//DIK_APOSTROPHE      0x28
-   ImGuiKey_GraveAccent, //DIK_GRAVE           0x29    /* accent grave */
+   ImGuiKey_GraveAccent, //DIK_GRAVE         0x29    /* accent grave */
    ImGuiKey_LeftShift, //DIK_LSHIFT          0x2A
    ImGuiKey_Backslash, //DIK_BACKSLASH       0x2B
    ImGuiKey_Z,         //DIK_Z               0x2C
@@ -148,7 +136,7 @@ static constexpr ImGuiKey dikToImGuiKeys[] = {
    ImGuiKey_Period,    //DIK_PERIOD          0x34    /* . on main keyboard */
    ImGuiKey_Slash,     //DIK_SLASH           0x35    /* / on main keyboard */
    ImGuiKey_RightShift,//DIK_RSHIFT          0x36
-   ImGuiKey_KeypadMultiply, //DIK_MULTIPLY        0x37    /* * on numeric keypad */
+   ImGuiKey_KeypadMultiply, //DIK_MULTIPLY   0x37    /* * on numeric keypad */
    ImGuiKey_Menu,      //DIK_LMENU           0x38    /* left Alt */
    ImGuiKey_Space,     //DIK_SPACE           0x39
    ImGuiKey_CapsLock,  //DIK_CAPITAL         0x3A
@@ -167,7 +155,7 @@ static constexpr ImGuiKey dikToImGuiKeys[] = {
    ImGuiKey_Keypad7,   //DIK_NUMPAD7         0x47
    ImGuiKey_Keypad8,   //DIK_NUMPAD8         0x48
    ImGuiKey_Keypad9,   //DIK_NUMPAD9         0x49
-   ImGuiKey_KeypadSubtract, //DIK_SUBTRACT        0x4A    /* - on numeric keypad */
+   ImGuiKey_KeypadSubtract, //DIK_SUBTRACT   0x4A    /* - on numeric keypad */
    ImGuiKey_Keypad4,   //DIK_NUMPAD4         0x4B
    ImGuiKey_Keypad5,   //DIK_NUMPAD5         0x4C
    ImGuiKey_Keypad6,   //DIK_NUMPAD6         0x4D
@@ -176,7 +164,7 @@ static constexpr ImGuiKey dikToImGuiKeys[] = {
    ImGuiKey_Keypad2,   //DIK_NUMPAD2         0x50
    ImGuiKey_Keypad3,   //DIK_NUMPAD3         0x51
    ImGuiKey_Keypad0,   //DIK_NUMPAD0         0x52
-   ImGuiKey_KeypadDecimal, //DIK_DECIMAL         0x53    /* . on numeric keypad */
+   ImGuiKey_KeypadDecimal, //DIK_DECIMAL     0x53    /* . on numeric keypad */
    ImGuiKey_None,      //0x54
    ImGuiKey_None,      //0x55
    ImGuiKey_None,      //DIK_OEM_102         0x56    /* < > | on UK/Germany keyboards */
@@ -361,7 +349,7 @@ static void SetupImGuiStyle(const float overall_alpha)
    style.GrabRounding = 2.0f;
    style.TabRounding = 3.5f;
    style.TabBorderSize = 0.0f;
-   style.TabMinWidthForCloseButton = 0.0f;
+   style.TabCloseButtonMinWidthUnselected = 0.0f;
    style.ColorButtonPosition = ImGuiDir_Right;
    style.ButtonTextAlign = ImVec2(0.5f, 0.5f);
    style.SelectableTextAlign = ImVec2(0.0f, 0.0f);
@@ -437,12 +425,10 @@ static void HelpMarker(const char *desc)
 
 template <class T> static std::vector<T> SortedCaseInsensitive(std::vector<T>& list, const std::function<string(T)>& map)
 {
-   std::vector<T> sorted;
-   sorted.reserve(list.size());
-   sorted.insert(sorted.begin(), list.begin(), list.end());
-   sort(sorted.begin(), sorted.end(), [map](const T &a, const T &b) -> bool 
+   std::vector<T> sorted(list.begin(), list.end());
+   std::ranges::sort(sorted, [map](const T &a, const T &b) -> bool 
       {
-         string str1 = map(a), str2 = map(b);
+         const string str1 = map(a), str2 = map(b);
          for (string::const_iterator c1 = str1.begin(), c2 = str2.begin(); c1 != str1.end() && c2 != str2.end(); ++c1, ++c2)
          {
             const auto cl1 = cLower(*c1);
@@ -458,7 +444,7 @@ template <class T> static std::vector<T> SortedCaseInsensitive(std::vector<T>& l
 }
 
 
-static void HelpTextCentered(const std::string& text)
+static void HelpTextCentered(const string& text)
 {
    const ImVec2 win_size = ImGui::GetWindowSize();
    const ImVec2 text_size = ImGui::CalcTextSize(text.c_str());
@@ -524,8 +510,8 @@ static void HelpSplash(const string &text, int rotation)
        }
    }
 
-   text_size.x += (padding / 2.f);
-   text_size.y = ((float)lines.size() * ImGui::GetTextLineHeightWithSpacing()) + (padding / 2.f);
+   text_size.x += padding / 2.f;
+   text_size.y = (float)lines.size() * ImGui::GetTextLineHeightWithSpacing() + (padding / 2.f);
 
    constexpr ImGuiWindowFlags window_flags
       = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
@@ -537,7 +523,7 @@ static void HelpSplash(const string &text, int rotation)
    for (const string& curline : lines)
    {
       const ImVec2 lineSize = font->CalcTextSizeA(font->FontSize, FLT_MAX, 0.0f, curline.c_str());
-      ImGui::SetCursorPosX(((text_size.x - lineSize.x) / 2.f));
+      ImGui::SetCursorPosX((text_size.x - lineSize.x) / 2.f);
       ImGui::Text("%s", curline.c_str());
    }
    ImGui::End();
@@ -625,7 +611,7 @@ static void HelpEditableHeader(bool is_live, IEditable *editable, IEditable *liv
    }
    HelpTextCentered(title);
    ImGui::BeginDisabled(is_live); // Do not edit name of live objects, it would likely break the script
-   string name = select_editable ? select_editable->GetName() : string();
+   string name = select_editable ? string(select_editable->GetName()) : string();
    if (ImGui::InputText("Name", &name))
    {
       editable->SetName(name);
@@ -648,8 +634,7 @@ LiveUI::LiveUI(RenderDevice *const rd)
    m_live_table = m_player->m_ptable;
    m_pininput = &(m_player->m_pininput);
    m_renderer = m_player->m_renderer;
-   m_disable_esc = m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "DisableESC"s, m_disable_esc);
-   memset(m_tweakState, 0, sizeof(m_tweakState));
+   m_disable_esc = m_live_table->m_settings.LoadValueBool(Settings::Player, "DisableESC"s);
 
    m_selection.type = Selection::SelectionType::S_NONE;
    m_useEditorCam = false;
@@ -665,7 +650,7 @@ LiveUI::LiveUI(RenderDevice *const rd)
    m_camDistance = m_live_table->m_bottom * 0.7f;
    const vec3 eye(m_live_table->m_right * 0.5f, m_live_table->m_bottom * 0.5f, -m_camDistance);
    const vec3 at(m_live_table->m_right * 0.5f, m_live_table->m_bottom * 0.5f, 0.f);
-   const vec3 up(0.f, -1.f, 0.f);
+   constexpr vec3 up{0.f, -1.f, 0.f};
    m_camView = Matrix3D::MatrixLookAtRH(eye, at, up);
    ImGuizmo::AllowAxisFlip(false);
 
@@ -765,7 +750,7 @@ LiveUI::~LiveUI()
 
 void LiveUI::MarkdownFormatCallback(const ImGui::MarkdownFormatInfo &markdownFormatInfo, bool start)
 {
-   LiveUI *ui = (LiveUI *)(markdownFormatInfo.config->userData);
+   LiveUI *const ui = (LiveUI *)(markdownFormatInfo.config->userData);
    switch (markdownFormatInfo.type)
    {
    case ImGui::MarkdownFormatType::EMPHASIS:
@@ -836,11 +821,11 @@ void LiveUI::MarkdownLinkCallback(ImGui::MarkdownLinkCallbackData data)
 
 ImGui::MarkdownImageData LiveUI::MarkdownImageCallback(ImGui::MarkdownLinkCallbackData data)
 {
-   LiveUI *ui = (LiveUI *)data.userData;
+   LiveUI *const ui = (LiveUI *)data.userData;
    Texture *const ppi = ui->m_live_table->GetImage(std::string(data.link, data.linkLength));
    if (ppi == nullptr)
       return ImGui::MarkdownImageData {};
-   Sampler *sampler = ui->m_renderer->m_renderDevice->m_texMan.LoadTexture(ppi->m_pdsBuffer, SamplerFilter::SF_BILINEAR, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, false);
+   Sampler *const sampler = ui->m_renderer->m_renderDevice->m_texMan.LoadTexture(ppi->m_pdsBuffer, SamplerFilter::SF_BILINEAR, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, false);
    if (sampler == nullptr)
       return ImGui::MarkdownImageData {};
    #if defined(ENABLE_BGFX)
@@ -878,7 +863,7 @@ void LiveUI::Render()
       return;
 
    // Rendering must happen on a render target matching the dimension we used to prepare the UI frame
-   ImGuiIO &io = ImGui::GetIO();
+   const ImGuiIO &io = ImGui::GetIO();
    assert( ((m_rotate == 0 || m_rotate == 2) && RenderTarget::GetCurrentRenderTarget()->GetWidth() == (int)io.DisplaySize.x && RenderTarget::GetCurrentRenderTarget()->GetHeight() == (int)io.DisplaySize.y)
         || ((m_rotate == 1 || m_rotate == 3) && RenderTarget::GetCurrentRenderTarget()->GetWidth() == (int)io.DisplaySize.y && RenderTarget::GetCurrentRenderTarget()->GetHeight() == (int)io.DisplaySize.x));
 
@@ -923,7 +908,7 @@ void LiveUI::Render()
             glDisable(GL_SCISSOR_TEST);
             
             #elif defined(ENABLE_DX9)
-            lui->m_rd->GetCoreDevice()->SetTransform(D3DTS_WORLD, (const D3DXMATRIX *)&matTranslate);
+            lui->m_rd->GetCoreDevice()->SetTransform(D3DTS_WORLD, (const D3DMATRIX *)&matTranslate);
             lui->m_rd->GetCoreDevice()->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
             #endif
 
@@ -989,7 +974,7 @@ void LiveUI::OpenLiveUI()
    }
 }
 
-unsigned int LiveUI::PushNotification(const string &message, const U32 lengthMs, const unsigned int reuseId)
+unsigned int LiveUI::PushNotification(const string &message, const int lengthMs, const unsigned int reuseId)
 {
    auto notif = std::ranges::find_if(m_notifications, [reuseId](const Notification &n) { return n.id == reuseId; });
    if (notif != m_notifications.end())
@@ -1000,7 +985,7 @@ unsigned int LiveUI::PushNotification(const string &message, const U32 lengthMs,
    }
    else
    {
-      m_notifications.push_back( { m_nextNotificationIs++, message, msec() + lengthMs} );
+      m_notifications.push_back({m_nextNotificationIs++, message, msec() + lengthMs});
       return m_nextNotificationIs - 1;
    }
 }
@@ -1042,7 +1027,7 @@ void LiveUI::UpdatePerfOverlay()
    // Frame sequence graph
    if (m_show_fps == 2)
    {
-      ImGuiWindow *window = ImGui::GetCurrentWindow();
+      ImGuiWindow *const window = ImGui::GetCurrentWindow();
       static const string infoLabels[] = {
          "Misc"s,
          "Script"s,
@@ -1073,7 +1058,7 @@ void LiveUI::UpdatePerfOverlay()
          "(Wait for GPU and display sync to finish current frame)"s,
          "(Sleep to synchronise on user selected FPS)"s,
       };
-      FrameProfiler::ProfileSection sections[] = {
+      static constexpr FrameProfiler::ProfileSection sections[] = {
          FrameProfiler::PROFILE_PREPARE_FRAME,
          FrameProfiler::PROFILE_RENDER_WAIT,
          FrameProfiler::PROFILE_RENDER_SUBMIT,
@@ -1081,7 +1066,7 @@ void LiveUI::UpdatePerfOverlay()
          FrameProfiler::PROFILE_RENDER_SLEEP,
          FrameProfiler::PROFILE_RENDER_SUBMIT, // For BGFX, since BGFX performs CPU->GPU submit after flip
       };
-      constexpr ImU32 cols[] = {
+      static constexpr ImU32 cols[] = {
          IM_COL32(128, 255, 128, 255), // Prepare
          IM_COL32(255,   0,   0, 255), // Wait for Render Frame
          IM_COL32(  0, 128, 255, 255), // Submit (VPX->BGFX)
@@ -1286,7 +1271,7 @@ void LiveUI::UpdatePerfOverlay()
       {
          ImPlot::SetupAxis(ImAxis_X1, nullptr, rt_axis);
          ImPlot::SetupAxis(ImAxis_Y1, nullptr, ImPlotAxisFlags_LockMin);
-         ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 2000.f / m_player->GetTargetRefreshRate(), ImGuiCond_Always);
+         ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 2000.f / min(m_player->GetTargetRefreshRate(), 200.f), ImGuiCond_Always);
          if (m_plotFPS.m_rolling)
             ImPlot::SetupAxisLimits(ImAxis_X1, 0, m_plotFPS.m_timeSpan, ImGuiCond_Always);
          else
@@ -1453,7 +1438,7 @@ void LiveUI::Update(const int width, const int height)
           ImGui::SetNextWindowBgAlpha(0.666f);
           ImGui::SetNextWindowPos(ImVec2((io.DisplaySize.x - text_size.x) / 2, notifY));
           ImGui::SetNextWindowSize(text_size);
-          ImGui::Begin("Notification"s.append(std::to_string(i)).c_str(), nullptr, window_flags);
+          ImGui::Begin(("Notification" + std::to_string(i)).c_str(), nullptr, window_flags);
           for (const string& lline : lines) {
              ImVec2 lineSize = font->CalcTextSizeA(font->FontSize, FLT_MAX, 0.0f, lline.c_str());
              ImGui::SetCursorPosX(((text_size.x - lineSize.x) / 2));
@@ -1614,13 +1599,18 @@ void LiveUI::OpenTweakMode()
       m_tweakPages.push_back(TP_Rules);
    if (m_renderer->m_stereo3D != STEREO_VR)
       m_tweakPages.push_back(TP_PointOfView);
+   #ifdef ENABLE_XR
+   // Legacy OpenVR does not support dynamic repositioning through LiveUI (especially overall scale, this would need to be rewritten but not done as this is planned for deprecation)
+   else
+      m_tweakPages.push_back(TP_VRPosition);
+   #endif
    m_tweakPages.push_back(TP_TableOption);
-   for (int j = 0; j < g_pvp->m_settings.GetNPluginSections(); j++)
+   for (int j = 0; j < Settings::GetNPluginSections(); j++)
    {
       int nOptions = 0;
-      int nCustomOptions = (int)m_live_table->m_settings.GetPluginSettings().size();
+      const int nCustomOptions = (int)Settings::GetPluginSettings().size();
       for (int i = 0; i < nCustomOptions; i++)
-         if ((m_live_table->m_settings.GetPluginSettings()[i].section == Settings::Plugin00 + j) && (m_live_table->m_settings.GetPluginSettings()[i].showMask & VPX_OPT_SHOW_TWEAK))
+         if ((Settings::GetPluginSettings()[i].section == Settings::Plugin00 + j) && (Settings::GetPluginSettings()[i].showMask & VPX_OPT_SHOW_TWEAK))
             nOptions++;
       if (nOptions > 0)
          m_tweakPages.push_back((TweakPage)(TP_Plugin00 + j));
@@ -1635,7 +1625,7 @@ void LiveUI::OpenTweakMode()
 void LiveUI::CloseTweakMode()
 {
    if (m_tweakMode)
-      m_live_table->FireKeyEvent(DISPID_GameEvents_OptionEvent, 3 /* tweak mode closed event */);
+      m_live_table->FireOptionEvent(3); // Tweak mode closed event
    m_tweakMode = false;
 }
 
@@ -1647,6 +1637,14 @@ void LiveUI::UpdateTweakPage()
    {
    case TP_Info:
    case TP_Rules:
+      break;
+   case TP_VRPosition:
+      m_tweakPageOptions.push_back(BS_VROrientation);
+      m_tweakPageOptions.push_back(BS_VRX);
+      m_tweakPageOptions.push_back(BS_VRY);
+      m_tweakPageOptions.push_back(BS_VRZ);
+      m_tweakPageOptions.push_back(BS_VRScale);
+      m_tweakPageOptions.push_back(BS_AR_VR);
       break;
    case TP_PointOfView:
       switch (m_live_table->mViewSetups[m_live_table->m_BG_current_set].mMode)
@@ -1695,7 +1693,7 @@ void LiveUI::UpdateTweakPage()
       break;
    case TP_TableOption:
    {
-      int nCustomOptions = (int)m_live_table->m_settings.GetTableSettings().size();
+      const int nCustomOptions = (int)m_live_table->m_settings.GetTableSettings().size();
       for (int i = 0; i < nCustomOptions; i++)
          m_tweakPageOptions.push_back((BackdropSetting)(BS_Custom + i));
       m_tweakPageOptions.push_back(BS_DayNight);
@@ -1710,9 +1708,9 @@ void LiveUI::UpdateTweakPage()
    }
    default: // Plugin options
    {
-      int nCustomOptions = (int)m_live_table->m_settings.GetPluginSettings().size();
+      const int nCustomOptions = (int)Settings::GetPluginSettings().size();
       for (int i = 0; i < nCustomOptions; i++)
-         if (m_live_table->m_settings.GetPluginSettings()[i].section == Settings::Plugin00 + (m_tweakPages[m_activeTweakPageIndex] - TP_Plugin00) && (m_live_table->m_settings.GetPluginSettings()[i].showMask & VPX_OPT_SHOW_TWEAK))
+         if (Settings::GetPluginSettings()[i].section == Settings::Plugin00 + (m_tweakPages[m_activeTweakPageIndex] - TP_Plugin00) && (Settings::GetPluginSettings()[i].showMask & VPX_OPT_SHOW_TWEAK))
             m_tweakPageOptions.push_back((BackdropSetting)(BS_Custom + i));
       break;
    }
@@ -1721,494 +1719,556 @@ void LiveUI::UpdateTweakPage()
       m_activeTweakIndex = (int)m_tweakPageOptions.size() - 1;
 }
 
-void LiveUI::OnTweakModeEvent(const int keyEvent, const int keycode)
+void LiveUI::HandleTweakInput()
 {
-   if (!IsTweakMode())
-      return;
    BackdropSetting activeTweakSetting = m_tweakPageOptions[m_activeTweakIndex];
    PinTable * const table = m_live_table;
-   
-   // Handle scrolling in rules/infos
-   if ((m_tweakPages[m_activeTweakPageIndex] == TP_Rules || m_tweakPages[m_activeTweakPageIndex] == TP_Info)
-      && (keycode == m_player->m_rgKeys[eRightMagnaSave] || keycode == m_player->m_rgKeys[eLeftMagnaSave]) && (keyEvent != 2))
+
+   if (m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "EnableCameraModeFlyAround"s, false))
    {
-      const float speed = m_overlayFont->FontSize * 0.5f;
-      if (keycode == m_player->m_rgKeys[eLeftMagnaSave])
-         m_tweakScroll -= speed;
-      else if (keycode == m_player->m_rgKeys[eRightMagnaSave])
-         m_tweakScroll += speed;
+      if (!ImGui::IsKeyDown(ImGuiKey_LeftAlt) && !ImGui::IsKeyDown(ImGuiKey_RightAlt))
+      {
+         if (ImGui::IsKeyDown(ImGuiKey_LeftArrow))
+            m_renderer->m_cam.x += 10.0f;
+         if (ImGui::IsKeyDown(ImGuiKey_RightArrow))
+            m_renderer->m_cam.x -= 10.0f;
+         if (ImGui::IsKeyDown(ImGuiKey_UpArrow))
+            m_renderer->m_cam.y += 10.0f;
+         if (ImGui::IsKeyDown(ImGuiKey_DownArrow))
+            m_renderer->m_cam.y -= 10.0f;
+      }
+      else
+      {
+         if (ImGui::IsKeyDown(ImGuiKey_UpArrow))
+            m_renderer->m_cam.z += 10.0f;
+         if (ImGui::IsKeyDown(ImGuiKey_DownArrow))
+            m_renderer->m_cam.z -= 10.0f;
+         if (ImGui::IsKeyDown(ImGuiKey_LeftArrow))
+            m_renderer->m_inc += 0.01f;
+         if (ImGui::IsKeyDown(ImGuiKey_RightArrow))
+            m_renderer->m_inc -= 0.01f;
+      }
    }
 
-   if (keycode == m_player->m_rgKeys[eLeftFlipperKey] || keycode == m_player->m_rgKeys[eRightFlipperKey])
+   static PinInput::InputState prevState { 0 };
+   PinInput::InputState state = m_player->m_pininput.GetInputState();
+   for (int i = 0; i < eCKeys; i++)
    {
-      static U32 startOfPress = 0;
-      if (keyEvent != 0)
-         startOfPress = msec();
-      if (keyEvent == 2) // Do not react on key up (only key down or long press)
-         return;
-      const bool up = keycode == m_player->m_rgKeys[eRightFlipperKey];
-      const float step = up ? 1.f : -1.f;
-      const float incSpeed = step * 0.05f * min(10.f, 0.75f + (float)(msec() - startOfPress) / 500.0f);
-      ViewSetup &viewSetup = table->mViewSetups[table->m_BG_current_set];
-      const bool isWindow = viewSetup.mMode == VLM_WINDOW;
-      bool modified = true;
-      switch (activeTweakSetting)
+      const EnumAssignKeys keycode = static_cast<EnumAssignKeys>(i);
+      const uint64_t mask = static_cast<uint64_t>(1) << i;
+      int keyEvent;
+      if (state.IsKeyPressed(keycode, prevState))
+         keyEvent = 1;
+      else if (state.IsKeyReleased(keycode, prevState))
+         keyEvent = 2;
+      else if (state.IsKeyDown(keycode))
+         keyEvent = 0;
+      else
+         continue;
+
+      // Handle scrolling in rules/infos
+      if ((m_tweakPages[m_activeTweakPageIndex] == TP_Rules || m_tweakPages[m_activeTweakPageIndex] == TP_Info)
+         && (keycode == eRightMagnaSave || keycode == eLeftMagnaSave) && (keyEvent != 2))
       {
-      // UI navigation
-      case BS_Page:
-      {
-         m_tweakState[activeTweakSetting] = 0;
-         if (keyEvent != 1) // Only keydown
-            return;
-         int stepi = up ? 1 : (int)m_tweakPages.size() - 1;
-         m_activeTweakPageIndex = ((m_activeTweakPageIndex + stepi) % m_tweakPages.size());
-         m_activeTweakIndex = 0;
-         m_tweakScroll = 0.f;
-         UpdateTweakPage();
-         break;
+         const float speed = m_overlayFont->FontSize * 0.5f;
+         if (keycode == eLeftMagnaSave)
+            m_tweakScroll -= speed;
+         else if (keycode == eRightMagnaSave)
+            m_tweakScroll += speed;
       }
 
-      // View setup settings
-      case BS_ViewMode:
+      if (keycode == eLeftFlipperKey || keycode == eRightFlipperKey)
       {
-         if (keyEvent != 1) // Only keydown
-            return;
-         int vlm = viewSetup.mMode + (int)step;
-         viewSetup.mMode = vlm < 0 ? VLM_WINDOW : vlm >= 3 ? VLM_LEGACY : (ViewLayoutMode)vlm;
-         UpdateTweakPage();
-         break;
-      }
-      case BS_LookAt: viewSetup.mLookAt += incSpeed; break;
-      case BS_FOV: viewSetup.mFOV += incSpeed; break;
-      case BS_Layback: viewSetup.mLayback += incSpeed; break;
-      case BS_ViewHOfs: viewSetup.mViewHOfs += incSpeed; break;
-      case BS_ViewVOfs: viewSetup.mViewVOfs += incSpeed; break;
-      case BS_XYZScale:
-         viewSetup.mSceneScaleX += 0.005f * incSpeed;
-         viewSetup.mSceneScaleY += 0.005f * incSpeed;
-         viewSetup.mSceneScaleZ += 0.005f * incSpeed;
-         break;
-      case BS_XScale: viewSetup.mSceneScaleX += 0.005f * incSpeed; break;
-      case BS_YScale: viewSetup.mSceneScaleY += 0.005f * incSpeed; break;
-      case BS_ZScale: viewSetup.mSceneScaleZ += 0.005f * incSpeed; break;
-      case BS_XOffset:
-         if (isWindow)
-            table->m_settings.SaveValue(Settings::Player, "ScreenPlayerX"s, table->m_settings.LoadValueWithDefault(Settings::Player, "ScreenPlayerX"s, 0.0f) + 0.5f * incSpeed);
-         else
-            viewSetup.mViewX += 10.f * incSpeed;
-         break;
-      case BS_YOffset:
-         if (isWindow)
-            table->m_settings.SaveValue(Settings::Player, "ScreenPlayerY"s, table->m_settings.LoadValueWithDefault(Settings::Player, "ScreenPlayerY"s, 0.0f) + 0.5f * incSpeed);
-         else
-            viewSetup.mViewY += 10.f * incSpeed;
-         break;
-      case BS_ZOffset:
-         if (isWindow)
-            table->m_settings.SaveValue(Settings::Player, "ScreenPlayerZ"s, table->m_settings.LoadValueWithDefault(Settings::Player, "ScreenPlayerZ"s, 70.0f) + 0.5f * incSpeed);
-         else
-            viewSetup.mViewZ += (viewSetup.mMode == VLM_LEGACY ? 100.f : 10.f) * incSpeed;
-         break;
-      case BS_WndTopZOfs: viewSetup.mWindowTopZOfs += 10.f * incSpeed; break;
-      case BS_WndBottomZOfs: viewSetup.mWindowBottomZOfs += 10.f * incSpeed; break;
-
-      // Table customization
-      case BS_DayNight:
-         m_renderer->m_globalEmissionScale = clamp(m_renderer->m_globalEmissionScale + incSpeed * 0.05f, 0.f, 1.f);
-         m_renderer->MarkShaderDirty();
-         m_live_table->FireKeyEvent(DISPID_GameEvents_OptionEvent, 1 /* table option changed event */);
-         break;
-      case BS_Difficulty:
-         table->m_globalDifficulty = clamp(table->m_globalDifficulty + incSpeed * 0.05f, 0.f, 1.f);
-         m_live_table->FireKeyEvent(DISPID_GameEvents_OptionEvent, 1 /* table option changed event */);
-         break;
-      case BS_Volume:
-         m_player->m_MusicVolume = clamp(m_player->m_MusicVolume + static_cast<int>(step), 0, 100);
-         m_player->m_SoundVolume = clamp(m_player->m_SoundVolume + static_cast<int>(step), 0, 100);
-         m_player->UpdateVolume();
-         m_live_table->FireKeyEvent(DISPID_GameEvents_OptionEvent, 1 /* table option changed event */);
-         break;
-      case BS_BackglassVolume:
-         m_player->m_MusicVolume = clamp(m_player->m_MusicVolume + static_cast<int>(step), 0, 100);
-         m_player->UpdateVolume();
-         m_live_table->FireKeyEvent(DISPID_GameEvents_OptionEvent, 1 /* table option changed event */);
-         break;
-      case BS_PlayfieldVolume:
-         m_player->m_SoundVolume = clamp(m_player->m_SoundVolume + static_cast<int>(step), 0, 100);
-         m_player->UpdateVolume();
-         m_live_table->FireKeyEvent(DISPID_GameEvents_OptionEvent, 1 /* table option changed event */);
-         break;
-      case BS_Exposure:
-         m_renderer->m_exposure = clamp(m_renderer->m_exposure + incSpeed * 0.05f, 0.f, 2.0f);
-         m_live_table->FireKeyEvent(DISPID_GameEvents_OptionEvent, 1 /* table option changed event */);
-         break;
-      case BS_Tonemapper:
-         if (keyEvent == 1)
+         static U32 startOfPress = 0;
+         if (keyEvent != 0)
+            startOfPress = msec();
+         if (keyEvent == 2) // Do not react on key up (only key down or long press)
+            continue;
+         const bool up = keycode == eRightFlipperKey;
+         const float step = up ? 1.f : -1.f;
+         const float incSpeed = step * 0.05f * min(10.f, 0.75f + (float)(msec() - startOfPress) / 500.0f);
+         ViewSetup &viewSetup = table->mViewSetups[table->m_BG_current_set];
+         const bool isWindow = viewSetup.mMode == VLM_WINDOW;
+         bool modified = true;
+         switch (activeTweakSetting)
          {
-            int tm = m_renderer->m_toneMapper + static_cast<int>(step);
-            #ifdef ENABLE_BGFX
-            if (tm < 0)
-               tm = ToneMapper::TM_AGX_PUNCHY;
-            if (tm > ToneMapper::TM_AGX_PUNCHY)
-               tm = ToneMapper::TM_REINHARD;
-            #else
-            if (tm < 0)
-               tm = ToneMapper::TM_NEUTRAL;
-            if (tm > ToneMapper::TM_NEUTRAL)
-               tm = ToneMapper::TM_REINHARD;
-            #endif
-            m_renderer->m_toneMapper = static_cast<ToneMapper>(tm);
-            m_live_table->FireKeyEvent(DISPID_GameEvents_OptionEvent, 1 /* table option changed event */);
-         }
-         break;
-
-      default:
-         if (activeTweakSetting >= BS_Custom)
+         // UI navigation
+         case BS_Page:
          {
-            const vector<Settings::OptionDef> &customOptions = m_tweakPages[m_activeTweakPageIndex] == TP_TableOption ? m_live_table->m_settings.GetTableSettings() : m_live_table->m_settings.GetPluginSettings();
-            if (activeTweakSetting < BS_Custom + (int)customOptions.size())
-            {
-               auto opt = customOptions[activeTweakSetting - BS_Custom];
-               float nTotalSteps = (opt.maxValue - opt.minValue) / opt.step;
-               int nMsecPerStep = nTotalSteps < 20.f ? 500 : max(5, 250 - (int)(msec() - startOfPress) / 10); // discrete vs continuous sliding
-               int nSteps = (msec() - m_lastTweakKeyDown) / nMsecPerStep;
-               if (keyEvent == 1)
-               {
-                  nSteps = 1;
-                  m_lastTweakKeyDown = msec() - nSteps * nMsecPerStep;
-               }
-               if (nSteps > 0)
-               {
-                  m_lastTweakKeyDown += nSteps * nMsecPerStep;
-                  float value = m_live_table->m_settings.LoadValueWithDefault(opt.section, opt.id, opt.defaultValue);
-                  if (!opt.literals.empty())
-                  {
-                     value += (float)nSteps * opt.step * step;
-                     while (value < opt.minValue)
-                        value += opt.maxValue - opt.minValue + 1;
-                     while (value > opt.maxValue)
-                        value -= opt.maxValue - opt.minValue + 1;
-                  }
-                  else
-                     value = clamp(value + (float)nSteps * opt.step * step, opt.minValue, opt.maxValue);
-                  table->m_settings.SaveValue(opt.section, opt.id, value);
-                  if (opt.section == Settings::TableOption)
-                     m_live_table->FireKeyEvent(DISPID_GameEvents_OptionEvent, 1 /* table option changed event */);
-                  else
-                     VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(VPXPluginAPIImpl::GetInstance().GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_SETTINGS_CHANGED), nullptr);
-               }
-               else
-                  modified = false;
-            }
-         }
-         else
-         {
-            assert(false);
+            m_tweakState[activeTweakSetting] = 0;
+            if (keyEvent != 1) // Only keydown
+               continue;
+            int stepi = up ? 1 : (int)m_tweakPages.size() - 1;
+            m_activeTweakPageIndex = ((m_activeTweakPageIndex + stepi) % m_tweakPages.size());
+            m_activeTweakIndex = 0;
+            m_tweakScroll = 0.f;
+            UpdateTweakPage();
             break;
          }
-      }
-      m_tweakState[activeTweakSetting] |= modified ? 1 : 0;
-   }
-   else if (keyEvent == 1) // Key down
-   {
-      if (keycode == m_player->m_rgKeys[eLeftTiltKey] && m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "EnableCameraModeFlyAround"s, false))
-         m_live_table->mViewSetups[m_live_table->m_BG_current_set].mViewportRotation -= 1.0f;
-      else if (keycode == m_player->m_rgKeys[eRightTiltKey] && m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "EnableCameraModeFlyAround"s, false))
-         m_live_table->mViewSetups[m_live_table->m_BG_current_set].mViewportRotation += 1.0f;
-      else if (keycode == m_player->m_rgKeys[eStartGameKey]) // Save tweak page
-      {
-         string iniFileName = m_live_table->GetSettingsFileName();
-         string message;
-         if (m_tweakPages[m_activeTweakPageIndex] == TP_PointOfView)
-         {
-            message = "Point of view";
-            m_live_table->mViewSetups[m_live_table->m_BG_current_set].SaveToTableOverrideSettings(m_table->m_settings, m_live_table->m_BG_current_set);
-            if (m_live_table->m_BG_current_set == BG_FULLSCREEN)
-            { // Player position is saved as an override (not saved if equal to app settings)
-               m_table->m_settings.SaveValue(Settings::Player, "ScreenPlayerX", m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "ScreenPlayerX"s, 0.0f), true);
-               m_table->m_settings.SaveValue(Settings::Player, "ScreenPlayerY", m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "ScreenPlayerY"s, 0.0f), true);
-               m_table->m_settings.SaveValue(Settings::Player, "ScreenPlayerZ", m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "ScreenPlayerZ"s, 70.0f), true);
-            }
-            // The saved value are the new base value, so all fields are marked as untouched
-            for (int i = BS_ViewMode; i < BS_WndBottomZOfs; i++)
-               m_tweakState[i] = 0;
-         }
-         else if (m_tweakPages[m_activeTweakPageIndex] == TP_TableOption)
-         {
-            // Day Night slider
-            if (m_tweakState[BS_DayNight] == 1)
-            {
-               m_table->m_settings.SaveValue(Settings::Player, "OverrideTableEmissionScale"s, true);
-               m_table->m_settings.SaveValue(Settings::Player, "DynamicDayNight"s, false);
-               m_table->m_settings.SaveValue(Settings::Player, "EmissionScale"s, m_renderer->m_globalEmissionScale);
-            }
-            else if (m_tweakState[BS_DayNight] == 2)
-            {
-               m_table->m_settings.DeleteValue(Settings::Player, "OverrideTableEmissionScale"s);
-               m_table->m_settings.DeleteValue(Settings::Player, "DynamicDayNight"s);
-               m_table->m_settings.DeleteValue(Settings::Player, "EmissionScale"s);
-            }
-            m_tweakState[BS_DayNight] = 0;
-            // Exposure slider
-            if (m_tweakState[BS_Exposure] == 1)
-               m_table->m_settings.SaveValue(Settings::TableOverride, "Exposure"s, m_renderer->m_exposure);
-            else if (m_tweakState[BS_Exposure] == 2)
-               m_table->m_settings.DeleteValue(Settings::TableOverride, "Exposure"s);
-            m_tweakState[BS_Exposure] = 0;
-            // Tonemapper
-            if (m_tweakState[BS_Tonemapper] == 1)
-               m_table->m_settings.SaveValue(Settings::TableOverride, "ToneMapper"s, m_renderer->m_toneMapper);
-            else if (m_tweakState[BS_Tonemapper] == 2)
-               m_table->m_settings.DeleteValue(Settings::TableOverride, "ToneMapper"s);
-            m_tweakState[BS_Tonemapper] = 0;
-            // Difficulty
-            if (m_tweakState[BS_Difficulty] != 0)
-               PushNotification("You have changed the difficulty level\nThis change will only be applied after restart.", 10000);
-            if (m_tweakState[BS_Difficulty] == 1)
-               m_table->m_settings.SaveValue(Settings::TableOverride, "Difficulty"s, m_live_table->m_globalDifficulty);
-            else if (m_tweakState[BS_Difficulty] == 2)
-               m_table->m_settings.DeleteValue(Settings::TableOverride, "Difficulty"s);
-            m_tweakState[BS_Difficulty] = 0;
-            // Music/sound volume
-            if (m_tweakState[BS_BackglassVolume] == 1)
-               m_table->m_settings.SaveValue(Settings::Player, "MusicVolume"s, m_player->m_MusicVolume);
-            else if (m_tweakState[BS_BackglassVolume] == 2)
-               m_table->m_settings.DeleteValue(Settings::Player, "MusicVolume"s);
-            m_tweakState[BS_BackglassVolume] = 0;
-            if (m_tweakState[BS_PlayfieldVolume] == 1)
-               m_table->m_settings.SaveValue(Settings::Player, "SoundVolume"s, m_player->m_SoundVolume);
-            else if (m_tweakState[BS_PlayfieldVolume] == 2)
-               m_table->m_settings.DeleteValue(Settings::Player, "SoundVolume"s);
-            m_tweakState[BS_PlayfieldVolume] = 0;
-         }
-         // Custom table/plugin options
-         if (m_tweakPages[m_activeTweakPageIndex] >= TP_TableOption)
-         {
-            const vector<Settings::OptionDef> &customOptions = m_tweakPages[m_activeTweakPageIndex] == TP_TableOption ? m_live_table->m_settings.GetTableSettings() : m_live_table->m_settings.GetPluginSettings();
-            message = m_tweakPages[m_activeTweakPageIndex] > TP_TableOption ? "Plugin options" : "Table options";
-            int nOptions = (int)customOptions.size();
-            for (int i = 0; i < nOptions; i++)
-            {
-               auto opt = customOptions[i];
-               if ((opt.section == Settings::TableOption && m_tweakPages[m_activeTweakPageIndex] == TP_TableOption)
-                  || (opt.section > Settings::TableOption && m_tweakPages[m_activeTweakPageIndex] == static_cast<int>(TP_Plugin00) + static_cast<int>(opt.section) - static_cast<int>(Settings::Plugin00)))
-               {
-                  if (m_tweakState[BS_Custom + i] == 2)
-                     m_table->m_settings.DeleteValue(opt.section, opt.id);
-                  else
-                     m_table->m_settings.SaveValue(opt.section, opt.id, m_live_table->m_settings.LoadValueWithDefault(opt.section, opt.name, opt.defaultValue));
-                  m_tweakState[BS_Custom + i] = 0;
-               }
-            }
-         }
-         if (m_table->m_szFileName.empty() || !FileExists(m_table->m_szFileName))
-         {
-            PushNotification("You need to save your table before exporting user settings"s, 5000);
-         }
-         else
-         {
-            m_table->m_settings.SaveToFile(iniFileName);
-            PushNotification(message + " exported to "s.append(iniFileName), 5000);
-         }
-         if (g_pvp->m_povEdit && m_tweakPages[m_activeTweakPageIndex] == TP_PointOfView)
-            g_pvp->QuitPlayer(Player::CloseState::CS_CLOSE_APP);
-      }
-      else if (keycode == m_player->m_rgKeys[ePlungerKey]) // Reset tweak page
-      {
-         if (m_tweakPages[m_activeTweakPageIndex] == TP_TableOption)
-         {
-            // Remove custom day/night and get back to the one of the table, eventually overriden by app (not table) settings
-            // FIXME we just default to the table value, missing the app settings being applied (like day/night from lat/lon,... see in player.cpp)
-            m_tweakState[BS_DayNight] = 2;
-            m_renderer->m_globalEmissionScale = m_table->m_globalEmissionScale;
 
-            // Exposure
-            m_tweakState[BS_Exposure] = 2;
-            m_renderer->m_exposure = m_table->m_settings.LoadValueWithDefault(Settings::TableOverride, "Exposure"s, m_table->GetExposure());
+         // View setup settings
+         case BS_ViewMode:
+         {
+            if (keyEvent != 1) // Only keydown
+               continue;
+            int vlm = viewSetup.mMode + (int)step;
+            viewSetup.mMode = vlm < 0 ? VLM_WINDOW : vlm >= 3 ? VLM_LEGACY : (ViewLayoutMode)vlm;
+            UpdateTweakPage();
+            break;
+         }
+         case BS_LookAt: viewSetup.mLookAt += incSpeed; break;
+         case BS_FOV: viewSetup.mFOV += incSpeed; break;
+         case BS_Layback: viewSetup.mLayback += incSpeed; break;
+         case BS_ViewHOfs: viewSetup.mViewHOfs += incSpeed; break;
+         case BS_ViewVOfs: viewSetup.mViewVOfs += incSpeed; break;
+         case BS_XYZScale:
+            viewSetup.mSceneScaleX += 0.005f * incSpeed;
+            viewSetup.mSceneScaleY += 0.005f * incSpeed;
+            viewSetup.mSceneScaleZ += 0.005f * incSpeed;
+            break;
+         case BS_XScale: viewSetup.mSceneScaleX += 0.005f * incSpeed; break;
+         case BS_YScale: viewSetup.mSceneScaleY += 0.005f * incSpeed; break;
+         case BS_ZScale: viewSetup.mSceneScaleZ += 0.005f * incSpeed; break;
+         case BS_XOffset:
+            if (isWindow)
+               table->m_settings.SaveValue(Settings::Player, "ScreenPlayerX"s, table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerX"s) + 0.5f * incSpeed);
+            else
+               viewSetup.mViewX += 10.f * incSpeed;
+            break;
+         case BS_YOffset:
+            if (isWindow)
+               table->m_settings.SaveValue(Settings::Player, "ScreenPlayerY"s, table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerY"s) + 0.5f * incSpeed);
+            else
+               viewSetup.mViewY += 10.f * incSpeed;
+            break;
+         case BS_ZOffset:
+            if (isWindow)
+               table->m_settings.SaveValue(Settings::Player, "ScreenPlayerZ"s, table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerZ"s) + 0.5f * incSpeed);
+            else
+               viewSetup.mViewZ += (viewSetup.mMode == VLM_LEGACY ? 100.f : 10.f) * incSpeed;
+            break;
+         case BS_WndTopZOfs: viewSetup.mWindowTopZOfs += 10.f * incSpeed; break;
+         case BS_WndBottomZOfs: viewSetup.mWindowBottomZOfs += 10.f * incSpeed; break;
 
-            // Tonemapper
-            m_tweakState[BS_Tonemapper] = 2;
-            m_renderer->m_toneMapper = (ToneMapper)m_table->m_settings.LoadValueWithDefault(Settings::TableOverride, "ToneMapper"s, m_table->GetToneMapper());
-
-            // Remove custom difficulty and get back to the one of the table, eventually overriden by app (not table) settings
-            m_tweakState[BS_Difficulty] = 2;
-            m_live_table->m_globalDifficulty = g_pvp->m_settings.LoadValueWithDefault(Settings::TableOverride, "Difficulty"s, m_table->m_difficulty);
-
-            // Music/sound volume
-            m_player->m_MusicVolume = m_table->m_settings.LoadValueWithDefault(Settings::Player, "MusicVolume"s, 100);
-            m_player->m_SoundVolume = m_table->m_settings.LoadValueWithDefault(Settings::Player, "SoundVolume"s, 100);
-
+         // VR Position
+         case BS_VRScale: m_player->m_vrDevice->SetLockbarWidth(clamp(m_player->m_vrDevice->GetLockbarWidth() + 1.f * incSpeed, 5.f, 200.f)); break;
+         case BS_VROrientation: m_player->m_vrDevice->SetSceneOrientation(m_player->m_vrDevice->GetSceneOrientation() + 1.f * incSpeed); break;
+         case BS_VRX: { Vertex3Ds pos = m_player->m_vrDevice->GetSceneOffset(); pos.x += 1.f * incSpeed; m_player->m_vrDevice->SetSceneOffset(pos); break; }
+         case BS_VRY: { Vertex3Ds pos = m_player->m_vrDevice->GetSceneOffset(); pos.y += 1.f * incSpeed; m_player->m_vrDevice->SetSceneOffset(pos); break; }
+         case BS_VRZ: { Vertex3Ds pos = m_player->m_vrDevice->GetSceneOffset(); pos.z += 1.f * incSpeed; m_player->m_vrDevice->SetSceneOffset(pos); break; }
+         case BS_AR_VR: if (keyEvent == 1) m_renderer->m_vrApplyColorKey = !m_renderer->m_vrApplyColorKey; break;
+      
+         // Table customization
+         case BS_DayNight:
+            m_renderer->m_globalEmissionScale = clamp(m_renderer->m_globalEmissionScale + incSpeed * 0.05f, 0.f, 1.f);
             m_renderer->MarkShaderDirty();
-         }
-         else if (m_tweakPages[m_activeTweakPageIndex] == TP_PointOfView)
-         {
-            for (int i = BS_ViewMode; i < BS_WndBottomZOfs; i++)
-               m_tweakState[i] = 2;
-            ViewSetupID id = table->m_BG_current_set;
-            ViewSetup &viewSetup = table->mViewSetups[id];
-            viewSetup.mViewportRotation = 0.f;
-            const bool portrait = m_player->m_playfieldWnd->GetWidth() < m_player->m_playfieldWnd->GetHeight();
-            switch (id)
+            m_live_table->FireOptionEvent(1); // Table option changed event
+            break;
+         case BS_Difficulty:
+            table->m_globalDifficulty = clamp(table->m_globalDifficulty + incSpeed * 0.05f, 0.f, 1.f);
+            m_live_table->FireOptionEvent(1); // Table option changed event
+            break;
+         case BS_Volume:
+            m_player->m_MusicVolume = clamp(m_player->m_MusicVolume + static_cast<int>(step), 0, 100);
+            m_player->m_SoundVolume = clamp(m_player->m_SoundVolume + static_cast<int>(step), 0, 100);
+            m_player->UpdateVolume();
+            m_live_table->FireOptionEvent(1); // Table option changed event
+            break;
+         case BS_BackglassVolume:
+            m_player->m_MusicVolume = clamp(m_player->m_MusicVolume + static_cast<int>(step), 0, 100);
+            m_player->UpdateVolume();
+            m_live_table->FireOptionEvent(1); // Table option changed event
+            break;
+         case BS_PlayfieldVolume:
+            m_player->m_SoundVolume = clamp(m_player->m_SoundVolume + static_cast<int>(step), 0, 100);
+            m_player->UpdateVolume();
+            m_live_table->FireOptionEvent(1); // Table option changed event
+            break;
+         case BS_Exposure:
+            m_renderer->m_exposure = clamp(m_renderer->m_exposure + incSpeed * 0.05f, 0.f, 2.0f);
+            m_live_table->FireOptionEvent(1); // Table option changed event
+            break;
+         case BS_Tonemapper:
+            if (keyEvent == 1)
             {
-            case BG_DESKTOP:
-            case BG_FSS:
-               PushNotification("POV reset to default values"s, 5000);
-               if (id == BG_DESKTOP && !portrait)
-               { // Desktop
-                  viewSetup.mMode = (ViewLayoutMode)g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopMode"s, VLM_CAMERA);
-                  viewSetup.mViewX = CMTOVPU(g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopCamX"s, 0.f));
-                  viewSetup.mViewY = CMTOVPU(g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopCamY"s, 20.f));
-                  viewSetup.mViewZ = CMTOVPU(g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopCamZ"s, 70.f));
-                  viewSetup.mSceneScaleX = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopScaleX"s, 1.f);
-                  viewSetup.mSceneScaleY = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopScaleY"s, 1.f);
-                  viewSetup.mSceneScaleZ = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopScaleZ"s, 1.f);
-                  viewSetup.mFOV = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopFov"s, 50.f);
-                  viewSetup.mLookAt = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopLookAt"s, 25.0f);
-                  viewSetup.mViewVOfs = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopViewVOfs"s, 14.f);
-               }
-               else
-               { // FSS
-                  viewSetup.mMode = (ViewLayoutMode)g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSMode"s, VLM_CAMERA);
-                  viewSetup.mViewX = CMTOVPU(g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSCamX"s, 0.f));
-                  viewSetup.mViewY = CMTOVPU(g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSCamY"s, 20.f));
-                  viewSetup.mViewZ = CMTOVPU(g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSCamZ"s, 70.f));
-                  viewSetup.mSceneScaleX = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSScaleX"s, 1.f);
-                  viewSetup.mSceneScaleY = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSScaleY"s, 1.f);
-                  viewSetup.mSceneScaleZ = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSScaleZ"s, 1.f);
-                  viewSetup.mFOV = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSFov"s, 77.f);
-                  viewSetup.mLookAt = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSLookAt"s, 50.0f);
-                  viewSetup.mViewVOfs = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSViewVOfs"s, 22.f);
-               }
-               break;
-            case BG_FULLSCREEN:
+               int tm = m_renderer->m_toneMapper + static_cast<int>(step);
+               #ifdef ENABLE_BGFX
+               if (tm < 0)
+                  tm = ToneMapper::TM_AGX_PUNCHY;
+               if (tm > ToneMapper::TM_AGX_PUNCHY)
+                  tm = ToneMapper::TM_REINHARD;
+               #else
+               if (tm < 0)
+                  tm = ToneMapper::TM_NEUTRAL;
+               if (tm > ToneMapper::TM_NEUTRAL)
+                  tm = ToneMapper::TM_REINHARD;
+               #endif
+               m_renderer->m_toneMapper = static_cast<ToneMapper>(tm);
+               m_live_table->FireOptionEvent(1); // Table option changed event
+            }
+            break;
+
+         default:
+            if (activeTweakSetting >= BS_Custom)
             {
-               const float screenWidth = g_pvp->m_settings.LoadValueWithDefault(Settings::Player, "ScreenWidth"s, 0.0f);
-               const float screenHeight = g_pvp->m_settings.LoadValueWithDefault(Settings::Player, "ScreenHeight"s, 0.0f);
-               if (screenWidth <= 1.f || screenHeight <= 1.f)
+               const vector<Settings::OptionDef> &customOptions = m_tweakPages[m_activeTweakPageIndex] == TP_TableOption ? m_live_table->m_settings.GetTableSettings() : Settings::GetPluginSettings();
+               if (activeTweakSetting < BS_Custom + (int)customOptions.size())
                {
-                  PushNotification("You must setup your screen size before using Window mode"s, 5000);
-               }
-               else
-               {
-                  float topHeight = table->m_glassTopHeight;
-                  float bottomHeight = table->m_glassBottomHeight;
-                  if (bottomHeight == topHeight)
-                  { // If table does not define the glass position (for table without it, when loading we set the glass as horizontal)
-                     TableDB db;
-                     db.Load();
-                     int bestSizeMatch = db.GetBestSizeMatch(table->GetTableWidth(), table->GetHeight(), topHeight);
-                     if (bestSizeMatch >= 0)
+                  const auto& opt = customOptions[activeTweakSetting - BS_Custom];
+                  float nTotalSteps = (opt.maxValue - opt.minValue) / opt.step;
+                  int nMsecPerStep = nTotalSteps < 20.f ? 500 : max(5, 250 - (int)(msec() - startOfPress) / 10); // discrete vs continuous sliding
+                  int nSteps = (msec() - m_lastTweakKeyDown) / nMsecPerStep;
+                  if (keyEvent == 1)
+                  {
+                     nSteps = 1;
+                     m_lastTweakKeyDown = msec() - nSteps * nMsecPerStep;
+                  }
+                  if (nSteps > 0)
+                  {
+                     m_lastTweakKeyDown += nSteps * nMsecPerStep;
+                     float value = m_live_table->m_settings.LoadValueWithDefault(opt.section, opt.id, opt.defaultValue);
+                     if (!opt.literals.empty())
                      {
-                        bottomHeight = INCHESTOVPU(db.m_data[bestSizeMatch].glassBottom);
-                        topHeight = INCHESTOVPU(db.m_data[bestSizeMatch].glassTop);
-                        char textBuf1[MAXNAMEBUFFER], textBuf2[MAXNAMEBUFFER];
-                        sprintf_s(textBuf1, sizeof(textBuf1), "%.02f", db.m_data[bestSizeMatch].glassBottom);
-                        sprintf_s(textBuf2, sizeof(textBuf2), "%.02f", db.m_data[bestSizeMatch].glassTop);
-                        PushNotification("Missing glass position guessed to be "s + textBuf1 + "\" / " + textBuf2 + "\" (" + db.m_data[bestSizeMatch].name + ')', 5000);
+                        value += (float)nSteps * opt.step * step;
+                        while (value < opt.minValue)
+                           value += opt.maxValue - opt.minValue + 1;
+                        while (value > opt.maxValue)
+                           value -= opt.maxValue - opt.minValue + 1;
                      }
                      else
-                     {
-                        PushNotification("The table is missing glass position and no good guess was found."s, 5000);
-                     }
+                        value = clamp(value + (float)nSteps * opt.step * step, opt.minValue, opt.maxValue);
+                     table->m_settings.SaveValue(opt.section, opt.id, value);
+                     if (opt.section == Settings::TableOption)
+                        m_live_table->FireOptionEvent(1); // Table option changed event
+                     else
+                        VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(VPXPluginAPIImpl::GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_SETTINGS_CHANGED), nullptr);
                   }
-                  const float scale = (screenHeight / table->GetTableWidth()) * (table->GetHeight() / screenWidth);
-                  const bool isFitted = (viewSetup.mViewHOfs == 0.f) && (viewSetup.mViewVOfs == -2.8f) && (viewSetup.mSceneScaleY == scale) && (viewSetup.mSceneScaleX == scale);
-                  viewSetup.mMode = VLM_WINDOW;
-                  viewSetup.mViewHOfs = 0.f;
-                  viewSetup.mViewVOfs = isFitted ? 0.f : -2.8f;
-                  viewSetup.mSceneScaleX = scale;
-                  viewSetup.mSceneScaleY = isFitted ? 1.f : scale;
-                  viewSetup.mWindowBottomZOfs = bottomHeight;
-                  viewSetup.mWindowTopZOfs = topHeight;
-                  PushNotification(isFitted ? "POV reset to default values (stretch to fit)"s : "POV reset to default values (no stretching)"s, 5000);
+                  else
+                     modified = false;
                }
+            }
+            else
+            {
+               assert(false);
                break;
             }
-            case BG_INVALID:
-            case NUM_BG_SETS: assert(false); break;
-            }
-            m_renderer->m_cam = Vertex3Ds(0.f, 0.f, 0.f);
-            UpdateTweakPage();
          }
-         // Reset custom table/plugin options
-         if (m_tweakPages[m_activeTweakPageIndex] >= TP_TableOption)
-         {
-            if (m_tweakPages[m_activeTweakPageIndex] > TP_TableOption)
-               PushNotification("Plugin options reset to default values"s, 5000);
-            else
-               PushNotification("Table options reset to default values"s, 5000);
-            const vector<Settings::OptionDef> &customOptions = m_tweakPages[m_activeTweakPageIndex] == TP_TableOption ? m_live_table->m_settings.GetTableSettings() : m_live_table->m_settings.GetPluginSettings();
-            int nOptions = (int)customOptions.size();
-            for (int i = 0; i < nOptions; i++)
-            {
-               auto opt = customOptions[i];
-               if ((opt.section == Settings::TableOption && m_tweakPages[m_activeTweakPageIndex] == TP_TableOption)
-                  || (opt.section > Settings::TableOption && m_tweakPages[m_activeTweakPageIndex] == static_cast<int>(TP_Plugin00) + static_cast<int>(opt.section) - static_cast<int>(Settings::Plugin00)))
-               {
-                  if (m_tweakState[BS_Custom + i] == 2)
-                     m_table->m_settings.DeleteValue(opt.section, opt.id);
-                  else
-                     m_table->m_settings.SaveValue(opt.section, opt.id, m_live_table->m_settings.LoadValueWithDefault(opt.section, opt.id, opt.defaultValue));
-                  m_tweakState[BS_Custom + i] = 0;
-               }
-            }
-            if (m_tweakPages[m_activeTweakPageIndex] > TP_TableOption)
-               VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(VPXPluginAPIImpl::GetInstance().GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_SETTINGS_CHANGED), nullptr);
-            else
-               m_live_table->FireKeyEvent(DISPID_GameEvents_OptionEvent, 2 /* custom option resetted event */);
-         }
+         m_tweakState[activeTweakSetting] |= modified ? 1 : 0;
       }
-      else if (keycode == m_player->m_rgKeys[eAddCreditKey]) // Undo tweaks of page
+      else if (keyEvent == 1) // Key down
       {
-         if (g_pvp->m_povEdit)
-            // Tweak mode from command line => quit
-            g_pvp->QuitPlayer(Player::CloseState::CS_CLOSE_APP);
-         else
+         if (keycode == eLeftTiltKey && m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "EnableCameraModeFlyAround"s, false))
+            m_live_table->mViewSetups[m_live_table->m_BG_current_set].mViewportRotation -= 1.0f;
+         else if (keycode == eRightTiltKey && m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "EnableCameraModeFlyAround"s, false))
+            m_live_table->mViewSetups[m_live_table->m_BG_current_set].mViewportRotation += 1.0f;
+         else if (keycode == eStartGameKey) // Save tweak page
          {
-            // Undo POV: copy from startup table to the live one
+            string iniFileName = m_live_table->GetSettingsFileName();
+            string message;
             if (m_tweakPages[m_activeTweakPageIndex] == TP_PointOfView)
             {
-               PushNotification("POV undo to startup values"s, 5000);
-               ViewSetupID id = m_live_table->m_BG_current_set;
-               const PinTable *const __restrict src = m_player->m_pEditorTable;
-               PinTable *const __restrict dst = m_live_table;
-               dst->mViewSetups[id] = src->mViewSetups[id];
-               dst->mViewSetups[id].ApplyTableOverrideSettings(m_live_table->m_settings, (ViewSetupID)id);
-               m_renderer->m_cam = Vertex3Ds(0.f, 0.f, 0.f);
+               message = "Point of view"s;
+               m_live_table->mViewSetups[m_live_table->m_BG_current_set].SaveToTableOverrideSettings(m_table->m_settings, m_live_table->m_BG_current_set);
+               if (m_live_table->m_BG_current_set == BG_FULLSCREEN)
+               { // Player position is saved as an override (not saved if equal to app settings)
+                  m_table->m_settings.SaveValue(Settings::Player, "ScreenPlayerX"s, m_live_table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerX"s), true);
+                  m_table->m_settings.SaveValue(Settings::Player, "ScreenPlayerY"s, m_live_table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerY"s), true);
+                  m_table->m_settings.SaveValue(Settings::Player, "ScreenPlayerZ"s, m_live_table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerZ"s), true);
+               }
+               // The saved value are the new base value, so all fields are marked as untouched
+               for (int i2 = BS_ViewMode; i2 < BS_WndBottomZOfs; i2++)
+                  m_tweakState[i2] = 0;
             }
+            else if (m_tweakPages[m_activeTweakPageIndex] == TP_VRPosition)
+            {
+               // Note that scene offset is not saved per table but as an app setting
+               m_player->m_vrDevice->SaveVRSettings(g_pvp->m_settings);
+               m_table->m_settings.SaveValue(Settings::PlayerVR, "UsePassthroughColor"s, m_renderer->m_vrApplyColorKey);
+            }
+            else if (m_tweakPages[m_activeTweakPageIndex] == TP_TableOption)
+            {
+               // Day Night slider
+               if (m_tweakState[BS_DayNight] == 1)
+               {
+                  m_table->m_settings.SaveValue(Settings::Player, "OverrideTableEmissionScale"s, true);
+                  m_table->m_settings.SaveValue(Settings::Player, "DynamicDayNight"s, false);
+                  m_table->m_settings.SaveValue(Settings::Player, "EmissionScale"s, m_renderer->m_globalEmissionScale);
+               }
+               else if (m_tweakState[BS_DayNight] == 2)
+               {
+                  m_table->m_settings.DeleteValue(Settings::Player, "OverrideTableEmissionScale"s);
+                  m_table->m_settings.DeleteValue(Settings::Player, "DynamicDayNight"s);
+                  m_table->m_settings.DeleteValue(Settings::Player, "EmissionScale"s);
+               }
+               m_tweakState[BS_DayNight] = 0;
+               // Exposure slider
+               if (m_tweakState[BS_Exposure] == 1)
+                  m_table->m_settings.SaveValue(Settings::TableOverride, "Exposure"s, m_renderer->m_exposure);
+               else if (m_tweakState[BS_Exposure] == 2)
+                  m_table->m_settings.DeleteValue(Settings::TableOverride, "Exposure"s);
+               m_tweakState[BS_Exposure] = 0;
+               // Tonemapper
+               if (m_tweakState[BS_Tonemapper] == 1)
+                  m_table->m_settings.SaveValue(Settings::TableOverride, "ToneMapper"s, m_renderer->m_toneMapper);
+               else if (m_tweakState[BS_Tonemapper] == 2)
+                  m_table->m_settings.DeleteValue(Settings::TableOverride, "ToneMapper"s);
+               m_tweakState[BS_Tonemapper] = 0;
+               // Difficulty
+               if (m_tweakState[BS_Difficulty] != 0)
+                  PushNotification("You have changed the difficulty level\nThis change will only be applied after restart.", 10000);
+               if (m_tweakState[BS_Difficulty] == 1)
+                  m_table->m_settings.SaveValue(Settings::TableOverride, "Difficulty"s, m_live_table->m_globalDifficulty);
+               else if (m_tweakState[BS_Difficulty] == 2)
+                  m_table->m_settings.DeleteValue(Settings::TableOverride, "Difficulty"s);
+               m_tweakState[BS_Difficulty] = 0;
+               // Music/sound volume
+               if (m_tweakState[BS_BackglassVolume] == 1)
+                  m_table->m_settings.SaveValue(Settings::Player, "MusicVolume"s, m_player->m_MusicVolume);
+               else if (m_tweakState[BS_BackglassVolume] == 2)
+                  m_table->m_settings.DeleteValue(Settings::Player, "MusicVolume"s);
+               m_tweakState[BS_BackglassVolume] = 0;
+               if (m_tweakState[BS_PlayfieldVolume] == 1)
+                  m_table->m_settings.SaveValue(Settings::Player, "SoundVolume"s, m_player->m_SoundVolume);
+               else if (m_tweakState[BS_PlayfieldVolume] == 2)
+                  m_table->m_settings.DeleteValue(Settings::Player, "SoundVolume"s);
+               m_tweakState[BS_PlayfieldVolume] = 0;
+            }
+            // Custom table/plugin options
+            if (m_tweakPages[m_activeTweakPageIndex] >= TP_TableOption)
+            {
+               const vector<Settings::OptionDef> &customOptions = m_tweakPages[m_activeTweakPageIndex] == TP_TableOption ? m_live_table->m_settings.GetTableSettings() : Settings::GetPluginSettings();
+               message = m_tweakPages[m_activeTweakPageIndex] > TP_TableOption ? "Plugin options"s : "Table options"s;
+               const int nOptions = (int)customOptions.size();
+               for (int i2 = 0; i2 < nOptions; i2++)
+               {
+                  const auto& opt = customOptions[i2];
+                  if ((opt.section == Settings::TableOption && m_tweakPages[m_activeTweakPageIndex] == TP_TableOption)
+                     || (opt.section > Settings::TableOption && m_tweakPages[m_activeTweakPageIndex] == static_cast<int>(TP_Plugin00) + static_cast<int>(opt.section) - static_cast<int>(Settings::Plugin00)))
+                  {
+                     if (m_tweakState[BS_Custom + i2] == 2)
+                        m_table->m_settings.DeleteValue(opt.section, opt.id);
+                     else
+                        m_table->m_settings.SaveValue(opt.section, opt.id, m_live_table->m_settings.LoadValueWithDefault(opt.section, opt.name, opt.defaultValue));
+                     m_tweakState[BS_Custom + i2] = 0;
+                  }
+               }
+            }
+            if (m_table->m_szFileName.empty() || !FileExists(m_table->m_szFileName))
+            {
+               PushNotification("You need to save your table before exporting user settings"s, 5000);
+            }
+            else
+            {
+               m_table->m_settings.SaveToFile(iniFileName);
+               PushNotification(message + " exported to " + iniFileName, 5000);
+            }
+            if (g_pvp->m_povEdit && m_tweakPages[m_activeTweakPageIndex] == TP_PointOfView)
+               g_pvp->QuitPlayer(Player::CloseState::CS_CLOSE_APP);
+         }
+         else if (keycode == ePlungerKey) // Reset tweak page
+         {
             if (m_tweakPages[m_activeTweakPageIndex] == TP_TableOption)
             {
-               // TODO undo Day/Night, difficulty, ...
+               // Remove custom day/night and get back to the one of the table, eventually overriden by app (not table) settings
+               // FIXME we just default to the table value, missing the app settings being applied (like day/night from lat/lon,... see in player.cpp)
+               m_tweakState[BS_DayNight] = 2;
+               m_renderer->m_globalEmissionScale = m_table->m_globalEmissionScale;
+
+               // Exposure
+               m_tweakState[BS_Exposure] = 2;
+               m_renderer->m_exposure = m_table->m_settings.LoadValueWithDefault(Settings::TableOverride, "Exposure"s, m_table->GetExposure());
+
+               // Tonemapper
+               m_tweakState[BS_Tonemapper] = 2;
+               m_renderer->m_toneMapper = (ToneMapper)m_table->m_settings.LoadValueWithDefault(Settings::TableOverride, "ToneMapper"s, m_table->GetToneMapper());
+
+               // Remove custom difficulty and get back to the one of the table, eventually overriden by app (not table) settings
+               m_tweakState[BS_Difficulty] = 2;
+               m_live_table->m_globalDifficulty = g_pvp->m_settings.LoadValueWithDefault(Settings::TableOverride, "Difficulty"s, m_table->m_difficulty);
+
+               // Music/sound volume
+               m_player->m_MusicVolume = m_table->m_settings.LoadValueWithDefault(Settings::Player, "MusicVolume"s, 100);
+               m_player->m_SoundVolume = m_table->m_settings.LoadValueWithDefault(Settings::Player, "SoundVolume"s, 100);
+
+               m_renderer->MarkShaderDirty();
+            }
+            else if (m_tweakPages[m_activeTweakPageIndex] == TP_PointOfView)
+            {
+               for (int i2 = BS_ViewMode; i2 < BS_WndBottomZOfs; i2++)
+                  m_tweakState[i2] = 2;
+               ViewSetupID id = table->m_BG_current_set;
+               ViewSetup &viewSetup = table->mViewSetups[id];
+               viewSetup.mViewportRotation = 0.f;
+               const bool portrait = m_player->m_playfieldWnd->GetWidth() < m_player->m_playfieldWnd->GetHeight();
+               switch (id)
+               {
+               case BG_DESKTOP:
+               case BG_FSS:
+                  PushNotification("POV reset to default values"s, 5000);
+                  if (id == BG_DESKTOP && !portrait)
+                  { // Desktop
+                     viewSetup.mMode = (ViewLayoutMode)g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopMode"s, VLM_CAMERA);
+                     viewSetup.mViewX = CMTOVPU(g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopCamX"s, 0.f));
+                     viewSetup.mViewY = CMTOVPU(g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopCamY"s, 20.f));
+                     viewSetup.mViewZ = CMTOVPU(g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopCamZ"s, 70.f));
+                     viewSetup.mSceneScaleX = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopScaleX"s, 1.f);
+                     viewSetup.mSceneScaleY = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopScaleY"s, 1.f);
+                     viewSetup.mSceneScaleZ = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopScaleZ"s, 1.f);
+                     viewSetup.mFOV = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopFov"s, 50.f);
+                     viewSetup.mLookAt = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopLookAt"s, 25.0f);
+                     viewSetup.mViewVOfs = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopViewVOfs"s, 14.f);
+                  }
+                  else
+                  { // FSS
+                     viewSetup.mMode = (ViewLayoutMode)g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSMode"s, VLM_CAMERA);
+                     viewSetup.mViewX = CMTOVPU(g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSCamX"s, 0.f));
+                     viewSetup.mViewY = CMTOVPU(g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSCamY"s, 20.f));
+                     viewSetup.mViewZ = CMTOVPU(g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSCamZ"s, 70.f));
+                     viewSetup.mSceneScaleX = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSScaleX"s, 1.f);
+                     viewSetup.mSceneScaleY = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSScaleY"s, 1.f);
+                     viewSetup.mSceneScaleZ = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSScaleZ"s, 1.f);
+                     viewSetup.mFOV = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSFov"s, 77.f);
+                     viewSetup.mLookAt = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSLookAt"s, 50.0f);
+                     viewSetup.mViewVOfs = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSViewVOfs"s, 22.f);
+                  }
+                  break;
+               case BG_FULLSCREEN:
+               {
+                  const float screenWidth = g_pvp->m_settings.LoadValueFloat(Settings::Player, "ScreenWidth"s);
+                  const float screenHeight = g_pvp->m_settings.LoadValueFloat(Settings::Player, "ScreenHeight"s);
+                  if (screenWidth <= 1.f || screenHeight <= 1.f)
+                  {
+                     PushNotification("You must setup your screen size before using Window mode"s, 5000);
+                  }
+                  else
+                  {
+                     float topHeight = table->m_glassTopHeight;
+                     float bottomHeight = table->m_glassBottomHeight;
+                     if (bottomHeight == topHeight)
+                     { // If table does not define the glass position (for table without it, when loading we set the glass as horizontal)
+                        TableDB db;
+                        db.Load();
+                        int bestSizeMatch = db.GetBestSizeMatch(table->GetTableWidth(), table->GetHeight(), topHeight);
+                        if (bestSizeMatch >= 0)
+                        {
+                           bottomHeight = INCHESTOVPU(db.m_data[bestSizeMatch].glassBottom);
+                           topHeight = INCHESTOVPU(db.m_data[bestSizeMatch].glassTop);
+                           PushNotification("Missing glass position guessed to be " + std::to_string(db.m_data[bestSizeMatch].glassBottom) + "\" / " + std::to_string(db.m_data[bestSizeMatch].glassTop) + "\" (" + db.m_data[bestSizeMatch].name + ')', 5000);
+                        }
+                        else
+                        {
+                           PushNotification("The table is missing glass position and no good guess was found."s, 5000);
+                        }
+                     }
+                     const float scale = (screenHeight / table->GetTableWidth()) * (table->GetHeight() / screenWidth);
+                     const bool isFitted = (viewSetup.mViewHOfs == 0.f) && (viewSetup.mViewVOfs == -2.8f) && (viewSetup.mSceneScaleY == scale) && (viewSetup.mSceneScaleX == scale);
+                     viewSetup.mMode = VLM_WINDOW;
+                     viewSetup.mViewHOfs = 0.f;
+                     viewSetup.mViewVOfs = isFitted ? 0.f : -2.8f;
+                     viewSetup.mSceneScaleX = scale;
+                     viewSetup.mSceneScaleY = isFitted ? 1.f : scale;
+                     viewSetup.mWindowBottomZOfs = bottomHeight;
+                     viewSetup.mWindowTopZOfs = topHeight;
+                     PushNotification(isFitted ? "POV reset to default values (stretch to fit)"s : "POV reset to default values (no stretching)"s, 5000);
+                  }
+                  break;
+               }
+               case BG_INVALID:
+               case NUM_BG_SETS: assert(false); break;
+               }
+               m_renderer->m_cam = Vertex3Ds(0.f, 0.f, 0.f);
+               UpdateTweakPage();
+            }
+            else if (m_tweakPages[m_activeTweakPageIndex] == TP_VRPosition)
+            {
+               m_player->m_vrDevice->RecenterTable();
+            }
+            // Reset custom table/plugin options
+            else if (m_tweakPages[m_activeTweakPageIndex] >= TP_TableOption)
+            {
+               if (m_tweakPages[m_activeTweakPageIndex] > TP_TableOption)
+                  PushNotification("Plugin options reset to default values"s, 5000);
+               else
+                  PushNotification("Table options reset to default values"s, 5000);
+               const vector<Settings::OptionDef> &customOptions = m_tweakPages[m_activeTweakPageIndex] == TP_TableOption ? m_live_table->m_settings.GetTableSettings() : Settings::GetPluginSettings();
+               const int nOptions = (int)customOptions.size();
+               for (int i2 = 0; i2 < nOptions; i2++)
+               {
+                  const auto& opt = customOptions[i2];
+                  if ((opt.section == Settings::TableOption && m_tweakPages[m_activeTweakPageIndex] == TP_TableOption)
+                     || (opt.section > Settings::TableOption && m_tweakPages[m_activeTweakPageIndex] == static_cast<int>(TP_Plugin00) + static_cast<int>(opt.section) - static_cast<int>(Settings::Plugin00)))
+                  {
+                     if (m_tweakState[BS_Custom + i2] == 2)
+                        m_table->m_settings.DeleteValue(opt.section, opt.id);
+                     else
+                        m_table->m_settings.SaveValue(opt.section, opt.id, m_live_table->m_settings.LoadValueWithDefault(opt.section, opt.id, opt.defaultValue));
+                     m_tweakState[BS_Custom + i2] = 0;
+                  }
+               }
+               if (m_tweakPages[m_activeTweakPageIndex] > TP_TableOption)
+                  VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(VPXPluginAPIImpl::GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_SETTINGS_CHANGED), nullptr);
+               else
+                  m_live_table->FireOptionEvent(2); // custom option resetted event
+            }
+         }
+         else if (keycode == eAddCreditKey) // Undo tweaks of page
+         {
+            if (g_pvp->m_povEdit)
+               // Tweak mode from command line => quit
+               g_pvp->QuitPlayer(Player::CloseState::CS_CLOSE_APP);
+            else
+            {
+               // Undo POV: copy from startup table to the live one
+               if (m_tweakPages[m_activeTweakPageIndex] == TP_PointOfView)
+               {
+                  PushNotification("POV undo to startup values"s, 5000);
+                  ViewSetupID id = m_live_table->m_BG_current_set;
+                  const PinTable *const __restrict src = m_player->m_pEditorTable;
+                  PinTable *const __restrict dst = m_live_table;
+                  dst->mViewSetups[id] = src->mViewSetups[id];
+                  dst->mViewSetups[id].ApplyTableOverrideSettings(m_live_table->m_settings, (ViewSetupID)id);
+                  m_renderer->m_cam = Vertex3Ds(0.f, 0.f, 0.f);
+               }
+               if (m_tweakPages[m_activeTweakPageIndex] == TP_TableOption)
+               {
+                  // TODO undo Day/Night, difficulty, ...
+               }
+            }
+         }
+         else if (keycode == eRightMagnaSave || keycode == eLeftMagnaSave)
+         {
+            if (keycode == eRightMagnaSave)
+            {
+               m_activeTweakIndex++;
+               if (m_activeTweakIndex >= (int) m_tweakPageOptions.size())
+                  m_activeTweakIndex = 0;
+            }
+            else
+            {
+               m_activeTweakIndex--;
+               if (m_activeTweakIndex < 0)
+                  m_activeTweakIndex = (int)m_tweakPageOptions.size() - 1;
             }
          }
       }
-      else if (keycode == m_player->m_rgKeys[eRightMagnaSave] || keycode == m_player->m_rgKeys[eLeftMagnaSave])
+      else if (keyEvent == 0) // Continuous keypress
       {
-         if (keycode == m_player->m_rgKeys[eRightMagnaSave])
-         {
-            m_activeTweakIndex++;
-            if (m_activeTweakIndex >= (int) m_tweakPageOptions.size())
-               m_activeTweakIndex = 0;
+         if ((keycode == ePlungerKey) && (m_tweakPages[m_activeTweakPageIndex] == TP_VRPosition)) {
+            m_player->m_vrDevice->RecenterTable();
          }
-         else
-         {
-            m_activeTweakIndex--;
-            if (m_activeTweakIndex < 0)
-               m_activeTweakIndex = (int)m_tweakPageOptions.size() - 1;
-         }
+         else if (keycode == eLeftTiltKey && m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "EnableCameraModeFlyAround"s, false))
+            m_live_table->mViewSetups[m_live_table->m_BG_current_set].mViewportRotation -= 1.0f;
+         else if (keycode == eRightTiltKey && m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "EnableCameraModeFlyAround"s, false))
+            m_live_table->mViewSetups[m_live_table->m_BG_current_set].mViewportRotation += 1.0f;
       }
    }
-   else
-   {
-      if (keycode == eLeftTiltKey && m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "EnableCameraModeFlyAround"s, false))
-         m_live_table->mViewSetups[m_live_table->m_BG_current_set].mViewportRotation -= 1.0f;
-      if (keycode == eRightTiltKey && m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "EnableCameraModeFlyAround"s, false))
-         m_live_table->mViewSetups[m_live_table->m_BG_current_set].mViewportRotation += 1.0f;
-   }
+   prevState = state;
 }
 
 void LiveUI::UpdateTweakModeUI()
 {
+   HandleTweakInput();
+
    ImGui::PushFont(m_overlayFont);
    PinTable *const table = m_live_table;
    constexpr ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
@@ -2260,7 +2320,7 @@ void LiveUI::UpdateTweakModeUI()
             ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 255, 0, 255));
          if (setting >= BS_Custom)
          {
-            const vector<Settings::OptionDef> &customOptions = m_tweakPages[m_activeTweakPageIndex] == TP_TableOption ? m_live_table->m_settings.GetTableSettings() : m_live_table->m_settings.GetPluginSettings();
+            const vector<Settings::OptionDef> &customOptions = m_tweakPages[m_activeTweakPageIndex] == TP_TableOption ? m_live_table->m_settings.GetTableSettings() : Settings::GetPluginSettings();
             if (setting - BS_Custom >= (int)customOptions.size())
                continue;
             const Settings::OptionDef &opt = customOptions[setting - BS_Custom];
@@ -2299,6 +2359,7 @@ void LiveUI::UpdateTweakModeUI()
             else 
                title = m_tweakPages[m_activeTweakPageIndex] == TP_TableOption ? "Table Options"s
                      : m_tweakPages[m_activeTweakPageIndex] == TP_PointOfView ? "Point of View"s
+                     : m_tweakPages[m_activeTweakPageIndex] == TP_VRPosition  ? "VR Scene Position"s
                      : m_tweakPages[m_activeTweakPageIndex] == TP_Rules       ? "Rules"s
                                                                               : "Information"s;
             CM_ROW(setting, "Page "s.append(std::to_string(1 + m_activeTweakPageIndex)).append(1,'/').append(std::to_string(m_tweakPages.size())).c_str(), "%s", title.c_str(), "");
@@ -2313,15 +2374,23 @@ void LiveUI::UpdateTweakModeUI()
          case BS_YScale: CM_ROW(setting, isWindow ? "Table YZ Scale" : "Table Y Scale", "%.1f", 100.f * viewSetup.mSceneScaleY / realToVirtual, "%"); break;
          case BS_ZScale: CM_ROW(setting, "Table Z Scale", "%.1f", 100.f * viewSetup.mSceneScaleZ / realToVirtual, "%"); CM_SKIP_LINE; break;
          case BS_LookAt:  if (isLegacy) { CM_ROW(setting, "Inclination", "%.1f", viewSetup.mLookAt, "deg"); } else { CM_ROW(setting, "Look at", "%.1f", viewSetup.mLookAt, "%"); } break;
-         case BS_XOffset: CM_ROW(setting, isLegacy ? "X Offset" : isWindow ? "Player X" : "Camera X", "%.1f", isWindow ? table->m_settings.LoadValueWithDefault(Settings::Player, "ScreenPlayerX"s, 0.0f) : VPUTOCM(viewSetup.mViewX), "cm"); break;
-         case BS_YOffset: CM_ROW(setting, isLegacy ? "Y Offset" : isWindow ? "Player Y" : "Camera Y", "%.1f", isWindow ? table->m_settings.LoadValueWithDefault(Settings::Player, "ScreenPlayerY"s, 0.0f) : VPUTOCM(viewSetup.mViewY), "cm"); break;
-         case BS_ZOffset: CM_ROW(setting, isLegacy ? "Z Offset" : isWindow ? "Player Z" : "Camera Z", "%.1f", isWindow ? table->m_settings.LoadValueWithDefault(Settings::Player, "ScreenPlayerZ"s, 70.0f) : VPUTOCM(viewSetup.mViewZ), "cm"); CM_SKIP_LINE; break;
+         case BS_XOffset: CM_ROW(setting, isLegacy ? "X Offset" : isWindow ? "Player X" : "Camera X", "%.1f", isWindow ? table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerX"s) : VPUTOCM(viewSetup.mViewX), "cm"); break;
+         case BS_YOffset: CM_ROW(setting, isLegacy ? "Y Offset" : isWindow ? "Player Y" : "Camera Y", "%.1f", isWindow ? table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerY"s) : VPUTOCM(viewSetup.mViewY), "cm"); break;
+         case BS_ZOffset: CM_ROW(setting, isLegacy ? "Z Offset" : isWindow ? "Player Z" : "Camera Z", "%.1f", isWindow ? table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerZ"s) : VPUTOCM(viewSetup.mViewZ), "cm"); CM_SKIP_LINE; break;
          case BS_FOV: CM_ROW(setting, "Field Of View (overall scale)", "%.1f", viewSetup.mFOV, "deg"); break;
          case BS_Layback: CM_ROW(setting, "Layback", "%.1f", viewSetup.mLayback, ""); CM_SKIP_LINE; break;
          case BS_ViewHOfs: CM_ROW(setting, "Horizontal Offset", "%.1f", viewSetup.mViewHOfs, isWindow ? "cm" : ""); break;
          case BS_ViewVOfs: CM_ROW(setting, "Vertical Offset", "%.1f", viewSetup.mViewVOfs, isWindow ? "cm" : ""); CM_SKIP_LINE; break;
          case BS_WndTopZOfs: CM_ROW(setting, "Window Top Z Ofs.", "%.1f", VPUTOCM(viewSetup.mWindowTopZOfs), "cm"); break;
          case BS_WndBottomZOfs: CM_ROW(setting, "Window Bottom Z Ofs.", "%.1f", VPUTOCM(viewSetup.mWindowBottomZOfs), "cm"); CM_SKIP_LINE; break;
+
+         // VR Position
+         case BS_VROrientation: CM_ROW(setting, "Scene Orientation", "%.1f", m_player->m_vrDevice->GetSceneOrientation(), "°"); break;
+         case BS_VRX: CM_ROW(setting, "Scene Offset X", "%.1f", m_player->m_vrDevice->GetSceneOffset().x, "cm"); break;
+         case BS_VRY: CM_ROW(setting, "Scene Offset Y", "%.1f", m_player->m_vrDevice->GetSceneOffset().y, "cm"); break;
+         case BS_VRZ: CM_ROW(setting, "Scene Offset Z", "%.1f", m_player->m_vrDevice->GetSceneOffset().z, "cm"); break;
+         case BS_VRScale: CM_ROW(setting, "Lockbar width", "%.1f", m_player->m_vrDevice->GetLockbarWidth(), "cm"); break;
+         case BS_AR_VR: CM_ROW(setting, "Color Keyed Passthrough:", "%s", m_renderer->m_vrApplyColorKey ? "Enabled" : "Disabled", ""); break;
 
          // Table options
          case BS_DayNight: CM_ROW(setting, "Day Night: ", "%.1f", 100.f * m_renderer->m_globalEmissionScale, "%"); break;
@@ -2370,7 +2439,7 @@ void LiveUI::UpdateTweakModeUI()
          // Do not show it as it is more confusing than helpful due to the use of different coordinate systems in settings vs live edit
          //ImGui::Text("Camera at X: %.1fcm Y: %.1fcm Z: %.1fcm", VPUTOCM(viewSetup.mViewX), VPUTOCM(viewSetup.mViewY), VPUTOCM(viewSetup.mViewZ));
          //ImGui::NewLine();
-         if (m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "ScreenWidth"s, 0.0f) <= 1.f)
+         if (m_live_table->m_settings.LoadValueFloat(Settings::Player, "ScreenWidth"s) <= 1.f)
          {
             ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 0, 0, 255));
             ImGui::Text("You are using 'Window' mode but haven't defined your display physical size.");
@@ -2704,7 +2773,7 @@ void LiveUI::UpdateMainUI()
          //const float zp = mvp._13 * v.x + mvp._23 * v.y + mvp._33 * v.z + mvp._43;
          const float wp = mvp._14 * v.x + mvp._24 * v.y + mvp._34 * v.z + mvp._44;
          if (wp <= 1e-10f) // behind camera (or degenerated)
-            return Vertex2D(FLT_MAX, FLT_MAX);
+            return Vertex2D{FLT_MAX, FLT_MAX};
          const float inv_wp = 1.0f / wp;
          return Vertex2D{(wp + xp) * rClipWidth * inv_wp, (wp - yp) * rClipHeight * inv_wp};
       };
@@ -2825,7 +2894,7 @@ void LiveUI::UpdateMainUI()
          bool noPrims = !(m_selectionFilter & SelectionFilter::SF_Primitives);
          bool noLights = !(m_selectionFilter & SelectionFilter::SF_Lights);
          bool noFlashers = !(m_selectionFilter & SelectionFilter::SF_Flashers);
-         for (auto hr : vhoUnfilteredHit)
+         for (const auto& hr : vhoUnfilteredHit)
          {
             if (noPF && hr.m_obj->m_editable && hr.m_obj->m_editable->GetItemType() == ItemTypeEnum::eItemPrimitive && ((Primitive*)hr.m_obj->m_editable)->IsPlayfield())
                continue;
@@ -2967,7 +3036,7 @@ void LiveUI::UpdateMainUI()
             view.Invert();
             const vec3 /*up = view.GetOrthoNormalUp(),*/ dir = view.GetOrthoNormalDir(), pos = view.GetOrthoNormalPos();
             const vec3 camTarget = pos - dir * m_camDistance;
-            const vec3 newUp(0.f, -1.f, 0.f);
+            constexpr vec3 newUp{0.f, -1.f, 0.f};
             const vec3 newDir(0.f, 0.f, ImGui::GetIO().KeyCtrl ? 1.f : -1.f);
             const vec3 newEye = camTarget + newDir * m_camDistance;
             m_camView = Matrix3D::MatrixLookAtRH(newEye, camTarget, newUp);
@@ -2981,7 +3050,7 @@ void LiveUI::UpdateMainUI()
             view.Invert();
             const vec3 /*up = view.GetOrthoNormalUp(),*/ dir = view.GetOrthoNormalDir(), pos = view.GetOrthoNormalPos();
             const vec3 camTarget = pos - dir * m_camDistance;
-            const vec3 newUp(0.f, 0.f, -1.f);
+            constexpr vec3 newUp{0.f, 0.f, -1.f};
             const vec3 newDir(0.f, ImGui::GetIO().KeyCtrl ? -1.f : 1.f, 0.f);
             const vec3 newEye = camTarget + newDir * m_camDistance;
             m_camView = Matrix3D::MatrixLookAtRH(newEye, camTarget, newUp);
@@ -2995,7 +3064,7 @@ void LiveUI::UpdateMainUI()
             view.Invert();
             const vec3 /*up = view.GetOrthoNormalUp(),*/ dir = view.GetOrthoNormalDir(), pos = view.GetOrthoNormalPos();
             const vec3 camTarget = pos - dir * m_camDistance;
-            const vec3 newUp(0.f, 0.f, -1.f);
+            constexpr vec3 newUp{0.f, 0.f, -1.f};
             const vec3 newDir(ImGui::GetIO().KeyCtrl ? 1.f : -1.f, 0.f, 0.f);
             const vec3 newEye = camTarget + newDir * m_camDistance;
             m_camView = Matrix3D::MatrixLookAtRH(newEye, camTarget, newUp);
@@ -3183,14 +3252,14 @@ void LiveUI::SetSelectionTransform(const Matrix3D &newTransform, bool clearPosit
    {
       Bumper *const f = static_cast<Bumper *>(m_selection.editable);
       const float px = f->m_d.m_vCenter.x, py = f->m_d.m_vCenter.y;
-      f->Translate(Vertex2D(posX - px, posY - py));
+      f->Translate(Vertex2D{posX - px, posY - py});
       break;
    }
    case eItemFlasher:
    {
       Flasher *const p = static_cast<Flasher *>(m_selection.editable);
       const float px = p->m_d.m_vCenter.x, py = p->m_d.m_vCenter.y;
-      p->TranslatePoints(Vertex2D(posX - px, posY - py));
+      p->TranslatePoints(Vertex2D{posX - px, posY - py});
       p->put_Height(posZ);
       p->put_RotX(rotX);
       p->put_RotY(rotY);
@@ -3201,7 +3270,7 @@ void LiveUI::SetSelectionTransform(const Matrix3D &newTransform, bool clearPosit
    {
       Flipper *const f = static_cast<Flipper *>(m_selection.editable);
       const float px = f->m_d.m_Center.x, py = f->m_d.m_Center.y;
-      f->Translate(Vertex2D(posX - px, posY - py));
+      f->Translate(Vertex2D{posX - px, posY - py});
       break;
    }
    case eItemLight:
@@ -3209,7 +3278,7 @@ void LiveUI::SetSelectionTransform(const Matrix3D &newTransform, bool clearPosit
       Light *const l = static_cast<Light *>(m_selection.editable);
       const float height = (m_selection.is_live ? m_live_table : m_table)->GetSurfaceHeight(l->m_d.m_szSurface, l->m_d.m_vCenter.x, l->m_d.m_vCenter.y);
       const float px = l->m_d.m_vCenter.x, py = l->m_d.m_vCenter.y, pz = height + l->m_d.m_height;
-      l->Translate(Vertex2D(posX - px, posY - py));
+      l->Translate(Vertex2D{posX - px, posY - py});
       l->m_d.m_height += posZ - pz;
       l->m_d.m_bulbHaloHeight += posZ - pz;
       break;
@@ -3233,7 +3302,7 @@ void LiveUI::SetSelectionTransform(const Matrix3D &newTransform, bool clearPosit
       Surface *const obj = static_cast<Surface *>(m_selection.editable);
       Vertex2D center = obj->GetPointCenter();
       const float px = center.x, py = center.y, pz = 0.5f * (obj->m_d.m_heightbottom + obj->m_d.m_heighttop);
-      obj->TranslatePoints(Vertex2D(posX - px, posY - py));
+      obj->TranslatePoints(Vertex2D{posX - px, posY - py});
       obj->m_d.m_heightbottom += posZ - pz;
       obj->m_d.m_heighttop += posZ - pz;
       break;
@@ -3245,10 +3314,8 @@ bool LiveUI::IsOutlinerFiltered(const string& name)
 {
    if (m_outlinerFilter.empty())
       return true;
-   string name_lcase = name;
-   StrToLower(name_lcase);
-   string filter_lcase = m_outlinerFilter;
-   StrToLower(filter_lcase);
+   const string name_lcase = lowerCase(name);
+   const string filter_lcase = lowerCase(m_outlinerFilter);
    return name_lcase.find(filter_lcase) != std::string::npos;
 }
 
@@ -3346,60 +3413,59 @@ void LiveUI::UpdateOutlinerUI()
             }
             if (ImGui::TreeNodeEx("Layers", ImGuiTreeNodeFlags_DefaultOpen))
             {
+               // Sort by path (this is heavy but simple, ensuring part groups appear before their children as well as stable alphabetical ordering)
+               vector<IEditable*> editables = table->m_vedit;
+               std::ranges::sort(editables, [](IEditable *a, IEditable *b) { return a->GetPathString(false) < b->GetPathString(false); });
+               // Live objects are the one created at runtime, not parented to any group
                if (is_live && ImGui::TreeNode("Live Objects"))
                {
-                  for (size_t t = 0; t < table->m_vedit.size(); t++)
+                  for (IEditable* edit : editables)
                   {
-                     ISelect *const psel = table->m_vedit[t]->GetISelect();
-                     if (psel != nullptr && psel->m_layerName.empty())
+                     if (edit->GetPartGroup() == nullptr && edit->GetItemType() != eItemPartGroup)
                      {
-                        Selection sel(is_live, table->m_vedit[t]);
-                        if (IsOutlinerFiltered(table->m_vedit[t]->GetName()) && ImGui::Selectable(table->m_vedit[t]->GetName(), m_selection == sel))
+                        Selection sel(is_live, edit);
+                        if (IsOutlinerFiltered(edit->GetName()) && ImGui::Selectable(edit->GetName(), m_selection == sel))
                            m_selection = sel;
                      }
                   }
                   ImGui::TreePop();
                }
-               // Very very inefficient...
-               robin_hood::unordered_map<std::string, vector<IEditable *>> layers;
-               for (size_t t = 0; t < table->m_vedit.size(); t++)
+               // Table definition parts
+               struct Node
                {
-                  ISelect *const psel = table->m_vedit[t]->GetISelect();
-                  if (psel != nullptr)
+                  PartGroup* group;
+                  bool opened;
+               };
+               vector<Node> stack;
+               for (IEditable* edit : editables)
+               {
+                  const PartGroup* parent = edit->GetPartGroup();
+                  if ((parent == nullptr) && (edit->GetItemType() != eItemPartGroup))
+                     continue;
+                  while (!stack.empty() && ((parent == nullptr) || !edit->IsChild(stack.back().group)))
                   {
-                     auto iter = layers.find(psel->m_layerName);
-                     if (iter != layers.end())
-                     {
-                        iter->second.push_back(table->m_vedit[t]);
-                     }
-                     else
-                     {
-                        vector<IEditable *> list;
-                        list.push_back(table->m_vedit[t]);
-                        layers[psel->m_layerName] = list;
-                     }
+                     if (stack.back().opened)
+                        ImGui::TreePop();
+                     stack.pop_back();
+                  }
+                  if (edit->GetItemType() == eItemPartGroup)
+                  {
+                     stack.push_back({
+                        static_cast<PartGroup*>(edit), 
+                        (stack.empty() || stack.back().opened) ? ImGui::TreeNodeEx(edit->GetName(), ImGuiTreeNodeFlags_None) : false});
+                  }
+                  else if (stack.back().opened)
+                  {
+                     Selection sel(is_live, edit);
+                     if (IsOutlinerFiltered(edit->GetName()) && ImGui::Selectable(edit->GetName(), m_selection == sel))
+                        m_selection = sel;
                   }
                }
-               std::vector<std::string> keys;
-               keys.reserve(layers.size());
-               for (auto &it : layers)
-                  keys.push_back(it.first);
-               sort(keys.begin(), keys.end());
-               for (auto &it : keys)
+               while (!stack.empty())
                {
-                  if (it.empty()) // Skip editables without a layer (like live implicit playfield,...)
-                     continue;
-                  if (ImGui::TreeNode(it.c_str()))
-                  {
-                     const std::function<string(IEditable *)> map = [](IEditable *editable) -> string { return editable->GetName(); };
-                     for (IEditable *&editable : SortedCaseInsensitive(layers[it], map))
-                     {
-                        Selection sel(is_live, editable);
-                        if (IsOutlinerFiltered(editable->GetName()) && ImGui::Selectable(editable->GetName(), m_selection == sel))
-                           m_selection = sel;
-                     }
+                  if (stack.back().opened)
                      ImGui::TreePop();
-                  }
+                  stack.pop_back();
                }
                ImGui::TreePop();
             }
@@ -3443,7 +3509,7 @@ void LiveUI::UpdatePropertyUI()
             ImGui::NewLine();
             switch (m_selection.type)
             {
-            case Selection::SelectionType::S_NONE: TableProperties(is_live); break; // Use header tab for live since table is displayed when there si no selection
+            case Selection::SelectionType::S_NONE: TableProperties(is_live); break; // Use header tab for live since table is displayed when there is no selection
             case Selection::SelectionType::S_CAMERA: CameraProperties(is_live); break;
             case Selection::SelectionType::S_MATERIAL: MaterialProperties(is_live); break;
             case Selection::SelectionType::S_RENDERPROBE: RenderProbeProperties(is_live); break;
@@ -3644,7 +3710,7 @@ void LiveUI::UpdateVideoOptionsModal()
                const char *glasses_items[] = { name[0].c_str(),name[1].c_str(),name[2].c_str(),name[3].c_str(),name[4].c_str(),name[5].c_str(),name[6].c_str(),name[7].c_str(),name[8].c_str(),name[9].c_str(), };
                if (ImGui::Combo("Glasses", &glassesIndex, glasses_items, IM_ARRAYSIZE(glasses_items)))
                   modeChanged = true;
-               const string prefKey = "Anaglyph"s.append(std::to_string(glassesIndex + 1));
+               const string prefKey = "Anaglyph" + std::to_string(glassesIndex + 1);
 
                if (ImGui::InputText("Name", &name[glassesIndex]))
                   g_pvp->m_settings.SaveValue(Settings::Player, prefKey + "Name", name[glassesIndex]);
@@ -3723,7 +3789,7 @@ void LiveUI::UpdateAnaglyphCalibrationModal()
    if (ImGui::BeginPopupModal(ID_ANAGLYPH_CALIBRATION, nullptr, (ImGuiWindowFlags_)((int)ImGuiWindowFlags_NoTitleBar | (int)ImGuiNextWindowDataFlags_HasBgAlpha)))
    {
       m_renderer->UpdateStereoShaderState();
-      const string prefKey = "Anaglyph"s.append(std::to_string(glassesIndex + 1));
+      const string prefKey = "Anaglyph" + std::to_string(glassesIndex + 1);
       static int calibrationStep = -1;
       static float calibrationBrightness = 0.5f;
       static const string fields[] = { "LeftRed"s, "LeftGreen"s, "LeftBlue"s, "RightRed"s, "RightGreen"s, "RightBlue"s, };
@@ -3877,7 +3943,7 @@ void LiveUI::UpdatePlumbWindow()
       if (ImGui::Checkbox("Acc. Enabled", &accEnabled))
       {
          g_pvp->m_settings.SaveValue(Settings::Player, "PBWEnabled"s, accEnabled);
-         m_player->ReadAccelerometerCalibration();
+         m_player->m_pininput.ReInit();
       }
       ImGui::BeginDisabled(!accEnabled);
       int accMax[] = { m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "PBWAccelMaxX"s, 100), m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "PBWAccelMaxY"s, 100) };
@@ -3885,20 +3951,20 @@ void LiveUI::UpdatePlumbWindow()
       {
          g_pvp->m_settings.SaveValue(Settings::Player, "PBWAccelMaxX"s, accMax[0]);
          g_pvp->m_settings.SaveValue(Settings::Player, "PBWAccelMaxY"s, accMax[1]);
-         m_player->ReadAccelerometerCalibration();
+         m_player->m_pininput.ReInit();
       }
       int accGain[] = { m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "PBWAccelGainX"s, 150), m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "PBWAccelGainY"s, 150) };
       if (ImGui::InputInt2("Acc. Gain", accGain))
       {
          g_pvp->m_settings.SaveValue(Settings::Player, "PBWAccelGainX"s, accGain[0]);
          g_pvp->m_settings.SaveValue(Settings::Player, "PBWAccelGainY"s, accGain[1]);
-         m_player->ReadAccelerometerCalibration();
+         m_player->m_pininput.ReInit();
       }
       int accSensitivity = m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "NudgeSensitivity"s, 500);
       if (ImGui::InputInt("Acc. Sensitivity", &accSensitivity))
       {
          g_pvp->m_settings.SaveValue(Settings::Player, "NudgeSensitivity"s, accSensitivity);
-         m_player->ReadAccelerometerCalibration();
+         m_player->m_pininput.ReInit();
       }
       bool accOrientationEnabled = m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "PBWRotationCB"s, false); // TODO Legacy stuff => remove and only keep rotation
       int accOrientation = accOrientationEnabled ? m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "PBWRotationValue"s, 500) : 0;
@@ -3906,19 +3972,19 @@ void LiveUI::UpdatePlumbWindow()
       {
          g_pvp->m_settings.SaveValue(Settings::Player, "PBWRotationCB"s, accOrientation != 0);
          g_pvp->m_settings.SaveValue(Settings::Player, "PBWRotationValue"s, accOrientation);
-         m_player->ReadAccelerometerCalibration();
+         m_player->m_pininput.ReInit();
       }
       bool accFaceUp = m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "PBWNormalMount"s, true);
       if (ImGui::Checkbox("Acc. Face Up", &accFaceUp))
       {
          g_pvp->m_settings.SaveValue(Settings::Player, "PBWNormalMount"s, accFaceUp);
-         m_player->ReadAccelerometerCalibration();
+         m_player->m_pininput.ReInit();
       }
       bool accFilter = m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "EnableNudgeFilter"s, false);
       if (ImGui::Checkbox("Acc. Filter", &accFilter))
       {
          g_pvp->m_settings.SaveValue(Settings::Player, "EnableNudgeFilter"s, accFilter);
-         m_player->ReadAccelerometerCalibration();
+         m_player->m_pininput.ReInit();
       }
       ImGui::EndDisabled();
 
@@ -3969,7 +4035,7 @@ void LiveUI::UpdatePlumbWindow()
             const ImVec2 &pos = ImGui::GetWindowPos();
             ImGui::GetWindowDrawList()->AddLine(pos + ImVec2(0.f, halfSize.y), pos + ImVec2(fullSize.x, halfSize.y), IM_COL32_WHITE);
             ImGui::GetWindowDrawList()->AddLine(pos + ImVec2(halfSize.x, 0.f), pos + ImVec2(halfSize.y, fullSize.y), IM_COL32_WHITE);
-            const Vertex2D &acc = m_player->GetRawAccelerometer(); // Range: -1..1
+            const Vertex2D &acc = m_player->m_pininput.GetNudge(); // Range: -1..1
             ImVec2 accPos = pos + halfSize + ImVec2(acc.x, acc.y) * halfSize * 2.f + ImVec2(0.5f, 0.5f);
             ImGui::GetWindowDrawList()->AddCircleFilled(accPos, 5.f * m_dpi, IM_COL32(255, 0, 0, 255));
             ImGui::EndChild();
@@ -4141,7 +4207,7 @@ void LiveUI::UpdateMainSplashModal()
          info << "By " << m_table->m_szAuthor << ", ";
       if (!m_table->m_szVersion.empty())
          info << "Version: " << m_table->m_szVersion;
-      info << " (" << (!m_table->m_szDateSaved.empty() ? m_table->m_szDateSaved : "N.A.") << " Revision " << m_table->m_numTimesSaved << ")\n";
+      info << " (" << (!m_table->m_szDateSaved.empty() ? m_table->m_szDateSaved : "N.A."s) << " Revision " << m_table->m_numTimesSaved << ")\n";
 
       constexpr ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
       ImGui::SetNextWindowBgAlpha(0.5f);
@@ -4170,6 +4236,30 @@ void LiveUI::UpdateMainSplashModal()
       int keyShortcut = 0;
       if (enableKeyboardShortcuts && (ImGui::IsKeyReleased(ImGuiKey_Escape) || ((ImGui::IsKeyReleased(dikToImGuiKeys[m_player->m_rgKeys[eEscape]]) && !m_disable_esc))))
          keyShortcut = m_esc_mode == 0 ? 1 : m_esc_mode;
+
+      // Map action to ImgUI navigation
+      if (m_player)
+      {
+         static PinInput::InputState prevState { 0 };
+         const PinInput::InputState& state = m_player->m_pininput.GetInputState();
+         if (state.IsKeyPressed(eLeftFlipperKey, prevState))
+            ImGui::GetIO().AddKeyEvent(ImGuiKey_UpArrow, true);
+         else if (state.IsKeyReleased(eLeftFlipperKey, prevState))
+            ImGui::GetIO().AddKeyEvent(ImGuiKey_UpArrow, false);
+         if (state.IsKeyPressed(eRightFlipperKey, prevState))
+            ImGui::GetIO().AddKeyEvent(ImGuiKey_DownArrow, true);
+         else if (state.IsKeyReleased(eRightFlipperKey, prevState))
+            ImGui::GetIO().AddKeyEvent(ImGuiKey_DownArrow, false);
+         if (state.IsKeyPressed(eStartGameKey, prevState))
+            ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, true);
+         else if (state.IsKeyReleased(eStartGameKey, prevState))
+            ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false);
+         if (state.IsKeyPressed(ePlungerKey, prevState))
+            ImGui::GetIO().AddKeyEvent(ImGuiKey_Space, true);
+         else if (state.IsKeyReleased(ePlungerKey, prevState))
+            ImGui::GetIO().AddKeyEvent(ImGuiKey_Space, false);
+         prevState = state;
+      }
 
       ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
       if (ImGui::Button("Resume Game", size) || (keyShortcut == 1))
@@ -4244,68 +4334,12 @@ void LiveUI::UpdateMainSplashModal()
          ImGui::GetIO().MousePos.y = 0;
       }
 #endif
-#ifndef __LIBVPINBALL__
-      bool webServerRunning = g_pvp->m_webServer.IsRunning();
-      if (ImGui::Button(webServerRunning ? "Disable Web Server" : "Enable Web Server", size))
-      {
-         g_pvp->m_settings.SaveValue(Settings::Standalone, "WebServer"s, !webServerRunning);
-
-         if (webServerRunning)
-            g_pvp->m_webServer.Stop();
-         else
-            g_pvp->m_webServer.Start();
-
-#if ((defined(__APPLE__) && (defined(TARGET_OS_IOS) && TARGET_OS_IOS)) || defined(__ANDROID__))
-         ImGui::GetIO().MousePos.x = 0;
-         ImGui::GetIO().MousePos.y = 0;
-#endif
-      }
-#endif
-
       if (ImGui::Button("Quit", size) || (enableKeyboardShortcuts && ImGui::IsKeyPressed(dikToImGuiKeys[m_player->m_rgKeys[eExitGame]])))
       {
          ImGui::CloseCurrentPopup();
          HideUI();
          m_table->QuitPlayer(Player::CS_CLOSE_APP);
       }
-
-#if (defined(__APPLE__) && ((defined(TARGET_OS_IOS) && TARGET_OS_IOS && !defined(__LIBVPINBALL__)) || (defined(TARGET_OS_TV) && TARGET_OS_TV))) || defined(__ANDROID__)
-      ImGui::Dummy(ImVec2(0.f, m_dpi * 4.f));
-      ImGui::Separator();
-      ImGui::Dummy(ImVec2(0.f, m_dpi * 4.f));
-      ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ((ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Launch Table:").x) * 0.5f));
-      ImGui::Text("Launch Table:");
-
-      ImGui::PushItemWidth(size.x);
-
-      const string launchTable = g_pvp->m_settings.LoadValueWithDefault(Settings::Standalone, "LaunchTable"s, "assets/exampleTable.vpx"s);
-      if (ImGui::BeginCombo("##Launch Table", launchTable.c_str()))
-      {
-         vector<string> files = find_files_by_extension(g_pvp->m_szMyPrefPath, "vpx"s);
-
-         for (const auto& file : files) {
-            if (ImGui::Selectable(file.c_str()))
-               g_pvp->m_settings.SaveValue(Settings::Standalone, "LaunchTable"s, file);
-         }
-
-         ImGui::EndCombo();
-      }
-
-      ImGui::PopItemWidth();
-#endif
-
-#ifndef __LIBVPINBALL__
-      string url = g_pvp->m_webServer.GetUrl();
-      if (!url.empty())
-      {
-         ImGui::Dummy(ImVec2(0.f, m_dpi * 4.f));
-         ImGui::Separator();
-         ImGui::Dummy(ImVec2(0.f, m_dpi * 4.f));
-         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ((ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(url.c_str()).x) * 0.5f));
-         ImGui::Text("%s", url.c_str());
-      }
-#endif
-
 #endif
       const ImVec2 pos = ImGui::GetWindowPos();
       ImVec2 max = ImGui::GetWindowSize();
@@ -4686,7 +4720,7 @@ void LiveUI::FlasherProperties(bool is_live, Flasher *startup_obj, Flasher *live
       }
       else if (flasher->m_d.m_renderMode == FlasherData::DMD)
       {
-         static const string renderStyles[] = { "Legacy VPX", "Neon Plasma", "Red LED", "Green LED", "Yellow LED", "Generic Plasma", "Generic LED" };
+         static const string renderStyles[] = { "Legacy VPX"s, "Neon Plasma"s, "Red LED"s, "Green LED"s, "Yellow LED"s, "Generic Plasma"s, "Generic LED"s };
          PropCombo("Render Style", m_table, is_live, startup_obj ? &(startup_obj->m_d.m_renderStyle) : nullptr, live_obj ? &(live_obj->m_d.m_renderStyle) : nullptr, std::size(renderStyles), renderStyles);
          // Missing source
          PropImageCombo("Glass", startup_obj, is_live, startup_obj ? &(startup_obj->m_d.m_szImageA) : nullptr, live_obj ? &(live_obj->m_d.m_szImageA) : nullptr, m_table);
@@ -4699,7 +4733,7 @@ void LiveUI::FlasherProperties(bool is_live, Flasher *startup_obj, Flasher *live
       }
       else if (flasher->m_d.m_renderMode == FlasherData::DISPLAY)
       {
-         static const string renderStyles[] = { "Pixelated", "Smoothed" };
+         static const string renderStyles[] = { "Pixelated"s, "Smoothed"s };
          PropCombo("Render Mode", m_table, is_live, startup_obj ? &(startup_obj->m_d.m_renderStyle) : nullptr, live_obj ? &(live_obj->m_d.m_renderStyle) : nullptr, std::size(renderStyles), renderStyles);
          // Missing source
       }
@@ -5203,7 +5237,7 @@ void LiveUI::PropVec3(const char *label, IEditable *undo_obj, bool is_live, Vert
       v->Set(col[0], col[1], col[2]);
       if (chg_callback)
       {
-         vec3 v1(prev_v.x, prev_v.y, prev_v.z), v2(v->x, v->y, v->z);
+         vec3 v1{prev_v.x, prev_v.y, prev_v.z}, v2{v->x, v->y, v->z};
          chg_callback(is_live, v1, v2);
       }
       if (!is_live)

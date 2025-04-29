@@ -4,16 +4,16 @@
 
 #include "core/TableDB.h"
 
-class DimensionDialog : public CDialog
+class DimensionDialog final : public CDialog
 {
 public:
    DimensionDialog();
 
 protected:
-   virtual BOOL OnInitDialog();
-   virtual INT_PTR DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam);
-   virtual BOOL OnCommand(WPARAM wParam, LPARAM lParam);
-   virtual LRESULT OnNotify(WPARAM wparam, LPARAM lparam);
+   BOOL OnInitDialog() override;
+   INT_PTR DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam) override;
+   BOOL OnCommand(WPARAM wParam, LPARAM lParam) override;
+   LRESULT OnNotify(WPARAM wparam, LPARAM lparam) override;
 
 private:
    void UpdateApplyState();

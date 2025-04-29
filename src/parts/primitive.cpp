@@ -192,34 +192,6 @@ void Mesh::UpdateBounds()
 
 Primitive::Primitive()
 {
-   m_meshBuffer = nullptr;
-   m_vertexBufferRegenerate = true;
-   m_d.m_use3DMesh = false;
-   m_d.m_staticRendering = false;
-   m_d.m_edgeFactorUI = 0.25f;
-   m_d.m_collision_reductionFactor = 0.f;
-   m_d.m_depthBias = 0.0f;
-   m_d.m_reflectionEnabled = true;
-   m_numGroupIndices = 0;
-   m_numGroupVertices = 0;
-   m_currentFrame = -1.f;
-   m_lockedByLS = false;
-
-   m_speed = 0.0f;
-   m_ptable = nullptr;
-   m_inPlayState = false;
-   m_endless = false;
-   m_doAnimation = false;
-   m_compressedVertices = false;
-   m_compressedIndices = false;
-   m_compressedAnimationVertices = false;
-
-   m_numIndices = 0;
-   m_numVertices = 0;
-   m_propPosition = nullptr;
-   m_propVisual = nullptr;
-   m_d.m_overwritePhysics = true;
-   m_d.m_useAsPlayfield = false;
 }
 
 Primitive::~Primitive()
@@ -249,7 +221,6 @@ void Primitive::SetDefaults(const bool fromMouseClick)
 {
 #define strKeyName Settings::DefaultPropsPrimitive
 
-   m_d.m_useAsPlayfield = false;
    m_d.m_use3DMesh = false;
 
    m_d.m_meshFileName.clear();
@@ -376,7 +347,7 @@ void Primitive::WriteRegDefaults()
 
 void Primitive::PhysicSetup(PhysicsEngine* physics, const bool isUI)
 {
-   m_d.m_useAsPlayfield = IsPlayfield();
+   m_useAsPlayfield = IsPlayfield();
 
    //
 
@@ -430,7 +401,7 @@ void Primitive::PhysicSetup(PhysicsEngine* physics, const bool isUI)
 
       //
 
-      robin_hood::unordered_set<robin_hood::pair<unsigned, unsigned>> addedEdges;
+      ankerl::unordered_dense::set<std::pair<unsigned, unsigned>> addedEdges;
 
       // add collision triangles and edges
       for (size_t i = 0; i < prog_new_indices.size(); ++i)
@@ -450,7 +421,11 @@ void Primitive::PhysicSetup(PhysicsEngine* physics, const bool isUI)
          rgv3D[2].x = prog_vertices[i1].x;
          rgv3D[2].y = prog_vertices[i1].y;
          rgv3D[2].z = prog_vertices[i1].z;
-         SetupHitObject(physics, new HitTriangle(this, rgv3D), isUI);
+         HitTriangle* ht = new HitTriangle(this, rgv3D);
+         if (ht->IsDegenerate())
+            delete ht;
+         else
+            SetupHitObject(physics, ht, isUI);
 
          AddHitEdge(physics, addedEdges, i0, i1, rgv3D[0], rgv3D[2], isUI);
          AddHitEdge(physics, addedEdges, i1, i2, rgv3D[2], rgv3D[1], isUI);
@@ -466,7 +441,7 @@ void Primitive::PhysicSetup(PhysicsEngine* physics, const bool isUI)
    }
    else
    {
-      robin_hood::unordered_set<robin_hood::pair<unsigned, unsigned>> addedEdges;
+      ankerl::unordered_dense::set<std::pair<unsigned, unsigned>> addedEdges;
 
       // add collision triangles and edges
       for (size_t i = 0; i < m_mesh.NumIndices(); i += 3)
@@ -506,10 +481,10 @@ void Primitive::PhysicRelease(PhysicsEngine* physics, const bool isUI)
 
 // Ported at: VisualPinball.Engine/Math/EdgeSet.cs
 
-void Primitive::AddHitEdge(PhysicsEngine* physics, robin_hood::unordered_set< robin_hood::pair<unsigned, unsigned> >& addedEdges, const unsigned i, const unsigned j, const Vertex3Ds &vi, const Vertex3Ds &vj, const bool isUI)
+void Primitive::AddHitEdge(PhysicsEngine* physics, ankerl::unordered_dense::set< std::pair<unsigned, unsigned> >& addedEdges, const unsigned i, const unsigned j, const Vertex3Ds &vi, const Vertex3Ds &vj, const bool isUI)
 {
    // create pair uniquely identifying the edge (i,j)
-   const robin_hood::pair<unsigned, unsigned> p(std::min(i, j), std::max(i, j));
+   const std::pair<unsigned, unsigned> p(std::min(i, j), std::max(i, j));
    if (!isUI && addedEdges.insert(p).second) // edge not yet added?
       SetupHitObject(physics, new HitLine3D(this, vi, vj), isUI);
 }
@@ -517,7 +492,7 @@ void Primitive::AddHitEdge(PhysicsEngine* physics, robin_hood::unordered_set< ro
 void Primitive::SetupHitObject(PhysicsEngine* physics, HitObject *obj, const bool isUI)
 {
    const Material * const mat = m_ptable->GetMaterial(m_d.m_szPhysicsMaterial);
-   if (m_d.m_useAsPlayfield)
+   if (m_useAsPlayfield)
    {
       obj->SetFriction(m_ptable->m_overridePhysics ? m_ptable->m_fOverrideContactFriction : m_ptable->m_friction);
       obj->m_elasticity = m_ptable->m_overridePhysics ? m_ptable->m_fOverrideElasticity : m_ptable->m_elasticity;
@@ -656,18 +631,18 @@ void Primitive::UIRenderPass2(Sur * const psur)
             const float Cn = m_normals[m_mesh.m_indices[i + 2]];
             if (fabsf(An + Bn) < m_d.m_edgeFactorUI)
             {
-               drawVertices.push_back({A->x, A->y});
-               drawVertices.push_back({B->x, B->y});
+               drawVertices.emplace_back(A->x, A->y);
+               drawVertices.emplace_back(B->x, B->y);
             }
             if (fabsf(Bn + Cn) < m_d.m_edgeFactorUI)
             {
-               drawVertices.push_back({B->x, B->y});
-               drawVertices.push_back({C->x, C->y});
+               drawVertices.emplace_back(B->x, B->y);
+               drawVertices.emplace_back(C->x, C->y);
             }
             if (fabsf(Cn + An) < m_d.m_edgeFactorUI)
             {
-               drawVertices.push_back({C->x, C->y});
-               drawVertices.push_back({A->x, A->y});
+               drawVertices.emplace_back(C->x, C->y);
+               drawVertices.emplace_back(A->x, A->y);
             }
          }
 
@@ -785,18 +760,18 @@ void Primitive::RenderBlueprint(Sur *psur, const bool solid)
          const float Cn = m_normals[m_mesh.m_indices[i + 2]];
          if (fabsf(An + Bn) < m_d.m_edgeFactorUI)
          {
-            drawVertices.push_back({A->x, A->y});
-            drawVertices.push_back({B->x, B->y});
+            drawVertices.emplace_back(A->x, A->y);
+            drawVertices.emplace_back(B->x, B->y);
          }
          if (fabsf(Bn + Cn) < m_d.m_edgeFactorUI)
          {
-            drawVertices.push_back({B->x, B->y});
-            drawVertices.push_back({C->x, C->y});
+            drawVertices.emplace_back(B->x, B->y);
+            drawVertices.emplace_back(C->x, C->y);
          }
          if (fabsf(Cn + An) < m_d.m_edgeFactorUI)
          {
-            drawVertices.push_back({C->x, C->y});
-            drawVertices.push_back({A->x, A->y});
+            drawVertices.emplace_back(C->x, C->y);
+            drawVertices.emplace_back(A->x, A->y);
          }
       }
 
@@ -819,14 +794,14 @@ void Primitive::GetBoundingVertices(vector<Vertex3Ds> &bounds, vector<Vertex3Ds>
       {
          const Vertex3Ds minBound = m_fullMatrix.MultiplyVectorNoPerspective(m_mesh.m_minAABound);
          const Vertex3Ds maxBound = m_fullMatrix.MultiplyVectorNoPerspective(m_mesh.m_maxAABound);
-         bounds.push_back({minBound.x, minBound.y, minBound.z});
-         bounds.push_back({minBound.x, minBound.y, maxBound.z});
-         bounds.push_back({minBound.x, maxBound.y, minBound.z});
-         bounds.push_back({minBound.x, maxBound.y, maxBound.z});
-         bounds.push_back({maxBound.x, minBound.y, minBound.z});
-         bounds.push_back({maxBound.x, minBound.y, maxBound.z});
-         bounds.push_back({maxBound.x, maxBound.y, minBound.z});
-         bounds.push_back({maxBound.x, maxBound.y, maxBound.z});
+         bounds.emplace_back(minBound.x, minBound.y, minBound.z);
+         bounds.emplace_back(minBound.x, minBound.y, maxBound.z);
+         bounds.emplace_back(minBound.x, maxBound.y, minBound.z);
+         bounds.emplace_back(minBound.x, maxBound.y, maxBound.z);
+         bounds.emplace_back(maxBound.x, minBound.y, minBound.z);
+         bounds.emplace_back(maxBound.x, minBound.y, maxBound.z);
+         bounds.emplace_back(maxBound.x, maxBound.y, minBound.z);
+         bounds.emplace_back(maxBound.x, maxBound.y, maxBound.z);
       }
    }
 }
@@ -1082,7 +1057,7 @@ void Primitive::RenderSetup(RenderDevice *device)
    // Check if we are part of a group, and if so if we are a child or the base
    m_groupdRendering = false;
    m_skipRendering = false;
-   for (auto collection : m_vCollection)
+   for (const auto collection : m_vCollection)
    {
       if (!collection->m_groupElements)
          continue;
@@ -1091,7 +1066,7 @@ void Primitive::RenderSetup(RenderDevice *device)
       // this element gets rendered by rendering all other group primitives
       // the rest of the group is marked as skipped rendering
       const Material * groupMaterial = nullptr;
-      const Texture *groupTexel = nullptr;
+      const Texture * groupTexel = nullptr;
       size_t overall_size = 0;
       bool partOfGroup = false;
       vector<Primitive *> prims;
@@ -1189,7 +1164,7 @@ void Primitive::RenderSetup(RenderDevice *device)
    m_lightmap = m_ptable->GetLight(m_d.m_szLightmap);
 
    m_currentFrame = -1.f;
-   m_d.m_isBackGlassImage = IsBackglass();
+   m_isBackGlassImage = IsBackglass();
 
    VertexBuffer *vertexBuffer = new VertexBuffer(m_rd, (unsigned int)m_mesh.NumVertices(), nullptr, !(m_d.m_staticRendering || m_mesh.m_animationFrames.empty()));
    IndexBuffer *indexBuffer = new IndexBuffer(m_rd, m_mesh.m_indices);
@@ -1213,6 +1188,7 @@ void Primitive::RenderRelease()
 void Primitive::Render(const unsigned int renderMask)
 {
    assert(m_rd != nullptr);
+   assert(!m_backglass);
 
    if (!m_d.m_visible || m_skipRendering)
       return;
@@ -1224,7 +1200,7 @@ void Primitive::Render(const unsigned int renderMask)
 
    // Update playfield primitive settings from table settings
    SamplerFilter pinf = SF_UNDEFINED; // Use the default filtering of the sampler (trilinear or anisotropic, depending on user choice)
-   if (m_d.m_useAsPlayfield)
+   if (m_useAsPlayfield)
    {
       m_d.m_szMaterial = g_pplayer->m_ptable->m_playfieldMaterial;
       m_d.m_szImage = g_pplayer->m_ptable->m_image;
@@ -1248,7 +1224,7 @@ void Primitive::Render(const unsigned int renderMask)
    if (m_lockedByLS && !m_inPlayState)
       return;
    
-   // only render if we have dynamic reflections to render above the staticly prerendered primitive
+   // only render if we have dynamic reflections to render above the statically prerendered primitive
    RenderTarget *const reflections = reflection_probe ? reflection_probe->Render(renderMask) : nullptr;
    if (isDynamicOnly && m_d.m_staticRendering && (reflections == nullptr))
       return; 
@@ -1300,7 +1276,7 @@ void Primitive::Render(const unsigned int renderMask)
    Texture * const nMap = m_ptable->GetImage(m_d.m_szNormalMap);
    BaseTexture *pin = nullptr;
    float pinAlphaTest = -1.f;
-   if (g_pplayer->m_texPUP && m_d.m_isBackGlassImage)
+   if (g_pplayer->m_texPUP && m_isBackGlassImage)
    {
       pin = g_pplayer->m_texPUP;
       m_rd->m_basicShader->SetAlphaTestValue(0.f);
@@ -1967,8 +1943,7 @@ INT_PTR CALLBACK Primitive::ObjImportProc(HWND hwndDlg, UINT uMsg, WPARAM wParam
                if (ReplaceExtensionFromFilename(szMatName, "mtl"s))
                {
                   Material * const mat = new Material();
-                  ObjLoader loader;
-                  if (loader.LoadMaterial(szMatName, mat))
+                  if (ObjLoader::LoadMaterial(szMatName, mat))
                   {
                      CComObject<PinTable> * const pActiveTable = g_pvp->GetActiveTable();
                      if (pActiveTable)

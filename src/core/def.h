@@ -186,13 +186,13 @@ class Vertex3D_TexelOnly final // for rendering, uses VF_POS_TEX
 {
 public:
    // Position
-   D3DVALUE x;
-   D3DVALUE y;
-   D3DVALUE z;
+   float x;
+   float y;
+   float z;
 
    // Texture coordinates
-   D3DVALUE tu;
-   D3DVALUE tv;
+   float tu;
+   float tv;
 };
 
 
@@ -201,18 +201,18 @@ class Vertex3D_NoTex2 final // for rendering, uses VF_POS_NORMAL_TEX
 {
 public:
    // Position
-   D3DVALUE x;
-   D3DVALUE y;
-   D3DVALUE z;
+   float x;
+   float y;
+   float z;
 
    // Normals
-   D3DVALUE nx;
-   D3DVALUE ny;
-   D3DVALUE nz;
+   float nx;
+   float ny;
+   float nz;
 
    // Texture coordinates (0)
-   D3DVALUE tu;
-   D3DVALUE tv;
+   float tu;
+   float tv;
 };
 
 class LocalString final
@@ -248,7 +248,7 @@ public:
 
 static const string platform_cpu[2] = { "x86"s, "arm"s };
 static const string platform_bits[2] = { "32"s, "64"s };
-static const string platform_os[6] = { "windows"s, "linux"s, "ios"s, "tvos"s, "macos"s, "android"s };
+static const string platform_os[6] = { "windows"s, "android"s, "linux"s, "ios"s, "tvos"s, "macos"s };
 static const string platform_renderer[2] = { "dx"s, "gl"s }; // gles necessary, too?
 
 #if defined(_M_IX86) || defined(_M_X64) || defined(_M_AMD64) || defined(__i386__) || defined(__i386) || defined(__i486__) || defined(__i486) || defined(i386) || defined(__ia64__) || defined(__x86_64__)
@@ -270,23 +270,23 @@ static const string platform_renderer[2] = { "dx"s, "gl"s }; // gles necessary, 
 #ifdef _MSC_VER
  #define GET_PLATFORM_OS_ENUM 0
  #define GET_PLATFORM_OS "windows"
-#elif (defined(__linux) || defined(__linux__))
+#elif defined(__ANDROID__) // leave here, as it also defines linux
  #define GET_PLATFORM_OS_ENUM 1
+ #define GET_PLATFORM_OS "android"
+#elif (defined(__linux) || defined(__linux__))
+ #define GET_PLATFORM_OS_ENUM 2
  #define GET_PLATFORM_OS "linux"
 #elif defined(__APPLE__)
 #if defined(TARGET_OS_IOS) && TARGET_OS_IOS
- #define GET_PLATFORM_OS_ENUM 2
+ #define GET_PLATFORM_OS_ENUM 3
  #define GET_PLATFORM_OS "ios"
 #elif defined(TARGET_OS_TV) && TARGET_OS_TV
- #define GET_PLATFORM_OS_ENUM 3
+ #define GET_PLATFORM_OS_ENUM 4
  #define GET_PLATFORM_OS "tvos"
 #else
- #define GET_PLATFORM_OS_ENUM 4
+ #define GET_PLATFORM_OS_ENUM 5
  #define GET_PLATFORM_OS "macos"
 #endif
-#elif defined(__ANDROID__)
- #define GET_PLATFORM_OS_ENUM 5
- #define GET_PLATFORM_OS "android" 
 #endif
 
 #if defined(ENABLE_BGFX)
@@ -581,8 +581,8 @@ constexpr __forceinline float millimetersToVPUnits(const float value)
    // return value * (float)(1.0 / 0.540425);
 }
 
-float sz2f(const string& sz);
-string f2sz(const float f);
+float sz2f(string sz, const bool force_convert_decimal_point = false);
+string f2sz(const float f, const bool can_convert_decimal_point = true);
 
 void WideStrNCopy(const WCHAR* wzin, WCHAR* wzout, const size_t wzoutMaxLen);
 int WideStrCmp(const WCHAR* wz1, const WCHAR* wz2);
@@ -710,11 +710,28 @@ CONSTEXPR inline void StrToLower(string& str)
    std::ranges::transform(str.begin(), str.end(), str.begin(), cLower);
 }
 
+CONSTEXPR inline void StrToUpper(string& str)
+{
+   std::ranges::transform(str.begin(), str.end(), str.begin(), cUpper);
+}
+
 inline bool StrCompareNoCase(const string& strA, const string& strB)
 {
    return strA.length() == strB.length()
-      && std::equal(strA.begin(), strA.end(), strB.begin(), 
+      && std::equal(strA.begin(), strA.end(), strB.begin(),
          [](char a, char b) { return cLower(a) == cLower(b); });
+}
+
+CONSTEXPR inline string lowerCase(string input)
+{
+   StrToLower(input);
+   return input;
+}
+
+CONSTEXPR inline string upperCase(string input)
+{
+   StrToUpper(input);
+   return input;
 }
 
 /**
@@ -726,15 +743,11 @@ bool IsWindows10_1803orAbove();
 
 #include "renderer/typedefs3D.h"
 
-#include <filesystem>
-#include <fstream>
-
 void copy_folder(const string& srcPath, const string& dstPath);
-vector<string> find_files_by_extension(const string& directoryPath, const string& extension);
-string find_path_case_insensitive(const string& szPath);
-string find_directory_case_insensitive(const std::string& szParentPath, const std::string& szDirName);
-string extension_from_path(const string& path);
 string normalize_path_separators(const string& szPath);
+string find_case_insensitive_file_path(const string& szPath);
+string find_case_insensitive_directory_path(const string& szPath);
+string extension_from_path(const string& path);
 bool path_has_extension(const string& path, const string& extension);
 bool try_parse_int(const string& str, int& value);
 bool try_parse_float(const string& str, float& value);
@@ -746,9 +759,7 @@ string trim_string(const string& str);
 vector<string> parse_csv_line(const string& line);
 string color_to_hex(OLE_COLOR color);
 bool string_contains_case_insensitive(const string& str1, const string& str2);
-bool string_compare_case_insensitive(const string& str1, const string& str2);
-bool string_starts_with_case_insensitive(const std::string& str, const std::string& prefix);
-string string_to_lower(string str);
+bool string_starts_with_case_insensitive(const string& str, const string& prefix);
 string string_replace_all(const string& szStr, const string& szFrom, const string& szTo, const size_t offs = 0);
 string create_hex_dump(const UINT8* buffer, size_t size);
 vector<unsigned char> base64_decode(const string &encoded_string);

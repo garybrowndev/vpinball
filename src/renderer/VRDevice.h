@@ -14,23 +14,48 @@ public:
    VRDevice();
    ~VRDevice();
 
-   int GetEyeWidth() const { return m_eyeWidth; }
-   int GetEyeHeight() const { return m_eyeHeight; }
-   void UpdateVRPosition(ModelViewProj& mvp);
+   unsigned int GetEyeWidth() const { return m_eyeWidth; }
+   unsigned int GetEyeHeight() const { return m_eyeHeight; }
+   
+   float GetLockbarWidth() const { return m_lockbarWidth; }
+   void SetLockbarWidth(float width) { m_lockbarWidth = width; m_worldDirty = true; }
 
-   void TableUp();
-   void TableDown();
    void RecenterTable();
+   float GetSceneOrientation() const { return m_orientation; }
+   const Vertex3Ds& GetSceneOffset() const { return m_tablePos; }
+   void SetSceneOrientation(float orientation) { m_orientation = orientation; m_worldDirty = true; }
+   void SetSceneOffset(const Vertex3Ds& pos) { m_tablePos = pos; m_worldDirty = true; }
    void SaveVRSettings(Settings& settings) const;
 
+   void UpdateVRPosition(PartGroupData::SpaceReference spaceRef, ModelViewProj& mvp);
+
+#ifndef ENABLE_XR
+   float GetPredictedDisplayDelayInS() const { return 0.f; } // Unsupported as OpenVR is planned for deprecation and removal
+#endif
+
 private:
-   int m_eyeWidth = 1080;
-   int m_eyeHeight = 1020;
-   float m_slope, m_orientation, m_tablex, m_tabley, m_tablez;
-   Matrix3D m_vrMatView;
-   Matrix3D m_vrMatProj[2];
-   Matrix3D m_tableWorld;
-   bool m_tableWorldDirty = true;
+   unsigned int m_eyeWidth = 1080;
+   unsigned int m_eyeHeight = 1020;
+   
+   float m_scale = 1.0f;
+   float m_lockbarWidth = 0.0f;
+   float m_orientation = 0.0f;
+   Vertex3Ds m_tablePos;
+   float m_slope = 0.0f;
+   
+   bool m_worldDirty = true;
+   Matrix3D m_pfWorld;
+   Matrix3D m_pfMatView;
+   Matrix3D m_pfMatProj[2];
+   Matrix3D m_cabWorld;
+   Matrix3D m_cabMatView;
+   Matrix3D m_cabMatProj[2];
+   Matrix3D m_feetWorld;
+   Matrix3D m_feetMatView;
+   Matrix3D m_feetMatProj[2];
+   Matrix3D m_roomWorld;
+   Matrix3D m_roomMatView;
+   Matrix3D m_roomMatProj[2];
 
 #ifdef ENABLE_VR
 public:
@@ -38,9 +63,10 @@ public:
    static bool IsVRturnedOn();
    bool IsVRReady() const;
    void SubmitFrame(Sampler* leftEye, Sampler* rightEye);
+   void TableUp();
+   void TableDown();
 
 private:
-   float m_scale = 1.0f;
    static vr::IVRSystem* m_pHMD;
    vr::TrackedDevicePose_t m_hmdPosition;
    vr::TrackedDevicePose_t* m_rTrackedDevicePose = nullptr;
@@ -63,7 +89,9 @@ public:
    void DiscardVisibilityMask() { delete m_visibilityMask; m_visibilityMask = nullptr; }
    MeshBuffer* GetVisibilityMask() const { return m_visibilityMask; }
 
-   Matrix3D m_visibilityMaskProj[2];
+   float GetPredictedDisplayDelayInS() const { return m_predictedDisplayDelayInS; }
+
+   Matrix3D* GetVisibilityMaskProjs() { return &m_nextProj[0]; }
 
    enum class SwapchainType : uint8_t
    {
@@ -110,7 +138,7 @@ private:
    std::vector<XrEnvironmentBlendMode> m_environmentBlendModes = {};
    XrEnvironmentBlendMode m_environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_MAX_ENUM;
 
-   XrSpace m_localSpace = XR_NULL_HANDLE;
+   XrSpace m_referenceSpace = XR_NULL_HANDLE;
    struct RenderLayerInfo
    {
       XrTime predictedDisplayTime = 0;
@@ -119,11 +147,16 @@ private:
       std::vector<XrCompositionLayerProjectionView> layerProjectionViews;
       std::vector<XrCompositionLayerDepthInfoKHR> depthInfoViews;
    };
-   static Matrix3D XRPoseToMatrix3D(const XrPosef& pose);
 
    bool m_depthExtensionSupported = false;
 
    bool m_colorSpaceExtensionSupported = false;
+
+   bool m_win32PerfCounterExtensionSupported = false;
+   float m_predictedDisplayDelayInS = 0.f;
+   Matrix3D m_nextMedianView;
+   Matrix3D m_nextView[2];
+   Matrix3D m_nextProj[2];
 
    bool m_debugUtilsExtensionSupported = false;
    XrDebugUtilsMessengerEXT m_debugUtilsMessenger = XR_NULL_HANDLE;
@@ -136,6 +169,8 @@ private:
 
    class XRGraphicBackend* m_backend = nullptr;
 
+   bool m_recenterTable = false;
    float m_sceneSize = 0.f;
+   Vertex3Ds m_sceneOffset = {};
 #endif
 };

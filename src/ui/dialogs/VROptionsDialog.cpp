@@ -246,6 +246,21 @@ static char rgszKeyName[][10] = {
    "Apps Menu", //DIK_APPS            0xDD    /* AppMenu key */
 };
 
+static int GetNextKey()
+{
+   for (unsigned int i = 0; i < 0xFF; ++i)
+   {
+      const SHORT keyState = GetAsyncKeyState(i);
+      if (keyState & 1)
+      {
+         const unsigned int dik = get_dik(i);
+         if (dik != ~0u)
+            return dik;
+      }
+   }
+   return 0;
+}
+
 class KeyWindowStruct
 {
 public:
@@ -294,13 +309,11 @@ void VROptionsDialog::AddToolTip(const char * const text, HWND parentHwnd, HWND 
    toolInfo.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
    toolInfo.uId = (UINT_PTR)controlHwnd;
    toolInfo.lpszText = (char*)text;
-   SendMessage(toolTipHwnd, TTM_ADDTOOL, 0, (LPARAM)&toolInfo);
+   ::SendMessage(toolTipHwnd, TTM_ADDTOOL, 0, (LPARAM)&toolInfo);
 }
 
 void VROptionsDialog::ResetVideoPreferences()
 {
-   char tmp[256];
-
    SendDlgItemMessage(IDC_VR_PREVIEW, CB_SETCURSEL, VRPREVIEW_LEFT, 0);
 
    constexpr bool scaleToFixedWidth = false;
@@ -310,32 +323,15 @@ void VROptionsDialog::ResetVideoPreferences()
    scaleRelative = 1.0f;
    scaleAbsolute = 55.0f;
 
-   sprintf_s(tmp, sizeof(tmp), scaleToFixedWidth ? "%0.1f" : "%0.3f", scaleToFixedWidth ? scaleAbsolute : scaleRelative);
-   SetDlgItemText(IDC_VR_SCALE, tmp);
+   SetDlgItemText(IDC_VR_SCALE, f2sz(scaleToFixedWidth ? scaleAbsolute : scaleRelative).c_str());
 
-   constexpr float vrNearPlane = 5.0f;
-   sprintf_s(tmp, sizeof(tmp), "%0.1f", vrNearPlane);
-   SetDlgItemText(IDC_NEAR_PLANE, tmp);
+   SetDlgItemText(IDC_NEAR_PLANE, f2sz(5.0f).c_str());
+   SetDlgItemText(IDC_VR_SLOPE, f2sz(6.5f).c_str());
 
-   constexpr float vrSlope = 6.5f;
-   sprintf_s(tmp, sizeof(tmp), "%0.1f", vrSlope);
-   SetDlgItemText(IDC_VR_SLOPE, tmp);
-
-   constexpr float vrOrientation = 0.0f;
-   sprintf_s(tmp, sizeof(tmp), "%0.1f", vrOrientation);
-   SetDlgItemText(IDC_3D_VR_ORIENTATION, tmp);
-
-   constexpr float vrX = 0.0f;
-   sprintf_s(tmp, sizeof(tmp), "%0.1f", vrX);
-   SetDlgItemText(IDC_VR_OFFSET_X, tmp);
-
-   constexpr float vrY = 0.0f;
-   sprintf_s(tmp, sizeof(tmp), "%0.1f", vrY);
-   SetDlgItemText(IDC_VR_OFFSET_Y, tmp);
-
-   constexpr float vrZ = 80.0f;
-   sprintf_s(tmp, sizeof(tmp), "%0.1f", vrZ);
-   SetDlgItemText(IDC_VR_OFFSET_Z, tmp);
+   SetDlgItemText(IDC_3D_VR_ORIENTATION, f2sz(0.0f).c_str());
+   SetDlgItemText(IDC_VR_OFFSET_X, f2sz(0.0f).c_str());
+   SetDlgItemText(IDC_VR_OFFSET_Y, f2sz(0.0f).c_str());
+   SetDlgItemText(IDC_VR_OFFSET_Z, f2sz(80.0f).c_str());
 
    SendDlgItemMessage(IDC_TURN_VR_ON, CB_SETCURSEL, 1, 0);
 
@@ -354,7 +350,7 @@ BOOL VROptionsDialog::OnInitDialog()
    const HWND toolTipHwnd = CreateWindowEx(NULL, TOOLTIPS_CLASS, NULL, WS_POPUP | TTS_ALWAYSTIP | TTS_BALLOON, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, hwndDlg, NULL, g_pvp->theInstance, NULL);
    if (toolTipHwnd)
    {
-      SendMessage(toolTipHwnd, TTM_SETMAXTIPWIDTH, 0, 180);
+      ::SendMessage(toolTipHwnd, TTM_SETMAXTIPWIDTH, 0, 180);
       AddToolTip("Disable VR auto-detection, e.g. if Visual Pinball refuses to start up.", hwndDlg, toolTipHwnd, GetDlgItem(IDC_TURN_VR_ON).GetHwnd());
       AddToolTip("What sources should be used for DMD?\nOnly internally supplied via Script/Text Label/Flasher\nScreenreader (see screenreader.ini)\nFrom Shared Memory API", hwndDlg, toolTipHwnd, GetDlgItem(IDC_DMD_SOURCE).GetHwnd());
       AddToolTip("What sources should be used for Backglass?\nOnly internal background\nTry to open a directb2s file\ndirectb2s file dialog\nScreenreader (see screenreader.ini)\nFrom Shared Memory API", hwndDlg, toolTipHwnd, GetDlgItem(IDC_BG_SOURCE).GetHwnd());
@@ -364,28 +360,54 @@ BOOL VROptionsDialog::OnInitDialog()
       AddToolTip("Attempt to capture the PUP player window and display it as a Backglass in VR.", hwndDlg, toolTipHwnd, GetDlgItem(IDC_CAP_PUP).GetHwnd());
    }
 
-   char tmp[256];
+   #ifdef ENABLE_XR
+      ::ShowWindow(GetDlgItem(IDC_SCALE_TO_CM).GetHwnd(), SW_HIDE); // OpenXR always use fixed scale to real world lockbar width
+      ::ShowWindow(GetDlgItem(IDC_VR_SCALE_LABEL).GetHwnd(), SW_HIDE);
+      ::ShowWindow(GetDlgItem(IDC_VR_SCALE).GetHwnd(), SW_HIDE);
+
+      ::ShowWindow(GetDlgItem(IDC_STATIC1).GetHwnd(), SW_HIDE); // No performance/hack option for the time being
+      ::ShowWindow(GetDlgItem(IDC_STATIC2).GetHwnd(), SW_HIDE);
+      ::ShowWindow(GetDlgItem(IDC_COMBO_TEXTURE).GetHwnd(), SW_HIDE);
+      ::ShowWindow(GetDlgItem(IDC_STATIC3).GetHwnd(), SW_HIDE);
+      ::ShowWindow(GetDlgItem(IDC_NEAR_LABEL).GetHwnd(), SW_HIDE); // OpenXR use fixed near plane distance in real world unit
+      ::ShowWindow(GetDlgItem(IDC_NEAR_PLANE).GetHwnd(), SW_HIDE);
+
+      ::ShowWindow(GetDlgItem(IDC_VR_SLOPE_LABEL).GetHwnd(), SW_HIDE); // OpenXR only compensate the playfield slope (no additional user adjustment)
+      ::ShowWindow(GetDlgItem(IDC_VR_SLOPE).GetHwnd(), SW_HIDE);
+
+      ::ShowWindow(GetDlgItem(IDC_BTTABLERECENTER).GetHwnd(), SW_HIDE); // Position is managed through TweakUI, not custom key shortcuts
+      ::ShowWindow(GetDlgItem(IDC_TABLEREC_TEXT).GetHwnd(), SW_HIDE);
+      ::ShowWindow(GetDlgItem(IDC_JOYTABLERECENTER).GetHwnd(), SW_HIDE);
+      ::ShowWindow(GetDlgItem(IDC_STATIC4).GetHwnd(), SW_HIDE);
+      ::ShowWindow(GetDlgItem(IDC_STATIC5).GetHwnd(), SW_HIDE);
+      ::ShowWindow(GetDlgItem(IDC_STATIC6).GetHwnd(), SW_HIDE);
+      ::ShowWindow(GetDlgItem(IDC_BTTABLEUP).GetHwnd(), SW_HIDE);
+      ::ShowWindow(GetDlgItem(IDC_TABLEUP_TEXT).GetHwnd(), SW_HIDE);
+      ::ShowWindow(GetDlgItem(IDC_JOYTABLEUP).GetHwnd(), SW_HIDE);
+      ::ShowWindow(GetDlgItem(IDC_BTTABLEDOWN).GetHwnd(), SW_HIDE);
+      ::ShowWindow(GetDlgItem(IDC_TABLEDOWN_TEXT).GetHwnd(), SW_HIDE);
+      ::ShowWindow(GetDlgItem(IDC_JOYTABLEDOWN).GetHwnd(), SW_HIDE);
+
+   #else
+      ::EnableWindow(GetDlgItem(IDC_COLOR_BUTTON1).GetHwnd(), FALSE);
+      ::EnableWindow(GetDlgItem(IDC_ENABLE_PASSTHROUGH_COLOR).GetHwnd(), FALSE);
+   #endif
 
    const VRPreviewMode vrPreview = (VRPreviewMode)g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "VRPreview"s, VRPREVIEW_LEFT);
    HWND hwnd = GetDlgItem(IDC_VR_PREVIEW).GetHwnd();
-   SendMessage(hwnd, WM_SETREDRAW, FALSE, 0); // to speed up adding the entries :/
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Disabled");
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Left Eye");
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Right Eye");
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Both Eyes");
-   SendMessage(hwnd, CB_SETCURSEL, (int)vrPreview, 0);
-   SendMessage(hwnd, WM_SETREDRAW, TRUE, 0);
+   ::SendMessage(hwnd, WM_SETREDRAW, FALSE, 0); // to speed up adding the entries :/
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Disabled");
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Left Eye");
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Right Eye");
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Both Eyes");
+   ::SendMessage(hwnd, CB_SETCURSEL, (int)vrPreview, 0);
+   ::SendMessage(hwnd, WM_SETREDRAW, TRUE, 0);
 
    const bool shrinkToFit = g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "ShrinkPreview"s, false);
    SendDlgItemMessage(IDC_SHRINK, BM_SETCHECK, shrinkToFit ? BST_CHECKED : BST_UNCHECKED, 0);
 
-   const int vrPreviewWidth = g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "PreviewWidth"s, 640);
-   sprintf_s(tmp, sizeof(tmp), "%d", vrPreviewWidth);
-   SetDlgItemText(IDC_VRPREVIEW_WIDTH, tmp);
-
-   const int vrPreviewHeight = g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "PreviewHeight"s, 640);
-   sprintf_s(tmp, sizeof(tmp), "%d", vrPreviewHeight);
-   SetDlgItemText(IDC_VRPREVIEW_HEIGHT, tmp);
+   SetDlgItemText(IDC_VRPREVIEW_WIDTH, std::to_string(g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "PreviewWidth"s, 640)).c_str());
+   SetDlgItemText(IDC_VRPREVIEW_HEIGHT, std::to_string(g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "PreviewHeight"s, 640)).c_str());
 
    const bool scaleToFixedWidth = g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "ScaleToFixedWidth"s, false);
    oldScaleValue = scaleToFixedWidth;
@@ -394,60 +416,42 @@ BOOL VROptionsDialog::OnInitDialog()
    scaleRelative = g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "ScaleRelative"s, 1.0f);
    scaleAbsolute = g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "ScaleAbsolute"s, 55.0f);
 
-   sprintf_s(tmp, sizeof(tmp), scaleToFixedWidth ? "%0.1f" : "%0.3f", scaleToFixedWidth ? scaleAbsolute : scaleRelative);
-   SetDlgItemText(IDC_VR_SCALE, tmp);
+   SetDlgItemText(IDC_VR_SCALE, f2sz(scaleToFixedWidth ? scaleAbsolute : scaleRelative).c_str());
 
-   const float vrNearPlane = g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "NearPlane"s, 5.0f);
-   sprintf_s(tmp, sizeof(tmp), "%0.1f", vrNearPlane);
-   SetDlgItemText(IDC_NEAR_PLANE, tmp);
-
-   const float vrSlope = g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "Slope"s, 6.5f);
-   sprintf_s(tmp, sizeof(tmp), "%0.2f", vrSlope);
-   SetDlgItemText(IDC_VR_SLOPE, tmp);
-
-   const float vrOrientation = g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "Orientation"s, 0.0f);
-   sprintf_s(tmp, sizeof(tmp), "%0.1f", vrOrientation);
-   SetDlgItemText(IDC_3D_VR_ORIENTATION, tmp);
-
-   const float vrX = g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "TableX"s, 0.0f);
-   sprintf_s(tmp, sizeof(tmp), "%0.1f", vrX);
-   SetDlgItemText(IDC_VR_OFFSET_X, tmp);
-
-   const float vrY = g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "TableY"s, 0.0f);
-   sprintf_s(tmp, sizeof(tmp), "%0.1f", vrY);
-   SetDlgItemText(IDC_VR_OFFSET_Y, tmp);
-
-   const float vrZ = g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "TableZ"s, 80.0f);
-   sprintf_s(tmp, sizeof(tmp), "%0.1f", vrZ);
-   SetDlgItemText(IDC_VR_OFFSET_Z, tmp);
+   SetDlgItemText(IDC_NEAR_PLANE, f2sz(g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "NearPlane"s, 5.0f)).c_str());
+   SetDlgItemText(IDC_VR_SLOPE, f2sz(g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "Slope"s, 6.5f)).c_str());
+   SetDlgItemText(IDC_3D_VR_ORIENTATION, f2sz(g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "Orientation"s, 0.0f)).c_str());
+   SetDlgItemText(IDC_VR_OFFSET_X, f2sz(g_pvp->m_settings.LoadValueFloat(Settings::PlayerVR, "TableX"s)).c_str());
+   SetDlgItemText(IDC_VR_OFFSET_Y, f2sz(g_pvp->m_settings.LoadValueFloat(Settings::PlayerVR, "TableY"s)).c_str());
+   SetDlgItemText(IDC_VR_OFFSET_Z, f2sz(g_pvp->m_settings.LoadValueFloat(Settings::PlayerVR, "TableZ"s)).c_str());
 
    const int askToTurnOn = g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "AskToTurnOn"s, 1);
    hwnd = GetDlgItem(IDC_TURN_VR_ON).GetHwnd();
-   SendMessage(hwnd, WM_SETREDRAW, FALSE, 0); // to speed up adding the entries :/
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"VR enabled");
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"VR autodetect");
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"VR disabled");
-   SendMessage(hwnd, CB_SETCURSEL, askToTurnOn, 0);
-   SendMessage(hwnd, WM_SETREDRAW, TRUE, 0);
+   ::SendMessage(hwnd, WM_SETREDRAW, FALSE, 0); // to speed up adding the entries :/
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"VR enabled");
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"VR autodetect");
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"VR disabled");
+   ::SendMessage(hwnd, CB_SETCURSEL, askToTurnOn, 0);
+   ::SendMessage(hwnd, WM_SETREDRAW, TRUE, 0);
 
    const int DMDsource = g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "DMDSource"s, 1); // Unimplemented for the time being
    hwnd = GetDlgItem(IDC_DMD_SOURCE).GetHwnd();
-   SendMessage(hwnd, WM_SETREDRAW, FALSE, 0); // to speed up adding the entries :/
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"Internal Text/Flasher (via vbscript)");
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"Screenreader");
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"SharedMemory API");
-   SendMessage(hwnd, CB_SETCURSEL, DMDsource, 0);
-   SendMessage(hwnd, WM_SETREDRAW, TRUE, 0);
+   ::SendMessage(hwnd, WM_SETREDRAW, FALSE, 0); // to speed up adding the entries :/
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"Internal Text/Flasher (via vbscript)");
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"Screenreader");
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"SharedMemory API");
+   ::SendMessage(hwnd, CB_SETCURSEL, DMDsource, 0);
+   ::SendMessage(hwnd, WM_SETREDRAW, TRUE, 0);
 
    const int BGsource = g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "BGSource"s, 1); // Unimplemented for the time being
    hwnd = GetDlgItem(IDC_BG_SOURCE).GetHwnd();
-   SendMessage(hwnd, WM_SETREDRAW, FALSE, 0); // to speed up adding the entries :/
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"Default table background");
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"directb2s File (auto only)");
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"directb2s File");
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"SharedMemory API");
-   SendMessage(hwnd, CB_SETCURSEL, BGsource, 0);
-   SendMessage(hwnd, WM_SETREDRAW, TRUE, 0);
+   ::SendMessage(hwnd, WM_SETREDRAW, FALSE, 0); // to speed up adding the entries :/
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"Default table background");
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"directb2s File (auto only)");
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"directb2s File");
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"SharedMemory API");
+   ::SendMessage(hwnd, CB_SETCURSEL, BGsource, 0);
+   ::SendMessage(hwnd, WM_SETREDRAW, TRUE, 0);
 
    bool on = g_pvp->m_settings.LoadValueWithDefault(Settings::Player, "CaptureExternalDMD"s, false);
    SendDlgItemMessage(IDC_CAP_EXTDMD, BM_SETCHECK, on ? BST_CHECKED : BST_UNCHECKED, 0);
@@ -458,21 +462,24 @@ BOOL VROptionsDialog::OnInitDialog()
    //AMD Debugging
    const int textureModeVR = g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "EyeFBFormat"s, 1);
    hwnd = GetDlgItem(IDC_COMBO_TEXTURE).GetHwnd();
-   SendMessage(hwnd, WM_SETREDRAW, FALSE, 0); // to speed up adding the entries :/
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"RGB 8");
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"RGBA 8 (Recommended)");
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"RGB 16F");
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"RGBA 16F");
-   SendMessage(hwnd, CB_SETCURSEL, textureModeVR, 0);
-   SendMessage(hwnd, WM_SETREDRAW, TRUE, 0);
+   ::SendMessage(hwnd, WM_SETREDRAW, FALSE, 0); // to speed up adding the entries :/
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"RGB 8");
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"RGBA 8 (Recommended)");
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"RGB 16F");
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"RGBA 16F");
+   ::SendMessage(hwnd, CB_SETCURSEL, textureModeVR, 0);
+   ::SendMessage(hwnd, WM_SETREDRAW, TRUE, 0);
 
-   int key;
+   on = g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "UsePassthroughColor"s, false);
+   SendDlgItemMessage(IDC_ENABLE_PASSTHROUGH_COLOR, BM_SETCHECK, on ? BST_CHECKED : BST_UNCHECKED, 0);
+
+   AttachItem(IDC_COLOR_BUTTON1, m_colorKey);
+   m_colorKey.SetColor(g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "PassthroughColor"s, static_cast<int>(0xFFBB4700)));
+
    for (unsigned int i = eTableRecenter; i <= eTableDown; ++i)
       if (regkey_idc[i] != -1)
       {
-         const bool hr = g_pvp->m_settings.LoadValue(Settings::Player, regkey_string[i], key);
-         if (!hr || key > 0xdd)
-            key = regkey_defdik[i];
+         const int key = static_cast<EnumAssignKeys>(g_pvp->m_settings.LoadValueInt(Settings::Player, regkey_string[i]));
          const HWND hwndControl = GetDlgItem(regkey_idc[i]);
          ::SetWindowText(hwndControl, rgszKeyName[key]);
          ::SetWindowLongPtr(hwndControl, GWLP_USERDATA, key);
@@ -527,12 +534,16 @@ BOOL VROptionsDialog::OnInitDialog()
       }
       ::SendMessage(hwnd, CB_SETCURSEL, selected, 0);
       ::SendMessage(hwnd, WM_SETREDRAW, TRUE, 0);
+      #ifdef ENABLE_XR
+         ::EnableWindow(hwnd, FALSE);
+      #endif
    }
 
    //
 
    KeyWindowStruct* const pksw = new KeyWindowStruct();
-   pksw->pi.Init(GetHwnd());
+   pksw->pi.SetFocusWindow(GetHwnd());
+   pksw->pi.Init();
    pksw->m_timerid = 0;
    ::SetWindowLongPtr(GetHwnd(), GWLP_USERDATA, (size_t)pksw);
 
@@ -541,14 +552,23 @@ BOOL VROptionsDialog::OnInitDialog()
    g_ButtonProc2 = (WNDPROC)::GetWindowLongPtr(hwndButton, GWLP_WNDPROC);
    ::SetWindowLongPtr(hwndButton, GWLP_WNDPROC, (size_t)MyKeyButtonProc2);
    ::SetWindowLongPtr(hwndButton, GWLP_USERDATA, (size_t)pksw);
+   #ifdef ENABLE_XR
+      ::EnableWindow(hwndButton, FALSE);
+   #endif
 
    hwndButton = GetDlgItem(IDC_BTTABLEUP).GetHwnd();
    ::SetWindowLongPtr(hwndButton, GWLP_WNDPROC, (size_t)MyKeyButtonProc2);
    ::SetWindowLongPtr(hwndButton, GWLP_USERDATA, (size_t)pksw);
+   #ifdef ENABLE_XR
+      ::EnableWindow(hwndButton, FALSE);
+   #endif
 
    hwndButton = GetDlgItem(IDC_BTTABLEDOWN).GetHwnd();
    ::SetWindowLongPtr(hwndButton, GWLP_WNDPROC, (size_t)MyKeyButtonProc2);
    ::SetWindowLongPtr(hwndButton, GWLP_USERDATA, (size_t)pksw);
+   #ifdef ENABLE_XR
+      ::EnableWindow(hwndButton, FALSE);
+   #endif
 
    return TRUE;
 }
@@ -557,10 +577,17 @@ INT_PTR VROptionsDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
    switch (uMsg)
    {
+   case WM_DRAWITEM:
+      switch (wParam)
+      {
+      case IDC_COLOR_BUTTON1: m_colorKey.DrawItem(reinterpret_cast<LPDRAWITEMSTRUCT>(lParam)); return TRUE;
+      }
+      break;
+   #ifndef ENABLE_XR
    case WM_TIMER:
    {
       KeyWindowStruct* const pksw = (KeyWindowStruct*)::GetWindowLongPtr(GetHwnd(), GWLP_USERDATA);
-      const int key = pksw->pi.GetNextKey();
+      const int key = GetNextKey();
       if (key != 0)
       {
          if (key < 0xDD) // Key mapping
@@ -587,6 +614,7 @@ INT_PTR VROptionsDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
       }
       break;
    }
+   #endif
    }
 
    return DialogProcDefault(uMsg, wParam, lParam);
@@ -605,22 +633,26 @@ BOOL VROptionsDialog::OnCommand(WPARAM wParam, LPARAM lParam)
       }
       case IDC_SCALE_TO_CM:
       {
-         const bool newScaleValue = IsDlgButtonChecked(IDC_SCALE_TO_CM)> 0;
-         if (oldScaleValue != newScaleValue) {
-            CString tmpStr = GetDlgItemText(IDC_VR_SCALE);
-            tmpStr.Replace(',', '.');
+         #ifdef ENABLE_XR
+            // Disable the custom scale as we always scale against the real world lockbar width
+            ::ShowWindow(GetDlgItem(IDC_VR_SCALE).GetHwnd(), SW_HIDE);
+         #else
+         const bool isScaleToLockbarWidth = IsDlgButtonChecked(IDC_SCALE_TO_CM) > 0;
+         if (oldScaleValue != isScaleToLockbarWidth)
+         {
+            const float tmpf = sz2f(GetDlgItemText(IDC_VR_SCALE).GetString());
             if (oldScaleValue)
-               scaleAbsolute = (float)atof(tmpStr.c_str());
+               scaleAbsolute = tmpf;
             else
-               scaleRelative = (float)atof(tmpStr.c_str());
+               scaleRelative = tmpf;
 
-            char tmp[256];
-            sprintf_s(tmp, sizeof(tmp), newScaleValue ? "%0.1f" : "%0.3f", newScaleValue ? scaleAbsolute : scaleRelative);
-            SetDlgItemText(IDC_VR_SCALE, tmp);
-            oldScaleValue = newScaleValue;
+            SetDlgItemText(IDC_VR_SCALE, f2sz(isScaleToLockbarWidth ? scaleAbsolute : scaleRelative).c_str());
+            oldScaleValue = isScaleToLockbarWidth;
          }
+         #endif
          break;
       }
+      #ifndef ENABLE_XR
       case IDC_BTTABLERECENTER:
       {
          if (HIWORD(wParam) == BN_CLICKED)
@@ -639,6 +671,23 @@ BOOL VROptionsDialog::OnCommand(WPARAM wParam, LPARAM lParam)
             StartTimer(IDC_TABLEDOWN_TEXT);
          break;
       }
+      #endif
+      case IDC_COLOR_BUTTON1:
+      {
+         CHOOSECOLOR cc = m_colorDialog.GetParameters();
+         cc.Flags = CC_FULLOPEN | CC_RGBINIT;
+         m_colorDialog.SetParameters(cc);
+         if (g_pvp->GetActiveTable())
+            m_colorDialog.SetCustomColors(g_pvp->GetActiveTable()->m_rgcolorcustom);
+         m_colorDialog.SetColor(m_colorKey.GetColor());
+         if (m_colorDialog.DoModal(GetHwnd()) == IDOK)
+         {
+            if (g_pvp->GetActiveTable())
+               memcpy(g_pvp->GetActiveTable()->m_rgcolorcustom, m_colorDialog.GetCustomColors(), sizeof(g_pvp->GetActiveTable()->m_rgcolorcustom));
+            m_colorKey.SetColor(m_colorDialog.GetColor());
+         }
+      }
+      break;
       default:
          return FALSE;
    }
@@ -658,27 +707,27 @@ void VROptionsDialog::OnOK()
    const bool shrinkToFit = IsDlgButtonChecked(IDC_SHRINK) != 0;
    g_pvp->m_settings.SaveValue(Settings::PlayerVR, "ShrinkPreview"s, shrinkToFit);
 
-   g_pvp->m_settings.SaveValue(Settings::PlayerVR, "PreviewWidth"s, GetDlgItemText(IDC_VRPREVIEW_WIDTH).c_str());
-   g_pvp->m_settings.SaveValue(Settings::PlayerVR, "PreviewHeight"s, GetDlgItemText(IDC_VRPREVIEW_HEIGHT).c_str());
+   g_pvp->m_settings.SaveValue(Settings::PlayerVR, "PreviewWidth"s, sz2f(GetDlgItemText(IDC_VRPREVIEW_WIDTH).GetString()));
+   g_pvp->m_settings.SaveValue(Settings::PlayerVR, "PreviewHeight"s, sz2f(GetDlgItemText(IDC_VRPREVIEW_HEIGHT).GetString()));
 
    const bool scaleToFixedWidth = IsDlgButtonChecked(IDC_SCALE_TO_CM)!= 0;
    g_pvp->m_settings.SaveValue(Settings::PlayerVR, "ScaleToFixedWidth"s, scaleToFixedWidth);
 
-   g_pvp->m_settings.SaveValue(Settings::PlayerVR, scaleToFixedWidth ? "ScaleAbsolute"s : "ScaleRelative"s, GetDlgItemText(IDC_VR_SCALE).c_str());
+   g_pvp->m_settings.SaveValue(Settings::PlayerVR, scaleToFixedWidth ? "ScaleAbsolute"s : "ScaleRelative"s, sz2f(GetDlgItemText(IDC_VR_SCALE).GetString()));
    //g_pvp->m_settings.SaveValue(Settings::PlayerVR, scaleToFixedWidth ? "ScaleRelative"s : "ScaleAbsolute"s, scaleToFixedWidth ? scaleRelative : scaleAbsolute); //Also update hidden value?
 
-   g_pvp->m_settings.SaveValue(Settings::PlayerVR, "NearPlane"s, GetDlgItemText(IDC_NEAR_PLANE).c_str());
+   g_pvp->m_settings.SaveValue(Settings::PlayerVR, "NearPlane"s, sz2f(GetDlgItemText(IDC_NEAR_PLANE).GetString()));
 
    //For compatibility keep these in Player instead of PlayerVR
-   g_pvp->m_settings.SaveValue(Settings::PlayerVR, "Slope"s, GetDlgItemText(IDC_VR_SLOPE).c_str());
+   g_pvp->m_settings.SaveValue(Settings::PlayerVR, "Slope"s, sz2f(GetDlgItemText(IDC_VR_SLOPE).GetString()));
 
-   g_pvp->m_settings.SaveValue(Settings::PlayerVR, "Orientation"s, GetDlgItemText(IDC_3D_VR_ORIENTATION).c_str());
+   g_pvp->m_settings.SaveValue(Settings::PlayerVR, "Orientation"s, sz2f(GetDlgItemText(IDC_3D_VR_ORIENTATION).GetString()));
 
-   g_pvp->m_settings.SaveValue(Settings::PlayerVR, "TableX"s, GetDlgItemText(IDC_VR_OFFSET_X).c_str());
+   g_pvp->m_settings.SaveValue(Settings::PlayerVR, "TableX"s, sz2f(GetDlgItemText(IDC_VR_OFFSET_X).GetString()));
 
-   g_pvp->m_settings.SaveValue(Settings::PlayerVR, "TableY"s, GetDlgItemText(IDC_VR_OFFSET_Y).c_str());
+   g_pvp->m_settings.SaveValue(Settings::PlayerVR, "TableY"s, sz2f(GetDlgItemText(IDC_VR_OFFSET_Y).GetString()));
 
-   g_pvp->m_settings.SaveValue(Settings::PlayerVR, "TableZ"s, GetDlgItemText(IDC_VR_OFFSET_Z).c_str());
+   g_pvp->m_settings.SaveValue(Settings::PlayerVR, "TableZ"s, sz2f(GetDlgItemText(IDC_VR_OFFSET_Z).GetString()));
 
    const size_t askToTurnOn = SendDlgItemMessage(IDC_TURN_VR_ON, CB_GETCURSEL, 0, 0);
    g_pvp->m_settings.SaveValue(Settings::PlayerVR, "AskToTurnOn"s, (int)askToTurnOn);
@@ -694,6 +743,11 @@ void VROptionsDialog::OnOK()
 
    selected = IsDlgButtonChecked(IDC_CAP_PUP)!= 0;
    g_pvp->m_settings.SaveValue(Settings::Player, "CapturePUP"s, selected);
+
+   selected = IsDlgButtonChecked(IDC_ENABLE_PASSTHROUGH_COLOR) != 0;
+   g_pvp->m_settings.SaveValue(Settings::PlayerVR, "UsePassthroughColor"s, selected);
+
+   g_pvp->m_settings.SaveValue(Settings::PlayerVR, "PassthroughColor"s, static_cast<unsigned int>(m_colorKey.GetColor()));
 
    SetValue(IDC_JOYTABLERECENTER, Settings::Player, "JoyTableRecenterKey"s);
    SetValue(IDC_JOYTABLEUP, Settings::Player, "JoyTableUpKey"s);
@@ -735,21 +789,21 @@ void VROptionsDialog::StartTimer(int nID)
    if (pksw->m_timerid == NULL) //add
    { //add
       // corrects input error with space bar
-      const int key = pksw->pi.GetNextKey();
+      const int key = GetNextKey();
       if (key == 0x39)
       {
-         pksw->pi.GetNextKey(); // Clear the current buffer out
+         GetNextKey(); // Clear the current buffer out
          return;
       }
 
-      pksw->pi.GetNextKey(); // Clear the current buffer out
+      GetNextKey(); // Clear the current buffer out
 
       pksw->m_timerid = ::SetTimer(GetHwnd(), 100, 50, nullptr);
       pksw->hwndKeyControl = hwndKeyWindow;
       ::SetWindowText(pksw->hwndKeyControl, "????");
-      while (pksw->pi.GetNextKey() != NULL) //clear entire keyboard buffer contents
+      while (GetNextKey() != NULL) //clear entire keyboard buffer contents
       {
-         pksw->pi.GetNextKey();
+         GetNextKey();
       }
    }
 }

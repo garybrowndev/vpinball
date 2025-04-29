@@ -49,7 +49,7 @@ public:
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
-   virtual HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) override;
+   HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
    DispReel();
    virtual ~DispReel();
@@ -99,8 +99,7 @@ public:
    int     GetRange() const { return m_d.m_digitrange; }
    void    SetRange(const int newRange)
    {
-       m_d.m_digitrange = max(0, newRange);                        // must have at least 1 digit (0 is a digit)
-       if (m_d.m_digitrange > 512 - 1) m_d.m_digitrange = 512 - 1; // and a max of 512 (0->511) //!! 512 requested by highrise
+       m_d.m_digitrange = clamp(newRange,0, 512 - 1); // must have at least 1 digit (0 is a digit) and a max of 512 (0->511) //!! 512 requested by highrise
    }
    float   GetX() const { return m_d.m_v1.x; }
    void    SetX(const float x)

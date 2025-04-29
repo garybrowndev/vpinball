@@ -4,8 +4,7 @@
 
 #define MINI_CASE_SENSITIVE
 #include "mINI/ini.h"
-#include "robin_hood.h"
-
+#include "unordered_dense.h"
 
 // This class holds the settings registry.
 // A setting registry can have a parent, in which case, missing settings will be looked for in the parent.
@@ -71,6 +70,7 @@ public:
       DefaultPropsTimer,
       DefaultPropsTrigger,
       DefaultCamera,
+      DefaultPropsPartGroup,
 
       // Plugin pages
       Plugin00
@@ -82,19 +82,13 @@ public:
 
    bool HasValue(const Section section, const string &key, const bool searchParent = false) const;
 
-   bool LoadValue(const Section section, const string &key, string &buffer) const;
-   bool LoadValue(const Section section, const string &key, void *const szbuffer, const DWORD size) const;
+   bool LoadValue(const Section section, const string &key, string &val) const;
    bool LoadValue(const Section section, const string &key, float &pfloat) const;
    bool LoadValue(const Section section, const string &key, int &pint) const;
-   bool LoadValue(const Section section, const string &key, unsigned int &pint) const;
-
-   void Validate(const Section section, const string &key, const string& defVal, const bool addDefaults);
-   void Validate(const Section section, const string &key, const bool defVal, const bool addDefaults);
-   void Validate(const Section section, const string &key, const int defVal, const int minVal, const int maxVal, const bool addDefaults);
-   void Validate(const Section section, const string &key, const float defVal, const float minVal, const float maxVal, const bool addDefaults);
-   void Validate(const bool addDefaults);
+   bool LoadValue(const Section section, const string &key, unsigned int &val) const;
 
    // The following method must only be used for settings previously validated to guarantee successfull loading
+   void Validate(const bool addDefaults);
    void ResetValue(const Section section, const string &key);
    string LoadValueString(const Section section, const string &key) const { string v; LoadValue(section, key, v); return v; }
    float LoadValueFloat(const Section section, const string &key) const { float v; bool ok = LoadValue(section, key, v); assert(ok); return v; }
@@ -107,7 +101,6 @@ public:
    bool LoadValueWithDefault(const Section section, const string &key, const bool def) const;
    string LoadValueWithDefault(const Section section, const string &key, const string &def) const;
 
-   bool SaveValue(const Section section, const string &key, const char *val, const bool overrideMode = false);
    bool SaveValue(const Section section, const string &key, const string &val, const bool overrideMode = false);
    bool SaveValue(const Section section, const string &key, const float val, const bool overrideMode = false);
    bool SaveValue(const Section section, const string &key, const int val, const bool overrideMode = false);
@@ -134,18 +127,18 @@ public:
    };
    void RegisterSetting(const Section section, const string &id, const unsigned int showMask, const string &name, float minValue, float maxValue, float step, float defaultValue, OptionUnit unit, const vector<string> &literals);
    const vector<OptionDef>& GetTableSettings() const { return m_tableOptions; }
-   const vector<OptionDef>& GetPluginSettings() const { return m_pluginOptions; }
+   static const vector<OptionDef>& GetPluginSettings() { return m_pluginOptions; }
 
 private:
-   enum DataType
-   {
-      DT_SZ, // char*, 0 terminated
-      DT_DWORD,
-      DT_ERROR
-   };
+#if 0
+   bool LoadValue(const Section section, const string &key, void *const szbuffer, const size_t size) const;
+   bool SaveValue(const Section section, const string &key, const char *val, const bool overrideMode = false);
+#endif
 
-   bool LoadValue(const Section section, const string &key, DataType &type, void *pvalue, DWORD size) const;
-   bool SaveValue(const Section section, const string &key, const DataType type, const void *pvalue, const DWORD size, const bool overrideMode);
+   void RegisterStringSetting(const Section section, const string &key, const string &defVal, const bool addDefaults, const string &comments = string());
+   void RegisterBoolSetting(const Section section, const string &key, const bool defVal, const bool addDefaults, const string &comments = string());
+   void RegisterIntSetting(const Section section, const string &key, const int defVal, const int minVal, const int maxVal, const bool addDefaults, const string &comments = string());
+   void RegisterFloatSetting(const Section section, const string &key, const float defVal, const float minVal, const float maxVal, const bool addDefaults, const string &comments = string());
 
    bool m_modified = false;
    string m_iniPath;
@@ -153,10 +146,10 @@ private:
    const Settings * m_parent;
    vector<OptionDef> m_tableOptions;
    #ifdef DEBUG
-      robin_hood::unordered_map<Section, robin_hood::unordered_flat_set<string>> m_validatedKeys;
+      ankerl::unordered_dense::map<Section, ankerl::unordered_dense::set<string>> m_validatedKeys;
    #endif
 
-   // Shared accross all settings
+   // Shared across all settings
    static vector<OptionDef> m_pluginOptions;
    static vector<string> m_settingKeys;
 };

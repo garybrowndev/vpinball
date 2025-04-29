@@ -36,10 +36,6 @@ Vertex2D IHaveDragPoints::GetPointCenter() const
    return {(maxx + minx)*0.5f, (maxy + miny)*0.5f};
 }
 
-void IHaveDragPoints::PutPointCenter(const Vertex2D& pv)
-{
-}
-
 void IHaveDragPoints::FlipPointY(const Vertex2D& pvCenter)
 {
    STARTUNDOSELECT
@@ -264,7 +260,7 @@ void IHaveDragPoints::ReverseOrder()
 
 // Ported at: VisualPinball.Engine/Math/DragPoint.cs
 
-void IHaveDragPoints::GetTextureCoords(const vector<RenderVertex> & vv, float **ppcoords)
+void IHaveDragPoints::GetTextureCoords(const vector<RenderVertex> & vv, float **ppcoords) const
 {
    vector<int> vitexpoints;
    vector<int> virenderpoints;

@@ -335,6 +335,7 @@ void Kicker::UpdateAnimation(const float diff_time_msec)
 void Kicker::Render(const unsigned int renderMask)
 {
    assert(m_rd != nullptr);
+   assert(!m_backglass);
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
    const bool isReflectionPass = renderMask & Renderer::REFLECTION_PASS;
@@ -437,7 +438,7 @@ void Kicker::ExportMesh(ObjLoader& loader)
    delete[] vertices;
 }
 
-void Kicker::GenerateMesh(Vertex3D_NoTex2 *const buf)
+void Kicker::GenerateMesh(Vertex3D_NoTex2 *const buf) const
 {
    int num_vertices;
    const Vertex3D_NoTex2 *vertices;
@@ -641,7 +642,7 @@ STDMETHODIMP Kicker::CreateSizedBallWithMass(/*[in]*/ float radius, /*[in]*/ flo
       pball->m_pBall->AddRef();
 
       pball->m_coll.m_hitflag = true;           // HACK: avoid capture leaving kicker
-      const Vertex3Ds hitnormal(FLT_MAX, FLT_MAX, FLT_MAX); // unused due to newBall being true
+      static constexpr Vertex3Ds hitnormal { FLT_MAX, FLT_MAX, FLT_MAX }; // unused due to newBall being true
       m_phitkickercircle->DoCollide(pball, hitnormal, false, true);
    }
 
@@ -661,7 +662,7 @@ STDMETHODIMP Kicker::CreateSizedBall(/*[in]*/ float radius, /*out, retval]*/ IBa
       pball->m_pBall->AddRef();
 
       pball->m_coll.m_hitflag = true;           // HACK: avoid capture leaving kicker
-      const Vertex3Ds hitnormal(FLT_MAX, FLT_MAX, FLT_MAX); // unused due to newBall being true
+      static constexpr Vertex3Ds hitnormal { FLT_MAX, FLT_MAX, FLT_MAX }; // unused due to newBall being true
       m_phitkickercircle->DoCollide(pball, hitnormal, false, true);
    }
 
@@ -680,7 +681,7 @@ STDMETHODIMP Kicker::CreateBall(IBall **pResult)
       pball->m_pBall->AddRef();
 
       pball->m_coll.m_hitflag = true;           // HACK: avoid capture leaving kicker
-      const Vertex3Ds hitnormal(FLT_MAX, FLT_MAX, FLT_MAX); // unused due to newBall being true
+      static constexpr Vertex3Ds hitnormal { FLT_MAX, FLT_MAX, FLT_MAX }; // unused due to newBall being true
       m_phitkickercircle->DoCollide(pball, hitnormal, false, true);
    }
 

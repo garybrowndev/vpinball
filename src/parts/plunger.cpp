@@ -58,10 +58,9 @@ void Plunger::SetDefaults(const bool fromMouseClick)
    m_d.m_autoPlunger = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "AutoPlunger"s, false) : false;
    m_d.m_visible = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Visible"s, true) : true;
 
-   hr = g_pvp->m_settings.LoadValue(regKey, "CustomTipShape"s, m_d.m_szTipShape, MAXTIPSHAPE);
+   hr = g_pvp->m_settings.LoadValue(regKey, "CustomTipShape"s, m_d.m_szTipShape);
    if (!hr || !fromMouseClick)
-      strncpy_s(m_d.m_szTipShape,
-      "0 .34; 2 .6; 3 .64; 5 .7; 7 .84; 8 .88; 9 .9; 11 .92; 14 .92; 39 .84", sizeof(m_d.m_szTipShape)-1);
+      m_d.m_szTipShape = "0 .34; 2 .6; 3 .64; 5 .7; 7 .84; 8 .88; 9 .9; 11 .92; 14 .92; 39 .84"s;
 
    m_d.m_rodDiam = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "CustomRodDiam"s, 0.60f) : 0.60f;
    m_d.m_ringGap = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "CustomRingGap"s, 2.0f) : 2.0f;
@@ -313,7 +312,7 @@ void Plunger::RenderSetup(RenderDevice *device)
       // Count entries in the tip list.  Entries are separated
       // by semicolons.
       int nTip = 1;
-      for (const char *p = m_d.m_szTipShape; *p != '\0'; ++p)
+      for (const char *p = m_d.m_szTipShape.c_str(); *p != '\0'; ++p)
       {
          if (*p == ';')
          {
@@ -330,7 +329,7 @@ void Plunger::RenderSetup(RenderDevice *device)
       // figure the tip lathe descriptor from the shape point list
       PlungerCoord *c = customDesc->c;
       float tiplen = 0;
-      for (const char *p = m_d.m_szTipShape; *p != '\0'; c++)
+      for (const char *p = m_d.m_szTipShape.c_str(); *p != '\0'; c++)
       {
          // Parse the entry: "yOffset, diam".  yOffset is the
          // offset (in table distance units) from the previous
@@ -820,6 +819,7 @@ void Plunger::UpdateAnimation(const float diff_time_msec)
 void Plunger::Render(const unsigned int renderMask)
 {
    assert(m_rd != nullptr);
+   assert(!m_backglass);
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
    const bool isReflectionPass = renderMask & Renderer::REFLECTION_PASS;
@@ -946,7 +946,7 @@ bool Plunger::LoadToken(const int id, BiffReader * const pbr)
    case FID(VSBL): pbr->GetBool(m_d.m_visible); break;
    case FID(REEN): pbr->GetBool(m_d.m_reflectionEnabled); break;
    case FID(SURF): pbr->GetString(m_d.m_szSurface); break;
-   case FID(TIPS): pbr->GetString(m_d.m_szTipShape, sizeof(m_d.m_szTipShape)); break;
+   case FID(TIPS): pbr->GetString(m_d.m_szTipShape); break;
    case FID(RODD): pbr->GetFloat(m_d.m_rodDiam); break;
    case FID(RNGG): pbr->GetFloat(m_d.m_ringGap); break;
    case FID(RNGD): pbr->GetFloat(m_d.m_ringDiam); break;
@@ -990,67 +990,18 @@ STDMETHODIMP Plunger::PullBackandRetract()
 
 STDMETHODIMP Plunger::MotionDevice(int *pVal)
 {
-   *pVal = g_pplayer->m_pininput.uShockType;
-   return S_OK;
+   *pVal = 6; // Deprecated: Always returns InputLayout::Generic
+return S_OK;
 }
 
-STDMETHODIMP Plunger::Position(float *pVal) // 0..25
+// Returns the position of the plunger as a value between 0 and 25
+// Note that g_pplayer->m_curMechPlungerPos is 0 at park position, which usually correspond to something like 4 or 5 here,
+// leading to value from 5 to 25 when pulling the plunger, with value below 5 being when the plunger pass the park position.
+STDMETHODIMP Plunger::Position(float *pVal)
 {
-   if (g_pplayer->m_pininput.uShockType == USHOCKTYPE_PBWIZARD ||
-       g_pplayer->m_pininput.uShockType == USHOCKTYPE_ULTRACADE ||
-       g_pplayer->m_pininput.uShockType == USHOCKTYPE_SIDEWINDER ||
-       g_pplayer->m_pininput.uShockType == USHOCKTYPE_VIRTUAPIN)
-   {
-      const float range = (float)JOYRANGEMX * (1.0f - m_d.m_parkPosition) - (float)JOYRANGEMN *m_d.m_parkPosition; // final range limit
-      float tmp = (g_pplayer->m_curMechPlungerPos < 0.f) ? g_pplayer->m_curMechPlungerPos*m_d.m_parkPosition : (g_pplayer->m_curMechPlungerPos*(1.0f - m_d.m_parkPosition));
-      tmp = tmp / range + m_d.m_parkPosition;           //scale and offset
-      *pVal = tmp*25.f;
-   }
-   else if (g_pplayer->m_pininput.uShockType == USHOCKTYPE_GENERIC)
-   {
-      float tmp;
-      if (g_pplayer->m_pininput.m_linearPlunger)
-      {
-         // Use a single linear scaling function.  Constrain the line to the physical
-         // plunger calibration, which we define as follows: the rest position is at 0,
-         // the fully retracted position is at JOYRANGEMX.  The fully compressed position
-         // is *not* part of the calibration, since that would over-constrain the
-         // calibration.  Instead, assume that the response on the negative (compression)
-         // side is a linear extension of the positive (retraction) side.  Calculate
-         // the scaling function as mx+b - the calibration constraints give us the following
-         // parameters:
-         const float m = (1.0f - m_d.m_parkPosition)*(float)(1.0 / JOYRANGEMX), b = m_d.m_parkPosition;
-
-         // calculate the rescaled value
-         tmp = m*g_pplayer->m_curMechPlungerPos + b;
-
-         // Because we don't have a calibration constraint on the negative side of the
-         // axis, the physical plunger could report a negative value that goes beyond
-         // the minimum on the virtual plunger.  Force it into range.
-         if (tmp < 0.0f)
-            tmp = 0.0f;
-      }
-      else
-      {
-         tmp = (g_pplayer->m_curMechPlungerPos < 0.f) ? g_pplayer->m_curMechPlungerPos*m_d.m_parkPosition : (g_pplayer->m_curMechPlungerPos*(1.0f - m_d.m_parkPosition));
-         const float range = (float)JOYRANGEMX * (1.0f - m_d.m_parkPosition) - (float)JOYRANGEMN *m_d.m_parkPosition; // final range limit
-         tmp = tmp / range + m_d.m_parkPosition;           //scale and offset
-      }
-      *pVal = tmp*25.f;
-   }
-   else // non-mechanical
-   {
-      const PlungerMoverObject& pa = m_phitplunger->m_plungerMover;
-      const float frame = (pa.m_pos - pa.m_frameStart) / (pa.m_frameEnd - pa.m_frameStart);
-
-      *pVal = 25.f - saturate(frame)*25.f; //!! somehow if m_mechPlunger is enabled this will only deliver a value 25 - 0..20??
-   }
-
-   //      float range = (float)JOYRANGEMX * (1.0f - m_d.m_parkPosition) - (float)JOYRANGEMN *m_d.m_parkPosition; // final range limit
-   //      float tmp = ((float)(JOYRANGEMN-1) < 0) ? (float)(JOYRANGEMN-1)*m_d.m_parkPosition : (float)(JOYRANGEMN-1)*(1.0f - m_d.m_parkPosition);
-   //      tmp = tmp/range + m_d.m_parkPosition;           //scale and offset
-   //      *pVal = tmp;
-
+   const PlungerMoverObject &pa = m_phitplunger->m_plungerMover;
+   const float frame = (pa.m_frameEnd - pa.m_pos) / (pa.m_frameEnd - pa.m_frameStart);
+   *pVal = 25.f * saturate(frame);
    return S_OK;
 }
 
@@ -1180,7 +1131,7 @@ STDMETHODIMP Plunger::put_AnimFrames(int newVal)
 STDMETHODIMP Plunger::get_TipShape(BSTR *pVal)
 {
    WCHAR wz[MAXTIPSHAPE];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szTipShape, -1, wz, MAXTIPSHAPE);
+   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szTipShape.c_str(), -1, wz, MAXTIPSHAPE);
    *pVal = SysAllocString(wz);
 
    return S_OK;
@@ -1188,7 +1139,10 @@ STDMETHODIMP Plunger::get_TipShape(BSTR *pVal)
 
 STDMETHODIMP Plunger::put_TipShape(BSTR newVal)
 {
-   WideCharToMultiByteNull(CP_ACP, 0, newVal, -1, m_d.m_szTipShape, MAXTIPSHAPE, nullptr, nullptr);
+   char sz[MAXTIPSHAPE];
+   WideCharToMultiByteNull(CP_ACP, 0, newVal, -1, sz, MAXTIPSHAPE, nullptr, nullptr);
+   m_d.m_szTipShape = sz;
+
    return S_OK;
 }
 

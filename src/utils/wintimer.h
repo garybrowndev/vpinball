@@ -6,8 +6,9 @@
 #include <climits>
 #endif
 #include <thread>
+#include <iomanip>
 
-#include "robin_hood.h"
+#include "unordered_dense.h"
 
 // call if msec,usec or uSleep, etc. should be more precise
 void set_lowest_possible_win_timer_resolution();
@@ -29,7 +30,7 @@ double MaxTheoreticRadiation(const unsigned int year, const double rlat);
 double SunsetSunriseLocalTime(const unsigned int day, const unsigned int month, const unsigned int year, const double rlong, const double rlat, const bool sunrise);
 
 
-class FrameProfiler
+class FrameProfiler final
 {
 public:
    enum ProfileSection
@@ -293,19 +294,19 @@ public:
            : section == PROFILE_INPUT_TO_PRESENT  ? m_profileData[(m_presentedIndex + N_SAMPLES - 1) % N_SAMPLES][PROFILE_INPUT_TO_PRESENT]
                                                   : m_profileData[(m_profileIndex + N_SAMPLES - 1) % N_SAMPLES][section];
    }
-   
+
    unsigned int GetMin(ProfileSection section) const
    {
       assert(0 <= section && section < PROFILE_COUNT);
       return m_profileMinData[section];
    }
-   
+
    unsigned int GetMax(ProfileSection section) const
    {
       assert(0 <= section && section < PROFILE_COUNT);
       return m_profileMaxData[section];
    }
-   
+
    double GetAvg(ProfileSection section) const
    {
       assert(0 <= section && section < PROFILE_COUNT);
@@ -313,20 +314,20 @@ public:
            : section == PROFILE_INPUT_TO_PRESENT  ? (m_presentedCount <= 0    ? 0. : (static_cast<double>(m_profileTotalData[PROFILE_INPUT_TO_PRESENT])  / static_cast<double>(m_presentedCount)))
                                                   : (m_frameIndex <= 0        ? 0. : (static_cast<double>(m_profileTotalData[section])                   / static_cast<double>(m_frameIndex)));
    }
-   
+
    double GetRatio(ProfileSection section) const
    {
       assert(0 <= section && section <= PROFILE_FRAME); // Unimplemented and not meaningful for other sections 
       return m_profileTotalData[ProfileSection::PROFILE_FRAME] == 0 ? 0. : (static_cast<double>(m_profileTotalData[section]) / static_cast<double>(m_profileTotalData[ProfileSection::PROFILE_FRAME]));
    }
-   
+
    double GetSlidingRatio(ProfileSection section) const
    {
       assert(0 <= section && section <= PROFILE_FRAME); // Unimplemented and not meaningful for other sections
       double frame = GetSlidingAvg(PROFILE_FRAME);
       return frame <= 1e-9 ? 0. : GetSlidingAvg(section) / frame;
    }
-   
+
    // (approximately) 1 second sliding average of frame sections
    double GetSlidingAvg(ProfileSection section) const
    {
@@ -434,7 +435,7 @@ public:
    {
       return EventDataToLog(m_worstScriptEventData[0], m_profileWorstProfileTimers[0], m_profileWorstProfileTimersLen[0]);
    }
-   
+
    void OnProcessInput()
    {
       unsigned long long ts = usec();
@@ -450,7 +451,7 @@ public:
       }
       m_processInputTimeStamp = ts;
    }
-   
+
    void OnPresented(U64 when) // May be called from any thread
    {
       m_lastPresentedTimeStamp = when;
@@ -483,7 +484,7 @@ private:
       unsigned int totalLength = 0;
    };
    DISPID m_scriptEventDispID = 0;
-   robin_hood::unordered_map<DISPID, EventTick> m_scriptEventData;
+   ankerl::unordered_dense::map<DISPID, EventTick> m_scriptEventData;
 
    // Overall frame
    unsigned int m_frameIndex = -1;
@@ -493,7 +494,7 @@ private:
    unsigned int m_processInputIndex = 0;
    unsigned int m_processInputCount = 0;
    unsigned long long m_processInputTimeStamp;
-   
+
    // Present lag
    unsigned int m_presentedIndex = 0;
    unsigned int m_presentedCount = 0;
@@ -517,12 +518,12 @@ private:
    unsigned int m_profileWorstGameTime[N_WORST];
    char m_profileWorstProfileTimers[N_WORST][MAX_TIMER_LOG];
    size_t m_profileWorstProfileTimersLen[N_WORST];
-   robin_hood::unordered_map<DISPID, EventTick> m_worstScriptEventData[N_WORST];
+   ankerl::unordered_dense::map<DISPID, EventTick> m_worstScriptEventData[N_WORST];
 
-   string EventDataToLog(const robin_hood::unordered_map<DISPID, EventTick>& eventData, const char* profileTimers, const size_t profileTimersLen) const
+   string EventDataToLog(const ankerl::unordered_dense::map<DISPID, EventTick>& eventData, const char* profileTimers, const size_t profileTimersLen) const
    {
       std::stringstream ss;
-      for (auto v : eventData)
+      for (const auto& v : eventData)
       {
          string name;
          switch (v.first)
@@ -557,7 +558,7 @@ private:
                int calls;
                U32 lengths;
             };
-            robin_hood::unordered_map<string, info> infos;
+            ankerl::unordered_dense::map<string, info> infos;
             size_t pos = 0;
             while (pos < profileTimersLen)
             {
@@ -592,7 +593,7 @@ extern FrameProfiler* g_frameProfiler;
 
 // Helper macro to profile custom function on the game logic thread
 #define PROFILE_FUNCTION(section) ScopedProfiler funcProfiler(section)
-class ScopedProfiler
+class ScopedProfiler final
 {
 public:
    ScopedProfiler(const FrameProfiler::ProfileSection section) { g_frameProfiler->EnterProfileSection(section); }

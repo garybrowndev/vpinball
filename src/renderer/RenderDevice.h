@@ -2,7 +2,6 @@
 
 #pragma once
 
-#include "robin_hood.h"
 #include "typedefs3D.h"
 
 #include "parts/Material.h"
@@ -75,7 +74,7 @@ public:
 class RenderDevice final
 {
 public:
-   RenderDevice(VPX::Window* const wnd, const bool isVR, const int nEyes, const bool useNvidiaApi, const bool disable_dwm, const bool compressTextures, int nMSAASamples, VideoSyncMode& syncMode);
+   RenderDevice(VPX::Window* const wnd, const bool isVR, const int nEyes, const bool useNvidiaApi, const bool disableDWM, const bool compressTextures, int nMSAASamples, VideoSyncMode& syncMode);
    ~RenderDevice();
 
    void AddWindow(VPX::Window* wnd);
@@ -156,6 +155,7 @@ public:
 
    void Flip();
    void WaitForVSync(const bool asynchronous);
+   float GetPredictedDisplayDelayInS() const;
 
    RenderTarget* GetOutputBackBuffer() const { return m_outputWnd[0]->GetBackBuffer(); } // The screen render target (the only one which is not stereo when doing stereo rendering)
 
@@ -246,6 +246,8 @@ private:
    void UploadAndSetSMAATextures();
    Sampler* m_SMAAsearchTexture = nullptr;
    Sampler* m_SMAAareaTexture = nullptr;
+
+   int m_visualLatencyCorrection = -1;
 
 #if defined(ENABLE_BGFX)
 public:

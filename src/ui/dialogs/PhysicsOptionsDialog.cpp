@@ -8,7 +8,7 @@
 #include "tinyxml2/tinyxml2.h"
 
 constexpr unsigned int num_physicsoptions = 8;
-static char * physicsoptions[num_physicsoptions] ={ nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+static string physicsoptions[num_physicsoptions];
 static unsigned int physicsselection = 0;
 
 
@@ -20,35 +20,29 @@ BOOL PhysicsOptionsDialog::OnInitDialog()
 {
     const HWND hwndList = GetDlgItem(IDC_PhysicsList).GetHwnd();
 
-    const size_t size = SendMessage(hwndList, LB_GETCOUNT, 0, 0);
+    const size_t size = ::SendMessage(hwndList, LB_GETCOUNT, 0, 0);
     for (size_t i = 0; i < size; i++)
     {
-        if (physicsoptions[i])
-        {
-            delete[] physicsoptions[i];
-            physicsoptions[i] = nullptr;
-        }
-        const int* sd = (int *)SendMessage(hwndList, LB_GETITEMDATA, i, 0);
+        physicsoptions[i].clear();
+        const int* sd = (int *)::SendMessage(hwndList, LB_GETITEMDATA, i, 0);
         delete sd;
     }
 
-    SendMessage(hwndList, WM_SETREDRAW, FALSE, 0); // to speed up adding the entries :/
-    SendMessage(hwndList, LB_RESETCONTENT, 0, 0);
+    ::SendMessage(hwndList, WM_SETREDRAW, FALSE, 0); // to speed up adding the entries :/
+    ::SendMessage(hwndList, LB_RESETCONTENT, 0, 0);
     for (unsigned int i = 0; i < num_physicsoptions; i++)
     {
-        physicsoptions[i] = new char[256];
-        char tmp[256];
-        sprintf_s(tmp, sizeof(tmp), "PhysicsSetName%u", i);
-        if (!g_pvp->m_settings.LoadValue(Settings::Player, tmp, physicsoptions[i], 256))
-            sprintf_s(physicsoptions[i], 256, "Set %u", i + 1);
-        sprintf_s(tmp, sizeof(tmp), "%u: %s", i + 1, physicsoptions[i]);
-        const size_t index = SendMessage(hwndList, LB_ADDSTRING, 0, (size_t)tmp);
+        string tmp = "PhysicsSetName" + std::to_string(i);
+        if (!g_pvp->m_settings.LoadValue(Settings::Player, tmp, physicsoptions[i]))
+            physicsoptions[i] = "Set " + std::to_string(i + 1);
+        tmp = std::to_string(i + 1) + ": " + physicsoptions[i];
+        const size_t index = ::SendMessage(hwndList, LB_ADDSTRING, 0, (size_t)tmp.c_str());
         int * const sd = new int;
         *sd = i;
-        SendMessage(hwndList, LB_SETITEMDATA, index, (LPARAM)sd);
+        ::SendMessage(hwndList, LB_SETITEMDATA, index, (LPARAM)sd);
     }
-    SendMessage(hwndList, LB_SETCURSEL, physicsselection, 0);
-    SendMessage(hwndList, WM_SETREDRAW, TRUE, 0);
+    ::SendMessage(hwndList, LB_SETCURSEL, physicsselection, 0);
+    ::SendMessage(hwndList, WM_SETREDRAW, TRUE, 0);
 
     const float FlipperPhysicsMass = g_pvp->m_settings.LoadValueWithDefault(Settings::Player, "FlipperPhysicsMass" + std::to_string(physicsselection), 1.f);
     SetItemText(DISPID_Flipper_Speed, FlipperPhysicsMass);
@@ -87,7 +81,7 @@ BOOL PhysicsOptionsDialog::OnInitDialog()
     const float TablePhysicsMaxSlope = g_pvp->m_settings.LoadValueWithDefault(Settings::Player, "TablePhysicsMaxSlope" + std::to_string(physicsselection), DEFAULT_TABLE_MAX_SLOPE);
     SetItemText(1104, TablePhysicsMaxSlope);
 
-    SetDlgItemText(1110, physicsoptions[physicsselection]);
+    SetDlgItemText(1110, (char*)physicsoptions[physicsselection].c_str());
 
     return TRUE;
 }
@@ -135,7 +129,7 @@ BOOL PhysicsOptionsDialog::OnCommand(WPARAM wParam, LPARAM lParam)
         {
             const HWND hwndList = GetDlgItem(IDC_PhysicsList).GetHwnd();
 
-            const size_t tmp = SendMessage(hwndList, LB_GETCURSEL, 0, 0);
+            const size_t tmp = ::SendMessage(hwndList, LB_GETCURSEL, 0, 0);
 
             if (tmp != physicsselection)
             {
@@ -341,11 +335,7 @@ void PhysicsOptionsDialog::OnDestroy()
     const size_t size = ::SendMessage(hwndList, LB_GETCOUNT, 0, 0);
     for (size_t i = 0; i < size; i++)
     {
-        if (physicsoptions[i])
-        {
-            delete[] physicsoptions[i];
-            physicsoptions[i] = nullptr;
-        }
+        physicsoptions[i].clear();
         const int* sd = (int *)::SendMessage(hwndList, LB_GETITEMDATA, i, 0);
         delete sd;
     }
@@ -371,7 +361,7 @@ bool PhysicsOptionsDialog::LoadSetting()
         std::ifstream myFile(szFileName[0]);
         buffer << myFile.rdbuf();
         myFile.close();
-        auto xml = buffer.str();
+        const string xml = buffer.str();
         if (xmlDoc.Parse(xml.c_str()))
         {
             ShowError("Error parsing VPP XML file");
@@ -389,7 +379,7 @@ bool PhysicsOptionsDialog::LoadSetting()
         strncpy_s(loadValues.defaultElementScatter, table->FirstChildElement("defaultElementScatter")->GetText(), sizeof(loadValues.defaultElementScatter) - 1);
         auto tmp = table->FirstChildElement("playfieldminslope");
         if(tmp)
-            strncpy_s(loadValues.minSlope, sizeof(loadValues.minSlope), tmp->GetText(), sizeof(loadValues.minSlope) - 1);
+           strncpy_s(loadValues.minSlope, sizeof(loadValues.minSlope), tmp->GetText(), sizeof(loadValues.minSlope) - 1);
         else
            sprintf_s(loadValues.minSlope, sizeof(loadValues.minSlope), "%f", DEFAULT_TABLE_MIN_SLOPE);
         tmp = table->FirstChildElement("playfieldmaxslope");
@@ -434,23 +424,23 @@ void PhysicsOptionsDialog::SetItemText(int id, float value)
 
 void PhysicsOptionsDialog::SaveCurrentPhysicsSetting()
 {
-    g_pvp->m_settings.SaveValue(Settings::Player, "FlipperPhysicsMass" + std::to_string(physicsselection), GetItemText(DISPID_Flipper_Speed).c_str());
-    g_pvp->m_settings.SaveValue(Settings::Player, "FlipperPhysicsStrength" + std::to_string(physicsselection), GetItemText(19).c_str());
-    g_pvp->m_settings.SaveValue(Settings::Player, "FlipperPhysicsElasticity" + std::to_string(physicsselection), GetItemText(21).c_str());
-    g_pvp->m_settings.SaveValue(Settings::Player, "FlipperPhysicsScatter" + std::to_string(physicsselection), GetItemText(112).c_str());
-    g_pvp->m_settings.SaveValue(Settings::Player, "FlipperPhysicsEOSTorque" + std::to_string(physicsselection), GetItemText(113).c_str());
-    g_pvp->m_settings.SaveValue(Settings::Player, "FlipperPhysicsEOSTorqueAngle" + std::to_string(physicsselection), GetItemText(189).c_str());
-    g_pvp->m_settings.SaveValue(Settings::Player, "FlipperPhysicsReturnStrength" + std::to_string(physicsselection), GetItemText(23).c_str());
-    g_pvp->m_settings.SaveValue(Settings::Player, "FlipperPhysicsElasticityFalloff" + std::to_string(physicsselection), GetItemText(22).c_str());
-    g_pvp->m_settings.SaveValue(Settings::Player, "FlipperPhysicsFriction" + std::to_string(physicsselection), GetItemText(109).c_str());
-    g_pvp->m_settings.SaveValue(Settings::Player, "FlipperPhysicsCoilRampUp" + std::to_string(physicsselection), GetItemText(110).c_str());
-    g_pvp->m_settings.SaveValue(Settings::Player, "TablePhysicsGravityConstant" + std::to_string(physicsselection), GetItemText(1100).c_str());
-    g_pvp->m_settings.SaveValue(Settings::Player, "TablePhysicsContactFriction" + std::to_string(physicsselection), GetItemText(1101).c_str());
-    g_pvp->m_settings.SaveValue(Settings::Player, "TablePhysicsElasticity" + std::to_string(physicsselection), GetItemText(1708).c_str());
-    g_pvp->m_settings.SaveValue(Settings::Player, "TablePhysicsElasticityFalloff" + std::to_string(physicsselection), GetItemText(1709).c_str());
-    g_pvp->m_settings.SaveValue(Settings::Player, "TablePhysicsScatterAngle" + std::to_string(physicsselection), GetItemText(1710).c_str());
-    g_pvp->m_settings.SaveValue(Settings::Player, "TablePhysicsContactScatterAngle" + std::to_string(physicsselection), GetItemText(1102).c_str());
-    g_pvp->m_settings.SaveValue(Settings::Player, "TablePhysicsMinSlope" + std::to_string(physicsselection), GetItemText(1103).c_str());
-    g_pvp->m_settings.SaveValue(Settings::Player, "TablePhysicsMaxSlope" + std::to_string(physicsselection), GetItemText(1104).c_str());
-    g_pvp->m_settings.SaveValue(Settings::Player, "PhysicsSetName" + std::to_string(physicsselection), GetItemText(1110).c_str());
+    g_pvp->m_settings.SaveValue(Settings::Player, "FlipperPhysicsMass" + std::to_string(physicsselection), sz2f(GetItemText(DISPID_Flipper_Speed).GetString()));
+    g_pvp->m_settings.SaveValue(Settings::Player, "FlipperPhysicsStrength" + std::to_string(physicsselection), sz2f(GetItemText(19).GetString()));
+    g_pvp->m_settings.SaveValue(Settings::Player, "FlipperPhysicsElasticity" + std::to_string(physicsselection), sz2f(GetItemText(21).GetString()));
+    g_pvp->m_settings.SaveValue(Settings::Player, "FlipperPhysicsScatter" + std::to_string(physicsselection), sz2f(GetItemText(112).GetString()));
+    g_pvp->m_settings.SaveValue(Settings::Player, "FlipperPhysicsEOSTorque" + std::to_string(physicsselection), sz2f(GetItemText(113).GetString()));
+    g_pvp->m_settings.SaveValue(Settings::Player, "FlipperPhysicsEOSTorqueAngle" + std::to_string(physicsselection), sz2f(GetItemText(189).GetString()));
+    g_pvp->m_settings.SaveValue(Settings::Player, "FlipperPhysicsReturnStrength" + std::to_string(physicsselection), sz2f(GetItemText(23).GetString()));
+    g_pvp->m_settings.SaveValue(Settings::Player, "FlipperPhysicsElasticityFalloff" + std::to_string(physicsselection), sz2f(GetItemText(22).GetString()));
+    g_pvp->m_settings.SaveValue(Settings::Player, "FlipperPhysicsFriction" + std::to_string(physicsselection), sz2f(GetItemText(109).GetString()));
+    g_pvp->m_settings.SaveValue(Settings::Player, "FlipperPhysicsCoilRampUp" + std::to_string(physicsselection), sz2f(GetItemText(110).GetString()));
+    g_pvp->m_settings.SaveValue(Settings::Player, "TablePhysicsGravityConstant" + std::to_string(physicsselection), sz2f(GetItemText(1100).GetString()));
+    g_pvp->m_settings.SaveValue(Settings::Player, "TablePhysicsContactFriction" + std::to_string(physicsselection), sz2f(GetItemText(1101).GetString()));
+    g_pvp->m_settings.SaveValue(Settings::Player, "TablePhysicsElasticity" + std::to_string(physicsselection), sz2f(GetItemText(1708).GetString()));
+    g_pvp->m_settings.SaveValue(Settings::Player, "TablePhysicsElasticityFalloff" + std::to_string(physicsselection), sz2f(GetItemText(1709).GetString()));
+    g_pvp->m_settings.SaveValue(Settings::Player, "TablePhysicsScatterAngle" + std::to_string(physicsselection), sz2f(GetItemText(1710).GetString()));
+    g_pvp->m_settings.SaveValue(Settings::Player, "TablePhysicsContactScatterAngle" + std::to_string(physicsselection), sz2f(GetItemText(1102).GetString()));
+    g_pvp->m_settings.SaveValue(Settings::Player, "TablePhysicsMinSlope" + std::to_string(physicsselection), sz2f(GetItemText(1103).GetString()));
+    g_pvp->m_settings.SaveValue(Settings::Player, "TablePhysicsMaxSlope" + std::to_string(physicsselection), sz2f(GetItemText(1104).GetString()));
+    g_pvp->m_settings.SaveValue(Settings::Player, "PhysicsSetName" + std::to_string(physicsselection), GetItemText(1110).GetString());
 }

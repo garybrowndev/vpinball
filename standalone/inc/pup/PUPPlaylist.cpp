@@ -2,6 +2,8 @@
 
 #include "PUPPlaylist.h"
 
+#include <filesystem>
+
 /*
    playlists.pup: ScreenNum,Folder,Des,AlphaSort,RestSeconds,Volume,Priority
    PuP Pack Editor: Folder (Playlist),Description,Randomize,RestSeconds,Volume,Priority
@@ -46,18 +48,18 @@ PUPPlaylist::PUPPlaylist(const string& szFolder, const string& szDescription, bo
    m_priority = priority;
    m_lastIndex = 0;
 
-   if (string_compare_case_insensitive(szFolder, "PUPOverlays"))
+   if (StrCompareNoCase(szFolder, "PUPOverlays"s))
       m_function = PUP_PLAYLIST_FUNCTION_OVERLAYS;
-   else if (string_compare_case_insensitive(szFolder, "PUPFrames"))
+   else if (StrCompareNoCase(szFolder, "PUPFrames"s))
       m_function = PUP_PLAYLIST_FUNCTION_FRAMES;
-   else if (string_compare_case_insensitive(szFolder, "PUPAlphas"))
+   else if (StrCompareNoCase(szFolder, "PUPAlphas"s))
       m_function = PUP_PLAYLIST_FUNCTION_ALPHAS;
-   else if (string_compare_case_insensitive(szFolder, "PuPShapes"))
+   else if (StrCompareNoCase(szFolder, "PuPShapes"s))
       m_function = PUP_PLAYLIST_FUNCTION_SHAPES;
    else
       m_function = PUP_PLAYLIST_FUNCTION_DEFAULT;
 
-   m_szBasePath = find_directory_case_insensitive(PUPManager::GetInstance()->GetPath(), szFolder);
+   m_szBasePath = find_case_insensitive_directory_path(PUPManager::GetInstance()->GetPath() + szFolder);
    if (m_szBasePath.empty()) {
       PLOGE.printf("Playlist folder not found: %s", szFolder.c_str());
       return;
@@ -68,7 +70,7 @@ PUPPlaylist::PUPPlaylist(const string& szFolder, const string& szDescription, bo
          string szFilename = entry.path().filename();
          if (!szFilename.empty() && szFilename[0] != '.') {
             m_files.push_back(szFilename);
-            m_fileMap[string_to_lower(szFilename)] = szFilename;
+            m_fileMap[lowerCase(szFilename)] = szFilename;
          }
       }
    }
@@ -84,13 +86,13 @@ PUPPlaylist* PUPPlaylist::CreateFromCSV(const string& line)
 {
    vector<string> parts = parse_csv_line(line);
    if (parts.size() != 7) {
-      PLOGD.printf("Invalid playlist: %s", line.c_str());
+      PLOGW.printf("Invalid playlist: %s", line.c_str());
       return nullptr;
    }
 
-   string szFolderPath = find_directory_case_insensitive(PUPManager::GetInstance()->GetPath(), parts[1]);
+   string szFolderPath = find_case_insensitive_directory_path(PUPManager::GetInstance()->GetPath() + parts[1]);
    if (szFolderPath.empty()) {
-      PLOGD.printf("Playlist folder not found: %s", parts[1].c_str());
+      PLOGW.printf("Playlist folder not found: %s", parts[1].c_str());
       return nullptr;
    }
 
@@ -106,8 +108,8 @@ PUPPlaylist* PUPPlaylist::CreateFromCSV(const string& line)
    }
 
    if (!hasFiles) {
-      PLOGD.printf("Playlist folder is empty");
-      return nullptr;
+      // TODO add to a pup pack audit, we log as info as not a big deal.
+      PLOGI.printf("Playlist folder %s is empty",szFolderPath.c_str());
    }
 
    string szFolder = std::filesystem::path(szFolderPath).parent_path().filename().string();
@@ -115,7 +117,7 @@ PUPPlaylist* PUPPlaylist::CreateFromCSV(const string& line)
    PUPPlaylist* pPlaylist = new PUPPlaylist(
       szFolder,
       parts[2],
-      (string_to_int(parts[3], 0) == 0),
+      (string_to_int(parts[3], 0) == 1),
       string_to_int(parts[4], 0),
       string_to_int(parts[5], 0),
       string_to_int(parts[6], 0));
@@ -125,29 +127,32 @@ PUPPlaylist* PUPPlaylist::CreateFromCSV(const string& line)
 
 const string& PUPPlaylist::GetPlayFile(const string& szFilename)
 {
-   static string emptyString = "";
+   static const string emptyString;
 
-   std::map<string, string>::iterator it = m_fileMap.find(string_to_lower(szFilename));
+   std::map<string, string>::iterator it = m_fileMap.find(lowerCase(szFilename));
    return it != m_fileMap.end() ? it->second : emptyString;
 }
 
 const string& PUPPlaylist::GetNextPlayFile()
 {
    if (!m_randomize) {
+      const string& file = m_files[m_lastIndex];
       if (++m_lastIndex >= m_files.size())
          m_lastIndex = 0;
-      return m_files[m_lastIndex];
+      return file;
    }
-
    return m_files[rand() % m_files.size()];
 }
 
 string PUPPlaylist::GetPlayFilePath(const string& szFilename)
 {
-   static string emptyString = "";
+   static const string emptyString;
+
+   if (m_files.empty())
+      return emptyString;
 
    if (!szFilename.empty()) {
-      std::map<string, string>::const_iterator it = m_fileMap.find(string_to_lower(szFilename));
+      std::map<string, string>::const_iterator it = m_fileMap.find(lowerCase(szFilename));
       if (it != m_fileMap.end())
          return m_szBasePath + it->second;
       else

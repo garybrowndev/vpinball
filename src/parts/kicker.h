@@ -44,7 +44,7 @@ public:
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
-   virtual HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) override;
+   HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
    Kicker();
    virtual ~Kicker();
@@ -91,7 +91,7 @@ public:
    vector<Vertex3Ds> m_hitMesh;
 
 private:
-   void GenerateMesh(Vertex3D_NoTex2 *const buf);
+   void GenerateMesh(Vertex3D_NoTex2 *const buf) const;
 
    PinTable *m_ptable = nullptr;
 

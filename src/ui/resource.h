@@ -600,6 +600,7 @@
 #define IDC_THROW_BALLS_MASS_EDIT       378
 #define IDI_RAMP                        378
 #define IDC_SIZE_WIDTH2                 378
+#define IDC_LATENCY_CORRECTION          378
 #define IDC_FILTERAMOUNT_EDIT           379
 #define IDD_PROPKICKER_STATE            379
 #define IDC_SPECULAR_EDIT               379
@@ -781,6 +782,7 @@
 #define IDC_EDGE_FACTOR_UI              454
 #define IDC_SHRINK                      454
 #define IDC_REFLECT_ON_BALLS            455
+#define IDC_ENABLE_PASSTHROUGH_COLOR    455
 #define IDC_NUDGE_STRENGTH              456
 #define IDC_SHADOWS                     456
 #define IDC_COLOR_FULL                  457
@@ -811,6 +813,7 @@
 #define IDC_SCREEN_PLAYERZ              469
 #define DISPID_SpringDiam               470
 #define IDC_BALL_TRAIL_STRENGTH         470
+#define IDC_LOCKBAR_WIDTH               471
 #define DISPID_TipShape                 471
 #define DISPID_SpringGauge              472
 #define DISPID_SpringLoops              473
@@ -1338,6 +1341,17 @@
 #define IDC_STATIC29                    954
 #define IDD_DMDSTYLE_OPT                955
 #define IDD_ALPHASEGSTYLE_OPT           956
+#define IDS_TB_PARTGROUP                957
+#define ID_INSERT_PARTGROUP             958
+#define IDC_PARTGROUP                   959
+#define IDR_PARTGROUP                   960
+#define IDB_TRISTATE_ICONS16            961
+#define IDC_MASK_PLAYFIELD              962
+#define IDC_MASK_MIXED_REALITY          963
+#define IDC_MASK_AUGMENTED_REALITY      964
+#define IDC_SPACE_REFERENCE             965
+#define IDD_PROPPARTGROUP_VISUALS       966
+#define IDC_LOCKBAR_HEIGHT_FROM_GROUND  967
 #define IDC_LAYBACK_EDIT                1040
 #define IDC_3D_STEREO_SEPARATION_EDIT   1041
 #define IDC_3D_STEREO_ZPD_EDIT          1042
@@ -1535,7 +1549,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        681
 #define _APS_NEXT_COMMAND_VALUE         4030
-#define _APS_NEXT_CONTROL_VALUE         957
+#define _APS_NEXT_CONTROL_VALUE         968
 #define _APS_NEXT_SYMED_VALUE           191
 #endif
 #endif

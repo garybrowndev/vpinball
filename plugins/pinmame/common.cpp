@@ -11,32 +11,63 @@ static inline char cLower(char c)
    return c;
 }
 
-static inline string string_to_lower(string str)
+static inline bool StrCompareNoCase(const string& strA, const string& strB)
 {
-   std::ranges::transform(str.begin(), str.end(), str.begin(), cLower);
-   return str;
+   return strA.length() == strB.length()
+      && std::equal(strA.begin(), strA.end(), strB.begin(),
+         [](char a, char b) { return cLower(a) == cLower(b); });
 }
 
-string find_directory_case_insensitive(const std::string& szParentPath, const std::string& szDirName)
+string normalize_path_separators(const string& szPath)
 {
-   std::filesystem::path parentPath(szParentPath);
-   if (!std::filesystem::exists(parentPath) || !std::filesystem::is_directory(parentPath))
-      return string();
+   string szResult = szPath;
 
-   std::filesystem::path fullPath = parentPath / szDirName;
-   if (std::filesystem::exists(fullPath) && std::filesystem::is_directory(fullPath))
-      return fullPath.string() + PATH_SEPARATOR_CHAR;
+   if (PATH_SEPARATOR_CHAR == '/')
+      std::ranges::replace(szResult.begin(), szResult.end(), '\\', PATH_SEPARATOR_CHAR);
+   else
+      std::ranges::replace(szResult.begin(), szResult.end(), '/', PATH_SEPARATOR_CHAR);
 
-   string szDirLower = string_to_lower(szDirName);
-   for (const auto& entry : std::filesystem::directory_iterator(parentPath)) {
-      if (!std::filesystem::is_directory(entry.status()))
+   auto end = std::unique(szResult.begin(), szResult.end(),
+      [](char a, char b) { return a == b && a == PATH_SEPARATOR_CHAR; });
+   szResult.erase(end, szResult.end());
+
+   return szResult;
+}
+
+string find_case_insensitive_directory_path(const string& szPath)
+{
+   string path = normalize_path_separators(szPath);
+   std::filesystem::path p = std::filesystem::path(path).lexically_normal();
+   std::error_code ec;
+
+   if (std::filesystem::exists(p, ec) && std::filesystem::is_directory(p, ec)) {
+      string exact = p.string();
+      if (!exact.empty() && exact.back() != PATH_SEPARATOR_CHAR)
+         exact.push_back(PATH_SEPARATOR_CHAR);
+      return exact;
+   }
+
+   auto parent = p.parent_path();
+   string base;
+   if (parent.empty() || parent == p)
+      base = '.';
+   else {
+      base = find_case_insensitive_directory_path(parent.string());
+      if (base.empty())
+         return string();
+   }
+
+   for (auto& ent : std::filesystem::directory_iterator(base, ec)) {
+      if (ec || !ent.is_directory(ec))
          continue;
-
-      if (string_to_lower(entry.path().filename().string()) == szDirLower) {
-         string szMatch = entry.path().string() + PATH_SEPARATOR_CHAR;
-         LOGI("case-insensitive match was found: szParentPath=%s, szDirName=%s, match=%s",
-            szParentPath.c_str(), szDirName.c_str(), szMatch.c_str());
-         return szMatch;
+      if (StrCompareNoCase(ent.path().filename().string(), p.filename().string())) {
+         string found = ent.path().string();
+         if (!found.empty() && found.back() != PATH_SEPARATOR_CHAR)
+            found.push_back(PATH_SEPARATOR_CHAR);
+         if (found != path) {
+            LOGI("case insensitive directory match: requested \"%s\", actual \"%s\"", path.c_str(), found.c_str());
+         }
+         return found;
       }
    }
 

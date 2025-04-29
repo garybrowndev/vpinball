@@ -3,6 +3,7 @@
 #include "FormBackglass.h"
 #include "FormDMD.h"
 #include "FormWindow.h"
+#include "../classes/B2SVersionInfo.h"
 #include "../classes/B2SScreen.h"
 #include "../classes/B2SAnimation.h"
 #include "../classes/AnimationInfo.h"
@@ -333,9 +334,14 @@ void FormBackglass::StopSound(const string& szSoundName)
    PLOGW << "Not implemented";
 }
 
+SDL_FRect& FormBackglass::GetScaleFactor()
+{
+   return m_pB2SScreen->GetRescaleBackglass();
+}
+
 void FormBackglass::LoadB2SData()
 {
-   string szFilename = find_path_case_insensitive(TitleAndPathFromFilename(m_pB2SData->GetTableFileName().c_str()) + ".directb2s");
+   string szFilename = find_case_insensitive_file_path(TitleAndPathFromFilename(m_pB2SData->GetTableFileName().c_str()) + ".directb2s");
    if (szFilename.empty()) {
       PLOGW.printf("No directb2s file found");
       return;
@@ -373,9 +379,9 @@ void FormBackglass::LoadB2SData()
       m_pB2SSettings->SetBackglassFileVersion(b2sTree.FirstChildElement("DirectB2SData")->Attribute("Version"));
 
       // current backglass version is not allowed to be larger than server version and to be smaller minimum B2S version
-      if (m_pB2SSettings->GetBackglassFileVersion() > m_pB2SSettings->GetDirectB2SVersion()) {
+      if (m_pB2SSettings->GetBackglassFileVersion() > string(B2S_VERSION_STRING)) {
          PLOGE.printf("B2S backglass server version (%s) doesn't match directb2s file version (%s). Please update the B2S backglass server.", 
-            m_pB2SSettings->GetDirectB2SVersion().c_str(), m_pB2SSettings->GetBackglassFileVersion().c_str());
+            B2S_VERSION_STRING, m_pB2SSettings->GetBackglassFileVersion().c_str());
          return;
       }
       else if (m_pB2SSettings->GetBackglassFileVersion() < m_pB2SSettings->GetMinimumDirectB2SVersion()) {
@@ -489,7 +495,15 @@ void FormBackglass::LoadB2SData()
             SDL_Surface* pImage = Base64ToImage(innerNode->Attribute("Image"));
             SDL_Surface* pOffImage = NULL;
             if (innerNode->FindAttribute("OffImage"))
-                pOffImage = Base64ToImage(innerNode->Attribute("OffImage"));
+               pOffImage = Base64ToImage(innerNode->Attribute("OffImage"));
+            if (picboxtype == ePictureBoxType_StandardImage) {
+               // Events of overlapping pictures get merged #76, crop image transparency
+               SDL_Surface* pCroppedImage = CropImageToTransparency(pImage, pOffImage, loc, size);
+               if (pCroppedImage) {
+                  SDL_DestroySurface(pImage);
+                  pImage = pCroppedImage;
+               }
+            }
             B2SPictureBox* pPicbox = new B2SPictureBox();
             bool isOnBackglass = (parent == "Backglass");
             pPicbox->SetName("PictureBox" + std::to_string(id));
@@ -1467,30 +1481,36 @@ SDL_Surface* FormBackglass::RotateSurface(SDL_Surface* source, int angle)
 {
    SDL_LockSurface(source);
 
-   SDL_Surface* const destination = SDL_CreateSurface(source->w, source->h, source->format);
+   const int sw = source->w;
+   const int sh = source->h;
+
+   SDL_Surface* const destination = SDL_CreateSurface(sw, sh, source->format);
 
    const float radians = -(float)angle * (float)(M_PI / 180.0);
    const float cosine = cosf(radians);
    const float sine = sinf(radians);
 
-   const float center_x = destination->w / 2.0f;
-   const float center_y = destination->h / 2.0f;
+   const int dw = destination->w;
+   const int dh = destination->h;
 
-   const UINT32* const __restrict src = ((UINT32*)source->pixels);
-   UINT32* const __restrict dest = ((UINT32*)destination->pixels);
+   const float center_x = dw / 2.0f;
+   const float center_y = dh / 2.0f;
 
-   for (int y = 0; y < destination->h; ++y) {
+   const uint32_t* const __restrict src = ((uint32_t*)source->pixels);
+   uint32_t* const __restrict dest = ((uint32_t*)destination->pixels);
+
+   for (int y = 0; y < dh; ++y) {
       const float xoffs = center_x - center_x * cosine + ((float)y - center_y) * sine;
       const float yoffs = center_y + center_x * sine   + ((float)y - center_y) * cosine;
 
-      for (int x = 0; x < destination->w; ++x) {
+      for (int x = 0; x < dw; ++x) {
          const int old_x = (int)(round(xoffs + (float)x * cosine));
          const int old_y = (int)(round(yoffs - (float)x * sine));
 
-         if (/*old_x >= 0 &&*/ (unsigned int)old_x < (unsigned int)source->w && /*old_y >= 0 &&*/ (unsigned int)old_y < (unsigned int)source->h)
-            dest[y * destination->w + x] = src[old_y * source->w + old_x];
+         if (/*old_x >= 0 &&*/ (unsigned int)old_x < (unsigned int)sw && /*old_y >= 0 &&*/ (unsigned int)old_y < (unsigned int)sh)
+            dest[y * dw + x] = src[old_y * sw + old_x];
          else
-            dest[y * destination->w + x] = 0; //!!?
+            dest[y * dw + x] = 0; //!!?
       }
    }
 
@@ -1501,13 +1521,91 @@ SDL_Surface* FormBackglass::RotateSurface(SDL_Surface* source, int angle)
 
 SDL_Surface* FormBackglass::ResizeSurface(SDL_Surface* original, int newWidth, int newHeight)
 {
-    SDL_Surface* newSurface = SDL_CreateSurface(newWidth, newHeight, original->format);
-    if (!newSurface)
-       return NULL;
+   SDL_Surface* newSurface = SDL_CreateSurface(newWidth, newHeight, original->format);
+   if (!newSurface)
+      return NULL;
 
-    SDL_BlitSurfaceScaled(original, NULL, newSurface, NULL, SDL_SCALEMODE_NEAREST);
+   SDL_BlitSurfaceScaled(original, NULL, newSurface, NULL, SDL_SCALEMODE_NEAREST);
 
-    return newSurface;
+   return newSurface;
+}
+
+SDL_Rect FormBackglass::GetBoundingRectangle(SDL_Surface* pImage)
+{
+   SDL_LockSurface(pImage);
+
+   const uint32_t* const __restrict pixels = static_cast<uint32_t*>(pImage->pixels);
+   const int pitch = pImage->pitch / sizeof(uint32_t);
+   const SDL_PixelFormatDetails* const pfd = SDL_GetPixelFormatDetails(pImage->format);
+   SDL_Palette* const pal = SDL_GetSurfacePalette(pImage);
+
+   const int w = pImage->w;
+   const int h = pImage->h;
+
+   int minX = w;
+   int minY = h;
+   int maxX = 0;
+   int maxY = 0;
+
+   bool foundNonTransparent = false;
+
+   for (int y = 0; y < h; y++) {
+      for (int x = 0; x < w; x++) {
+         uint8_t r,g,b,alpha;
+         SDL_GetRGBA(pixels[y * pitch + x], pfd, pal, &r, &g, &b, &alpha);
+
+         if (alpha) {
+            foundNonTransparent = true;
+            minX = min(minX, x);
+            minY = min(minY, y);
+            maxX = max(maxX, x);
+            maxY = max(maxY, y);
+         }
+      }
+   }
+
+   SDL_UnlockSurface(pImage);
+
+   if (!foundNonTransparent)
+      return { 0, 0, 0, 0 };
+
+   return { minX, minY, maxX - minX + 1, maxY - minY + 1 };
+}
+
+SDL_Surface* FormBackglass::CropImageToTransparency(SDL_Surface* pImage, SDL_Surface* pOffImage, SDL_Point& loc, SDL_Rect& size)
+{
+   SDL_Rect boundingRect = GetBoundingRectangle(pImage);
+   if (boundingRect.w == 0 && boundingRect.h == 0)
+      return NULL;
+
+   SDL_Surface* pCroppedImage = SDL_CreateSurface(boundingRect.w, boundingRect.h, pImage->format);
+
+   if (pOffImage) {
+      SDL_Rect offboundingRect = GetBoundingRectangle(pOffImage);
+      if (offboundingRect.w == 0 && offboundingRect.h == 0) {
+         SDL_DestroySurface(pCroppedImage);
+         return NULL;
+      }
+
+      SDL_Rect unionRect;
+      SDL_GetRectUnion(&boundingRect, &offboundingRect, &unionRect);
+      boundingRect = unionRect;
+
+      SDL_Rect srcRect = boundingRect;
+      SDL_Rect dstRect = { 0, 0, boundingRect.w, boundingRect.h };
+      SDL_BlitSurfaceScaled(pOffImage, &srcRect, pCroppedImage, &dstRect, SDL_SCALEMODE_NEAREST);
+   }
+
+   SDL_Rect srcRect = boundingRect;
+   SDL_Rect dstRect = { 0, 0, boundingRect.w, boundingRect.h };
+   SDL_BlitSurfaceScaled(pImage, &srcRect, pCroppedImage, &dstRect, SDL_SCALEMODE_NEAREST);
+
+   size.w = size.w * boundingRect.w / pImage->w;
+   size.h = size.h * boundingRect.h / pImage->h;
+   loc.x += boundingRect.x;
+   loc.y += boundingRect.y;
+
+   return pCroppedImage;
 }
 
 SDL_Surface* FormBackglass::Base64ToImage(const string& image)

@@ -26,6 +26,9 @@
 #define DEBUG_LEVEL_LOG 0
 #define WRITE_SHADER_FILES 1
 #endif
+
+#elif defined(ENABLE_DX9)
+#include <d3dx9.h>
 #endif
 
 // Attempt to speed up STL which is very CPU costly, maybe we should look into using EASTL instead? http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2007/n2271.html https://github.com/electronicarts/EASTL
@@ -504,7 +507,7 @@ public:
    void SetBool(const ShaderUniforms uniformName, const bool b) { m_state->SetBool(uniformName, b); }
    void SetUniformBlock(const ShaderUniforms uniformName, const float* const pMatrix) { m_state->SetUniformBlock(uniformName, pMatrix); }
    #if defined(ENABLE_DX9)
-   void SetMatrix(const ShaderUniforms uniformName, const D3DXMATRIX* const pMatrix, const unsigned int count = 1) { SetMatrix(uniformName, &(pMatrix->m[0][0]), count); }
+   void SetMatrix(const ShaderUniforms uniformName, const D3DMATRIX* const pMatrix, const unsigned int count = 1) { SetMatrix(uniformName, &(pMatrix->m[0][0]), count); }
    #endif
    void SetMatrix(const ShaderUniforms uniformName, const Matrix3D* const pMatrix, const unsigned int count = 1) { SetMatrix(uniformName, &(pMatrix->m[0][0]), count); }
    void SetVector(const ShaderUniforms uniformName, const vec4* const pVector) { m_state->SetVector(uniformName, pVector); }
@@ -762,9 +765,9 @@ private:
    static TechniqueDef shaderTechniqueNames[SHADER_TECHNIQUE_COUNT];
    static const string shaderAttributeNames[SHADER_ATTRIBUTE_COUNT];
    static ShaderUniform shaderUniformNames[SHADER_UNIFORM_COUNT];
-   ShaderUniforms getUniformByName(const string& name);
-   ShaderAttributes getAttributeByName(const string& name);
-   ShaderTechniques getTechniqueByName(const string& name);
+   ShaderUniforms getUniformByName(const string& name) const;
+   ShaderAttributes getAttributeByName(const string& name) const;
+   static ShaderTechniques getTechniqueByName(const string& name);
 
    vector<ShaderUniforms> m_uniforms[SHADER_TECHNIQUE_COUNT]; // Uniforms used by each technique
 
@@ -800,8 +803,8 @@ public:
    string m_shaderPath;
 
    bool UseGeometryShader() const;
-   bool parseFile(const string& fileNameRoot, const string& fileName, int level, robin_hood::unordered_map<string, string>& values, const string& parentMode);
-   string analyzeFunction(const string& shaderCodeName, const string& technique, const string& functionName, const robin_hood::unordered_map<string, string>& values);
+   bool parseFile(const string& fileNameRoot, const string& fileName, int level, ankerl::unordered_dense::map<string, string>& values, const string& parentMode);
+   string analyzeFunction(const string& shaderCodeName, const string& technique, const string& functionName, const ankerl::unordered_dense::map<string, string>& values);
    ShaderTechnique* compileGLShader(const ShaderTechniques technique, const string& fileNameRoot, const string& shaderCodeName, const string& vertex, const string& geometry, const string& fragment);
    string PreprocessGLShader(const string& shaderCode);
    void Load(const std::string& file);

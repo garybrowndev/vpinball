@@ -48,10 +48,10 @@ public:
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
-   virtual HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) override;
+   HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
    Bumper();
-   ~Bumper();
+   virtual ~Bumper();
 
    BEGIN_COM_MAP(Bumper)
       COM_INTERFACE_ENTRY(IDispatch)
@@ -148,10 +148,10 @@ public:
 
 private:
    void UpdateSkirt(const bool doCalculation);
-   void GenerateBaseMesh(Vertex3D_NoTex2 *buf);
-   void GenerateSocketMesh(Vertex3D_NoTex2 *buf);
-   void GenerateRingMesh(Vertex3D_NoTex2 *buf);
-   void GenerateCapMesh(Vertex3D_NoTex2 *buf);
+   void GenerateBaseMesh(Vertex3D_NoTex2 *buf) const;
+   void GenerateSocketMesh(Vertex3D_NoTex2 *buf) const;
+   void GenerateRingMesh(Vertex3D_NoTex2 *buf) const;
+   void GenerateCapMesh(Vertex3D_NoTex2 *buf) const;
 
    PinTable *m_ptable;
 

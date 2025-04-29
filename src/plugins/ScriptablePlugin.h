@@ -158,10 +158,13 @@ typedef struct ScriptablePluginAPI
       if (scriptablePluginApi != nullptr) { \
          va_list args; \
          va_start(args, format); \
-         int size = vsnprintf(NULL, 0, format, args); \
+         va_list args_copy; \
+         va_copy(args_copy, args); \
+         int size = vsnprintf(nullptr, 0, format, args_copy); \
+         va_end(args_copy); \
          if (size > 0) { \
             char* buffer = static_cast<char*>(malloc(size + 1)); \
-            vsnprintf(buffer, size, format, args); \
+            vsnprintf(buffer, size + 1, format, args); \
             scriptablePluginApi->OnError(type, buffer); \
             free(buffer); \
          } \
@@ -202,7 +205,7 @@ typedef struct ScriptablePluginAPI
 #define PSC_VAR_SET_uint16(variant, value)        (variant).vUInt16 = value
 #define PSC_VAR_SET_uint32(variant, value)        (variant).vUInt32 = value
 #define PSC_VAR_SET_uint64(variant, value)        (variant).vUInt64 = value
-#define PSC_VAR_SET_string(variant, value)        { const string& v=value; size_t n=v.size()+1; char* p = new char[n];  memcpy(p, v.c_str(), n); (variant).vString = { [](ScriptString* s) { delete[] s->string; }, p }; }
+#define PSC_VAR_SET_string(variant, value)        { const string& v=value; size_t n=v.length()+1; char* p = new char[n];  memcpy(p, v.c_str(), n); (variant).vString = { [](ScriptString* s) { delete[] s->string; }, p }; }
 #define PSC_VAR_SET_enum(type, variant, value)    (variant).vInt = static_cast<int>(value)
 #define PSC_VAR_SET_object(type, variant, value)  (variant).vObject = static_cast<void*>(value);
 

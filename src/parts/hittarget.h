@@ -5,7 +5,7 @@
 #pragma once
 
 #include "ui/resource.h"
-#include "robin_hood.h"
+#include "unordered_dense.h"
 
 // Indices for RotAndTra:
 //     RotX = 0
@@ -61,7 +61,7 @@ public:
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
-   virtual HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) override;
+   HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
 
    static constexpr float DROP_TARGET_LIMIT = 52.0f;
@@ -156,11 +156,11 @@ public:
    STDMETHOD(get_HitThreshold)(/*[out, retval]*/ float *pVal);
 
 
-   virtual void MoveOffset(const float dx, const float dy);
-   virtual void SetObjectPos();
+   void MoveOffset(const float dx, const float dy) final;
+   void SetObjectPos() final;
    // Multi-object manipulation
-   virtual Vertex2D GetCenter() const;
-   virtual void PutCenter(const Vertex2D& pv);
+   Vertex2D GetCenter() const final;
+   void PutCenter(const Vertex2D& pv) final;
 
    //STDMETHOD(get_Name)(BSTR *pVal) {return E_FAIL;}
 
@@ -185,7 +185,7 @@ public:
 private:
    void UpdateTarget();
    void SetupHitObject(class PhysicsEngine* physics, HitObject * obj, const bool setHitObject, const bool isUI);
-   void AddHitEdge(class PhysicsEngine *physics, robin_hood::unordered_set<robin_hood::pair<unsigned, unsigned>> &addedEdges, const unsigned i, const unsigned j, const Vertex3Ds &vi,
+   void AddHitEdge(class PhysicsEngine *physics, ankerl::unordered_dense::set<std::pair<unsigned, unsigned>> &addedEdges, const unsigned i, const unsigned j, const Vertex3Ds &vi,
       const Vertex3Ds &vj, const bool setHitObject, const bool isUI);
 
    PinTable        *m_ptable = nullptr;

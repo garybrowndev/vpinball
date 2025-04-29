@@ -13,10 +13,10 @@ ViewSetup::ViewSetup()
 void ViewSetup::SetWindowModeFromSettings(const PinTable* const table)
 {
    float realToVirtual = GetRealToVirtualScale(table);
-   vec3 playerPos(CMTOVPU(table->m_settings.LoadValueWithDefault(Settings::Player, "ScreenPlayerX"s, 0.0f)),
-                  CMTOVPU(table->m_settings.LoadValueWithDefault(Settings::Player, "ScreenPlayerY"s, 0.0f)),
-                  CMTOVPU(table->m_settings.LoadValueWithDefault(Settings::Player, "ScreenPlayerZ"s, 70.0f)));
-   float inclination = table->m_settings.LoadValueWithDefault(Settings::Player, "ScreenInclination"s, 0.0f);
+   vec3 playerPos(CMTOVPU(table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerX"s)),
+                  CMTOVPU(table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerY"s)),
+                  CMTOVPU(table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerZ"s)));
+   float inclination = table->m_settings.LoadValueFloat(Settings::Player, "ScreenInclination"s);
    float screenBotZ = GetWindowBottomZOFfset(table);
    float screenTopZ = GetWindowTopZOFfset(table);
    const Matrix3D rotx = // Rotate by the angle between playfield and real world horizontal (scale on Y and Z axis are equal and can be ignored)
@@ -138,7 +138,7 @@ float ViewSetup::GetRealToVirtualScale(const PinTable* const table) const
    if (mMode == VLM_WINDOW)
    {
       float windowBotZ = GetWindowBottomZOFfset(table), windowTopZ = GetWindowTopZOFfset(table);
-      const float screenHeight = table->m_settings.LoadValueWithDefault(Settings::Player, "ScreenWidth"s, 0.0f); // Physical width (always measured in landscape orientation) is the height in window mode
+      const float screenHeight = table->m_settings.LoadValueFloat(Settings::Player, "ScreenWidth"s); // Physical width (always measured in landscape orientation) is the height in window mode
       // const float inc = atan2f(mSceneScaleZ * (windowTopZ - windowBotZ), mSceneScaleY * table->m_bottom);
       const float inc = atan2f(windowTopZ - windowBotZ, table->m_bottom);
       return screenHeight <= 1.f ? 1.f : (VPUTOCM(table->m_bottom) / cosf(inc)) / screenHeight; // Ratio between screen height in virtual world to real world screen height
@@ -291,8 +291,8 @@ void ViewSetup::ComputeMVP(const PinTable* const table, const float aspect, cons
 
    // Compute frustum Z bounds (near/far plane), taking in account base view but also reflected point of view to avoid depth clipping in reflection probes
    float zNear, zFar;
-   table->ComputeNearFarPlane(bounds, matView, 1.f, zNear, zFar);
-   for (auto probe : table->m_vrenderprobe)
+   PinTable::ComputeNearFarPlane(bounds, matView, 1.f, zNear, zFar);
+   for (const auto probe : table->m_vrenderprobe)
    {
       if (probe->GetType() == RenderProbe::PLANE_REFLECTION)
       {
@@ -303,7 +303,7 @@ void ViewSetup::ComputeMVP(const PinTable* const table, const float aspect, cons
          const Matrix3D reflect = Matrix3D::MatrixPlaneReflection(pn, plane.w);
          const Matrix3D probeView = reflect * matView;
          float zNearProbe, zFarProbe;
-         table->ComputeNearFarPlane(bounds, probeView, 1.f, zNearProbe, zFarProbe);
+         PinTable::ComputeNearFarPlane(bounds, probeView, 1.f, zNearProbe, zFarProbe);
          zNear = min(zNear, zNearProbe);
          zFar = max(zFar, zFarProbe);
       }
@@ -345,7 +345,7 @@ void ViewSetup::ComputeMVP(const PinTable* const table, const float aspect, cons
       const Vertex3Ds bottom = fit * Vertex3Ds{centerAxis, table->m_bottom, windowBotZ};
       const float xmin = zNear * min(bottom.x, top.x), xmax = zNear * max(bottom.x, top.x);
       const float ymin = zNear * min(bottom.y, top.y), ymax = zNear * max(bottom.y, top.y);
-      const float screenHeight = table->m_settings.LoadValueWithDefault(Settings::Player, "ScreenWidth"s, 0.0f); // Physical width (always measured in landscape orientation) is the height in window mode
+      const float screenHeight = table->m_settings.LoadValueFloat(Settings::Player, "ScreenWidth"s); // Physical width (always measured in landscape orientation) is the height in window mode
       float offsetScale;
       if ((quadrant & 1) == 0) // 0 & 180
       {

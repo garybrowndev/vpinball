@@ -5,6 +5,8 @@
 #include "PUPCustomPos.h"
 #include "PUPWindow.h"
 
+#include <filesystem>
+
 PUPManager* PUPManager::m_pInstance = NULL;
 
 PUPManager* PUPManager::GetInstance()
@@ -19,6 +21,7 @@ PUPManager::PUPManager()
 {
    m_init = false;
    m_isRunning = false;
+   m_szRootPath = find_case_insensitive_directory_path(g_pvp->m_currentTablePath + "pupvideos");
 }
 
 PUPManager::~PUPManager()
@@ -32,19 +35,25 @@ void PUPManager::LoadConfig(const string& szRomName)
       return;
    }
 
-   m_szRootPath = find_directory_case_insensitive(g_pvp->m_currentTablePath, "pupvideos");
    if (m_szRootPath.empty())
+   {
+      PLOGI.printf("No pupvideos folder found, not initializing PUP");
       return;
+   }
 
-   m_szPath = find_directory_case_insensitive(m_szRootPath, szRomName);
+   m_szPath = find_case_insensitive_directory_path(m_szRootPath + szRomName);
    if (m_szPath.empty())
       return;
 
    PLOGI.printf("PUP path: %s", m_szPath.c_str());
 
+   // Load playlists
+
+   LoadPlaylists();
+
    // Load screens
 
-   string szScreensPath = find_path_case_insensitive(m_szPath + "screens.pup");
+   string szScreensPath = find_case_insensitive_file_path(m_szPath + "screens.pup");
    if (!szScreensPath.empty()) {
       std::ifstream screensFile;
       screensFile.open(szScreensPath, std::ifstream::in);
@@ -54,7 +63,7 @@ void PUPManager::LoadConfig(const string& szRomName)
          while (std::getline(screensFile, line)) {
             if (++i == 1)
                continue;
-            AddScreen(PUPScreen::CreateFromCSV(line));
+            AddScreen(PUPScreen::CreateFromCSV(line, m_playlists));
          }
       }
       else {
@@ -70,7 +79,8 @@ void PUPManager::LoadConfig(const string& szRomName)
    for (auto& [key, pScreen] : m_screenMap) {
       PUPCustomPos* pCustomPos = pScreen->GetCustomPos();
       if (pCustomPos) {
-         PUPScreen* pParentScreen = GetScreen(pCustomPos->GetSourceScreen());
+         std::map<int, PUPScreen*>::iterator it = m_screenMap.find(pCustomPos->GetSourceScreen());
+         PUPScreen* pParentScreen = it != m_screenMap.end() ? it->second : nullptr;
          if (pParentScreen && pScreen != pParentScreen)
             pParentScreen->AddChild(pScreen);
       }
@@ -78,7 +88,7 @@ void PUPManager::LoadConfig(const string& szRomName)
 
    // Load Fonts
 
-   string szFontsPath = find_directory_case_insensitive(m_szPath, "FONTS");
+   string szFontsPath = find_case_insensitive_directory_path(m_szPath + "FONTS");
    if (!szFontsPath.empty()) {
       for (const auto& entry : std::filesystem::directory_iterator(szFontsPath)) {
          if (entry.is_regular_file()) {
@@ -104,11 +114,34 @@ void PUPManager::LoadConfig(const string& szRomName)
    return;
 }
 
+void PUPManager::LoadPlaylists()
+{
+   string szPlaylistsPath = find_case_insensitive_file_path(GetPath() + "playlists.pup");
+   std::ifstream playlistsFile;
+   playlistsFile.open(szPlaylistsPath, std::ifstream::in);
+   if (playlistsFile.is_open()) {
+      ankerl::unordered_dense::set<std::string> lowerPlaylistNames;
+      string line;
+      int i = 0;
+      while (std::getline(playlistsFile, line)) {
+         if (++i == 1)
+            continue;
+         if (PUPPlaylist* pPlaylist = PUPPlaylist::CreateFromCSV(line)) {
+            string folderNameLower = lowerCase(pPlaylist->GetFolder());
+            if (lowerPlaylistNames.find(folderNameLower) == lowerPlaylistNames.end()) {
+               m_playlists.push_back(pPlaylist);
+               lowerPlaylistNames.insert(folderNameLower);
+            }
+            else {
+               PLOGW.printf("Duplicate playlist: playlist=%s", pPlaylist->ToString().c_str());
+            }
+         }
+      }
+   }
+}
+
 const string& PUPManager::GetRootPath()
 {
-   if (!m_init) {
-      PLOGW.printf("Getting root path before initialization");
-   }
    return m_szRootPath;
 }
 
@@ -130,6 +163,11 @@ bool PUPManager::AddScreen(PUPScreen* pScreen)
    PLOGI.printf("Screen added: screen={%s}", pScreen->ToString().c_str());
 
    return true;
+}
+
+bool PUPManager::AddScreen(LONG lScreenNum)
+{
+   return AddScreen(PUPScreen::CreateDefault(lScreenNum, m_playlists));
 }
 
 bool PUPManager::HasScreen(int screenNum)
@@ -157,18 +195,18 @@ bool PUPManager::AddFont(TTF_Font* pFont, const string& szFilename)
 
    const string szFamilyName = string(TTF_GetFontFamilyName(pFont));
 
-   const string szNormalizedFamilyName = string_to_lower(string_replace_all(szFamilyName, "  ", " "));
+   const string szNormalizedFamilyName = lowerCase(string_replace_all(szFamilyName, "  ", " "));
    m_fontMap[szNormalizedFamilyName] = pFont;
 
    string szStyleName = string(TTF_GetFontStyleName(pFont));
    if (szStyleName != "Regular")
    {
       const string szFullName = szFamilyName + ' ' + szStyleName;
-      const string szNormalizedFullName = string_to_lower(string_replace_all(szFullName, "  ", " "));
+      const string szNormalizedFullName = lowerCase(string_replace_all(szFullName, "  ", " "));
       m_fontMap[szNormalizedFullName] = pFont;
    }
 
-   const string szNormalizedFilename = string_to_lower(szFilename.substr(0, szFilename.length() - 4));
+   const string szNormalizedFilename = lowerCase(szFilename.substr(0, szFilename.length() - 4));
    m_fontFilenameMap[szNormalizedFilename] = pFont;
 
    PLOGI.printf("Font added: familyName=%s, styleName=%s, filename=%s", szFamilyName.c_str(), szStyleName.c_str(), szFilename.c_str());
@@ -178,12 +216,12 @@ bool PUPManager::AddFont(TTF_Font* pFont, const string& szFilename)
 
 TTF_Font* PUPManager::GetFont(const string& szFont)
 {
-   string szNormalizedFamilyName = string_to_lower(string_replace_all(szFont, "  ", " "));
+   string szNormalizedFamilyName = lowerCase(string_replace_all(szFont, "  ", " "));
 
    std::map<string, TTF_Font*>::iterator it = m_fontMap.find(szNormalizedFamilyName);
    if (it != m_fontMap.end())
       return it->second;
-   it = m_fontFilenameMap.find(string_to_lower(szFont));
+   it = m_fontFilenameMap.find(lowerCase(szFont));
    if (it != m_fontFilenameMap.end())
       return it->second;
 

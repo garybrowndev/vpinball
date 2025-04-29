@@ -215,13 +215,13 @@ public class IDLParserToC {
         fragment.append("default:\n");
         fragment.append("break;\n");
         fragment.append("}\n");
-        fragment.append("if (hres == S_OK) {\n");
+        fragment.append("if (SUCCEEDED(hres)) {\n");
         fragment.append("if (pVarResult)\n");
         fragment.append("\t*pVarResult = res;\n");
         fragment.append("else\n");
         fragment.append("\tVariantClear(&res);\n");
         fragment.append("}\n");
-        fragment.append("else if (hres != S_FALSE) {\n");
+        fragment.append("else {\n");
         fragment.append("printf(\"" + idlInterface.getClassName() + "_Invoke: dispId=%d (0x%08x), wFlags=%d, hres=%d\\n\", dispIdMember, dispIdMember, wFlags, hres);\n");
         fragment.append("}\n");
         fragment.append("return hres;\n");
@@ -514,6 +514,18 @@ public class IDLParserToC {
         IDLParserToC parser = new IDLParserToC();
 
         parser.parse(
+                "../../inc/wine/dlls/vbscript/vbsregexp55.idl",
+                "regexp_proxy.c",
+                Arrays.asList(
+                	new IDLInterface("IRegExp", "RegExp"),
+                	new IDLInterface("IRegExp2", "RegExp2"),
+                	new IDLInterface("IMatch", "Match"),
+                	new IDLInterface("IMatch2", "Match2"),
+                	new IDLInterface("IMatchCollection", "MatchCollection"),
+                	new IDLInterface("IMatchCollection2", "MatchCollection2"),
+                	new IDLInterface("ISubMatches", "SubMatches")));
+
+        parser.parse(
                 "../../inc/wine/dlls/scrrun/scrrun.idl", 
                 "dictionary_proxy.c",
                 Arrays.asList(
@@ -526,6 +538,7 @@ public class IDLParserToC {
                 	new IDLInterface("IDriveCollection", "drivecoll"),
                 	new IDLInterface("IFolderCollection", "foldercoll"),
                 	new IDLInterface("IFolder", "folder"),
+                	new IDLInterface("IFileCollection", "filecoll"),
                 	new IDLInterface("IDrive", "drive"),
                 	new IDLInterface("ITextStream", "textstream"),
                 	new IDLInterface("IFile", "file"),

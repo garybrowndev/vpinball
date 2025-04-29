@@ -480,9 +480,7 @@ void Light::RenderSetup(RenderDevice *device)
    {
       char name[sizeof(m_wzName)/sizeof(m_wzName[0])];
       WideCharToMultiByteNull(CP_ACP, 0, m_wzName, -1, name, sizeof(name), nullptr, nullptr);
-      char textBuffer[MAX_PATH];
-      _snprintf_s(textBuffer, MAX_PATH-1, "%s has an invalid shape! It can not be rendered!", name);
-      ShowError(textBuffer);
+      ShowError(name + " has an invalid shape! It can not be rendered!"s);
       return;
    }
 
@@ -516,10 +514,9 @@ void Light::Render(const unsigned int renderMask)
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
    const bool isLightBuffer = renderMask & Renderer::LIGHT_BUFFER;
    const bool isReflectionPass = renderMask & Renderer::REFLECTION_PASS;
-   const bool isNoBackdrop = renderMask & Renderer::DISABLE_BACKDROP;
    TRACE_FUNCTION();
 
-   if (m_backglass && isNoBackdrop)
+   if (m_backglass && !GetPTable()->GetDecalsEnabled())
       return;
 
    m_rd->ResetRenderState();
@@ -579,8 +576,11 @@ void Light::Render(const unsigned int renderMask)
 
    // Bulb model
    // FIXME m_bulbLightMeshBuffer will be null if started without a bulb, then activated from the LiveUI. This prevents the crash but it would be nicer to ensure LiveUI do RenderRelease/RenderSetup on toggle
-   if (m_d.m_showBulbMesh && m_d.m_visible && m_bulbLightMeshBuffer != nullptr 
-      && ((m_d.m_reflectionEnabled && !m_backglass) || !isReflectionPass)
+   if (m_d.m_showBulbMesh
+      && m_d.m_visible
+      && m_bulbLightMeshBuffer != nullptr 
+      && !(isReflectionPass && !m_d.m_reflectionEnabled)
+      && !m_backglass
       && !isLightBuffer)
    {
       Material mat;
@@ -627,8 +627,7 @@ void Light::Render(const unsigned int renderMask)
    if (!isStaticOnly
       && m_d.m_visible
       && ((m_d.m_reflectionEnabled && ! m_backglass) || !isReflectionPass)
-      && (m_lightmapMeshBuffer != nullptr) // in case of degenerate light
-      && (!m_backglass || (GetPTable()->GetDecalsEnabled() && g_pplayer->m_renderer->m_stereo3D != STEREO_VR)))
+      && (m_lightmapMeshBuffer != nullptr)) // in case of degenerate light
    {
       Texture *offTexel = nullptr;
 

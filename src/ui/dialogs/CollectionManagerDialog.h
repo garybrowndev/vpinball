@@ -2,25 +2,25 @@
 
 #pragma once
 
-class CollectionDialogStruct
+class CollectionDialogStruct final
 {
 public:
     Collection *pcol;
     PinTable *ppt;
 };
 
-class CollectionManagerDialog : public CDialog
+class CollectionManagerDialog final : public CDialog
 {
 public:
     CollectionManagerDialog();
 
 protected:
-    virtual BOOL OnInitDialog();
-    virtual INT_PTR DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam);
-    virtual BOOL OnCommand(WPARAM wParam, LPARAM lParam);
-    virtual void OnOK();
-    virtual void OnClose();
-    virtual void OnCancel();
+    BOOL OnInitDialog() override;
+    INT_PTR DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam) override;
+    BOOL OnCommand(WPARAM wParam, LPARAM lParam) override;
+    void OnOK() override;
+    void OnClose() override;
+    void OnCancel() override;
 
 private:
     void EditCollection();
@@ -31,15 +31,15 @@ private:
     static int m_columnSortOrder;
 };
 
-class CollectionDialog : public CDialog
+class CollectionDialog final : public CDialog
 {
 public:
     CollectionDialog(CollectionDialogStruct &pcds);
 
 protected:
-    virtual BOOL OnInitDialog();
-    virtual BOOL OnCommand(WPARAM wParam, LPARAM lParam);
-    virtual void OnOK();
+    BOOL OnInitDialog() override;
+    BOOL OnCommand(WPARAM wParam, LPARAM lParam) override;
+    void OnOK() override;
 
 private:
     CollectionDialogStruct &pCurCollection;

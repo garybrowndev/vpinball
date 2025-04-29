@@ -11,6 +11,8 @@
 #include <filesystem>
 #include <cassert>
 
+using namespace std::string_literals;
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Scriptable object definitions
 
@@ -201,9 +203,11 @@ LPI_IMPLEMENT // Implement shared login support
 
 void PINMAMECALLBACK OnLogMessage(PINMAME_LOG_LEVEL logLevel, const char* format, va_list args, void* const pUserData)
 {
-   int size = vsnprintf(nullptr, 0, format, args);
-   if (size > 0)
-   {
+   va_list args_copy;
+   va_copy(args_copy, args);
+   int size = vsnprintf(nullptr, 0, format, args_copy);
+   va_end(args_copy);
+   if (size > 0) {
       char* const buffer = static_cast<char*>(malloc(size + 1));
       vsnprintf(buffer, size + 1, format, args);
       if (logLevel == PINMAME_LOG_LEVEL_INFO)
@@ -587,7 +591,7 @@ MSGPI_EXPORT void MSGPIAPI PluginLoad(const uint32_t sessionId, MsgPluginAPI* ap
          VPXTableInfo tableInfo;
          vpxApi->GetTableInfo(&tableInfo);
          std::filesystem::path tablePath = tableInfo.path;
-         pinmamePath = find_directory_case_insensitive(tablePath.parent_path().string(), "pinmame");
+         pinmamePath = find_case_insensitive_directory_path(tablePath.parent_path().string() + "pinmame"s);
       }
       if (pinmamePath.empty())
       {
@@ -601,7 +605,7 @@ MSGPI_EXPORT void MSGPIAPI PluginLoad(const uint32_t sessionId, MsgPluginAPI* ap
       {
          // FIXME implement a last resort or just ask the user to define its path setup in the settings ?
          #if (defined(__APPLE__) && ((defined(TARGET_OS_IOS) && TARGET_OS_IOS) || (defined(TARGET_OS_TV) && TARGET_OS_TV))) || defined(__ANDROID__)
-            //pinmamePath = find_directory_case_insensitive(g_pvp->m_szMyPath, "pinmame");
+            //pinmamePath = find_directory_case_insensitive(g_pvp->m_szMyPath, "pinmame"s);
          #else
             //pinmamePath = string(getenv("HOME")) + PATH_SEPARATOR_CHAR + ".pinmame" + PATH_SEPARATOR_CHAR;
          #endif

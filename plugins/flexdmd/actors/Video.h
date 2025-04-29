@@ -5,7 +5,7 @@
 class Video final : public AnimatedActor 
 {
 public:
-   ~Video();
+   ~Video() override;
 
    static Video* Create(FlexDMD* pFlexDMD, const string& path, const string& name, bool loop);
 
@@ -15,7 +15,7 @@ public:
    float GetPlaySpeed() const { return m_playSpeed; }
    
    void Seek(float posInSeconds) override;
-
+   void Advance(float delta) override;
    void Rewind() override;
    void ReadNextFrame() override;
    void Draw(VP::SurfaceGraphics* pGraphics) override;

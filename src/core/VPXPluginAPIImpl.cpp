@@ -42,7 +42,7 @@ float VPXPluginAPIImpl::GetOption(const char* pageId, const char* optionId, cons
    {
       Settings& settings = g_pplayer ? g_pplayer->m_ptable->m_settings : g_pvp->m_settings;
       const std::string sectionName = "Plugin."s + pageId;
-      Settings::Section section = settings.GetSection(sectionName);
+      Settings::Section section = Settings::GetSection(sectionName);
       std::vector<std::string> literals;
       if (values != nullptr)
       {
@@ -57,18 +57,16 @@ float VPXPluginAPIImpl::GetOption(const char* pageId, const char* optionId, cons
    }
 }
 
-void* VPXPluginAPIImpl::PushNotification(const char* msg, const unsigned int lengthMs)
+unsigned int VPXPluginAPIImpl::PushNotification(const char* msg, const int lengthMs)
 {
    assert(g_pplayer); // Only allowed in game
-   g_pplayer->m_liveUI->PushNotification(msg, lengthMs);
-   // FIXME implement
-   return nullptr;
+   return g_pplayer->m_liveUI->PushNotification(msg, lengthMs);
 }
 
-void VPXPluginAPIImpl::UpdateNotification(const void* handle, const char* msg, const unsigned int lengthMs)
+void VPXPluginAPIImpl::UpdateNotification(const unsigned int handle, const char* msg, const int lengthMs)
 {
    assert(g_pplayer); // Only allowed in game
-   // FIXME implement
+   g_pplayer->m_liveUI->PushNotification(msg, lengthMs, handle);
 }
 
 
@@ -100,9 +98,9 @@ void VPXPluginAPIImpl::GetActiveViewSetup(VPXViewSetupDef* view)
    view->viewVOfs = viewSetup.mViewVOfs;
    view->windowTopZOfs = viewSetup.mWindowTopZOfs;
    view->windowBottomZOfs = viewSetup.mWindowBottomZOfs;
-   view->screenWidth = g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "ScreenWidth"s, 0.0f);
-   view->screenHeight = g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "ScreenHeight"s, 0.0f);
-   view->screenInclination = g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "ScreenInclination"s, 0.0f);
+   view->screenWidth = g_pplayer->m_ptable->m_settings.LoadValueFloat(Settings::Player, "ScreenWidth"s);
+   view->screenHeight = g_pplayer->m_ptable->m_settings.LoadValueFloat(Settings::Player, "ScreenHeight"s);
+   view->screenInclination = g_pplayer->m_ptable->m_settings.LoadValueFloat(Settings::Player, "ScreenInclination"s);
    view->realToVirtualScale = viewSetup.GetRealToVirtualScale(g_pplayer->m_ptable);
 }
 
@@ -114,6 +112,28 @@ void VPXPluginAPIImpl::SetActiveViewSetup(VPXViewSetupDef* view)
    viewSetup.mViewY = view->viewY;
    viewSetup.mViewZ = view->viewZ;
    g_pplayer->m_renderer->InitLayout();
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
+// Input API
+
+void VPXPluginAPIImpl::GetInputState(uint64_t* keyState, float* nudgeX, float* nudgeY, float* plunger)
+{
+   const Vertex2D& nudge = g_pplayer->m_pininput.GetNudge();
+   *nudgeX = nudge.x;
+   *nudgeY = nudge.y;
+   *plunger = g_pplayer->m_pininput.GetPlungerPos();
+   *keyState = g_pplayer->m_pininput.GetInputState().actionState;
+}
+
+void VPXPluginAPIImpl::SetInputState(const uint64_t keyState, const float nudgeX, const float nudgeY, const float plunger)
+{
+   PinInput::InputState state;
+   state.actionState = keyState;
+   g_pplayer->m_pininput.SetInputState(state);
+   g_pplayer->m_pininput.SetNudge(Vertex2D(nudgeX, nudgeY));
+   g_pplayer->m_pininput.SetPlungerPos(plunger);
 }
 
 
@@ -175,8 +195,7 @@ void VPXPluginAPIImpl::SetCOMObjectOverride(const char* className, const ScriptC
    VPXPluginAPIImpl& pi = VPXPluginAPIImpl::GetInstance();
    // FIXME remove when classDef is unregistered
    // FIXME check that classDef has been registered in the type library ?
-   string classId(className);
-   StrToLower(classId);
+   const string classId(lowerCase(className));
    if (classDef == nullptr)
       pi.m_scriptCOMObjectOverrides.erase(classId);
    else
@@ -195,8 +214,7 @@ string VPXPluginAPIImpl::ApplyScriptCOMObjectOverrides(string& script) const
    while (std::regex_search(searchStart, script.cend(), res, re))
    {
       result << res.prefix().str();
-      string className = res[1].str();
-      StrToLower(className);
+      const string className = lowerCase(res[1].str());
       const auto& overrideEntry = m_scriptCOMObjectOverrides.find(className);
       if (overrideEntry != m_scriptCOMObjectOverrides.end())
       {
@@ -217,8 +235,7 @@ IDispatch* VPXPluginAPIImpl::CreateCOMPluginObject(const string& classId)
 {
    // FIXME we are not separating type library per plugin, therefore collision may occur
    VPXPluginAPIImpl& pi = VPXPluginAPIImpl::GetInstance();
-   string className(classId);
-   StrToLower(className);
+   const string className(lowerCase(classId));
    const auto& overrideEntry = m_scriptCOMObjectOverrides.find(className);
    if (overrideEntry == m_scriptCOMObjectOverrides.end())
    {
@@ -328,7 +345,7 @@ VPXPluginAPIImpl::VPXPluginAPIImpl()
       {
          const Settings& settings = g_pplayer ? g_pplayer->m_ptable->m_settings : g_pvp->m_settings;
          const std::string sectionName = "Plugin."s + name_space;
-         Settings::Section section = settings.GetSection(sectionName);
+         Settings::Section section = Settings::GetSection(sectionName);
          std::string buffer;
          valueBuf[0] = '\0';
          if (settings.LoadValue(section, name, buffer))
@@ -351,6 +368,9 @@ VPXPluginAPIImpl::VPXPluginAPIImpl()
    m_api.DisableStaticPrerendering = DisableStaticPrerendering;
    m_api.GetActiveViewSetup = GetActiveViewSetup;
    m_api.SetActiveViewSetup = SetActiveViewSetup;
+
+   m_api.GetInputState = GetInputState;
+   m_api.SetInputState = SetInputState;
 
    m_vpxPlugin = MsgPluginManager::GetInstance().RegisterPlugin("vpx", "VPX", "Visual Pinball X", "", "", "https://github.com/vpinball/vpinball", 
          [](const uint32_t pluginId, const MsgPluginAPI* api) {},

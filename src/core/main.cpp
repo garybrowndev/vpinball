@@ -1,14 +1,10 @@
 // license:GPLv3+
 
-// Implementation of (Win)Main
+// Implementation of WinMain (Windows with UI) or main (Standalone)
 
 #include "core/stdafx.h"
 
 #include "vpversion.h"
-
-#ifdef __STANDALONE__
-#include <SDL3_ttf/SDL_ttf.h>
-#endif
 
 #include "plugins/VPXPlugin.h"
 #include "core/VPXPluginAPIImpl.h"
@@ -22,7 +18,7 @@
 #include "ui/resource.h"
 #include <initguid.h>
 
-#define  SET_CRT_DEBUG_FIELD(a)   _CrtSetDbgFlag((a) | _CrtSetDbgFlag(_CRTDBG_REPORT_FLAG))
+#define SET_CRT_DEBUG_FIELD(a) _CrtSetDbgFlag((a) | _CrtSetDbgFlag(_CRTDBG_REPORT_FLAG))
 
 #ifndef __STANDALONE__
 #include "vpinball_i.c"
@@ -37,6 +33,15 @@
 
 #ifdef __STANDALONE__
 #include <SDL3_ttf/SDL_ttf.h>
+#include <filesystem>
+#endif
+
+#ifndef OVERRIDE
+#ifndef __STANDALONE__
+   #define OVERRIDE override
+#else
+   #define OVERRIDE
+#endif
 #endif
 
 #ifdef CRASH_HANDLER
@@ -132,7 +137,7 @@ BEGIN_OBJECT_MAP(ObjectMap)
 END_OBJECT_MAP()
 
 
-PCHAR* CommandLineToArgvA(PCHAR CmdLine, int* _argc)
+static PCHAR* CommandLineToArgvA(PCHAR CmdLine, int* _argc)
 {
    PCHAR*  argv;
    PCHAR   _argv;
@@ -239,7 +244,8 @@ static const string options[] = { // keep in sync with option_names & option_des
    "TableIni"s,
    "TournamentFile"s,
    "v"s,
-   "exit"s // (ab)used by frontend, not handled by us
+   "exit"s, // (ab)used by frontend, not handled by us
+   "Audit"s
 #ifdef __STANDALONE__
    ,
    "PrefPath"s,
@@ -271,7 +277,8 @@ static const string option_descs[] =
    "[filename]  Use a custom table settings file. This option is only available in conjunction with a command which specifies a table filename like Play, Edit,..."s,
    "[table filename] [tournament filename]  Load a table and tournament file and convert to .png"s,
    "Displays the version"s,
-   string()
+   string(),
+   "[table filename] Audit the table"s
 #ifdef __STANDALONE__
    ,
    "[path]  Use a custom preferences path instead of $HOME/.vpinball"s,
@@ -303,7 +310,8 @@ enum option_names
    OPTION_TABLE_INI,
    OPTION_TOURNAMENT,
    OPTION_VERSION,
-   OPTION_FRONTEND_EXIT
+   OPTION_FRONTEND_EXIT,
+   OPTION_AUDIT
 #ifdef __STANDALONE__
    ,
    OPTION_PREFPATH,
@@ -412,9 +420,10 @@ private:
    bool m_file;
    bool m_loadFileResult;
    bool m_extractScript;
+   bool m_audit;
    bool m_tournament;
-   bool m_bgles;
-   float m_fgles;
+   bool m_bgles = false;
+   float m_fgles = 0.f;
 #ifdef __STANDALONE__
    string m_szPrefPath;
    bool m_listRes;
@@ -437,7 +446,7 @@ public:
        g_pvp = &m_vpinball;
    }
 
-   virtual ~VPApp() 
+   ~VPApp() OVERRIDE
    {
 #ifndef __STANDALONE__
       _Module.Term();
@@ -541,6 +550,7 @@ public:
       m_run = true;
       m_loadFileResult = true;
       m_extractScript = false;
+      m_audit = false;
       m_tournament = false;
       m_fgles = 0.f;
       m_bgles = false;
@@ -586,7 +596,7 @@ public:
          //
 #ifdef __STANDALONE__
          // If the only parameter passed is a vpx table we play it automatically.
-         const bool launchfile = (!valid_param) && (nArgs == 2) && (i==1) && strstr(szArglist[i], ".vpx") == (&szArglist[i][strlen(szArglist[i]) - 4]);
+         const bool launchfile = (!valid_param) && (nArgs == 2) && (i==1) && StrStrI(szArglist[i], ".vpx") == (&szArglist[i][strlen(szArglist[i]) - 4]);
          if(launchfile)
          {
             valid_param = true;
@@ -616,6 +626,7 @@ public:
                             "\n-"  +options[OPTION_PLAY]+                 "  "+option_descs[OPTION_PLAY]+
                             "\n-"  +options[OPTION_POVEDIT]+              "  "+option_descs[OPTION_POVEDIT]+
                             "\n-"  +options[OPTION_POV]+                  "  "+option_descs[OPTION_POV]+
+                            "\n-"  +options[OPTION_AUDIT]+                "  "+option_descs[OPTION_AUDIT]+
                             "\n-"  +options[OPTION_EXTRACTVBS]+           "  "+option_descs[OPTION_EXTRACTVBS]+
                             "\n-"  +options[OPTION_INI]+                  "  "+option_descs[OPTION_INI]+
                             "\n-"  +options[OPTION_TABLE_INI]+            "  "+option_descs[OPTION_TABLE_INI]+
@@ -647,11 +658,11 @@ public:
 
          if (compare_option(szArglist[i], OPTION_VERSION))
          {
-            const string ver = "Visual Pinball "s + VP_VERSION_STRING_FULL_LITERAL;
+            static const string ver = "Visual Pinball "s + VP_VERSION_STRING_FULL_LITERAL;
 #ifndef __STANDALONE__
             ::MessageBox(NULL, ver.c_str(), "Visual Pinball", MB_OK);
 #else
-            std::cout << ver.c_str() << "\n\n";
+            std::cout << ver << "\n\n";
 #endif
             exit(0);
          }
@@ -691,13 +702,13 @@ public:
 
          if (compare_option(szArglist[i], OPTION_DISABLETRUEFULLSCREEN))
          {
-             m_vpinball.m_disEnableTrueFullscreen = 0;
-             continue;
+            m_vpinball.m_disEnableTrueFullscreen = 0;
+            continue;
          }
          if (compare_option(szArglist[i], OPTION_ENABLETRUEFULLSCREEN))
          {
-             m_vpinball.m_disEnableTrueFullscreen = 1;
-             continue;
+            m_vpinball.m_disEnableTrueFullscreen = 1;
+            continue;
          }
 
          //
@@ -706,24 +717,24 @@ public:
          int customIdx = 1;
          for (char t = '1'; t <= '9'; ++t)
          {
-             if (lstrcmpi(szArglist[i], ("-c"s+t).c_str()) == 0 || lstrcmpi(szArglist[i], ("/c"s+t).c_str()) == 0)
-             {
-                 useCustomParams = true;
-                 break;
-             }
-             customIdx++;
+            if (lstrcmpi(szArglist[i], ("-c"s+t).c_str()) == 0 || lstrcmpi(szArglist[i], ("/c"s+t).c_str()) == 0)
+            {
+               useCustomParams = true;
+               break;
+            }
+            customIdx++;
          }
 
          if (useCustomParams && (i+1<nArgs))
          {
-             const size_t len = strlen(szArglist[i + 1]);
-             m_vpinball.m_customParameters[customIdx - 1] = new WCHAR[len + 1];
+            const size_t len = strlen(szArglist[i + 1]);
+            m_vpinball.m_customParameters[customIdx - 1] = new WCHAR[len + 1];
 
-             MultiByteToWideCharNull(CP_ACP, 0, szArglist[i + 1], -1, m_vpinball.m_customParameters[customIdx - 1], (int)len + 1);
+            MultiByteToWideCharNull(CP_ACP, 0, szArglist[i + 1], -1, m_vpinball.m_customParameters[customIdx - 1], (int)len + 1);
 
-             ++i; // two params processed
+            ++i; // two params processed
 
-             continue;
+            continue;
          }
 
          //
@@ -731,19 +742,19 @@ public:
          const bool minimized = compare_option(szArglist[i], OPTION_MINIMIZED);
          if (minimized)
          {
-             m_vpinball.m_open_minimized = true;
-             m_vpinball.m_disable_pause_menu = true;
+            m_vpinball.m_open_minimized = true;
+            m_vpinball.m_disable_pause_menu = true;
          }
 
          const bool ext_minimized = compare_option(szArglist[i], OPTION_EXTMINIMIZED);
          if (ext_minimized)
-             m_vpinball.m_open_minimized = true;
+            m_vpinball.m_open_minimized = true;
 
          const bool gles = compare_option(szArglist[i], OPTION_GLES);
 
          const bool primaryDisplay = compare_option(szArglist[i], OPTION_PRIMARY);
          if (primaryDisplay)
-             m_vpinball.m_primaryDisplay = true;
+            m_vpinball.m_primaryDisplay = true;
 
          // global emission scale parameter handling
          if (gles && (i + 1 < nArgs))
@@ -762,6 +773,7 @@ public:
          const bool povEdit = compare_option(szArglist[i], OPTION_POVEDIT);
          const bool extractpov = compare_option(szArglist[i], OPTION_POV);
          const bool extractscript = compare_option(szArglist[i], OPTION_EXTRACTVBS);
+         const bool audit = compare_option(szArglist[i], OPTION_AUDIT);
 #ifdef __STANDALONE__
          const bool prefPath = compare_option(szArglist[i], OPTION_PREFPATH);
          const bool listRes = compare_option(szArglist[i], OPTION_LISTRES);
@@ -778,7 +790,7 @@ public:
 #ifndef __STANDALONE__
          if (ini || tableIni || editfile || playfile || povEdit || extractpov || extractscript || tournament)
 #else
-         if (prefPath || ini || tableIni || editfile || playfile || launchfile || povEdit || extractpov || extractscript || tournament)
+         if (prefPath || ini || tableIni || editfile || playfile || launchfile || povEdit || extractpov || extractscript || tournament || audit)
 #endif
          {
             if (i + 1 >= nArgs)
@@ -839,11 +851,11 @@ public:
                m_szIniFileName = path;
             else if (tableIni)
                m_szTableIniFileName = path;
-            else // editfile || playfile || povEdit || extractpov || extractscript || tournament
+            else // editfile || playfile || povEdit || extractpov || extractscript || audit || tournament
             {
                allowLoadOnStart = false; // Don't face the user with a load dialog since the file is provided on the command line
                m_file = true;
-               if (m_play || m_extractPov || m_extractScript || m_vpinball.m_povEdit || m_tournament)
+               if (m_play || m_extractPov || m_extractScript || m_audit || m_vpinball.m_povEdit || m_tournament)
                {
 #ifndef __STANDALONE__
                   ::MessageBox(NULL, ("Only one of " + options[OPTION_EDIT] + ", " + options[OPTION_PLAY] + ", " + options[OPTION_POVEDIT] + ", " + options[OPTION_POV] + ", " + options[OPTION_EXTRACTVBS] + ", " + options[OPTION_TOURNAMENT] + " can be used.").c_str(),
@@ -858,7 +870,8 @@ public:
                      << options[OPTION_POVEDIT] << ", "
                      << options[OPTION_POV] << ", "
                      << options[OPTION_EXTRACTVBS] << ", "
-                     << options[OPTION_TOURNAMENT] << " can be used."
+                     << options[OPTION_TOURNAMENT] << ", "
+                     << options[OPTION_AUDIT] << " can be used."
                      << "\n\n";
 #endif
                   exit(1);
@@ -869,6 +882,7 @@ public:
 #endif
                m_extractPov = extractpov;
                m_extractScript = extractscript;
+               m_audit = audit;
                m_vpinball.m_povEdit = povEdit;
                m_tournament = tournament;
                m_szTableFileName = path;
@@ -902,10 +916,10 @@ public:
          }
          catch(...) {
             std::cout
-                << "Visual Pinball Error"
-                << "\n\n"
-                << "Could not create preferences path: " << m_szPrefPath
-                << "\n\n";
+               << "Visual Pinball Error"
+               << "\n\n"
+               << "Could not create preferences path: " << m_szPrefPath
+               << "\n\n";
             exit(1);
          }
       }
@@ -937,13 +951,9 @@ public:
       }
 
       m_vpinball.m_settings.LoadFromFile(m_szIniFileName, true);
-      m_vpinball.m_settings.SaveValue(Settings::Version, "VPinball"s, VP_VERSION_STRING_DIGITS);
+      m_vpinball.m_settings.SaveValue(Settings::Version, "VPinball"s, string(VP_VERSION_STRING_DIGITS));
 
-#ifndef __STANDALONE__
-      Logger::GetInstance()->SetupLogger(m_vpinball.m_settings.LoadValueWithDefault(Settings::Editor, "EnableLog"s, false));
-#else
-      Logger::GetInstance()->SetupLogger(m_vpinball.m_settings.LoadValueWithDefault(Settings::Editor, "EnableLog"s, true));
-#endif
+      Logger::GetInstance()->SetupLogger(m_vpinball.m_settings.LoadValueBool(Settings::Editor, "EnableLog"s));
 
       PLOGI << "Starting VPX - " << VP_VERSION_STRING_FULL_LITERAL;
       PLOGI << "Setting file is: " << m_szIniFileName;
@@ -1000,13 +1010,6 @@ public:
 
       if (m_listRes || m_listSnd)
          exit(0);
-
-#if (defined(__APPLE__) && ((defined(TARGET_OS_IOS) && TARGET_OS_IOS) || (defined(TARGET_OS_TV) && TARGET_OS_TV))) || defined(__ANDROID__)
-      const string launchTable = g_pvp->m_settings.LoadValueWithDefault(Settings::Standalone, "LaunchTable"s, "assets/exampleTable.vpx"s);
-      m_szTableFileName = m_vpinball.m_szMyPrefPath + launchTable;
-      m_file = true;
-      m_play = true;
-#endif
 
 #endif
 
@@ -1079,6 +1082,7 @@ public:
       EditableRegistry::RegisterEditable<Timer>();
       EditableRegistry::RegisterEditable<Trigger>();
       EditableRegistry::RegisterEditable<HitTarget>();
+      EditableRegistry::RegisterEditable<PartGroup>();
 
       m_vpinball.AddRef();
       m_vpinball.Create(nullptr);
@@ -1114,6 +1118,12 @@ public:
             if(ReplaceExtensionFromFilename(szScriptFilename, "vbs"s))
                m_vpinball.m_ptableActive->m_pcv->SaveToFile(szScriptFilename);
             m_vpinball.QuitPlayer(Player::CloseState::CS_CLOSE_APP);
+         }
+         if (m_audit && m_loadFileResult)
+         {
+            string audit = m_vpinball.m_ptableActive->AuditTable(false);
+            m_vpinball.QuitPlayer(Player::CloseState::CS_CLOSE_APP);
+            PLOGW << audit;
          }
          if (m_extractPov && m_loadFileResult)
          {

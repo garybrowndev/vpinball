@@ -26,7 +26,7 @@ void EditorOptionsDialog::AddToolTip(const char * const text, HWND parentHwnd, H
     toolInfo.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
     toolInfo.uId = (UINT_PTR)controlHwnd;
     toolInfo.lpszText = (char*)text;
-    SendMessage(toolTipHwnd, TTM_ADDTOOL, 0, (LPARAM)&toolInfo);
+    ::SendMessage(toolTipHwnd, TTM_ADDTOOL, 0, (LPARAM)&toolInfo);
 }
 
 BOOL EditorOptionsDialog::OnInitDialog()
@@ -36,7 +36,7 @@ BOOL EditorOptionsDialog::OnInitDialog()
     const HWND toolTipHwnd = ::CreateWindowEx(0, TOOLTIPS_CLASS, nullptr, WS_POPUP | TTS_ALWAYSTIP | TTS_BALLOON, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, GetHwnd(), nullptr, g_pvp->theInstance, nullptr);
     if (toolTipHwnd)
     {
-        SendMessage(toolTipHwnd, TTM_SETMAXTIPWIDTH, 0, 180);
+        ::SendMessage(toolTipHwnd, TTM_SETMAXTIPWIDTH, 0, 180);
         AddToolTip("If checked, the 'Throw Balls in Player' option is always active. You don't need to activate it in the debug menu again.", GetHwnd(), toolTipHwnd, GetDlgItem(IDC_THROW_BALLS_ALWAYS_ON_CHECK));
         AddToolTip("Defines the default size of the ball when dropped onto the table.", GetHwnd(), toolTipHwnd, GetDlgItem(IDC_THROW_BALLS_SIZE_EDIT));
     }
@@ -93,7 +93,7 @@ BOOL EditorOptionsDialog::OnInitDialog()
     const float throwBallMass = g_pvp->m_settings.LoadValueWithDefault(Settings::Editor, "ThrowBallMass"s, 1.0f);
     SetDlgItemText(IDC_THROW_BALLS_MASS_EDIT, f2sz(throwBallMass).c_str());
 
-    const bool enableLog = g_pvp->m_settings.LoadValueWithDefault(Settings::Editor, "EnableLog"s, false);
+    const bool enableLog = g_pvp->m_settings.LoadValueBool(Settings::Editor, "EnableLog"s);
     SendDlgItemMessage(IDC_ENABLE_LOGGING, BM_SETCHECK, enableLog ? BST_CHECKED : BST_UNCHECKED, 0);
 
     const bool logScript = g_pvp->m_settings.LoadValueWithDefault(Settings::Editor, "LogScriptOutput"s, false);
@@ -104,10 +104,10 @@ BOOL EditorOptionsDialog::OnInitDialog()
 
     const int units = g_pvp->m_settings.LoadValueWithDefault(Settings::Editor, "Units"s, 0);
     const HWND hwnd = GetDlgItem(IDC_UNIT_LIST_COMBO).GetHwnd();
-    SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"VPUnits");
-    SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"Inches");
-    SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"Millimeters");
-    SendMessage(hwnd, CB_SETCURSEL, units, 0);
+    ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"VPUnits");
+    ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"Inches");
+    ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM)"Millimeters");
+    ::SendMessage(hwnd, CB_SETCURSEL, units, 0);
 
     return TRUE;
 }
@@ -216,7 +216,7 @@ BOOL EditorOptionsDialog::OnCommand(WPARAM wParam, LPARAM lParam)
           SendDlgItemMessage(IDC_START_VP_FILE_DIALOG, BM_SETCHECK, BST_CHECKED, 0);
           SendDlgItemMessage(IDC_START_VP_FILE_DIALOG2, BM_SETCHECK, BST_CHECKED, 0);
           SendDlgItemMessage(IDC_UNIT_LIST_COMBO, CB_SETCURSEL, 0, 0);
-          SetDlgItemText(IDC_THROW_BALLS_MASS_EDIT, "1.0");
+          SetDlgItemText(IDC_THROW_BALLS_MASS_EDIT, f2sz(1.0f).c_str());
           SendDlgItemMessage(IDC_ENABLE_LOGGING, BM_SETCHECK, BST_UNCHECKED, 0);
           SendDlgItemMessage(IDC_ENABLE_SCRIPT_LOGGING, BM_SETCHECK, BST_CHECKED, 0);
           SendDlgItemMessage(IDC_STORE_INI_LOCATION, BM_SETCHECK, BST_UNCHECKED, 0);
@@ -308,7 +308,7 @@ void EditorOptionsDialog::OnOK()
     const int ballSize = GetDlgItemInt(IDC_THROW_BALLS_SIZE_EDIT, nothing, FALSE);
     g_pvp->m_settings.SaveValue(Settings::Editor, "ThrowBallSize"s, ballSize);
 
-    const float fv = sz2f(GetDlgItemText(IDC_THROW_BALLS_MASS_EDIT).c_str());
+    const float fv = sz2f(GetDlgItemText(IDC_THROW_BALLS_MASS_EDIT).GetString());
     g_pvp->m_settings.SaveValue(Settings::Editor, "ThrowBallMass"s, fv);
 
     checked = (IsDlgButtonChecked(IDC_DEFAULT_GROUP_COLLECTION_CHECK) == BST_CHECKED);

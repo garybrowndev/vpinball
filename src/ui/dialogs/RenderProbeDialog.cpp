@@ -29,15 +29,15 @@ BOOL RenderProbeDialog::OnInitDialog()
    lvcol.cx = 200;
    ListView_InsertColumn(hListHwnd, 1, &lvcol); */
 
-   HWND hwnd = GetDlgItem(IDC_REFLECTION_MAX_LEVEL).GetHwnd();
-   SendMessage(hwnd, WM_SETREDRAW, FALSE, 0); // to speed up adding the entries :/
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Disabled");
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Balls Only");
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Static Only");
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Static & Balls");
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Static & Unsynced Dynamic");
-   SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Dynamic");
-   SendMessage(hwnd, WM_SETREDRAW, TRUE, 0);
+   const HWND hwnd = GetDlgItem(IDC_REFLECTION_MAX_LEVEL).GetHwnd();
+   ::SendMessage(hwnd, WM_SETREDRAW, FALSE, 0); // to speed up adding the entries :/
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Disabled");
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Balls Only");
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Static Only");
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Static & Balls");
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Static & Unsynced Dynamic");
+   ::SendMessage(hwnd, CB_ADDSTRING, 0, (LPARAM) "Dynamic");
+   ::SendMessage(hwnd, WM_SETREDRAW, TRUE, 0);
 
    UpdateList();
 
@@ -84,7 +84,7 @@ INT_PTR RenderProbeDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
          NMLVDISPINFO *pinfo = (NMLVDISPINFO *)lParam;
          if (pinfo->item.pszText == nullptr || pinfo->item.pszText[0] == '\0')
             return FALSE;
-         auto new_name = string(pinfo->item.pszText);
+         const string new_name(pinfo->item.pszText);
          LVITEM lvitem;
          lvitem.mask = LVIF_PARAM;
          lvitem.iItem = pinfo->item.iItem;
@@ -196,14 +196,14 @@ void RenderProbeDialog::LoadProbeToUI(RenderProbe *const pb)
    GetDlgItem(IDC_REFLECTION_MAX_LEVEL).EnableWindow(type == RenderProbe::PLANE_REFLECTION);
    GetDlgItem(IDC_REFLECTION_NO_LIGHTMAPS).EnableWindow(type == RenderProbe::PLANE_REFLECTION && !isPfReflections);
    CheckDlgButton(IDC_REFLECTION_NO_LIGHTMAPS, pb->GetReflectionNoLightmaps() ? 1 : 0);
-   HWND hwnd = GetDlgItem(IDC_ROUGHNESS).GetHwnd();
-   SendMessage(hwnd, TBM_SETRANGE, fTrue, MAKELONG(0, 13 - 1));
-   SendMessage(hwnd, TBM_SETTICFREQ, 1, 0);
-   SendMessage(hwnd, TBM_SETLINESIZE, 0, 1);
-   SendMessage(hwnd, TBM_SETPAGESIZE, 0, 1);
-   SendMessage(hwnd, TBM_SETTHUMBLENGTH, 10, 0);
-   SendMessage(hwnd, TBM_SETPOS, TRUE, pb->GetRoughness());
-   GetDlgItem(IDC_ROUGHNESS_LABEL).SetWindowText("Level: "s.append(std::to_string(pb->GetRoughness())).c_str());
+   const HWND hwnd = GetDlgItem(IDC_ROUGHNESS).GetHwnd();
+   ::SendMessage(hwnd, TBM_SETRANGE, fTrue, MAKELONG(0, 13 - 1));
+   ::SendMessage(hwnd, TBM_SETTICFREQ, 1, 0);
+   ::SendMessage(hwnd, TBM_SETLINESIZE, 0, 1);
+   ::SendMessage(hwnd, TBM_SETPAGESIZE, 0, 1);
+   ::SendMessage(hwnd, TBM_SETTHUMBLENGTH, 10, 0);
+   ::SendMessage(hwnd, TBM_SETPOS, TRUE, pb->GetRoughness());
+   GetDlgItem(IDC_ROUGHNESS_LABEL).SetWindowText(("Level: " + std::to_string(pb->GetRoughness())).c_str());
 }
 
 void RenderProbeDialog::SaveProbeFromUI(RenderProbe *const pb)
@@ -212,10 +212,10 @@ void RenderProbeDialog::SaveProbeFromUI(RenderProbe *const pb)
    RenderProbe::ProbeType type = isReflection ? RenderProbe::PLANE_REFLECTION : RenderProbe::SCREEN_SPACE_TRANSPARENCY;
    vec4 plane;
    pb->GetReflectionPlane(plane);
-   const float vx = sz2f(GetDlgItemText(IDC_REFLECTION_PLANE_NX).c_str());
-   const float vy = sz2f(GetDlgItemText(IDC_REFLECTION_PLANE_NY).c_str());
-   const float vz = sz2f(GetDlgItemText(IDC_REFLECTION_PLANE_NZ).c_str());
-   const float vw = sz2f(GetDlgItemText(IDC_REFLECTION_PLANE_DIST).c_str());
+   const float vx = sz2f(GetDlgItemText(IDC_REFLECTION_PLANE_NX).GetString());
+   const float vy = sz2f(GetDlgItemText(IDC_REFLECTION_PLANE_NY).GetString());
+   const float vz = sz2f(GetDlgItemText(IDC_REFLECTION_PLANE_NZ).GetString());
+   const float vw = sz2f(GetDlgItemText(IDC_REFLECTION_PLANE_DIST).GetString());
    LRESULT reflectionMode = SendDlgItemMessage(IDC_REFLECTION_MAX_LEVEL, CB_GETCURSEL, 0, 0);
    if (reflectionMode == LB_ERR)
       reflectionMode = RenderProbe::REFL_STATIC;

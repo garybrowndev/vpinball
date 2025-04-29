@@ -6,7 +6,7 @@
 #include "plugins/ScriptablePlugin.h"
 #include "plugins/LoggingPlugin.h"
 #include "core/DynamicScript.h"
-#include "robin_hood.h"
+#include "unordered_dense.h"
 
 // VPX serves as a plugin host, using the generic messaging plugin API
 // 
@@ -26,8 +26,8 @@ public:
    unsigned int GetVPXEndPointId() const { return m_vpxPlugin->m_endpointId; }
    void BroadcastVPXMsg(const unsigned int msgId, void* data) const { MsgPluginManager::GetInstance().GetMsgAPI().BroadcastMsg(m_vpxPlugin->m_endpointId, msgId, data); }
 
-   unsigned int GetMsgID(const char* name_space, const char* name) const { return MsgPluginManager::GetInstance().GetMsgAPI().GetMsgID(name_space, name); }
-   void ReleaseMsgID(const unsigned int msgId) const { MsgPluginManager::GetInstance().GetMsgAPI().ReleaseMsgID(msgId); }
+   static unsigned int GetMsgID(const char* name_space, const char* name) { return MsgPluginManager::GetInstance().GetMsgAPI().GetMsgID(name_space, name); }
+   static void ReleaseMsgID(const unsigned int msgId) { MsgPluginManager::GetInstance().GetMsgAPI().ReleaseMsgID(msgId); }
 
    string ApplyScriptCOMObjectOverrides(string& script) const;
    IDispatch* CreateCOMPluginObject(const string& classId);
@@ -43,16 +43,21 @@ private:
    static void GetTableInfo(VPXTableInfo* info);
 
    static float GetOption(const char* pageId, const char* optionId, const unsigned int showMask, const char* optionName, const float minValue, const float maxValue, const float step, const float defaultValue, const VPXPluginAPI::OptionUnit unit, const char** values);
-   static void* PushNotification(const char* msg, const unsigned int lengthMs);
-   static void UpdateNotification(const void* handle, const char* msg, const unsigned int lengthMs);
+   static unsigned int PushNotification(const char* msg, const int lengthMs);
+   static void UpdateNotification(const unsigned int handle, const char* msg, const int lengthMs);
 
    static void DisableStaticPrerendering(const BOOL disable);
    static void GetActiveViewSetup(VPXViewSetupDef* view);
    static void SetActiveViewSetup(VPXViewSetupDef* view);
 
+   static void GetInputState(uint64_t* keyState, float* nudgeX, float* nudgeY, float* plunger);
+   static void SetInputState(const uint64_t keyState, const float nudgeX, const float nudgeY, const float plunger);
+
+
    // Plugin logging API
    static void OnGetLoggingPluginAPI(const unsigned int msgId, void* userData, void* msgData);
    static void PluginLog(unsigned int level, const char* message);
+
    LoggingPluginAPI m_loggingApi;
 
    // Scriptable plugin API
@@ -63,13 +68,15 @@ private:
    static void SubmitTypeLibrary();
    static void OnScriptError(unsigned int type, const char* message);
    static void SetCOMObjectOverride(const char* className, const ScriptClassDef* classDef);
-   robin_hood::unordered_map<string, const ScriptClassDef*> m_scriptCOMObjectOverrides;
+
+   ankerl::unordered_dense::map<string, const ScriptClassDef*> m_scriptCOMObjectOverrides;
    DynamicTypeLibrary m_dynamicTypeLibrary;
    ScriptablePluginAPI m_scriptableApi;
 
    // Contribute VPX API through plugin API
    unsigned int m_getRenderDmdMsgId;
    unsigned int m_getIdentifyDmdMsgId;
+
    static void ControllerOnGetDMDSrc(const unsigned int msgId, void* userData, void* msgData);
    static void ControllerOnGetRenderDMD(const unsigned int msgId, void* userData, void* msgData);
    static void ControllerOnGetIdentifyDMD(const unsigned int msgId, void* userData, void* msgData);

@@ -69,9 +69,7 @@ set(VPINBALL_SOURCES
    src/core/def.h
    src/parts/dragpoint.cpp
    src/utils/eventproxy.h
-   src/parts/backGlass.cpp
-   src/core/pininput.cpp
-   src/core/pininput_OpenPinDev_stub.cpp
+   src/renderer/Backglass.cpp
    src/parts/pinbinary.cpp
    src/core/vpversion.h
 
@@ -89,7 +87,6 @@ set(VPINBALL_SOURCES
    src/core/ieditable.h
    src/core/iselect.cpp
    src/core/iselect.h
-   src/core/pininput.h
    src/core/pinundo.cpp
    src/core/pinundo.h
    src/core/main.cpp
@@ -108,6 +105,10 @@ set(VPINBALL_SOURCES
    src/core/TableDB.h
    src/core/VPXPluginAPIImpl.h
    src/core/VPXPluginAPIImpl.cpp
+
+   src/input/pininput.h
+   src/input/pininput.cpp
+   src/input/SDLInputHandler.h
 
    src/math/bbox.h
    src/math/math.cpp
@@ -149,7 +150,7 @@ set(VPINBALL_SOURCES
    src/meshes/triggerSimpleMesh.h
    src/meshes/triggerStarMesh.h
 
-   src/parts/backGlass.h
+   src/renderer/Backglass.h
    src/parts/dragpoint.h
    src/parts/Material.h
    src/parts/pinbinary.h
@@ -175,6 +176,8 @@ set(VPINBALL_SOURCES
    src/parts/light.h
    src/parts/lightseq.cpp
    src/parts/lightseq.h
+   src/parts/PartGroup.cpp
+   src/parts/PartGroup.h
    src/parts/pintable.cpp
    src/parts/pintable.h
    src/parts/plunger.cpp
@@ -281,7 +284,7 @@ set(VPINBALL_SOURCES
 
    src/utils/bulb.cpp
    src/utils/bulb.h
-   src/utils/def.cpp
+   src/core/def.cpp
    src/utils/wintimer.cpp
    src/utils/wintimer.h
    src/utils/ushock_output.cpp
@@ -336,8 +339,8 @@ set(VPINBALL_SOURCES
    third-party/include/tinyxml2/tinyxml2.cpp
    third-party/include/tinyxml2/tinyxml2.h
    third-party/include/miniz/miniz.c
-   third-party/include/miniz/miniz.h   
-   third-party/include/robin_hood.h
+   third-party/include/miniz/miniz.h
+   third-party/include/unordered_dense.h
    third-party/include/RSJparser/RSJparser.tcc
 
    standalone/vpinball_standalone_i.c
@@ -738,6 +741,13 @@ target_link_libraries(vpinball PUBLIC
    pupdmd
    sockpp
    dof
+   avcodec
+   avdevice
+   avfilter
+   avformat
+   avutil
+   swresample
+   swscale
 )
 
 if(PLATFORM STREQUAL "ios" OR PLATFORM STREQUAL "ios-simulator")
@@ -745,13 +755,6 @@ if(PLATFORM STREQUAL "ios" OR PLATFORM STREQUAL "ios-simulator")
       bass
       freetype
       harfbuzz
-      avcodec
-      avdevice
-      avfilter
-      avformat
-      avutil
-      swresample
-      swscale
       bz2
       iconv
       "-framework OpenGLES"

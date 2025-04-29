@@ -2,18 +2,19 @@
 
 #pragma once
 
-class DrawingOrderDialog : public CDialog
+class DrawingOrderDialog final : public CDialog
 {
 public:
    DrawingOrderDialog(bool select);
-   virtual ~DrawingOrderDialog();
+   ~DrawingOrderDialog() override;
 
 protected:
-   virtual void OnClose();
-   virtual BOOL OnInitDialog();
-   virtual BOOL OnCommand(WPARAM wParam, LPARAM lParam);
-   virtual void OnOK();
-   void         UpdateDrawingOrder(IEditable *ptr, bool up);
+   void OnClose() override;
+   BOOL OnInitDialog() override;
+   BOOL OnCommand(WPARAM wParam, LPARAM lParam) override;
+   void OnOK() override;
+
+   void UpdateDrawingOrder(IEditable *ptr, bool up);
 
 private:
    HWND hOrderList;
