@@ -10,10 +10,8 @@ Rubber::Rubber()
    m_menuid = IDR_SURFACEMENU;
    m_d.m_collidable = true;
    m_d.m_visible = true;
-   m_d.m_hitEvent = false;
    m_propPosition = nullptr;
    m_propVisual = nullptr;
-   m_d.m_overwritePhysics = true;
    m_ptable = nullptr;
    m_d.m_tdr.m_TimerEnabled = false;
    m_d.m_tdr.m_TimerInterval = 0;
@@ -137,18 +135,18 @@ void Rubber::DrawRubberMesh(Sur * const psur)
       const Vertex3Ds C = Vertex3Ds(m_vertices[m_ringIndices[i + 2]].x, m_vertices[m_ringIndices[i + 2]].y, m_vertices[m_ringIndices[i + 2]].z);
       if (fabsf(m_vertices[m_ringIndices[i]].nz + m_vertices[m_ringIndices[i + 1]].nz) < 1.f)
       {
-         drawVertices.emplace_back(Vertex2D(A.x, A.y));
-         drawVertices.emplace_back(Vertex2D(B.x, B.y));
+         drawVertices.emplace_back(A.x, A.y);
+         drawVertices.emplace_back(B.x, B.y);
       }
       if (fabsf(m_vertices[m_ringIndices[i + 1]].nz + m_vertices[m_ringIndices[i + 2]].nz) < 1.f)
       {
-         drawVertices.emplace_back(Vertex2D(B.x, B.y));
-         drawVertices.emplace_back(Vertex2D(C.x, C.y));
+         drawVertices.emplace_back(B.x, B.y);
+         drawVertices.emplace_back(C.x, C.y);
       }
       if (fabsf(m_vertices[m_ringIndices[i + 2]].nz + m_vertices[m_ringIndices[i]].nz) < 1.f)
       {
-         drawVertices.emplace_back(Vertex2D(C.x, C.y));
-         drawVertices.emplace_back(Vertex2D(A.x, A.y));
+         drawVertices.emplace_back(C.x, C.y);
+         drawVertices.emplace_back(A.x, A.y);
       }
    }
    if (!drawVertices.empty())
@@ -536,7 +534,7 @@ float Rubber::GetSurfaceHeight(float x, float y) const
 
 void Rubber::PhysicSetup(PhysicsEngine* physics, const bool isUI)
 {
-   robin_hood::unordered_set<robin_hood::pair<unsigned, unsigned>> addedEdges;
+   ankerl::unordered_dense::set<std::pair<unsigned, unsigned>> addedEdges;
 
    if (!isUI)
       GenerateMesh(6, true); //!! adapt hacky code in the function if changing the "6" here
@@ -579,10 +577,10 @@ void Rubber::PhysicRelease(PhysicsEngine* physics, const bool isUI)
       m_vhoCollidable.clear();
 }
 
-void Rubber::AddHitEdge(PhysicsEngine* physics, robin_hood::unordered_set<robin_hood::pair<unsigned, unsigned>> &addedEdges, const unsigned i, const unsigned j, const bool isUI)
+void Rubber::AddHitEdge(PhysicsEngine* physics, ankerl::unordered_dense::set<std::pair<unsigned, unsigned>> &addedEdges, const unsigned i, const unsigned j, const bool isUI)
 {
    // create pair uniquely identifying the edge (i,j)
-   const robin_hood::pair<unsigned, unsigned> p(std::min(i, j), std::max(i, j));
+   const std::pair<unsigned, unsigned> p(std::min(i, j), std::max(i, j));
    if (!isUI && addedEdges.insert(p).second) // edge not yet added?
    {
       const Vertex3Ds v1(m_vertices[i].x, m_vertices[i].y, m_vertices[i].z);
@@ -720,6 +718,7 @@ void Rubber::UpdateAnimation(const float diff_time_msec)
 void Rubber::Render(const unsigned int renderMask)
 {
    assert(m_rd != nullptr);
+   assert(!m_backglass);
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
    const bool isReflectionPass = renderMask & Renderer::REFLECTION_PASS;

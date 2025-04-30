@@ -10,6 +10,14 @@
 #include "scintilla.h"
 #endif
 
+#ifndef OVERRIDE
+#ifndef __STANDALONE__
+   #define OVERRIDE override
+#else
+   #define OVERRIDE
+#endif
+#endif
+
 #define MAX_FIND_LENGTH 81
 #define MAX_LINE_LENGTH 2048
 
@@ -82,7 +90,7 @@ public:
    virtual void DoCodeViewCommand(int command) = 0;
 };
 
-class CodeViewDispatch
+class CodeViewDispatch final
 {
 public:
    CodeViewDispatch() {}
@@ -100,20 +108,20 @@ public:
 };
 
 class CodeViewer :
-	public CWnd,
-	public CComObjectRoot,
-	//public IDispatchImpl<IDragPoint, &IID_IDragPoint, &LIBID_VPinballLib>,
-	//public CComCoClass<CodeViewer,&CLSID_DragPoint>,
-	//public CComObjectRootEx<CComSingleThreadModel>,
-	public IActiveScriptSite,
-	public IActiveScriptSiteDebug,
-	public IActiveScriptSiteWindow,
-	public IInternetHostSecurityManager,
-	public IServiceProvider
+   public CWnd,
+   public CComObjectRoot,
+   //public IDispatchImpl<IDragPoint, &IID_IDragPoint, &LIBID_VPinballLib>,
+   //public CComCoClass<CodeViewer,&CLSID_DragPoint>,
+   //public CComObjectRootEx<CComSingleThreadModel>,
+   public IActiveScriptSite,
+   public IActiveScriptSiteDebug,
+   public IActiveScriptSiteWindow,
+   public IInternetHostSecurityManager,
+   public IServiceProvider
 {
 public:
    CodeViewer() : m_haccel(nullptr), m_pProcessDebugManager(nullptr), m_parentLevel(0), m_lastErrorWidgetVisible(false), m_suppressErrorDialogs(false) {}
-   virtual ~CodeViewer();
+   ~CodeViewer() OVERRIDE;
 
    void Init(IScriptableHost *psh);
    void SetVisible(const bool visible);
@@ -282,7 +290,7 @@ public:
    void EvaluateScriptStatement(const char * const szScript);
    void AddToDebugOutput(const char * const szText);
 
-   bool PreTranslateMessage(MSG* msg);
+   BOOL PreTranslateMessage(MSG& msg) OVERRIDE;
 
    IScriptableHost *m_psh;
 
@@ -478,7 +486,7 @@ public:
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
-   virtual HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) override;
+   HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
 public:
    Collection();
@@ -550,51 +558,40 @@ constexpr __forceinline bool IsWhitespace(const char ch)
    return (ch == ' ' || ch == 9/*tab*/);
 }
 
-__forceinline string upperCase(string input)
-{
-   std::ranges::transform(input.begin(), input.end(), input.begin(), cUpper);
-   return input;
-}
-
-__forceinline string lowerCase(string input)
-{
-   StrToLower(input);
-   return input;
-}
-
 inline void RemovePadding(string &line)
 {
-    const size_t LL = line.length();
-    size_t Pos = line.find_first_not_of("\n\r\t ,");
-    if (Pos == string::npos)
-    {
-        line.clear();
-        return;
-    }
+   const size_t LL = line.length();
+   size_t Pos = line.find_first_not_of("\n\r\t ,");
+   if (Pos == string::npos)
+   {
+      line.clear();
+      return;
+   }
 
-    if (Pos > 0)
-    {
-        if ((SSIZE_T)(LL - Pos) < 1) return;
-        line = line.substr(Pos, (LL - Pos));
-    }
+   if (Pos > 0)
+   {
+      if ((SSIZE_T)(LL - Pos) < 1) return;
+      line = line.substr(Pos, (LL - Pos));
+   }
 
-    Pos = line.find_last_not_of("\n\r\t ,");
-    if (Pos != string::npos)
-    {
-        if (Pos < 1) return;
-        line = line.erase(Pos + 1);
-    }
+   Pos = line.find_last_not_of("\n\r\t ,");
+   if (Pos != string::npos)
+   {
+      if (Pos < 1) return;
+      line = line.erase(Pos + 1);
+   }
 }
 
-inline string ParseRemoveVBSLineComments(string &Line)
+inline string ParseRemoveVBSLineComments(string &line)
 {
-    const size_t commentIdx = Line.find('\'');
-    if (commentIdx == string::npos) return string();
-    string RetVal = Line.substr(commentIdx + 1, string::npos);
-    RemovePadding(RetVal);
-    if (commentIdx > 0)
-        Line = Line.substr(0, commentIdx);
-    else
-        Line.clear();
-    return RetVal;
+   const size_t commentIdx = line.find('\'');
+   if (commentIdx == string::npos)
+      return string();
+   string RetVal = line.substr(commentIdx + 1, string::npos);
+   RemovePadding(RetVal);
+   if (commentIdx > 0)
+      line = line.substr(0, commentIdx);
+   else
+      line.clear();
+   return RetVal;
 }

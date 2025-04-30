@@ -57,7 +57,7 @@ void LightSeq::WriteRegDefaults()
    char strTmp[MAXSTRING];
    WideCharToMultiByteNull(CP_ACP, 0, m_d.m_wzCollection.c_str(), -1, strTmp, MAXSTRING, nullptr, nullptr);
    g_pvp->m_settings.SaveValue(regKey, "UpdateInterval"s, (int)m_d.m_updateinterval);
-   g_pvp->m_settings.SaveValue(regKey, "Collection"s, strTmp);
+   g_pvp->m_settings.SaveValue(regKey, "Collection"s, string(strTmp));
    g_pvp->m_settings.SaveValue(regKey, "CenterX"s, m_d.m_vCenter.x);
    g_pvp->m_settings.SaveValue(regKey, "CenterY"s, m_d.m_vCenter.y);
    g_pvp->m_settings.SaveValue(regKey, "TimerEnabled"s, m_d.m_tdr.m_TimerEnabled);
@@ -233,12 +233,12 @@ void LightSeq::RenderSetup(RenderDevice *device)
       return;
    }
    else*/
-      ZeroMemory((void *)m_pgridData, (size_t)((m_lightSeqGridHeight*m_lightSeqGridWidth)*sizeof(short)));
+      memset((void *)m_pgridData, 0, m_lightSeqGridHeight*m_lightSeqGridWidth * sizeof(short));
 
    // get the number of elements (objects) in the collection (referenced by m_visel)
    size = m_pcollection->m_visel.size();
 
-   // go though the collection and get the cordinates of all the lights
+   // go though the collection and get the coordinates of all the lights
    for (int i = 0; i < size; ++i)
    {
       // get the type of object
@@ -1534,9 +1534,9 @@ bool LightSeq::ProcessTracer(_tracer * const pTracer, const LightState State)
 
       // process the circle type of effect
       case eSeqCircle:
-         for (float fi = 0; fi < 360.0f; fi += 0.5f)
+         for (int fi = 0; fi < 720; fi ++)
          {
-            const float angle = (float)(M_PI * 2.0 / 360.0)*fi;
+            const float angle = static_cast<float>((M_PI * 2.0 / 360.0)*(fi / 2.0));
             const float sn = sinf(angle);
             const float cs = cosf(angle);
             const float x = pTracer->x + sn*pTracer->radius;

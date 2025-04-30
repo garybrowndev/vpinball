@@ -57,7 +57,7 @@ const char* PUP_PINDISPLAY_REQUEST_TYPE_TO_STRING(PUP_PINDISPLAY_REQUEST_TYPE va
      CustomPos = CustomPos
 */
 
-PUPScreen::PUPScreen(PUP_SCREEN_MODE mode, int screenNum, const string& szScreenDes, const string& szBackgroundPlaylist, const string& szBackgroundFilename, bool transparent, float volume, PUPCustomPos* pCustomPos)
+PUPScreen::PUPScreen(PUP_SCREEN_MODE mode, int screenNum, const string& szScreenDes, const string& szBackgroundPlaylist, const string& szBackgroundFilename, bool transparent, float volume, PUPCustomPos* pCustomPos, const std::vector<PUPPlaylist*>& playlists)
 {
    m_pManager = PUPManager::GetInstance();
 
@@ -78,8 +78,14 @@ PUPScreen::PUPScreen(PUP_SCREEN_MODE mode, int screenNum, const string& szScreen
    m_pPageTimer = new VP::Timer();
    m_pPageTimer->SetElapsedListener(std::bind(&PUPScreen::PageTimerElapsed, this, std::placeholders::_1));
    m_pParent = nullptr;
+   m_isRunning = false;
 
-   LoadPlaylists();
+   for (const PUPPlaylist* pPlaylist : playlists) {
+      // make a copy of the playlist
+      PUPPlaylist *pPlaylistCopy = new PUPPlaylist(*pPlaylist);
+      AddPlaylist(pPlaylistCopy);
+   }
+
    LoadTriggers();
 
    QueueTrigger('D', 0, 1);
@@ -97,7 +103,8 @@ PUPScreen::~PUPScreen()
       m_isRunning = false;
    }
    m_queueCondVar.notify_all();
-   m_thread.join();
+   if (m_thread.joinable())
+      m_thread.join();
 
    delete m_pCustomPos;
    FreeRenderable(&m_background);
@@ -120,7 +127,7 @@ PUPScreen::~PUPScreen()
       pChildren->clear();
 }
 
-PUPScreen* PUPScreen::CreateFromCSV(const string& line)
+PUPScreen* PUPScreen::CreateFromCSV(const string& line, const std::vector<PUPPlaylist*>& playlists)
 {
    vector<string> parts = parse_csv_line(line);
    if (parts.size() != 8) {
@@ -129,19 +136,19 @@ PUPScreen* PUPScreen::CreateFromCSV(const string& line)
    }
 
    PUP_SCREEN_MODE mode;
-   if (string_compare_case_insensitive(parts[5], "Show"))
+   if (StrCompareNoCase(parts[5], "Show"))
       mode = PUP_SCREEN_MODE_SHOW;
-   else if (string_compare_case_insensitive(parts[5], "ForceON"))
+   else if (StrCompareNoCase(parts[5], "ForceON"))
       mode = PUP_SCREEN_MODE_FORCE_ON;
-   else if (string_compare_case_insensitive(parts[5], "ForcePoP"))
+   else if (StrCompareNoCase(parts[5], "ForcePoP"))
       mode = PUP_SCREEN_MODE_FORCE_POP;
-   else if (string_compare_case_insensitive(parts[5], "ForceBack"))
+   else if (StrCompareNoCase(parts[5], "ForceBack"))
       mode = PUP_SCREEN_MODE_FORCE_BACK;
-   else if (string_compare_case_insensitive(parts[5], "ForcePopBack"))
+   else if (StrCompareNoCase(parts[5], "ForcePopBack"))
       mode = PUP_SCREEN_MODE_FORCE_POP_BACK;
-   else if (string_compare_case_insensitive(parts[5], "MusicOnly"))
+   else if (StrCompareNoCase(parts[5], "MusicOnly"))
       mode = PUP_SCREEN_MODE_MUSIC_ONLY;
-   else if (string_compare_case_insensitive(parts[5], "Off"))
+   else if (StrCompareNoCase(parts[5], "Off"))
       mode = PUP_SCREEN_MODE_OFF;
    else {
       PLOGW.printf("Invalid screen mode: %s", parts[5].c_str());
@@ -156,10 +163,10 @@ PUPScreen* PUPScreen::CreateFromCSV(const string& line)
       parts[3], // background PlayFile
       parts[4] == "1", // transparent
       string_to_float(parts[6], 100.0f), // volume
-      PUPCustomPos::CreateFromCSV(parts[7]));
+      PUPCustomPos::CreateFromCSV(parts[7]), playlists);
 }
 
-PUPScreen* PUPScreen::CreateDefault(int screenNum)
+PUPScreen* PUPScreen::CreateDefault(int screenNum, const std::vector<PUPPlaylist*>& playlists)
 {
    if (PUPManager::GetInstance()->HasScreen(screenNum)) {
       PLOGW.printf("Screen already exists: screenNum=%d", screenNum);
@@ -169,38 +176,22 @@ PUPScreen* PUPScreen::CreateDefault(int screenNum)
    PUPScreen* pScreen = nullptr;
    switch(screenNum) {
       case PUP_SCREEN_TOPPER:
-         pScreen = new PUPScreen(PUP_SCREEN_MODE_SHOW, PUP_SCREEN_TOPPER, "Topper", "", "", false, 100.0f, nullptr);
+         pScreen = new PUPScreen(PUP_SCREEN_MODE_SHOW, PUP_SCREEN_TOPPER, "Topper"s, "", "", false, 100.0f, nullptr, playlists);
       case PUP_SCREEN_DMD:
-         pScreen = new PUPScreen(PUP_SCREEN_MODE_SHOW, PUP_SCREEN_DMD, "DMD", "", "", false, 100.0f, nullptr);
+         pScreen = new PUPScreen(PUP_SCREEN_MODE_SHOW, PUP_SCREEN_DMD, "DMD"s, "", "", false, 100.0f, nullptr, playlists);
       case PUP_SCREEN_BACKGLASS:
-         pScreen = new PUPScreen(PUP_SCREEN_MODE_SHOW, PUP_SCREEN_BACKGLASS, "Backglass", "", "", false, 100.0f, nullptr);
+         pScreen = new PUPScreen(PUP_SCREEN_MODE_SHOW, PUP_SCREEN_BACKGLASS, "Backglass"s, "", "", false, 100.0f, nullptr, playlists);
       case PUP_SCREEN_PLAYFIELD:
-         pScreen = new PUPScreen(PUP_SCREEN_MODE_SHOW, PUP_SCREEN_PLAYFIELD, "Playfield", "", "", false, 100.0f, nullptr);
+         pScreen = new PUPScreen(PUP_SCREEN_MODE_SHOW, PUP_SCREEN_PLAYFIELD, "Playfield"s, "", "", false, 100.0f, nullptr, playlists);
       default:
-         pScreen = new PUPScreen(PUP_SCREEN_MODE_SHOW, screenNum, "Unknown", "", "", false, 100.0f, nullptr);
+         pScreen = new PUPScreen(PUP_SCREEN_MODE_SHOW, screenNum, "Unknown"s, "", "", false, 100.0f, nullptr, playlists);
    }
    return pScreen;
 }
 
-void PUPScreen::LoadPlaylists()
-{
-   string szPlaylistsPath = find_path_case_insensitive(m_pManager->GetPath() + "playlists.pup");
-   std::ifstream playlistsFile;
-   playlistsFile.open(szPlaylistsPath, std::ifstream::in);
-   if (playlistsFile.is_open()) {
-      string line;
-      int i = 0;
-      while (std::getline(playlistsFile, line)) {
-         if (++i == 1)
-            continue;
-         AddPlaylist(PUPPlaylist::CreateFromCSV(line));
-      }
-   }
-}
-
 void PUPScreen::LoadTriggers()
 {
-   string szPlaylistsPath = find_path_case_insensitive(m_pManager->GetPath() + "triggers.pup");
+   string szPlaylistsPath = find_case_insensitive_file_path(m_pManager->GetPath() + "triggers.pup");
    std::ifstream triggersFile;
    triggersFile.open(szPlaylistsPath, std::ifstream::in);
    if (triggersFile.is_open()) {
@@ -252,17 +243,12 @@ void PUPScreen::AddPlaylist(PUPPlaylist* pPlaylist)
    if (!pPlaylist)
       return;
 
-   if (GetPlaylist(pPlaylist->GetFolder())) {
-      delete pPlaylist;
-      return;
-   }
-
-   m_playlistMap[string_to_lower(pPlaylist->GetFolder())] = pPlaylist;
+   m_playlistMap[lowerCase(pPlaylist->GetFolder())] = pPlaylist;
 }
 
 PUPPlaylist* PUPScreen::GetPlaylist(const string& szFolder)
 {
-   std::map<string, PUPPlaylist*>::iterator it = m_playlistMap.find(string_to_lower(szFolder));
+   std::map<string, PUPPlaylist*>::iterator it = m_playlistMap.find(lowerCase(szFolder));
    return it != m_playlistMap.end() ? it->second : nullptr;
 }
 
@@ -289,13 +275,13 @@ void PUPScreen::AddLabel(PUPLabel* pLabel)
    }
 
    pLabel->SetScreen(this);
-   m_labelMap[string_to_lower(pLabel->GetName())] = pLabel;
+   m_labelMap[lowerCase(pLabel->GetName())] = pLabel;
    m_labels.push_back(pLabel);
 }
 
 PUPLabel* PUPScreen::GetLabel(const string& szLabelName)
 {
-   auto it = m_labelMap.find(string_to_lower(szLabelName));
+   auto it = m_labelMap.find(lowerCase(szLabelName));
    return it != m_labelMap.end() ? it->second : nullptr;
 }
 
@@ -351,6 +337,13 @@ void PUPScreen::SetBackground(PUPPlaylist* pPlaylist, const std::string& szPlayF
 {
    std::lock_guard<std::mutex> lock(m_renderMutex);
    LoadRenderable(&m_background, pPlaylist->GetPlayFilePath(szPlayFile));
+}
+
+void PUPScreen::SetCustomPos(const string& szCustomPos)
+{
+   std::lock_guard<std::mutex> lock(m_renderMutex);
+   delete m_pCustomPos;
+   m_pCustomPos = PUPCustomPos::CreateFromCSV(szCustomPos);
 }
 
 void PUPScreen::SetOverlay(PUPPlaylist* pPlaylist, const std::string& szPlayFile)

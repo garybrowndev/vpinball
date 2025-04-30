@@ -159,13 +159,13 @@ static HRESULT WINAPI drive_Invoke(IDrive *iface, DISPID dispIdMember,
 		default:
 		break;
 	}
-	if (hres == S_OK) {
+	if (SUCCEEDED(hres)) {
 		if (pVarResult)
 			*pVarResult = res;
 		else
 			VariantClear(&res);
 	}
-	else if (hres != S_FALSE) {
+	else {
 		external_log_info("drive_Invoke: dispId=%d (0x%08x), wFlags=%d, hres=%d", dispIdMember, dispIdMember, wFlags, hres);
 	}
 	return hres;
@@ -247,13 +247,13 @@ static HRESULT WINAPI drivecoll_Invoke(IDriveCollection *iface, DISPID dispIdMem
 		default:
 		break;
 	}
-	if (hres == S_OK) {
+	if (SUCCEEDED(hres)) {
 		if (pVarResult)
 			*pVarResult = res;
 		else
 			VariantClear(&res);
 	}
-	else if (hres != S_FALSE) {
+	else {
 		external_log_info("drivecoll_Invoke: dispId=%d (0x%08x), wFlags=%d, hres=%d", dispIdMember, dispIdMember, wFlags, hres);
 	}
 	return hres;
@@ -442,13 +442,13 @@ static HRESULT WINAPI textstream_Invoke(ITextStream *iface, DISPID dispIdMember,
 		default:
 		break;
 	}
-	if (hres == S_OK) {
+	if (SUCCEEDED(hres)) {
 		if (pVarResult)
 			*pVarResult = res;
 		else
 			VariantClear(&res);
 	}
-	else if (hres != S_FALSE) {
+	else {
 		external_log_info("textstream_Invoke: dispId=%d (0x%08x), wFlags=%d, hres=%d", dispIdMember, dispIdMember, wFlags, hres);
 	}
 	return hres;
@@ -684,13 +684,13 @@ static HRESULT WINAPI file_Invoke(IFile *iface, DISPID dispIdMember,
 		default:
 		break;
 	}
-	if (hres == S_OK) {
+	if (SUCCEEDED(hres)) {
 		if (pVarResult)
 			*pVarResult = res;
 		else
 			VariantClear(&res);
 	}
-	else if (hres != S_FALSE) {
+	else {
 		external_log_info("file_Invoke: dispId=%d (0x%08x), wFlags=%d, hres=%d", dispIdMember, dispIdMember, wFlags, hres);
 	}
 	return hres;
@@ -1153,14 +1153,102 @@ static HRESULT WINAPI filesys_Invoke(IFileSystem3 *iface, DISPID dispIdMember,
 		default:
 		break;
 	}
-	if (hres == S_OK) {
+	if (SUCCEEDED(hres)) {
 		if (pVarResult)
 			*pVarResult = res;
 		else
 			VariantClear(&res);
 	}
-	else if (hres != S_FALSE) {
+	else {
 		external_log_info("filesys_Invoke: dispId=%d (0x%08x), wFlags=%d, hres=%d", dispIdMember, dispIdMember, wFlags, hres);
+	}
+	return hres;
+}
+
+static HRESULT WINAPI filecoll_GetIDsOfNames(IFileCollection *iface, REFIID riid, LPOLESTR *rgszNames,
+                UINT cNames, LCID lcid, DISPID *rgDispId)
+{
+	static struct {
+		const WCHAR *name;
+		DISPID dispId;
+	} names_ids_list[] = {
+			{ NULL },
+			{ L"Count", 0x00000001 }
+	};
+
+	size_t min = 1, max = ARRAY_SIZE(names_ids_list) - 1, i;
+	int r;
+	while(min <= max) {
+		i = (min + max) / 2;
+		r = wcsicmp(names_ids_list[i].name, *rgszNames);
+		if(!r) {
+			*rgDispId = names_ids_list[i].dispId;
+			return S_OK;
+		}
+		if(r < 0)
+		   min = i+1;
+		else
+		   max = i-1;
+	}
+	return DISP_E_MEMBERNOTFOUND;
+}
+
+static HRESULT WINAPI filecoll_Invoke(IFileCollection *iface, DISPID dispIdMember,
+                                      REFIID riid, LCID lcid, WORD wFlags,
+                                      DISPPARAMS *pDispParams, VARIANT *pVarResult,
+                                      EXCEPINFO *pExcepInfo, UINT *puArgErr)
+{
+	int index = pDispParams->cArgs;
+	VARIANT res;
+	HRESULT hres = DISP_E_UNKNOWNNAME;
+
+	V_VT(&res) = VT_EMPTY;
+
+	switch(dispIdMember) {
+		case DISPID_VALUE: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 446: [id(DISPID_VALUE), propget]HRESULT Item([in] VARIANT Key, [out, retval] IFile** ppfile);
+				VARIANT var0;
+				V_VT(&var0) = VT_EMPTY;
+				VariantChangeType(&var0, &pDispParams->rgvarg[--index], 0, VT_VARIANT);
+				V_VT(&res) = VT_DISPATCH;
+				hres = filecoll_get_Item(iface, var0, (IFile**)&V_DISPATCH(&res));
+				VariantClear(&var0);
+			}
+			else if (wFlags == (DISPATCH_METHOD | DISPATCH_PROPERTYGET)) {
+				V_VT(&res) = VT_DISPATCH;
+				V_DISPATCH(&res) = (IDispatch*)iface;
+				hres = S_OK;
+			}
+			break;
+		}
+		case DISPID_NEWENUM: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 449: [id(DISPID_NEWENUM), propget, restricted, hidden]HRESULT _NewEnum([out, retval] IUnknown** ppenum);
+				V_VT(&res) = VT_UNKNOWN;
+				hres = filecoll_get__NewEnum(iface, &V_UNKNOWN(&res));
+			}
+			break;
+		}
+		case 0x00000001: {
+			if (wFlags & DISPATCH_PROPERTYGET) {
+				// line 452: [id(0x00000001), propget]HRESULT Count([out, retval] long* plCount);
+				V_VT(&res) = VT_I4;
+				hres = filecoll_get_Count(iface, (LONG*)&V_I4(&res));
+			}
+			break;
+		}
+		default:
+		break;
+	}
+	if (SUCCEEDED(hres)) {
+		if (pVarResult)
+			*pVarResult = res;
+		else
+			VariantClear(&res);
+	}
+	else {
+		external_log_info("filecoll_Invoke: dispId=%d (0x%08x), wFlags=%d, hres=%d\n", dispIdMember, dispIdMember, wFlags, hres);
 	}
 	return hres;
 }
@@ -1254,13 +1342,13 @@ static HRESULT WINAPI foldercoll_Invoke(IFolderCollection *iface, DISPID dispIdM
 		default:
 		break;
 	}
-	if (hres == S_OK) {
+	if (SUCCEEDED(hres)) {
 		if (pVarResult)
 			*pVarResult = res;
 		else
 			VariantClear(&res);
 	}
-	else if (hres != S_FALSE) {
+	else {
 		external_log_info("foldercoll_Invoke: dispId=%d (0x%08x), wFlags=%d, hres=%d", dispIdMember, dispIdMember, wFlags, hres);
 	}
 	return hres;
@@ -1527,13 +1615,13 @@ static HRESULT WINAPI folder_Invoke(IFolder *iface, DISPID dispIdMember,
 		default:
 		break;
 	}
-	if (hres == S_OK) {
+	if (SUCCEEDED(hres)) {
 		if (pVarResult)
 			*pVarResult = res;
 		else
 			VariantClear(&res);
 	}
-	else if (hres != S_FALSE) {
+	else {
 		external_log_info("folder_Invoke: dispId=%d (0x%08x), wFlags=%d, hres=%d", dispIdMember, dispIdMember, wFlags, hres);
 	}
 	return hres;

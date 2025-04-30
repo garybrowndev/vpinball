@@ -1,7 +1,14 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
+
+#include <iomanip>
+
 #include "PhysicsEngine.h"
+
+#include "plugins/MsgPlugin.h"
+#include "plugins/VPXPlugin.h"
+#include "core/VPXPluginAPIImpl.h"
 
 PhysicsEngine::PhysicsEngine(PinTable *const table)
    : m_hitPlayfield(table)
@@ -94,6 +101,8 @@ PhysicsEngine::PhysicsEngine(PinTable *const table)
       m_hitoctree.DumpTree(0);
    #endif
 
+   m_onUpdatePhysicsMsgId = VPXPluginAPIImpl::GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_UPDATE_PHYSICS);
+
 #ifdef DEBUGPHYSICS
    c_hitcnts = 0;
    c_collisioncnt = 0;
@@ -117,6 +126,8 @@ PhysicsEngine::~PhysicsEngine()
    if (m_pendingHitObjects)
       ReleaseVHO(*m_pendingHitObjects, false);
    ReleaseVHO(m_hitoctree.GetHitObjects(), false);
+   
+   VPXPluginAPIImpl::ReleaseMsgID(m_onUpdatePhysicsMsgId);
    
    // We should release objects from the dynamic tree except HitBall (but there are only HitBall...)
 }
@@ -289,7 +300,7 @@ void PhysicsEngine::UpdateNudge(float dtime)
       m_tableVelOld = m_tableVel;
 
       // Acquire from sensor input
-      Vertex2D sensor = g_pplayer->GetRawAccelerometer();
+      Vertex2D sensor = g_pplayer->m_pininput.GetNudge();
 
       // Simulate hardware nudge by getting the cabinet velocity and applying it to the table spring model
       if (g_pplayer->IsAccelInputAsVelocity())
@@ -399,8 +410,8 @@ void PhysicsEngine::UpdateNudge(float dtime)
       {
          m_plumbTiltHigh = tilted;
          // this triggers front nudge instead of mechanical (so using the accelerometer to simulate keyboard nudge which would be a surprising use case)
-         g_pplayer->m_pininput.FireKeyEvent(m_plumbTiltHigh ? DISPID_GameEvents_KeyDown : DISPID_GameEvents_KeyUp, g_pplayer->m_rgKeys[eCenterTiltKey]);
-         //g_pplayer->m_pininput.FireKeyEvent(m_plumbTiltHigh ? DISPID_GameEvents_KeyDown : DISPID_GameEvents_KeyUp, g_pplayer->m_rgKeys[eMechanicalTilt]);
+         g_pplayer->m_pininput.FireActionEvent(eCenterTiltKey, m_plumbTiltHigh);
+         //g_pplayer->m_pininput.FireActionEvent(eMechanicalTilt, m_plumbTiltHigh);
       }
 
       #else
@@ -421,10 +432,10 @@ void PhysicsEngine::UpdateNudge(float dtime)
       Vertex3Ds gravity(0.f, 0.f, -9.81f);
       Vertex3Ds plumbAcc = gravity;
       plumbAcc += m_plumbMassFactor * nudge; // This is absolutely not physically correct
-      plumbAcc -= plumbAcc.Dot(poleAxis) * poleAxis; // Keep acceleration ortogonal to pole
+      plumbAcc -= plumbAcc.Dot(poleAxis) * poleAxis; // Keep acceleration orthogonal to pole
       m_plumbVel *= 0.999f;
       m_plumbVel += plumbAcc * (float)PHYSICS_STEPTIME_S;
-      m_plumbVel -= m_plumbVel.Dot(poleAxis) * poleAxis; // Keep velocity ortogonal to pole
+      m_plumbVel -= m_plumbVel.Dot(poleAxis) * poleAxis; // Keep velocity orthogonal to pole
       m_plumbPos += m_plumbVel * (float)PHYSICS_STEPTIME_S;
       m_plumbPos *= m_plumbPoleLength / m_plumbPos.Length(); // Keep plumb at end of pole
 
@@ -452,7 +463,7 @@ void PhysicsEngine::UpdateNudge(float dtime)
       if (m_plumbTiltHigh != tilted)
       {
          m_plumbTiltHigh = tilted;
-         g_pplayer->m_pininput.FireKeyEvent(m_plumbTiltHigh ? DISPID_GameEvents_KeyDown : DISPID_GameEvents_KeyUp, g_pplayer->m_rgKeys[eMechanicalTilt]);
+         g_pplayer->m_pininput.FireActionEvent(eMechanicalTilt, m_plumbTiltHigh);
       }
       #endif
 
@@ -633,6 +644,9 @@ void PhysicsEngine::UpdatePhysics()
    PLOGD.printf("End Frame");
 #endif
 
+   if (m_nextPhysicsFrameTime < initial_time_usec)
+      VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(m_onUpdatePhysicsMsgId, nullptr);
+
    while (m_nextPhysicsFrameTime < initial_time_usec) // loop here until physics (=simulated) time catches up to current real time, still staying behind real time by up to one physics emulation step
    {
       g_pplayer->m_time_sec = max(g_pplayer->m_time_sec, (double)(m_curPhysicsFrameTime - m_startTime_usec) / 1000000.0); // First iteration is done before precise time
@@ -693,7 +707,7 @@ void PhysicsEngine::UpdatePhysics()
 
       #if !defined(ENABLE_BGFX)
       // FIXME remove ? To be done correctly, we should process OS messages and sync back controller
-      g_pplayer->m_pininput.ProcessKeys(/*sim_msec,*/ cur_time_msec);
+      g_pplayer->m_pininput.ProcessInput();
       #endif
 
       // FIXME remove or at least move legacy ushock to a plugin

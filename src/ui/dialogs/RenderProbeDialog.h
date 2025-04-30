@@ -4,17 +4,17 @@
 
 class RenderProbe;
 
-class RenderProbeDialog : public CDialog
+class RenderProbeDialog final : public CDialog
 {
 public:
    RenderProbeDialog();
 
 protected:
-   BOOL OnInitDialog();
-   virtual INT_PTR DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam);
-   virtual BOOL OnCommand(WPARAM wParam, LPARAM lParam);
-   virtual void OnOK();
-   virtual void OnClose();
+   BOOL OnInitDialog() override;
+   INT_PTR DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam) override;
+   BOOL OnCommand(WPARAM wParam, LPARAM lParam) override;
+   void OnOK() override;
+   void OnClose() override;
 
 private:
    void UpdateList();

@@ -64,10 +64,8 @@ add_executable(vpinball WIN32
    src/core/def.h
    src/parts/dragpoint.cpp
    src/utils/eventproxy.h
-   src/parts/backGlass.cpp
+   src/renderer/Backglass.cpp
    src/parts/pinbinary.cpp
-   src/core/pininput.cpp
-   src/core/pininput_OpenPinDev.cpp
    src/core/vpversion.h
 
    src/audio/pinsound.cpp
@@ -84,7 +82,6 @@ add_executable(vpinball WIN32
    src/core/ieditable.h
    src/core/iselect.cpp
    src/core/iselect.h
-   src/core/pininput.h
    src/core/pinundo.cpp
    src/core/pinundo.h
    src/core/main.cpp
@@ -103,6 +100,17 @@ add_executable(vpinball WIN32
    src/core/TableDB.h
    src/core/VPXPluginAPIImpl.h
    src/core/VPXPluginAPIImpl.cpp
+
+   src/input/pininput.h
+   src/input/pininput.cpp
+   src/input/DirectInputJoystickHandler.h
+   src/input/DirectInputKeyboardHandler.h
+   src/input/DirectInputMouseHandler.h
+   src/input/OpenPinDevHandler.h
+   src/input/OpenPinDevHandler.cpp
+   src/input/SDLInputHandler.h
+   src/input/Win32InputKeyboardHandler.h
+   src/input/XInputJoystickHandler.h
 
    src/math/bbox.h
    src/math/math.cpp
@@ -144,7 +152,7 @@ add_executable(vpinball WIN32
    src/meshes/triggerSimpleMesh.h
    src/meshes/triggerStarMesh.h
 
-   src/parts/backGlass.h
+   src/renderer/Backglass.h
    src/parts/dragpoint.h
    src/parts/Material.h
    src/parts/pinbinary.h
@@ -170,6 +178,8 @@ add_executable(vpinball WIN32
    src/parts/light.h
    src/parts/lightseq.cpp
    src/parts/lightseq.h
+   src/parts/PartGroup.cpp
+   src/parts/PartGroup.h
    src/parts/pintable.cpp
    src/parts/pintable.h
    src/parts/plunger.cpp
@@ -190,7 +200,7 @@ add_executable(vpinball WIN32
    src/parts/timer.h
    src/parts/trigger.cpp
    src/parts/trigger.h
-   src/parts/VPXFileFeedback.h
+   src/ui/VPXFileFeedback.h
 
    src/physics/physconst.h
    src/physics/AsyncDynamicQuadTree.h
@@ -372,6 +382,8 @@ add_executable(vpinball WIN32
    src/ui/properties/LightStatesProperty.h
    src/ui/properties/LightVisualsProperty.cpp
    src/ui/properties/LightVisualsProperty.h
+   src/ui/properties/PartGroupVisualsProperty.cpp
+   src/ui/properties/PartGroupVisualsProperty.h
    src/ui/properties/PlungerPhysicsProperty.cpp
    src/ui/properties/PlungerPhysicsProperty.h
    src/ui/properties/PlungerVisualsProperty.cpp
@@ -417,7 +429,7 @@ add_executable(vpinball WIN32
 
    src/utils/bulb.cpp
    src/utils/bulb.h
-   src/utils/def.cpp
+   src/core/def.cpp
    src/utils/wintimer.cpp
    src/utils/wintimer.h
    src/utils/memutil.cpp
@@ -450,7 +462,7 @@ add_executable(vpinball WIN32
    src/utils/CrashHandler.h
 
    src/ui/vpinball.rc
-   vpinball.idl
+   src/core/vpinball.idl
 
    src/ui/res/ball.rgs
    src/ui/res/bumper.rgs

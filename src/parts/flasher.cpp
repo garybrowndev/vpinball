@@ -12,19 +12,6 @@
 Flasher::Flasher()
 {
    m_menuid = IDR_SURFACEMENU;
-   m_d.m_isVisible = true;
-   m_d.m_depthBias = 0.0f;
-   m_dynamicVertexBufferRegenerate = true;
-   m_vertices = nullptr;
-   m_propVisual = nullptr;
-   m_ptable = nullptr;
-   m_numVertices = 0;
-   m_numPolys = 0;
-   m_minx = FLT_MAX;
-   m_maxx = -FLT_MAX;
-   m_miny = FLT_MAX;
-   m_maxy = -FLT_MAX;
-   m_lockedByLS = false;
 }
 
 Flasher::~Flasher()
@@ -398,7 +385,6 @@ void Flasher::UpdatePoint(int index, float x, float y)
      CComObject<DragPoint> *pdp = m_vdpoint[index];
      pdp->m_v.x = x;
      pdp->m_v.y = y;
-
 }
 
 HRESULT Flasher::SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool saveForUndo)
@@ -1154,6 +1140,7 @@ void Flasher::RenderSetup(RenderDevice *device)
    m_meshBuffer = new MeshBuffer(m_wzName, dynamicVertexBuffer, dynamicIndexBuffer, true);
 
    m_vertices = new Vertex3D_NoTex2[m_numVertices];
+   m_transformedVertices = new Vertex3D_NoTex2[m_numVertices];
 
    m_minx = FLT_MAX;
    m_miny = FLT_MAX;
@@ -1204,9 +1191,11 @@ void Flasher::RenderRelease()
    ResetVideoCap();
    delete m_meshBuffer;
    delete[] m_vertices;
+   delete[] m_transformedVertices;
    delete m_dmdFrame;
    m_meshBuffer = nullptr;
    m_vertices = nullptr;
+   m_transformedVertices = nullptr;
    m_dmdFrame = nullptr;
    m_dmdSize = int2(0, 0);
    m_lightmap = nullptr;
@@ -1236,7 +1225,7 @@ void Flasher::Render(const unsigned int renderMask)
    // Don't render if LightSequence in play and state is off
    if (m_lockedByLS && !m_inPlayState)
       return;
-   
+
    // Update lightmap before checking anything that uses alpha
    float alpha = (float) m_d.m_alpha;
    if (m_lightmap)
@@ -1270,6 +1259,7 @@ void Flasher::Render(const unsigned int renderMask)
          tempMatrix.MultiplyVector(vert);
          if (m_backglass)
             vert.z = 1.f;
+         m_transformedVertices[i] = vert;
          buf[i] = vert;
       }
       m_meshBuffer->m_vb->Unlock();
@@ -1367,7 +1357,7 @@ void Flasher::Render(const unsigned int renderMask)
 
       case FlasherData::DMD:
       {
-         BaseTexture *frame = g_pplayer->m_resURIResolver.GetDisplay(m_d.m_imageSrcLink, this);
+         BaseTexture *frame = g_pplayer->m_resURIResolver.GetDisplay(m_d.m_imageSrcLink);
          if (frame == nullptr)
             frame = m_dmdFrame != nullptr ? m_dmdFrame : g_pplayer->GetControllerDisplay({ 0, 0 }).frame;
          if (frame == nullptr)
@@ -1381,9 +1371,10 @@ void Flasher::Render(const unsigned int renderMask)
             m_rd->EnableAlphaBlend(m_d.m_addBlend);
          else
             m_rd->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
+         m_rd->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
          const vec3 dotTint = frame->m_format == BaseTexture::BW ? vec3(color.x, color.y, color.z) : vec3(1.f, 1.f, 1.f);
          const int dmdProfile = clamp(m_d.m_renderStyle, 0, 7);
-         g_pplayer->m_renderer->SetupDMDRender(dmdProfile, false, dotTint, color.w, frame, m_d.m_modulate_vs_add, m_backglass ? Renderer::Reinhard : Renderer::Linear, m_vertices,
+         g_pplayer->m_renderer->SetupDMDRender(dmdProfile, false, dotTint, color.w, frame, m_d.m_modulate_vs_add, m_backglass ? Renderer::Reinhard : Renderer::Linear, m_transformedVertices,
             vec4(m_d.m_glassPadLeft, m_d.m_glassPadTop, m_d.m_glassPadRight, m_d.m_glassPadBottom),
             vec3(1.f, 1.f, 1.f), m_d.m_glassRoughness, 
             glass, vec4(0.f, 0.f, 1.f, 1.f), vec3(GetRValue(m_d.m_glassAmbient) / 255.f, GetGValue(m_d.m_glassAmbient) / 255.f, GetBValue(m_d.m_glassAmbient) / 255.f));
@@ -1395,7 +1386,7 @@ void Flasher::Render(const unsigned int renderMask)
 
       case FlasherData::DISPLAY:
       {
-         BaseTexture *frame = g_pplayer->m_resURIResolver.GetDisplay(m_d.m_imageSrcLink, this);
+         BaseTexture *frame = g_pplayer->m_resURIResolver.GetDisplay(m_d.m_imageSrcLink);
          if (frame == nullptr)
          {
             if (m_backglass)
@@ -1451,19 +1442,23 @@ void Flasher::Render(const unsigned int renderMask)
 
       case FlasherData::ALPHASEG:
       {
-         ResURIResolver::SegDisplay segs = g_pplayer->m_resURIResolver.GetSegDisplay(m_d.m_imageSrcLink, this);
-         if (segs.frame == nullptr)
+         ResURIResolver::SegDisplay segs = g_pplayer->m_resURIResolver.GetSegDisplay(m_d.m_imageSrcLink);
+         if (segs.frame == nullptr || segs.displays.empty())
             return;
          Texture *const glass = m_ptable->GetImage(m_d.m_szImageA);
-         if (m_d.m_modulate_vs_add < 1.f)
-            m_rd->EnableAlphaBlend(m_d.m_addBlend);
-         else
-            m_rd->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
-         const int renderStyle = clamp(m_d.m_renderStyle, 0, 7);
-         g_pplayer->m_renderer->SetupSegmentRenderer(renderStyle, false, vec3(color.x, color.y, color.z), color.w, Renderer::Generic, SegElementType::CTLPI_GETSEG_LAYOUT_16, segs.frame, m_d.m_modulate_vs_add, m_backglass ? Renderer::Reinhard : Renderer::Linear, m_vertices,
+         // We always use max blending as segment may overlap in the glass diffuse: we retain the most lighted one which is wrong but looks ok (otherwise we would have to deal with colorspace conversions and layering between glass and emitter)
+         m_rd->SetRenderState(RenderState::BLENDOP, RenderState::BLENDOP_MAX);
+         m_rd->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_TRUE);
+         m_rd->SetRenderState(RenderState::SRCBLEND, RenderState::SRC_ALPHA);
+         m_rd->SetRenderState(RenderState::DESTBLEND, RenderState::ONE);
+         m_rd->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
+         const int renderStyle = clamp(m_d.m_renderStyle % 8, 0, 7); // Shading settings
+         const Renderer::SegmentFamily segFamily = static_cast<Renderer::SegmentFamily>(clamp(m_d.m_renderStyle / 8, 0, 4)); // Segments shape
+         g_pplayer->m_renderer->SetupSegmentRenderer(renderStyle, false, vec3(color.x, color.y, color.z), color.w,
+            segFamily, segs.displays[0], segs.frame, m_backglass ? Renderer::Reinhard : Renderer::Linear, m_transformedVertices,
             vec4(m_d.m_glassPadLeft, m_d.m_glassPadTop, m_d.m_glassPadRight, m_d.m_glassPadBottom),
-            vec3(1.f, 1.f, 1.f), m_d.m_glassRoughness,
-            glass, vec4(0.f, 0.f , 1.f, 1.f), vec3(GetRValue(m_d.m_glassAmbient)/255.f, GetGValue(m_d.m_glassAmbient)/255.f, GetBValue(m_d.m_glassAmbient)/255.f));
+            vec3(1.f, 1.f, 1.f), m_d.m_glassRoughness, glass, vec4(0.f, 0.f , 1.f, 1.f), 
+            vec3(GetRValue(m_d.m_glassAmbient)/255.f, GetGValue(m_d.m_glassAmbient)/255.f, GetBValue(m_d.m_glassAmbient)/255.f));
          // We also apply the depth bias shift, not for backward compatibility (as alphaseg display did not exist before 10.8.1) but for consistency between DMD and Display mode
          m_rd->DrawMesh(m_rd->m_DMDShader, true, pos, m_d.m_depthBias - 10000.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numPolys * 3);
          break;

@@ -8,7 +8,7 @@
 #include "physics/PhysicsEngine.h"
 #include "ui/Debugger.h"
 #include "ui/LiveUI.h"
-#include "pininput.h"
+#include "input/pininput.h"
 #include "plugins/CorePlugin.h"
 #include "ResURIResolver.h"
 #include "ScoreView.h"
@@ -21,147 +21,6 @@
 constexpr int DBG_SPRITE_SIZE = 1024;
 
 class VRDevice;
-
-// NOTE that the following four definitions need to be in sync in their order!
-enum EnumAssignKeys
-{
-   eLeftFlipperKey,
-   eRightFlipperKey,
-   eStagedLeftFlipperKey,
-   eStagedRightFlipperKey,
-   eLeftTiltKey,
-   eRightTiltKey,
-   eCenterTiltKey,
-   ePlungerKey,
-   eFrameCount,
-   eDBGBalls,
-   eDebugger,
-   eAddCreditKey,
-   eAddCreditKey2,
-   eStartGameKey,
-   eMechanicalTilt,
-   eRightMagnaSave,
-   eLeftMagnaSave,
-   eExitGame,
-   eVolumeUp,
-   eVolumeDown,
-   eLockbarKey,
-   eEnable3D,
-   eTableRecenter,
-   eTableUp,
-   eTableDown,
-   eEscape,
-   ePause,
-   eTweak,
-   eBallHistoryMenu,
-   eBallHistoryRecall,
-   eCKeys
-};
-
-static const string regkey_string[eCKeys] = {
-   "LFlipKey"s,
-   "RFlipKey"s,
-   "StagedLFlipKey"s,
-   "StagedRFlipKey"s,
-   "LTiltKey"s,
-   "RTiltKey"s,
-   "CTiltKey"s,
-   "PlungerKey"s,
-   "FrameCount"s,
-   "DebugBalls"s,
-   "Debugger"s,
-   "AddCreditKey"s,
-   "AddCreditKey2"s,
-   "StartGameKey"s,
-   "MechTilt"s,
-   "RMagnaSave"s,
-   "LMagnaSave"s,
-   "ExitGameKey"s,
-   "VolumeUp"s,
-   "VolumeDown"s,
-   "LockbarKey"s,
-   "Enable3DKey"s,
-   "TableRecenterKey"s,
-   "TableUpKey"s,
-   "TableDownKey"s,
-   "EscapeKey"s,
-   "PauseKey"s,
-   "TweakKey"s,
-   "BallHistoryMenu"s,
-   "BallHistoryRecall"s
-};
-
-static constexpr int regkey_defdik[eCKeys] = {
-   DIK_LSHIFT,
-   DIK_RSHIFT,
-   DIK_LWIN,
-   DIK_RALT,
-   DIK_Z,
-   DIK_SLASH,
-   DIK_SPACE,
-   DIK_RETURN,
-#if !defined(__APPLE__) && !defined(__ANDROID__)
-   DIK_F11,
-#else
-   DIK_F1,
-#endif
-   DIK_O,
-   DIK_D,
-   DIK_5,
-   DIK_4,
-   DIK_1,
-   DIK_T,
-   DIK_RCONTROL,
-   DIK_LCONTROL,
-   DIK_Q,
-   DIK_EQUALS,
-   DIK_MINUS,
-   DIK_LALT,
-   DIK_F10,
-   DIK_NUMPAD5,
-   DIK_NUMPAD8,
-   DIK_NUMPAD2,
-   DIK_ESCAPE,
-   DIK_P,
-   DIK_F12,
-   DIK_C,
-   DIK_R
-};
-
-static constexpr int regkey_idc[eCKeys] = {
-   IDC_LEFTFLIPPER,
-   IDC_RIGHTFLIPPER,
-   IDC_STAGEDLEFTFLIPPER,
-   IDC_STAGEDRIGHTFLIPPER,
-   IDC_LEFTTILT,
-   IDC_RIGHTTILT,
-   IDC_CENTERTILT,
-   IDC_PLUNGER_TEXT,
-   IDC_FRAMECOUNT,
-   IDC_DEBUGBALL,
-   IDC_DEBUGGER,
-   IDC_ADDCREDIT,
-   IDC_ADDCREDITKEY2,
-   IDC_STARTGAME,
-   IDC_MECHTILT,
-   IDC_RMAGSAVE,
-   IDC_LMAGSAVE,
-   IDC_EXITGAME,
-   IDC_VOLUMEUP,
-   IDC_VOLUMEDN,
-   IDC_LOCKBAR,
-   -1, //!! missing in key dialog! (Enable/disable 3D stereo)
-   IDC_TABLEREC_TEXT,
-   IDC_TABLEUP_TEXT,
-   IDC_TABLEDOWN_TEXT,
-   -1, // Escape
-   IDC_PAUSE,
-   IDC_TWEAK,
-   IDC_BALLHISTORYMENU,
-   IDC_BALLHISTORYRECALL
-};
-
-#include "ballhistory.h"
 
 #define MAX_TOUCHREGION 11
 
@@ -179,7 +38,7 @@ static constexpr RECT touchregion[MAX_TOUCHREGION] = { //left,top,right,bottom (
    { 70, 90, 100, 100 },  // Plunger
 };
 
-static constexpr EnumAssignKeys touchkeymap[MAX_TOUCHREGION] = {
+static constexpr EnumAssignKeys touchActionMap[MAX_TOUCHREGION] = {
    eAddCreditKey, //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    eEscape,
    eLeftMagnaSave,
@@ -216,7 +75,7 @@ enum ProfilingMode
 ////////////////////////////////////////////////////////////////////////////////
 // Startup progress dialog
 
-class ProgressDialog : public CDialog
+class ProgressDialog final : public CDialog
 {
 public:
    ProgressDialog() : CDialog(IDD_PROGRESS) { }
@@ -237,7 +96,7 @@ public:
    }
 
 protected:
-   BOOL OnInitDialog() final
+   BOOL OnInitDialog() override
    {
       #ifndef __STANDALONE__
       AttachItem(IDC_PROGRESS2, m_progressBar);
@@ -275,7 +134,7 @@ public:
    string GetPerfInfo();
 
    void SetPlayState(const bool isPlaying, const U32 delayBeforePauseMs = 0); // Allow to play/pause during UI interaction or to perform timed simulation steps (still needs the player window to be focused).
-   inline bool IsPlaying(const bool applyWndFocus = true) const { return (applyWndFocus ? (m_playing && m_focused) : m_focused) && !IsEditorMode(); }
+   bool IsPlaying(const bool applyWndFocus = true) const { return (applyWndFocus ? (m_playing && m_focused) : m_focused) && !IsEditorMode(); }
    void OnFocusChanged(const bool isGameFocused); // On focus lost, pause player and show mouse cursor
 
    U32 m_pauseTimeTarget = 0;
@@ -320,15 +179,15 @@ public:
    bool m_lastFrameSyncOnVBlank = false;
    bool m_lastFrameSyncOnFPS = false;
 
-   float GetTargetRefreshRate() const { return m_maxFramerate < 10000.f ? m_maxFramerate : m_playfieldWnd->GetRefreshRate(); }
+   float GetTargetRefreshRate() const { return m_maxFramerate; }
    bool m_curFrameSyncOnFPS = false;
+   bool m_curFrameSyncOnVBlank = false;
    
    FrameProfiler m_logicProfiler; // Frame timing profiler to be used when measuring timings from the game logic thread
    FrameProfiler* m_renderProfiler = nullptr; // Frame timing profiler to be used when measuring timings from the render thread (same as game logic profiler for single threaded mode)
 
 private:
    float m_maxFramerate = 0.f; // targeted refresh rate in Hz, if larger refresh rate it will limit FPS by uSleep() //!! currently does not work adaptively as it would require IDirect3DDevice9Ex which is not supported on WinXP
-   bool m_curFrameSyncOnVBlank = false;
    U64 m_startFrameTick; // System time in us when render frame was started (beginning of frame animation then collect,...)
    unsigned int m_onGameStartMsgId;
    unsigned int m_onPrepareFrameMsgId;
@@ -341,31 +200,20 @@ private:
 
 #pragma region MechPlunger
 public:
-   void MechPlungerIn(const int z, const int joyidx);
-   void MechPlungerSpeedIn(const int z, const int joyidx);
-   int GetMechPlungerSpeed() const;
-
-   U32 m_movedPlunger = 0;    // has plunger moved, must have moved at least three times
-   U32 m_LastPlungerHit = 0;  // the last time the plunger was in contact (at least the vicinity) of the ball
-   float m_curMechPlungerPos; // position from joystick axis input, if a position axis is assigned
-   int m_curMechPlungerSpeed; // plunger speed from joystick axis input, if a speed axis is assigned
-   float m_plungerSpeedScale; // scaling factor for plunger speed input, to convert from joystick to internal units
-   bool m_fExtPlungerSpeed;   // flag: plunger speed was received via joystick input
-
+   float GetMechPlungerSpeed() const;
    void MechPlungerUpdate();
 
+   U32 m_LastPlungerHit = 0;  // the last time the plunger was in contact (at least the vicinity) of the ball
+   float m_curMechPlungerPos; // position from joystick axis input, if a position axis is assigned
+   float m_plungerSpeedScale; // scaling factor for plunger speed input, to convert from joystick to internal units
+
 private:
-   int m_curPlunger[PININ_JOYMXCNT];      // mechanical plunger position input, one reading per joystick device
-   int m_curPlungerSpeed[PININ_JOYMXCNT]; // mechanical plunger speed input, per joystick device
+   int m_plungerUpdateCount = 0;
 #pragma endregion
 
 
 #pragma region Nudge
 public:
-   void ReadAccelerometerCalibration();
-   void SetNudgeX(const int x, const int joyidx);
-   void SetNudgeY(const int y, const int joyidx);
-   const Vertex2D& GetRawAccelerometer() const;
    bool IsAccelInputAsVelocity() const { return m_accelInputIsVelocity; }
    
    #ifdef UNUSED_TILT
@@ -375,17 +223,7 @@ public:
    float m_NudgeShake; // whether to shake the screen during nudges and how much
 
 private:
-   int2 m_accelerometerMax; // Accelerometer max value X/Y axis (in -JOYRANGEMX..JOYRANGEMX range)
-   int2 m_curAccel[PININ_JOYMXCNT]; // Live value acquired from joystick, clamped to max values (in -m_accelerometerMax..m_accelerometerMax)
-   mutable bool m_accelerometerDirty = true;
-   mutable Vertex2D m_accelerometer; // lazily evaluated sum of joystick mapped accelerometers, applying clamping then gain, normalized to -1..1 range
-   bool m_accelerometerEnabled; // true if electronic accelerometer enabled
-   bool m_accelerometerFaceUp; // true is Normal Mounting (Left Hand Coordinates)
-   float m_accelerometerAngle; // 0 degrees rotated counterclockwise (GUI is lefthand coordinates)
-   float m_accelerometerSensitivity;
-   Vertex2D m_accelerometerGain; // Accelerometer gain X/Y axis
    bool m_accelInputIsVelocity;
-
 #pragma endregion
 
 
@@ -397,7 +235,7 @@ public:
    PhysicsEngine* m_physics = nullptr;
 
    vector<HitBall *> m_vball;
-   vector<Hitable *> m_vhitables; // all Hitables obtained from the table's list of Editables
+   vector<IEditable *> m_vhitables; // all Renderable parts obtained from the table's list of Editables
 
    int m_minphyslooptime; // minimum physics loop processing time in usec (0-1000), effort to reduce input latency (mainly useful if vsync is enabled, too)
 
@@ -453,7 +291,7 @@ private:
 #pragma region Input
 public:
    PinInput m_pininput;
-   EnumAssignKeys m_rgKeys[eCKeys]; // Player's key assignments
+   int m_rgKeys[eCKeys]; // Player's key assignments (keycode triggering each action)
    bool m_supportsTouch = false; // Display is a touchscreen?
    bool m_touchregion_pressed[MAX_TOUCHREGION]; // status for each touch region to avoid multitouch double triggers (true = finger on, false = finger off)
    void ShowMouseCursor(const bool show) { m_drawCursor = show; UpdateCursorState(); }
@@ -475,8 +313,8 @@ public:
 
    bool m_PlayMusic;
    bool m_PlaySound;
-   int m_MusicVolume;
-   int m_SoundVolume;
+   int m_MusicVolume; // -100..100
+   int m_SoundVolume; // -100..100
    PinSound *m_audio = nullptr;
 #pragma endregion
 
@@ -567,7 +405,7 @@ private:
 private:
    static void OnAudioUpdated(const unsigned int msgId, void *userData, void *msgData);
    unsigned int m_onAudioUpdatedMsgId;
-   robin_hood::unordered_flat_map<uint64_t, PinSound*> m_externalAudioPlayers;
+   ankerl::unordered_dense::map<uint64_t, PinSound*> m_externalAudioPlayers;
 
 
 public:

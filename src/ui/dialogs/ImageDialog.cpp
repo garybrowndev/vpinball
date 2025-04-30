@@ -3,8 +3,6 @@
 #include "core/stdafx.h"
 #include "ui/resource.h"
 #include "ImageDialog.h"
-#include "core/vpversion.h"
-#include "atlconv.h"
 #include "WhereUsedDialog.h"
 
 typedef struct _tagSORTDATA
@@ -12,7 +10,7 @@ typedef struct _tagSORTDATA
     HWND hwndList;
     int subItemIndex;
     int sortUpDown;
-}SORTDATA;
+} SORTDATA;
 
 extern SORTDATA SortData;
 extern int CALLBACK MyCompProc( LPARAM lSortParam1, LPARAM lSortParam2, LPARAM lSortOption );
@@ -138,9 +136,7 @@ INT_PTR ImageDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
          ListImages(hListView);
 
-         char textBuf[16];
-         strncpy_s(textBuf, "128", sizeof(textBuf)-1);
-         SetDlgItemText(IDC_ALPHA_MASK_EDIT, textBuf);
+         SetDlgItemText(IDC_ALPHA_MASK_EDIT, f2sz(128.0f).c_str());
          ListView_SetItemState(hListView, 0, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
          GotoDlgCtrl(hListView);
          return FALSE;
@@ -242,7 +238,7 @@ INT_PTR ImageDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
             Texture * const ppi = (Texture *)lvitem.lParam;
             if (ppi != nullptr)
             {
-               const float v = sz2f(GetDlgItemText(IDC_ALPHA_MASK_EDIT).c_str())/255.f;
+               const float v = sz2f(GetDlgItemText(IDC_ALPHA_MASK_EDIT).GetString())/255.f;
                if (ppi->m_alphaTestValue != v)
                {
                   ppi->m_alphaTestValue = v;
@@ -361,7 +357,7 @@ void ImageDialog::UpdateImages()
             Texture * const ppi = (Texture *)lvitem.lParam;
             if (ppi != nullptr)
             {
-                const float v = sz2f(GetDlgItemText(IDC_ALPHA_MASK_EDIT).c_str())/255.f;
+                const float v = sz2f(GetDlgItemText(IDC_ALPHA_MASK_EDIT).GetString())/255.f;
                 if (ppi->m_alphaTestValue != v)
                 {
                     ppi->m_alphaTestValue = v;
@@ -613,7 +609,7 @@ void ImageDialog::Export()
                   ppi = (Texture*)lvitem.lParam;
                }
 
-               g_pvp->m_settings.SaveValue(Settings::RecentDir, "ImageDir"s, pathName);
+               g_pvp->m_settings.SaveValue(Settings::RecentDir, "ImageDir"s, string(pathName));
             } // finished all selected items
          }
       }
@@ -1032,5 +1028,5 @@ void ImageDialog::AddToolTip(const char *const text, HWND parentHwnd, HWND toolT
     toolInfo.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
     toolInfo.uId = (UINT_PTR)controlHwnd;
     toolInfo.lpszText = (char *)text;
-    SendMessage(toolTipHwnd, TTM_ADDTOOL, 0, (LPARAM)&toolInfo);
+    ::SendMessage(toolTipHwnd, TTM_ADDTOOL, 0, (LPARAM)&toolInfo);
 }

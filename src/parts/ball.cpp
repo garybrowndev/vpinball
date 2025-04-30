@@ -7,6 +7,7 @@
 #include "meshes/ballMesh.h"
 #include "renderer/RenderCommand.h"
 #include "renderer/Shader.h"
+#include "renderer/VRDevice.h"
 
 const AntiStretchHelper Ball::m_ash;
 unsigned int Ball::m_nextBallID = 0;
@@ -15,14 +16,6 @@ unsigned int Ball::GetNextBallID() { unsigned int id = Ball::m_nextBallID; Ball:
 Ball::Ball() : m_id(GetNextBallID())
 {
    swprintf_s(m_wzName, std::size(m_wzName), L"LiveBall%d", m_id); // Default name
-   m_d.m_useTableRenderSettings = true;
-   m_d.m_color = RGB(255, 255, 255);
-   m_d.m_bulb_intensity_scale = 1.0f;
-   m_d.m_playfieldReflectionStrength = 1.0f;
-   m_d.m_reflectionEnabled = true;
-   m_d.m_forceReflection = false;
-   m_d.m_visible = true;
-   m_d.m_decalMode = false;
    m_hitBall.m_d.m_pos = Vertex3Ds(0.f, 0.f, 25.f);
    m_hitBall.m_d.m_radius = 25.f;
    m_hitBall.m_d.m_mass = 1.f;
@@ -277,6 +270,7 @@ static inline float map_bulblight_to_emission(const Light* const l) // magic map
 void Ball::Render(const unsigned int renderMask)
 {
    assert(m_rd != nullptr);
+   assert(!m_backglass);
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
    const bool isReflectionPass = renderMask & Renderer::REFLECTION_PASS;
@@ -307,7 +301,7 @@ void Ball::Render(const unsigned int renderMask)
 
    // collect the x nearest lights that can reflect on balls
    vector<Light*>& reflectedLights = g_pplayer->m_renderer->m_ballReflectedLights;
-   std::ranges::sort(reflectedLights.begin(), reflectedLights.end(), [this](Light* const pLight1, Light* const pLight2) {
+   std::ranges::sort(reflectedLights.begin(), reflectedLights.end(), [this](const Light* const pLight1, const Light* const pLight2) {
       const float dist1 = Vertex3Ds(pLight1->m_d.m_vCenter.x - m_hitBall.m_d.m_pos.x, pLight1->m_d.m_vCenter.y - m_hitBall.m_d.m_pos.y, pLight1->m_d.m_meshRadius + pLight1->m_surfaceHeight - m_hitBall.m_d.m_pos.z).LengthSquared(); //!! z pos
       const float dist2 = Vertex3Ds(pLight2->m_d.m_vCenter.x - m_hitBall.m_d.m_pos.x, pLight2->m_d.m_vCenter.y - m_hitBall.m_d.m_pos.y, pLight2->m_d.m_meshRadius + pLight2->m_surfaceHeight - m_hitBall.m_d.m_pos.z).LengthSquared(); //!! z pos
       return dist1 < dist2;
@@ -460,8 +454,11 @@ void Ball::Render(const unsigned int renderMask)
    // may be modified while the update command is executed.
    Shader::ShaderState* ss = m_rd->GetCurrentPass()->m_commands.back()->GetShaderState();
    m_rd->AddBeginOfFrameCmd([this, rot, scale, ss](){
-      float zheight = m_hitBall.m_d.m_lockedInKicker ? (m_hitBall.m_d.m_pos.z - m_hitBall.m_d.m_radius) : m_hitBall.m_d.m_pos.z;
-      Matrix3D trans = Matrix3D::MatrixTranslate(m_hitBall.m_d.m_pos.x, m_hitBall.m_d.m_pos.y, zheight);
+      vec3 pos(m_hitBall.m_d.m_pos.x, m_hitBall.m_d.m_pos.y, m_hitBall.m_d.m_lockedInKicker ? (m_hitBall.m_d.m_pos.z - m_hitBall.m_d.m_radius) : m_hitBall.m_d.m_pos.z);
+      float delay = m_rd->GetPredictedDisplayDelayInS();
+      pos += delay * m_hitBall.m_d.m_vel;
+      //PLOGD << "Ball position advanced to display predicted time by " << delay << "s > " << m_hitBall.m_d.m_vel;
+      Matrix3D trans = Matrix3D::MatrixTranslate(pos.x, pos.y, pos.z);
       Matrix3D m3D_full = rot * scale * trans;
       ss->SetMatrix(SHADER_orientation, &m3D_full.m[0][0]);
    });
@@ -513,7 +510,7 @@ void Ball::Render(const unsigned int renderMask)
             continue; // Fully faded out or radius too small => discard
 
          vec *= 1.0f / sqrtf(ls);
-         const Vertex3Ds up(0.f, 0.f, 1.f); // TODO Should be camera axis instead of fixed vertical
+         constexpr Vertex3Ds up{0.f, 0.f, 1.f}; // TODO Should be camera axis instead of fixed vertical
          const Vertex3Ds n = CrossProduct(vec, up) * r;
 
          Vertex3D_NoTex2 quadVertices[4];

@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "robin_hood.h"
+#include "unordered_dense.h"
 
 #include <atomic>
 #include "utils/hash.h"
@@ -14,9 +14,10 @@
 #include "renderer/RenderProbe.h"
 #include "renderer/ViewSetup.h"
 
+#include "input/pininput.h"
+
 #ifdef __STANDALONE__
 #include <iostream>
-#include <unordered_map>
 class Light;
 #endif
 
@@ -28,8 +29,6 @@ class Light;
 
 #define DISABLE_SCRIPT_EDITING 0x00000002 // cannot open script windows (stops editing and viewing)
 #define DISABLE_EVERYTHING 0x80000000 // everything is off limits (including future locks)
-
-#define MAX_LAYERS 11
 
 struct LightSource
 {
@@ -67,7 +66,11 @@ class PinTableMDI final : public CMDIChild
 {
 public:
    PinTableMDI(VPinball *vpinball);
-   virtual ~PinTableMDI();
+   ~PinTableMDI()
+   #ifndef __STANDALONE__
+   override
+   #endif
+   ;
    CComObject<PinTable> *GetTable() { return m_table; }
    bool CanClose() const;
 
@@ -105,7 +108,7 @@ public:
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
-   HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) override;
+   HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
    STDMETHOD(get_BallFrontDecal)(/*[out, retval]*/ BSTR *pVal);
    STDMETHOD(put_BallFrontDecal)(/*[in]*/ BSTR newVal);
@@ -342,22 +345,22 @@ public:
    void InitTablePostLoad();
    void RemoveInvalidReferences();
 
-   HRESULT GetTypeName(BSTR *pVal) override;
+   HRESULT GetTypeName(BSTR *pVal) const final;
 
    void SetCaption(const string &szCaption);
    void SetMouseCapture();
    int ShowMessageBox(const char *text) const;
    POINT GetScreenPoint() const;
 
-   void UIRenderPass2(Sur *const psur) override;
+   void UIRenderPass2(Sur *const psur) final;
    void Paint(HDC hdc);
    ISelect *HitTest(const int x, const int y);
-   void SetDirtyDraw();
+   void SetDirtyDraw() final;
 
    void Render3DProjection(Sur *const psur);
 
-   bool GetDecalsEnabled() const;
-   bool GetEMReelsEnabled() const;
+   bool GetDecalsEnabled() const { return m_renderDecals; } // Enable backdrop image, decals and lights on backdrop
+   bool GetEMReelsEnabled() const { return m_renderEMReels; } // Enable dispreel on backdrop
 
    void Copy(int x, int y);
    void Paste(const bool atLocation, const int x, const int y);
@@ -368,8 +371,8 @@ public:
    void ExportBackdropPOV();
    void ImportVPP(const string &filename);
 
-   //void FireVoidEvent(int dispid);
-   void FireKeyEvent(int dispid, int keycode);
+   void FireOptionEvent(int event);
+   void FireGenericKeyEvent(int dispid, int keycode);
 
    void ImportSound(const HWND hwndListView, const string &filename);
    void ReImportSound(const HWND hwndListView, PinSound *const pps, const string &filename);
@@ -379,7 +382,7 @@ public:
    void RemoveSound(PinSound *const pps);
    HRESULT SaveSoundToStream(const PinSound *const pps, IStream *pstm);
    HRESULT LoadSoundFromStream(IStream *pstm, const int LoadFileVersion);
-   bool isWav(const string &szPath);
+   static bool isWav(const string &szPath);
    bool ExportImage(const Texture *const ppi, const char *const filename);
    Texture* ImportImage(const string &filename, const string &imageName);
    Texture *ImportFreeImage(FIBITMAP *dib, const string &imagename);
@@ -395,7 +398,7 @@ public:
    void ShowWhereMaterialsUsed(vector<WhereUsedInfo> &);
    void ShowWhereMaterialUsed(vector<WhereUsedInfo> &, Material *const ppi);
 
-   string AuditTable() const;
+   string AuditTable(bool log) const;
 
    void ListCustomInfo(HWND hwndListView);
    int AddListItem(HWND hwndListView, const string &szName, const string &szValue1, LPARAM lparam);
@@ -412,40 +415,40 @@ public:
    void SetCollectionName(Collection *pcol, const char *szName, HWND hwndList, int index);
 
    void DoContextMenu(int x, int y, const int menuid, ISelect *psel);
-   virtual void DoCommand(int icmd, int x, int y) override;
+   void DoCommand(int icmd, int x, int y) final;
    bool FMutilSelLocked();
 
-   virtual void SelectItem(IScriptable *piscript) override;
-   virtual void DoCodeViewCommand(int command) override;
-   virtual void SetDirtyScript(SaveDirtyState sds) override;
-   virtual void ExportMesh(ObjLoader &loader) override;
+   void SelectItem(IScriptable *piscript) final;
+   void DoCodeViewCommand(int command) final;
+   void SetDirtyScript(SaveDirtyState sds) final;
+   void ExportMesh(ObjLoader &loader) final;
 
    // Multi-object manipulation
-   virtual Vertex2D GetCenter() const override;
-   virtual void PutCenter(const Vertex2D &pv) override;
-   virtual void FlipY(const Vertex2D &pvCenter) override;
-   virtual void FlipX(const Vertex2D &pvCenter) override;
-   virtual void Rotate(const float ang, const Vertex2D &pvCenter, const bool useElementCenter) override;
-   virtual void Scale(const float scalex, const float scaley, const Vertex2D &pvCenter, const bool useElementCenter) override;
-   virtual void Translate(const Vertex2D &pvOffset) override;
+   Vertex2D GetCenter() const final;
+   void PutCenter(const Vertex2D &pv) final;
+   void FlipY(const Vertex2D &pvCenter) final;
+   void FlipX(const Vertex2D &pvCenter) final;
+   void Rotate(const float ang, const Vertex2D &pvCenter, const bool useElementCenter) final;
+   void Scale(const float scalex, const float scaley, const Vertex2D &pvCenter, const bool useElementCenter) final;
+   void Translate(const Vertex2D &pvOffset) final;
 
    // IEditable (mostly bogus for now)
-   virtual void UIRenderPass1(Sur *const psur) override;
-   virtual ItemTypeEnum GetItemType() const override { return eItemTable; }
-   virtual HRESULT InitLoad(IStream *pstm, PinTable *ptable, int *pid, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey) override;
-   virtual HRESULT InitPostLoad() override;
-   virtual HRESULT InitVBA(BOOL fNew, int id, WCHAR *const wzName) override;
-   virtual ISelect *GetISelect() override { return (ISelect *)this; }
-   virtual const ISelect *GetISelect() const override { return (const ISelect *)this; }
-   virtual void SetDefaults(const bool fromMouseClick) override;
-   virtual IScriptable *GetScriptable() override { return (IScriptable *)this; }
-   virtual void SetDefaultPhysics(const bool fromMouseClick) override;
+   void UIRenderPass1(Sur *const psur) final;
+   ItemTypeEnum GetItemType() const final { return eItemTable; }
+   HRESULT InitLoad(IStream *pstm, PinTable *ptable, int *pid, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey) final;
+   HRESULT InitPostLoad() final;
+   HRESULT InitVBA(BOOL fNew, int id, WCHAR *const wzName) final;
+   ISelect *GetISelect() final { return (ISelect *)this; }
+   const ISelect *GetISelect() const final { return (const ISelect *)this; }
+   void SetDefaults(const bool fromMouseClick) final;
+   IScriptable *GetScriptable() final { return (IScriptable *)this; }
+   void SetDefaultPhysics(const bool fromMouseClick) final;
 
-   virtual PinTable *GetPTable() override { return this; }
-   virtual const PinTable *GetPTable() const override { return this; }
-   const char *GetElementName(IEditable *pedit) const;
+   PinTable *GetPTable() final { return this; }
+   const PinTable *GetPTable() const final { return this; }
+   static const char *GetElementName(IEditable *pedit);
 
-   IEditable *GetElementByName(const char *const name);
+   IEditable *GetElementByName(const char *const name) const;
    void OnDelete();
 
    void DoLeftButtonDown(int x, int y, bool zoomIn);
@@ -453,6 +456,7 @@ public:
    void OnRightButtonDown(int x, int y);
    void FillCollectionContextMenu(CMenu &mainMenu, CMenu &colSubMenu, ISelect *psel);
    void FillLayerContextMenu(CMenu &mainMenu, CMenu &layerSubMenu, ISelect *psel);
+   void AssignSelectionToPartGroup(PartGroup *group);
    void OnRightButtonUp(int x, int y);
    void DoMouseMove(int x, int y);
    void OnLeftDoubleClick(int x, int y);
@@ -479,30 +483,30 @@ public:
    HRESULT SaveToStorage(IStorage *pstg, VPXFileFeedback& feedback);
    HRESULT SaveInfo(IStorage *pstg, HCRYPTHASH hcrypthash);
    HRESULT SaveCustomInfo(IStorage *pstg, IStream *pstmTags, HCRYPTHASH hcrypthash);
-   HRESULT WriteInfoValue(IStorage *pstg, const WCHAR *const wzName, const string &szValue, HCRYPTHASH hcrypthash);
-   HRESULT ReadInfoValue(IStorage *pstg, const WCHAR *const wzName, string &output, HCRYPTHASH hcrypthash);
-   HRESULT SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool saveForUndo) override;
+   static HRESULT WriteInfoValue(IStorage *pstg, const WCHAR *const wzName, const string &szValue, HCRYPTHASH hcrypthash);
+   static HRESULT ReadInfoValue(IStorage *pstg, const WCHAR *const wzName, string &output, HCRYPTHASH hcrypthash);
+   HRESULT SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool saveForUndo) final;
    HRESULT LoadGameFromFilename(const string &szFileName);
    HRESULT LoadGameFromFilename(const string &szFileName, VPXFileFeedback& feedback);
    HRESULT LoadInfo(IStorage *pstg, HCRYPTHASH hcrypthash, int version);
    HRESULT LoadCustomInfo(IStorage *pstg, IStream *pstmTags, HCRYPTHASH hcrypthash, int version);
    HRESULT LoadData(IStream *pstm, int &csubobj, int &csounds, int &ctextures, int &cfonts, int &ccollection, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey);
-   virtual IEditable *GetIEditable() override { return (IEditable *)this; }
-   virtual const IEditable *GetIEditable() const override { return (const IEditable *)this; }
-   virtual void Delete() override { } // Can't delete table itself
-   virtual void Uncreate() override { }
-   virtual bool LoadToken(const int id, BiffReader *const pbr) override;
+   IEditable *GetIEditable() final { return (IEditable *)this; }
+   const IEditable *GetIEditable() const final { return (const IEditable *)this; }
+   void Delete() final { } // Can't delete table itself
+   void Uncreate() final { }
+   bool LoadToken(const int id, BiffReader *const pbr) final;
 
    virtual IDispatch *GetPrimary() { return this->GetDispatch(); }
-   virtual IDispatch *GetDispatch() override { return (IDispatch *)this; }
-   virtual const IDispatch *GetDispatch() const override { return (const IDispatch *)this; }
-   virtual IFireEvents *GetIFireEvents() override { return (IFireEvents *)this; }
+   IDispatch *GetDispatch() final { return (IDispatch *)this; }
+   const IDispatch *GetDispatch() const final { return (const IDispatch *)this; }
+   IFireEvents *GetIFireEvents() final { return (IFireEvents *)this; }
 
    void SetZoom(float zoom);
    void SetMyScrollInfo();
 
-   void BeginUndo();
-   void EndUndo();
+   void BeginUndo() final;
+   void EndUndo() final;
    void Undo();
 
    void Uncreate(IEditable *pie);
@@ -516,9 +520,9 @@ public:
    STDMETHOD(GetPredefinedStrings)(DISPID dispID, CALPOLESTR *pcaStringsOut, CADWORD *pcaCookiesOut, IEditable *piedit);
    STDMETHOD(GetPredefinedValue)(DISPID dispID, DWORD dwCookie, VARIANT *pVarOut, IEditable *piedit);
 
-   virtual void OnLButtonDown(int x, int y) override;
-   virtual void OnLButtonUp(int x, int y) override;
-   virtual void OnMouseMove(int x, int y) override;
+   void OnLButtonDown(int x, int y) final;
+   void OnLButtonUp(int x, int y) final;
+   void OnMouseMove(int x, int y) final;
    void OnMouseMove(const short x, const short y);
 
    void SetDefaultView();
@@ -543,7 +547,6 @@ public:
    HRESULT StopSound(BSTR Sound);
    void StopAllSounds();
 
-   void DeleteFromLayer(IEditable *obj);
    void UpdateCollection(const int index);
    void MoveCollectionUp(CComObject<Collection> *pcol);
    void MoveCollectionDown(CComObject<Collection> *pcol);
@@ -556,7 +559,7 @@ public:
 
    FRect3D GetBoundingBox() const;
    void ComputeNearFarPlane(const Matrix3D &matWorldView, const float scale, float &zNear, float &zFar) const;
-   void ComputeNearFarPlane(const vector<Vertex3Ds> &bounds, const Matrix3D &matWorldView, const float scale, float &zNear, float &zFar) const;
+   static void ComputeNearFarPlane(const vector<Vertex3Ds> &bounds, const Matrix3D &matWorldView, const float scale, float &zNear, float &zFar);
 
    bool RenderSolid() const { return m_renderSolid; }
 
@@ -593,8 +596,8 @@ public:
    string m_szTitle;
 
    // Flag that disables all table edition. Lock toggles are counted to identify version changes in a table (for example to guarantee untouched table for tournament)
-   bool IsLocked() const { return (m_locked & 1) != 0; }
-   void ToggleLock() { BeginUndo(); MarkForUndo(); m_locked++; EndUndo(); SetDirtyDraw(); }
+   bool IsLocked() const { return (m_tablelocked & 1) != 0; }
+   void ToggleLock() { BeginUndo(); MarkForUndo(); m_tablelocked++; EndUndo(); SetDirtyDraw(); }
 
    bool TournamentModePossible() const { return IsLocked() && !FDirty() && m_pcv->external_script_name.empty(); }
 
@@ -618,33 +621,32 @@ public:
    Settings m_settings; // Settings for this table (apply overrides above application settings)
 
    bool m_isLiveInstance = false; // true for live shallow copy of a table
-   robin_hood::unordered_map<void *, void *> m_startupToLive; // For live table, maps back and forth to startup table editable parts, materials,...
-   robin_hood::unordered_map<void *, void *> m_liveToStartup;
+   ankerl::unordered_dense::map<void *, void *> m_startupToLive; // For live table, maps back and forth to startup table editable parts, materials,...
+   ankerl::unordered_dense::map<void *, void *> m_liveToStartup;
 
    // editor viewport
    Vertex2D m_offset;
    float m_zoom;
 
-   //ISelect *m_pselcur;
    VectorProtected<ISelect> m_vmultisel;
 
-   float m_left; // always zero for now
-   float m_top; // always zero for now
-   float m_right;
-   float m_bottom;
+   float m_left = 0.f; // always zero for now
+   float m_top = 0.f; // always zero for now
+   float m_right = 0.f;
+   float m_bottom = 0.f;
 
-   float m_glassBottomHeight; // Height of glass above playfield at bottom of playfield
-   float m_glassTopHeight; // Height of glass above playfield at top of playfield
+   float m_glassBottomHeight = 210.f; // Height of glass above playfield at bottom of playfield
+   float m_glassTopHeight = 210.f; // Height of glass above playfield at top of playfield
 
-   float m_3DmaxSeparation;
+   float m_3DmaxSeparation = 0.03f;
    float m_global3DMaxSeparation;
-   float m_3DZPD;
+   float m_3DZPD = 0.5f;
    float m_global3DZPD;
-   float m_3DOffset;
+   float m_3DOffset = 0.f;
    float m_global3DOffset;
-   float m_defaultBulbIntensityScaleOnBall;
+   float m_defaultBulbIntensityScaleOnBall = 1.f;
 
-   bool m_BG_enable_FSS; // Flag telling if this table supports Full Single Screen POV (defaults is to use it in desktop mode if available)
+   bool m_BG_enable_FSS = false; // Flag telling if this table supports Full Single Screen POV (defaults is to use it in desktop mode if available)
    ViewSetupID m_BG_override = BG_INVALID; // Allow to easily override the POV for testing (not persisted)
    ViewSetupID m_BG_current_set; // Cache of the active view setup ID (depends on table but also on application settings and user overriding it)
    ViewSetup mViewSetups[NUM_BG_SETS];
@@ -654,38 +656,41 @@ public:
    float m_angletiltMax;
    float m_angletiltMin;
 
-   int m_overridePhysics;
-   float m_fOverrideGravityConstant, m_fOverrideContactFriction, m_fOverrideElasticity, m_fOverrideElasticityFalloff, m_fOverrideScatterAngle;
-   float m_fOverrideMinSlope, m_fOverrideMaxSlope;
+   int m_overridePhysics = 0;
+   float m_fOverrideGravityConstant;
+   float m_fOverrideContactFriction;
+   float m_fOverrideElasticity;
+   float m_fOverrideElasticityFalloff;
+   float m_fOverrideScatterAngle;
+   float m_fOverrideMinSlope;
+   float m_fOverrideMaxSlope;
+
+   bool m_overridePhysicsFlipper = false;
 
    unsigned int m_PhysicsMaxLoops;
 
    float m_Gravity;
-
    float m_friction;
    float m_elasticity;
    float m_elasticityFalloff;
    float m_scatter;
+   float m_defaultScatter = 0.f;
+   
+   int m_plungerNormalize = 100;  //Mech-Plunger component adjustment or weak spring, aging
+   bool m_plungerFilter = false;
 
-   float m_defaultScatter;
-   float m_nudgeTime;
-   int m_plungerNormalize;
-   bool m_plungerFilter;
-
-   bool m_overridePhysicsFlipper;
-
-   bool m_tblAutoStartEnabled;
-   bool m_tblMirrorEnabled; // Mirror tables left to right.  This is activated by a cheat during table selection.
-
+   float m_nudgeTime = 5.f;
    Vertex2D m_tblNudgeRead;
-   float m_tblNudgeReadTilt;
+   float m_tblNudgeReadTilt = 0.f;
    Vertex2D m_tblNudgePlumb;
 
+   bool m_tblAutoStartEnabled;
    U32 m_tblAutoStart; // msecs before trying an autostart if doing once-only method .. 0 is automethod
    U32 m_tblAutoStartRetry; // msecs before retrying to autostart.
-   float m_tblVolmod; // volume modulation for doing audio balancing
-   U32 m_tblExitConfirm; // msecs for exit (or esc if not disabled) button to be pressed to exit completely
-   float m_difficulty; // table difficulty Level
+
+   bool m_tblMirrorEnabled = false; // Mirror tables left to right.  This is activated by a cheat during table selection.
+
+   float m_difficulty = 0.2f; // table difficulty Level
    float m_globalDifficulty; // global difficulty, that is to say table difficulty eventually overriden from settings
 
    short2 m_oldMousePos;
@@ -707,14 +712,13 @@ public:
    string m_envImage;
 
    vector<IEditable *> m_vedit;
-   vector<IEditable *> m_layer[MAX_LAYERS];
    vector<ISelect *> m_allHitElements;
 
    vector<Texture *> m_vimage;
    vector<Texture *> m_vliveimage;
    const vector<Texture *> &GetImageList() const { return m_vimage; }
 
-   int m_numMaterials;
+   int m_numMaterials = 0;
    vector<Material *> m_materials;
    const vector<Material *> &GetMaterialList() const { return m_materials; }
 
@@ -742,18 +746,16 @@ public:
 
    FRect m_rcDragRect; // Multi-select
 
-   HBITMAP m_hbmOffScreen; // Buffer for drawing the editor window
-
    PinUndo m_undo;
 
    CComObject<CodeViewer> *m_pcv;
 
    CComObject<ScriptGlobalTable> *m_psgt; // Object to expose to script for global functions
 
-   SaveDirtyState m_sdsDirtyProp;
-   SaveDirtyState m_sdsDirtyScript;
-   SaveDirtyState m_sdsNonUndoableDirty;
-   SaveDirtyState m_sdsCurrentDirtyState;
+   SaveDirtyState m_sdsDirtyProp = eSaveClean;
+   SaveDirtyState m_sdsDirtyScript = eSaveClean;
+   SaveDirtyState m_sdsNonUndoableDirty = eSaveClean;
+   SaveDirtyState m_sdsCurrentDirtyState = eSaveClean;
 
    // Table info
    string m_szTableName;
@@ -767,9 +769,7 @@ public:
    string m_szRules;
    string m_szScreenShot;
    string m_szDateSaved;
-   unsigned int m_numTimesSaved;
-
-   PinBinary *m_pbTempScreenshot; // Holds contents of screenshot image until the image asks for it
+   unsigned int m_numTimesSaved = 0;
 
    vector<string> m_vCustomInfoTag;
    vector<string> m_vCustomInfoContent;
@@ -782,7 +782,7 @@ public:
    float m_lightRange;
    float m_lightEmissionScale;
    float m_envEmissionScale;
-   float m_globalEmissionScale;
+   float m_globalEmissionScale = 1.f;
    float m_AOScale;
    float m_SSRScale;
 
@@ -793,19 +793,17 @@ public:
    bool m_enableSSR;
    float m_bloom_strength;
 
-   HWND m_hMaterialManager;
    SearchSelectDialog m_searchSelectDlg;
 
-   volatile std::atomic<bool> m_savingActive;
+   volatile std::atomic<bool> m_savingActive = false;
 
-   bool m_dirtyDraw; // Whether our background bitmap is up to date
-   bool m_renderSolid;
+   bool m_renderSolid = true;
 
-   bool m_grid; // Display grid or not
-   bool m_backdrop;
-   bool m_renderDecals;
-   bool m_renderEMReels;
-   bool m_overwriteGlobalStereo3D;
+   bool m_grid = true; // Display grid or not
+   bool m_backdrop = true;
+   bool m_renderDecals = true;
+   bool m_renderEMReels = true;
+   bool m_overwriteGlobalStereo3D = false;
 
 #ifdef UNUSED_TILT //!! currently unused (see NudgeGetTilt())
    int m_jolt_amount;
@@ -814,9 +812,9 @@ public:
    int m_tilt_trigger_time;
 #endif
 
-   virtual void OnInitialUpdate() override;
-   virtual LRESULT WndProc(UINT uMsg, WPARAM wParam, LPARAM lParam) override;
-   virtual BOOL OnEraseBkgnd(CDC &dc) override;
+   void OnInitialUpdate() final;
+   LRESULT WndProc(UINT uMsg, WPARAM wParam, LPARAM lParam) final;
+   BOOL OnEraseBkgnd(CDC &dc) final;
 
    void SetMouseCursor();
    void OnLeftButtonDown(const short x, const short y);
@@ -871,15 +869,20 @@ public:
    void SetExposure(const float exposure) { m_exposure = exposure; }
 
 private:
-   unsigned int m_locked = 0;
+   unsigned int m_tablelocked = 0;
 
    PinTableMDI *m_mdiTable = nullptr;
    CString m_notesText;
-   robin_hood::unordered_map<string, Texture *, StringHashFunctor, StringComparator> m_textureMap; // hash table to speed up texture lookup by name
-   robin_hood::unordered_map<string, Material *, StringHashFunctor, StringComparator> m_materialMap; // hash table to speed up material lookup by name
-   robin_hood::unordered_map<string, Light *, StringHashFunctor, StringComparator> m_lightMap; // hash table to speed up light lookup by name
-   robin_hood::unordered_map<string, RenderProbe *, StringHashFunctor, StringComparator> m_renderprobeMap; // hash table to speed up renderprobe lookup by name
-   bool m_moving;
+   ankerl::unordered_dense::map<string, Texture *, StringHashFunctor, StringComparator> m_textureMap; // hash table to speed up texture lookup by name
+   ankerl::unordered_dense::map<string, Material *, StringHashFunctor, StringComparator> m_materialMap; // hash table to speed up material lookup by name
+   ankerl::unordered_dense::map<string, Light *, StringHashFunctor, StringComparator> m_lightMap; // hash table to speed up light lookup by name
+   ankerl::unordered_dense::map<string, RenderProbe *, StringHashFunctor, StringComparator> m_renderprobeMap; // hash table to speed up renderprobe lookup by name
+   bool m_moving = false;
+
+   PinBinary *m_pbTempScreenshot = nullptr; // Holds contents of screenshot image until the image asks for it
+
+   bool m_dirtyDraw = true; // Whether our background bitmap is up to date
+   HBITMAP m_hbmOffScreen = nullptr; // Buffer for drawing the editor window
 
    ToneMapper m_toneMapper = ToneMapper::TM_AGX;
    float m_exposure = 1.f;
@@ -1017,11 +1020,11 @@ public:
    void Init(VPinball *vpinball, PinTable *pt);
    ~ScriptGlobalTable();
 
-   IDispatch *GetDispatch() override { return (IDispatch *)this; }
-   const IDispatch *GetDispatch() const override { return (const IDispatch *)this; }
+   IDispatch *GetDispatch() final { return (IDispatch *)this; }
+   const IDispatch *GetDispatch() const final { return (const IDispatch *)this; }
 
-   ISelect *GetISelect() override { return nullptr; }
-   const ISelect *GetISelect() const override { return nullptr; }
+   ISelect *GetISelect() final { return nullptr; }
+   const ISelect *GetISelect() const final { return nullptr; }
 
    BEGIN_COM_MAP(ScriptGlobalTable)
    COM_INTERFACE_ENTRY(ITableGlobal)

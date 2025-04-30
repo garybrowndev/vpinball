@@ -5,7 +5,7 @@
 #include <mutex>
 #include <string>
 using std::string;
-#include "robin_hood.h"
+#include "unordered_dense.h"
 #include "typedefs3D.h"
 
 class RenderDevice;
@@ -47,13 +47,13 @@ struct SamplerBinding
    SamplerAddressMode clamp_v;
 };
 
-class Sampler
+class Sampler final
 {
 public:
    Sampler(RenderDevice* rd, const BaseTexture* const surf, const bool force_linear_rgb, const SamplerAddressMode clampu = SA_UNDEFINED, const SamplerAddressMode clampv = SA_UNDEFINED, const SamplerFilter filter = SF_UNDEFINED);
 #if defined(ENABLE_BGFX)
    Sampler(RenderDevice* rd, SurfaceType type, bgfx::TextureHandle bgfxTexture, unsigned int width, unsigned int height, bool ownTexture, bool linear_rgb, const SamplerAddressMode clampu = SA_UNDEFINED, const SamplerAddressMode clampv = SA_UNDEFINED, const SamplerFilter filter = SF_UNDEFINED);
-   bgfx::TextureHandle GetCoreTexture();
+   bgfx::TextureHandle GetCoreTexture(bool genMipmaps);
    bool IsMipMapGenerated() const { return (m_textureUpdate == nullptr) && !bgfx::isValid(m_nomipsTexture); }
    uintptr_t GetNativeTexture();
 #elif defined(ENABLE_OPENGL)
@@ -80,7 +80,7 @@ public:
    SamplerAddressMode GetClampV() const { return m_clampv; }
 
    bool m_dirty;
-   robin_hood::unordered_set<SamplerBinding*> m_bindings;
+   ankerl::unordered_dense::set<SamplerBinding*> m_bindings;
    const SurfaceType m_type;
 
 private:

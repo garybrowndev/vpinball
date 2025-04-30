@@ -6,16 +6,16 @@
 #include <string>
 
 // Dialog box shown when a runtime script error occurs
-class ScriptErrorDialog : public CDialog
+class ScriptErrorDialog final : public CDialog
 {
 public:
 	ScriptErrorDialog(const wstring &message);
 
-	virtual BOOL OnInitDialog() override;
-	virtual BOOL OnCommand(WPARAM wParam, LPARAM lParam) override;
+	BOOL OnInitDialog() override;
+	BOOL OnCommand(WPARAM wParam, LPARAM lParam) override;
 
 	// Call this after the dialog has been closed to determine whether the user wanted to suppress future runtime errors for this session
-	inline bool WasSuppressErrorsRequested()
+	bool WasSuppressErrorsRequested() const
 	{
 		return shouldSuppressErrors;
 	}

@@ -72,10 +72,10 @@ BOOL AboutDialog::OnCommand(WPARAM wParam, LPARAM lParam)
       case IDC_TRANSSITE:
       {
          if (LOWORD(wParam) == IDC_WEBSITE)
-            /*const HRESULT hr =*/ OpenURL("http://www.vpforums.org"s);
+            /*const HRESULT hr =*/ OpenURL("https://www.vpforums.org"s);
          else
          {
-            m_urlString = GetDlgItem(IDC_TRANSWEBSITE).GetWindowText().c_str();
+            m_urlString = GetDlgItem(IDC_TRANSWEBSITE).GetWindowText().GetString();
             /*const HRESULT hr =*/ OpenURL(m_urlString);
          }
          return TRUE;

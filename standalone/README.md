@@ -78,6 +78,8 @@ To make a successful port, we would need tackle several tasks:
 >   - [Bug 56931](https://bugs.winehq.org/show_bug.cgi?id=56931) - vbscript: Const used before declaration fails (explicit)
 >   - [Bug 57511](https://bugs.winehq.org/show_bug.cgi?id=57511) - vbscript: For loop where loop var is not defined throws error without context
 >   - ~~[Bug 57563](https://bugs.winehq.org/show_bug.cgi?id=57563) - vbscript: mid() throws when passed VT_EMPTY instead of returning empty string~~
+>   - [Bug 58051](https://bugs.winehq.org/show_bug.cgi?id=58051) - vbscript: Dictionary direct Keys/Items access causes parse error
+>   - [Bug 58056](https://bugs.winehq.org/show_bug.cgi?id=58056) - vbscript: Directly indexing a Split returns Empty
 
 > - Add support for `Scripting.FileSystemObject` and `Scripting.Dictionary` leveraging Wine's `scrrun` code.
 > - Add support for `E_NOTIMPL` commands to Wine's VBScript engine:
@@ -171,25 +173,29 @@ To list all available audio devices, execute the following:
 ./VPinballX_GL -listsnd
 ```
 
-## Joystick
+## Joystick Configuration
 
-The joystick is currently mapped to an XBox controller layout.
+Visual Pinball Standalone uses **SDL Game Controller** mappings instead of SDL Joystick mappings. To set up your controller, add an entry to the `gamecontrollerdb.txt` file. You can find mappings for many popular controllers in the [SDL Game Controller Database](https://github.com/mdqinc/SDL_GameControllerDB).
 
-| Action | Button |
-| --- | --- |
-| Left Flipper | `Left Shoulder` |
-| Right Flipper | `Right Shoulder` |
-| Left Magna Save | `Left Stick` |
-| Right Magna Save | `Right Stick` |
-| Center Tilt | `D-pad Up` |
-| Left Tilt | `D-pad Left` |
-| Right Tilt | `D-pad Right` |
-| Plunger | `D-pad Down` |
-| Add Credit | `A` |
-| Start | `B` |
-| FPS | `X` |
-| Cancel | `Y` |
-| Fire | `Guide` |
+Once you've updated `gamecontrollerdb.txt`, adjust the corresponding entries in `VPinballX.ini` for your controller. Here's an example configuration for an Xbox controller:
+
+| Button         | Action            | Key = Value              |
+|-----------------|-------------------|--------------------------|
+| Left Shoulder   | Left Flipper      | JoyLFlipKey = 10         |
+| Right Shoulder  | Right Flipper     | JoyRFlipKey = 11         |
+| Left Stick      | Left Magna Save   | JoyLMagnaSave = 8        |
+| Right Stick     | Right Magna Save  | JoyRMagnaSave = 9        |
+| D-pad Up        | Center Tilt       | JoyCTiltKey = 12         |
+| D-pad Left      | Left Tilt         | JoyLTiltKey = 14         |
+| D-pad Right     | Right Tilt        | JoyRTiltKey = 15         |
+| D-pad Down      | Plunger           | JoyPlungerKey = 13       |
+| A               | Add Credit        | JoyAddCreditKey = 1      |
+| B               | Start             | JoyStartGameKey = 2      |
+| X               | FPS               | JoyFrameCount = 3        |
+| Y               | Cancel            | JoyPMCancel = 4          |
+| Guide           | Fire              | JoyLockbarKey = 6        |
+
+Note: Game controller button indexes in `VPinballX.ini` are **1-based**, meaning they start from **1** instead of **0**.
 
 ## Keyboard
 

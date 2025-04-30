@@ -9,11 +9,11 @@
 class IEditable;
 class PinTable;
 
-class UndoRecord
+class UndoRecord final
 {
 public:
    UndoRecord();
-   virtual ~UndoRecord();
+   ~UndoRecord();
 
    void MarkForUndo(IEditable *const pie, const bool saveForUndo);
    void MarkForCreate(IEditable *const pie);
@@ -27,11 +27,11 @@ private:
    vector<IEditable*> m_vieMark;
 };
 
-class PinUndo
+class PinUndo final
 {
 public:
    PinUndo();
-   virtual ~PinUndo();
+   ~PinUndo();
 
    void BeginUndo();
    void MarkForUndo(IEditable * const pie, const bool saveForUndo = false);

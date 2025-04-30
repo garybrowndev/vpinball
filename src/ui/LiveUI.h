@@ -2,13 +2,13 @@
 
 #pragma once
 
-#include "core/pininput.h"
+#include "input/pininput.h"
 
 #include "imgui/imgui.h"
 #include "imguizmo/ImGuizmo.h"
 #include "imgui_markdown/imgui_markdown.h"
 
-class LiveUI
+class LiveUI final
 {
 public:
    LiveUI(RenderDevice* const rd);
@@ -25,13 +25,12 @@ public:
 
    void OpenTweakMode();
    bool IsTweakMode() const { return m_tweakMode; }
-   void OnTweakModeEvent(const int keyEvent, const int keycode);
 
    void HideUI();
 
    void ToggleFPS();
    bool IsShowingFPSDetails() const { return m_show_fps > 1; }
-   unsigned int PushNotification(const string &message, const U32 lengthMs, const unsigned int reuseId = 0);
+   unsigned int PushNotification(const string &message, const int lengthMs, const unsigned int reuseId = 0);
 
 private:
    // Main UI frame & panels
@@ -53,12 +52,14 @@ private:
       TweakOption(TweakType _type, float _min, float _max, float _step, float _def, const string& _name, const string& _unit, std::initializer_list<string> _options): 
          type(_type), min(_min), max(_max), step(_step), def(_def), name(_name), unit(_unit), options(_options) { }
    };
-   enum TweakPage { TP_Info, TP_Rules, TP_PointOfView, TP_TableOption, TP_Plugin00 };
+   enum TweakPage { TP_Info, TP_Rules, TP_PointOfView, TP_VRPosition, TP_TableOption, TP_Plugin00 };
    enum BackdropSetting
    {
       BS_Page,
       // Point of View
       BS_ViewMode, BS_LookAt, BS_FOV, BS_Layback, BS_ViewHOfs, BS_ViewVOfs, BS_XYZScale, BS_XScale, BS_YScale, BS_ZScale, BS_XOffset, BS_YOffset, BS_ZOffset, BS_WndTopZOfs, BS_WndBottomZOfs,
+      // VR position
+      BS_VROrientation, BS_VRX, BS_VRY, BS_VRZ, BS_AR_VR, BS_VRScale,
       // Table tweaks & Custom table defined options (must be the last of this enum)
       BS_Volume, BS_BackglassVolume, BS_PlayfieldVolume, BS_DayNight, BS_Difficulty, BS_Tonemapper, BS_Exposure, BS_Custom
    };
@@ -66,10 +67,11 @@ private:
    int m_activeTweakIndex = 0;
    int m_activeTweakPageIndex = 0;
    vector<TweakPage> m_tweakPages;
-   int m_tweakState[BS_Custom + 100]; // 0 = unmodified, 1 = modified, 2 = resetted
+   int m_tweakState[BS_Custom + 100] = {}; // 0 = unmodified, 1 = modified, 2 = resetted
    vector<BackdropSetting> m_tweakPageOptions;
    bool m_tweakMode = false;
    float m_tweakScroll = 0.f;
+   void HandleTweakInput();
    void UpdateTweakPage();
    void UpdateTweakModeUI();
 

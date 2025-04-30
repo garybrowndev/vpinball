@@ -7,17 +7,9 @@ IEditable::IEditable()
    VariantInit(&m_uservalue);
 }
 
-IEditable::~IEditable()
-{
-}
-
 void IEditable::SetDirtyDraw()
 {
    GetPTable()->SetDirtyDraw();
-}
-
-void IEditable::ClearForOverwrite()
-{
 }
 
 void IEditable::Delete()
@@ -41,6 +33,47 @@ void IEditable::Uncreate()
    if (GetScriptable())
       GetPTable()->m_pcv->RemoveItem(GetScriptable());
 }
+
+void IEditable::SetPartGroup(PartGroup* partGroup)
+{
+   if (m_partGroup != partGroup)
+   {
+      if (partGroup)
+      {
+         assert(std::ranges::find(GetPTable()->m_vedit, partGroup) != GetPTable()->m_vedit.end());
+         partGroup->AddRef();
+      }
+      if (m_partGroup)
+         m_partGroup->Release();
+      m_partGroup = partGroup;
+   }
+}
+
+string IEditable::GetPathString(const bool isDirOnly) const
+{
+   vector<const PartGroup*> itemPath;
+   const PartGroup* parent = GetPartGroup();
+   while (parent != nullptr)
+   {
+      itemPath.insert(itemPath.begin(), parent);
+      parent = parent->GetPartGroup();
+   }
+   std::stringstream ss;
+   for (const auto& group : itemPath)
+      ss << group->GetName() << '/';
+   if (!isDirOnly)
+      ss << GetName();
+   return ss.str();
+}
+
+bool IEditable::IsChild(const PartGroup* group) const
+{
+   const PartGroup* parent = GetPartGroup();
+   while ((parent != group) && (parent != nullptr))
+      parent = parent->GetPartGroup();
+   return parent == group;
+}
+
 
 HRESULT IEditable::put_TimerEnabled(VARIANT_BOOL newVal, BOOL *pte)
 {
@@ -132,20 +165,16 @@ void IEditable::Undelete()
    }
 }
 
-const char *IEditable::GetName()
+const char *IEditable::GetName() const
 {
-    WCHAR *elemName = nullptr;
     if (GetItemType() == eItemDecal)
         return "Decal";
 
-    IScriptable *const pscript = GetScriptable();
+    const IScriptable *const pscript = const_cast<IEditable*>(this)->GetScriptable();
     if (pscript)
-        elemName = pscript->m_wzName;
-
-    if (elemName)
     {
         static char elementName[256];
-        WideCharToMultiByteNull(CP_ACP, 0, elemName, -1, elementName, sizeof(elementName), nullptr, nullptr);
+        WideCharToMultiByteNull(CP_ACP, 0, pscript->m_wzName, -1, elementName, sizeof(elementName), nullptr, nullptr);
         return elementName;
     }
     return nullptr;
@@ -157,7 +186,7 @@ void IEditable::SetName(const string& name)
         return;
     if (GetItemType() == eItemDecal)
         return;
-    PinTable* const pt = GetPTable();
+    const PinTable* const pt = GetPTable();
     if (pt == nullptr)
         return;
 
@@ -179,8 +208,8 @@ void IEditable::SetName(const string& name)
     pt->m_pcv->ReplaceName(GetScriptable(), namePtr);
     lstrcpynW(GetScriptable()->m_wzName, namePtr, sizeof(oldName));
 #ifndef __STANDALONE__
-    g_pvp->GetLayersListDialog()->UpdateElement(this);
     g_pvp->SetPropSel(GetPTable()->m_vmultisel);
+    g_pvp->GetLayersListDialog()->Update();
 
     if (GetItemType() == eItemSurface && g_pvp->MessageBox("Replace the name also in all table elements that use this surface?", "Replace", MB_ICONQUESTION | MB_YESNO) == IDYES)
     for (size_t i = 0; i < pt->m_vedit.size(); i++)

@@ -23,13 +23,13 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncMode, const StereoMode stereo3D)
-   : m_table(table)
-   , m_stereo3D(stereo3D)
+   : m_stereo3D(stereo3D)
    #if defined(ENABLE_DX9) // DirectX 9 does not support stereo rendering
    , m_stereo3DfakeStereo(true)
    #else
    , m_stereo3DfakeStereo(stereo3D == STEREO_VR ? false : table->m_settings.LoadValueWithDefault(Settings::Player, "Stereo3DFake"s, false))
    #endif
+   , m_table(table)
 {
    m_stereo3Denabled = m_table->m_settings.LoadValueWithDefault(Settings::Player, "Stereo3DEnabled"s, (m_stereo3D != STEREO_OFF));
    m_toneMapper = (ToneMapper)m_table->m_settings.LoadValueWithDefault(Settings::TableOverride, "ToneMapper"s, m_table->GetToneMapper());
@@ -67,18 +67,23 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
       bool hr = m_table->m_settings.LoadValue(Settings::Player, "BallImage"s, imageName);
       if (hr)
       {
-         BaseTexture* const tex = BaseTexture::CreateFromFile(imageName, m_table->m_settings.LoadValueWithDefault(Settings::Player, "MaxTexDimension"s, 0));
+         BaseTexture* const tex = BaseTexture::CreateFromFile(imageName, m_table->m_settings.LoadValueInt(Settings::Player, "MaxTexDimension"s));
          if (tex != nullptr)
             m_ballImage = new Texture(tex);
       }
       hr = m_table->m_settings.LoadValue(Settings::Player, "DecalImage"s, imageName);
       if (hr)
       {
-         BaseTexture* const tex = BaseTexture::CreateFromFile(imageName, m_table->m_settings.LoadValueWithDefault(Settings::Player, "MaxTexDimension"s, 0));
+         BaseTexture* const tex = BaseTexture::CreateFromFile(imageName, m_table->m_settings.LoadValueInt(Settings::Player, "MaxTexDimension"s));
          if (tex != nullptr)
             m_decalImage = new Texture(tex);
       }
    }
+   m_vrApplyColorKey = m_table->m_settings.LoadValueWithDefault(Settings::PlayerVR, "UsePassthroughColor"s, false);
+   m_vrColorKey = convertColor(m_table->m_settings.LoadValueWithDefault(Settings::PlayerVR, "PassthroughColor"s, static_cast<int>(0xFFBB4700)), 1.f);
+   m_vrColorKey.x = InvsRGB(m_vrColorKey.x);
+   m_vrColorKey.y = InvsRGB(m_vrColorKey.y);
+   m_vrColorKey.z = InvsRGB(m_vrColorKey.z);
 
    // Global emission scale
    m_globalEmissionScale = m_table->m_globalEmissionScale;
@@ -111,7 +116,7 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
       }
       else
       {
-         m_globalEmissionScale = m_table->m_settings.LoadValueWithDefault(Settings::Player, "EmissionScale"s, 0.5f);
+         m_globalEmissionScale = m_table->m_settings.LoadValueFloat(Settings::Player, "EmissionScale"s);
       }
    }
    if (g_pvp->m_bgles)
@@ -401,8 +406,6 @@ Renderer::~Renderer()
    delete m_ballDebugPoints;
    #endif
    delete m_ballTrailMeshBuffer;
-   delete m_ballImage;
-   delete m_decalImage;
    delete m_tonemapLUT;
    delete m_staticPrepassRT;
    delete m_pOffscreenBackBufferTexture1;
@@ -1177,6 +1180,14 @@ void Renderer::RenderFrame()
    }
    m_renderableToInit.clear();
 
+   // Update backdrop visibility and visibility mask
+   // For the time being, the RenderFrame only support rendering one 3D view, used for main scene, mixed realaity and virtual reality
+   // Dedicated 3D rendering for backglass, topper, apron are not yet implemented
+   m_noBackdrop = (g_pplayer->m_vrDevice != nullptr) || (m_table->m_BG_current_set == BG_FULLSCREEN);
+   m_visibilityMask = g_pplayer->m_vrDevice == nullptr ? PartGroupData::VisibilityMask::VM_PLAYFIELD
+                    : m_vrApplyColorKey ?               (PartGroupData::VisibilityMask::VM_PLAYFIELD | PartGroupData::VisibilityMask::VM_MIXED_REALITY)
+                    :                                   (PartGroupData::VisibilityMask::VM_PLAYFIELD | PartGroupData::VisibilityMask::VM_MIXED_REALITY | PartGroupData::VisibilityMask::VM_VIRTUAL_REALITY);
+
    // Setup ball rendering: collect all lights that can reflect on balls
    m_ballTrailMeshBufferPos = 0;
    m_ballReflectedLights.clear();
@@ -1193,7 +1204,10 @@ void Renderer::RenderFrame()
    // Update camera point of view
    #if defined(ENABLE_VR) || defined(ENABLE_XR)
    if (m_stereo3D == STEREO_VR)
-      g_pplayer->m_vrDevice->UpdateVRPosition(GetMVP());
+   {
+      m_mvpSpaceReference = PartGroupData::SpaceReference::SR_PLAYFIELD;
+      g_pplayer->m_vrDevice->UpdateVRPosition(PartGroupData::SpaceReference::SR_PLAYFIELD, GetMVP());
+   }
    else 
    #endif
    // Legacy headtracking (to be moved to a plugin, using plugin API to update camera)
@@ -1227,7 +1241,7 @@ void Renderer::RenderFrame()
             m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_TRUE);
             m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_TRUE);
             m_renderDevice->SetRenderState(RenderState::ZFUNC, RenderState::Z_ALWAYS);
-            m_renderDevice->m_basicShader->SetMatrix(SHADER_matWorldViewProj, &g_pplayer->m_vrDevice->m_visibilityMaskProj[0], 2);
+            m_renderDevice->m_basicShader->SetMatrix(SHADER_matWorldViewProj, g_pplayer->m_vrDevice->GetVisibilityMaskProjs(), 2);
             m_renderDevice->m_basicShader->SetTechnique(SHADER_TECHNIQUE_vr_mask);
             m_renderDevice->DrawMesh(m_renderDevice->m_basicShader, false, pos, 0, mask, RenderDevice::TRIANGLELIST, 0, mask->m_ib->m_count);
             UpdateBasicShaderMatrix();
@@ -1237,7 +1251,7 @@ void Renderer::RenderFrame()
    }
    else
    {
-      RenderStaticPrepass(); // Update staticly prerendered parts if needed
+      RenderStaticPrepass(); // Update statically prerendered parts if needed
       m_renderDevice->SetRenderTarget("Render Scene"s, GetMSAABackBufferTexture());
       m_renderDevice->AddRenderTargetDependency(m_staticPrepassRT);
       m_renderDevice->BlitRenderTarget(m_staticPrepassRT, GetMSAABackBufferTexture());
@@ -1263,7 +1277,7 @@ static Texture* LoadSegSDF(Texture& tex, const string& path)
    return &tex;
 }
 
-void Renderer::SetupSegmentRenderer(int profile, const bool isBackdrop, const vec3& color, const float brightness, const SegmentFamily family, const SegElementType type, float* segs, const float alpha, const ColorSpace colorSpace, Vertex3D_NoTex2* vertices,
+void Renderer::SetupSegmentRenderer(int profile, const bool isBackdrop, const vec3& color, const float brightness, const SegmentFamily family, const SegElementType type, float* segs, const ColorSpace colorSpace, Vertex3D_NoTex2* vertices,
    const vec4& emitterPad, const vec3& glassTint, const float glassRougness, Texture* const glassTex, const vec4& glassArea, const vec3& glassAmbient)
 {
    Texture* segSDF = nullptr;
@@ -1384,7 +1398,7 @@ void Renderer::SetupDMDRender(int profile, const bool isBackdrop, const vec3& co
       m_renderDevice->m_DMDShader->SetVector(SHADER_displayProperties,
          dmd->m_format != BaseTexture::BW ? 1.f : 0.f, // luminance or (s)RGB frame source
          0.5f * (1.0f + (1.0f / (2.0f /*N_SAMPLES*/ + 0.5f)) * m_dmdDotProperties[profile].x / 2.0f), // Internal SDF offset to obtain 0.5 at dot border, increasing inside, decreasing outside
-         0.5f + 0.5f * (0.025f /* Antialiasing */ + m_dmdDotProperties[profile].x * (1.0f - m_dmdDotProperties[profile].y) /* Dot border darkening */), // Dot internal SDF threshold
+         0.5f + 0.5f * (m_dmdDotProperties[profile].x * (1.0f - m_dmdDotProperties[profile].y) /* Dot border darkening */), // Dot internal SDF threshold
          0.f); // Unused
       m_renderDevice->m_DMDShader->SetVector(SHADER_w_h_height,
          glassAmbient.x * 2.f, glassAmbient.y * 2.f, glassAmbient.z * 2.f, // Glass ambient color (only used when there is a glass texture)
@@ -1396,10 +1410,10 @@ void Renderer::SetupDMDRender(int profile, const bool isBackdrop, const vec3& co
       { // (fake) depth by applying some parallax mapping
          Vertex3Ds v0(vertices[0].x, vertices[0].y, vertices[0].z);
          Vertex3Ds v1(vertices[1].x, vertices[1].y, vertices[1].z);
-         Vertex3Ds v2(vertices[2].x, vertices[2].y, vertices[2].z);
+         Vertex3Ds v2(vertices[3].x, vertices[3].y, vertices[3].z);
          Vertex2D u0(vertices[0].tu, vertices[0].tv);
          Vertex2D u1(vertices[1].tu, vertices[1].tv);
-         Vertex2D u2(vertices[2].tu, vertices[2].tv);
+         Vertex2D u2(vertices[3].tu, vertices[3].tv);
          Vertex3Ds dv1 = v1 - v0;
          Vertex3Ds dv2 = v2 - v0;
          Vertex2D duv1 = u1 - u0;
@@ -1410,7 +1424,7 @@ void Renderer::SetupDMDRender(int profile, const bool isBackdrop, const vec3& co
          const Matrix3D& mv = GetMVP().GetModelView();
          tangent = mv.MultiplyVectorNoTranslate(tangent);
          bitangent = mv.MultiplyVectorNoTranslate(bitangent);
-         Vertex3Ds eye = (v0 + v2) * 0.5f; // Suppose a rectangle shape, use opposite corners to get its center
+         Vertex3Ds eye = (v1 + v2) * 0.5f; // Suppose a rectangle shape, use opposite corners to get its center
          eye = mv.MultiplyVectorNoPerspective(eye);
          eye.Normalize();
          float tN = tangent.Length();
@@ -1440,9 +1454,9 @@ void Renderer::DrawBulbLightBuffer()
    m_render_mask |= Renderer::LIGHT_BUFFER;
    m_renderDevice->SetRenderTarget("Transmitted Light " + std::to_string(id), GetBloomBufferTexture(), true, true);
    m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE); // disable all z-tests as zbuffer is in different resolution
-   for (Hitable *hitable : g_pplayer->m_vhitables)
-      if (hitable->HitableGetItemType() == eItemLight)
-         hitable->Render(m_render_mask);
+   for (IEditable *renderable : g_pplayer->m_vhitables)
+      if (renderable->GetItemType() == eItemLight)
+         RenderItem(renderable, true);
    m_render_mask &= ~Renderer::LIGHT_BUFFER;
 
    bool hasLight = m_renderDevice->GetCurrentPass()->GetCommandCount() > 0;
@@ -1486,26 +1500,28 @@ void Renderer::DrawBulbLightBuffer()
 void Renderer::DrawStatics()
 {
    const unsigned int mask = m_render_mask;
+   const bool isNoBackdrop = m_noBackdrop || ((m_render_mask & Renderer::REFLECTION_PASS) != 0);
    m_render_mask |= Renderer::STATIC_ONLY;
-   for (Hitable* hitable : g_pplayer->m_vhitables)
-      hitable->Render(m_render_mask);
+   for (IEditable* renderable : g_pplayer->m_vhitables)
+      RenderItem(renderable, isNoBackdrop);
    m_render_mask = mask;
 }
 
 void Renderer::DrawDynamics(bool onlyBalls)
 {
    const unsigned int mask = m_render_mask;
+   const bool isNoBackdrop = m_noBackdrop || ((m_render_mask & Renderer::REFLECTION_PASS) != 0);
    m_render_mask |= Renderer::DYNAMIC_ONLY;
    if (onlyBalls)
    {
       for (HitBall* ball : g_pplayer->m_vball)
-         ball->m_pBall->Render(m_render_mask);
+         RenderItem(ball->m_pBall, isNoBackdrop);
    }
    else
    {
       DrawBulbLightBuffer();
-      for (Hitable* hitable : g_pplayer->m_vhitables)
-         hitable->Render(m_render_mask);
+      for (IEditable* renderable : g_pplayer->m_vhitables)
+         RenderItem(renderable, isNoBackdrop);
    }
    m_render_mask = mask;
 }
@@ -1547,6 +1563,29 @@ using namespace Concurrency::diagnostic;
 extern marker_series series;
 #endif
 
+void Renderer::RenderItem(IEditable* renderable, bool isNoBackdrop)
+{
+   if ((isNoBackdrop && renderable->m_backglass) // Don't render backdrop items in reflections or VR & cabinet modes
+      || (renderable->GetPartGroup() != nullptr && ((renderable->GetPartGroup()->GetVisibilityMask() & m_visibilityMask) == 0))) // Apply visibility mask
+      return;
+      
+   #if defined(ENABLE_XR)
+   if (m_stereo3D == STEREO_VR)
+   {
+      PartGroupData::SpaceReference spaceReference = renderable->GetPartGroup() ? renderable->GetPartGroup()->GetReferenceSpace() : PartGroupData::SpaceReference::SR_PLAYFIELD;
+      if (m_mvpSpaceReference != spaceReference)
+      {
+         m_mvpSpaceReference = spaceReference;
+         g_pplayer->m_vrDevice->UpdateVRPosition(m_mvpSpaceReference, GetMVP());
+         UpdateBasicShaderMatrix();
+      }
+   }
+   #endif
+
+   renderable->GetIHitable()->Render(m_render_mask);
+}
+
+
 void Renderer::RenderStaticPrepass()
 {
    // For VR, we don't use any static pre-rendering
@@ -1565,6 +1604,7 @@ void Renderer::RenderStaticPrepass()
    TRACE_FUNCTION();
 
    m_render_mask |= Renderer::STATIC_ONLY;
+   const bool isNoBackdrop = m_noBackdrop || ((m_render_mask & Renderer::REFLECTION_PASS) != 0);
 
    // The code will fail if the static render target is MSAA (the copy operation we are performing is not allowed)
    delete m_staticPrepassRT;
@@ -1579,7 +1619,7 @@ void Renderer::RenderStaticPrepass()
    if (IsUsingStaticPrepass())
    {
       PLOGI << "Performing prerendering of static parts."; // For profiling
-      m_renderDevice->SetMainTextureDefaultFiltering(SF_BILINEAR);
+      RenderDevice::SetMainTextureDefaultFiltering(SF_BILINEAR);
    }
 
    //#define STATIC_PRERENDER_ITERATIONS_KOROBOV 7.0 // for the (commented out) lattice-based QMC oversampling, 'magic factor', depending on the the number of iterations!
@@ -1627,8 +1667,8 @@ void Renderer::RenderStaticPrepass()
 
          // Render static parts
          UpdateBasicShaderMatrix();
-         for (Hitable *hitable : g_pplayer->m_vhitables)
-            hitable->Render(m_render_mask);
+         for (IEditable* renderable : g_pplayer->m_vhitables)
+            RenderItem(renderable, isNoBackdrop);
 
          // Rendering is done to the static render target then accumulated to accumulationSurface
          // We use the framebuffer mirror shader which copies a weighted version of the bound texture
@@ -1668,7 +1708,7 @@ void Renderer::RenderStaticPrepass()
 
    // if rendering static/with heavy oversampling, re-enable the aniso/trilinear filter now for the normal rendering
    const bool forceAniso = m_table->m_settings.LoadValueWithDefault(Settings::Player, "ForceAnisotropicFiltering"s, true);
-   m_renderDevice->SetMainTextureDefaultFiltering(forceAniso ? SF_ANISOTROPIC : SF_TRILINEAR);
+   RenderDevice::SetMainTextureDefaultFiltering(forceAniso ? SF_ANISOTROPIC : SF_TRILINEAR);
 
    // Now finalize static buffer with static AO
    if (GetAOMode() == 1)
@@ -1745,8 +1785,8 @@ void Renderer::RenderStaticPrepass()
          for (size_t i = 0; i < m_table->m_vrenderprobe.size(); ++i)
             m_table->m_vrenderprobe[i]->MarkDirty();
          UpdateBasicShaderMatrix();
-         for (Hitable* hitable : g_pplayer->m_vhitables)
-            hitable->Render(m_render_mask);
+         for (IEditable* renderable : g_pplayer->m_vhitables)
+            RenderItem(renderable, isNoBackdrop);
       }
       // Copy supersampled color buffer
       m_renderDevice->SetRenderTarget("PreRender Combine Color"s, renderRTmsaa, true, true); // Force new pass to avoid sorting blit call with background calls
@@ -1815,10 +1855,11 @@ void Renderer::RenderDynamics()
    #endif
 
    const unsigned int mask = m_render_mask;
+   const bool isNoBackdrop = m_noBackdrop || ((m_render_mask & Renderer::REFLECTION_PASS) != 0);
    m_render_mask |= IsUsingStaticPrepass() ? Renderer::DYNAMIC_ONLY : Renderer::DEFAULT;
    DrawBulbLightBuffer();
-   for (Hitable* hitable : g_pplayer->m_vhitables)
-      hitable->Render(m_render_mask);
+   for (IEditable* renderable : g_pplayer->m_vhitables)
+      RenderItem(renderable, isNoBackdrop);
    m_render_mask = mask;
    
    m_renderDevice->m_basicShader->SetTextureNull(SHADER_tex_base_transmission); // need to reset the bulb light texture, as its used as render target for bloom again
@@ -2642,6 +2683,34 @@ void Renderer::PrepareVideoBuffers(RenderTarget* outputBackBuffer)
                verts[1].x = verts[3].x = 1.f;
                m_renderDevice->m_FBShader->SetInt(SHADER_layer, 1);
                m_renderDevice->DrawTexturedQuad(m_renderDevice->m_FBShader, verts);
+            }
+
+            if (m_vrApplyColorKey)
+            {
+               // Apply a color mask for color keying. For the time being, this is the only way we have to support mixed reality
+               // as HMD does not expose passthrough layers to PCVR (at least Meta Quest 3, used for development).
+               // Therefore we leverage VirtualDesktop color keying feature. This needs to be performed as a post process to avoid
+               // blending the color key with the rendered scene (alpha blending which would be kept, as it is not fullfilling the
+               // color key after blending).
+               m_renderDevice->SetRenderTarget("VR ColorKeying"s, m_renderDevice->GetOutputBackBuffer(), true, true);
+               m_renderDevice->AddRenderTargetDependency(previewRT);
+               Matrix3D matWorldViewProj[2];
+               matWorldViewProj[0].SetIdentity();
+               matWorldViewProj[1].SetIdentity();
+               m_renderDevice->m_basicShader->SetMatrix(SHADER_matWorldViewProj, &matWorldViewProj[0], 2);
+               m_renderDevice->m_basicShader->SetVector(SHADER_staticColor_Alpha, &m_vrColorKey);
+               m_renderDevice->m_basicShader->SetTechnique(SHADER_TECHNIQUE_unshaded_without_texture);
+               static constexpr Vertex3D_NoTex2 ckVerts[4] =
+               {
+                  { -1.0f,  1.0f, 1.0f },
+                  {  1.0f,  1.0f, 1.0f },
+                  { -1.0f, -1.0f, 1.0f },
+                  {  1.0f, -1.0f, 1.0f }
+               };
+               m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_TRUE);
+               m_renderDevice->SetRenderState(RenderState::ZFUNC, RenderState::Z_LESSEQUAL);
+               m_renderDevice->DrawTexturedQuad(m_renderDevice->m_basicShader, ckVerts);
+               m_renderDevice->m_basicShader->SetVector(SHADER_staticColor_Alpha, 1.f, 1.f, 1.f, 1.f);
             }
 
          #elif defined(ENABLE_VR)

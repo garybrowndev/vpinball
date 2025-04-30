@@ -72,16 +72,16 @@ void Decal::SetDefaults(const bool fromMouseClick)
       hr = g_pvp->m_settings.LoadValue(regKey, "FontSize"s, fTmp);
       fd.cySize.int64 = hr && fromMouseClick ? (LONGLONG)(fTmp * 10000.0f) : 142500;
 
-      char tmp[MAXSTRING];
-      hr = g_pvp->m_settings.LoadValue(regKey, "FontName"s, tmp, MAXSTRING);
+      string tmp;
+      hr = g_pvp->m_settings.LoadValue(regKey, "FontName"s, tmp);
       if (!hr || !fromMouseClick)
          fd.lpstrName = (LPOLESTR)(L"Arial Black");
       else
       {
-         const int len = lstrlen(tmp) + 1;
+         const int len = (int)tmp.length() + 1;
          fd.lpstrName = (LPOLESTR)malloc(len*sizeof(WCHAR));
          memset(fd.lpstrName, 0, len*sizeof(WCHAR));
-         MultiByteToWideCharNull(CP_ACP, 0, tmp, -1, fd.lpstrName, len);
+         MultiByteToWideCharNull(CP_ACP, 0, tmp.c_str(), -1, fd.lpstrName, len);
       }
 
       fd.sWeight = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "FontWeight"s, FW_NORMAL) : FW_NORMAL;
@@ -147,7 +147,7 @@ void Decal::WriteRegDefaults()
       const size_t charCnt = wcslen(fd.lpstrName) + 1;
       char * const strTmp = new char[2 * charCnt];
       WideCharToMultiByteNull(CP_ACP, 0, fd.lpstrName, -1, strTmp, (int)(2 * charCnt), nullptr, nullptr);
-      g_pvp->m_settings.SaveValue(regKey, "FontName"s, strTmp);
+      g_pvp->m_settings.SaveValue(regKey, "FontName"s, string(strTmp));
       delete[] strTmp;
       const int weight = fd.sWeight;
       const int charset = fd.sCharset;
@@ -165,7 +165,7 @@ void Decal::WriteRegDefaults()
 
 void Decal::UIRenderPass1(Sur * const psur)
 {
-   if (!m_backglass || GetPTable()->GetDecalsEnabled())
+   if (!(m_backglass && !GetPTable()->GetDecalsEnabled()))
    {
       psur->SetBorderColor(-1, false, 0);
       psur->SetFillColor(m_ptable->RenderSolid() ? RGB(0, 0, 255) : -1);
@@ -197,7 +197,7 @@ void Decal::UIRenderPass1(Sur * const psur)
 
 void Decal::UIRenderPass2(Sur * const psur)
 {
-   if (!m_backglass || GetPTable()->GetDecalsEnabled())
+   if (!(m_backglass && !GetPTable()->GetDecalsEnabled()))
    {
       psur->SetBorderColor(RGB(0, 0, 0), false, 0);
       psur->SetFillColor(-1);
@@ -752,13 +752,9 @@ void Decal::Render(const unsigned int renderMask)
    assert(m_rd != nullptr);
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
-   const bool isReflectionPass = renderMask & Renderer::REFLECTION_PASS;
-   const bool isNoBackdrop = renderMask & Renderer::DISABLE_BACKDROP;
    TRACE_FUNCTION();
 
-   if ((m_backglass && !GetPTable()->GetDecalsEnabled())
-    || (m_backglass && isReflectionPass)
-    || (m_backglass && isNoBackdrop))
+   if (m_backglass && !GetPTable()->GetDecalsEnabled())
       return;
 
    //!! should just check if material has no opacity enabled, but this is crucial for HV setup performance like-is
@@ -810,7 +806,7 @@ void Decal::Render(const unsigned int renderMask)
    else
    {
       m_rd->SetRenderStateDepthBias(0.0f);
-      const vec4 staticColor(1.0f, 1.0f, 1.0f, 1.0f);
+      static constexpr vec4 staticColor { 1.0f, 1.0f, 1.0f, 1.0f };
       m_rd->m_basicShader->SetVector(SHADER_cBase_Alpha, &staticColor);
    }
 

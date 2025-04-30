@@ -44,7 +44,7 @@
 #include "ui/properties/TableVisualsProperty.h"
 #include "ui/properties/TablePhysicsProperty.h"
 #include "ui/properties/TableLightsProperty.h"
-#include <WindowsX.h>
+#include "ui/properties/PartGroupVisualsProperty.h"
 
 #pragma region PropertyDialog
 
@@ -409,6 +409,17 @@ void PropertyDialog::CreateTabs(VectorProtected<ISelect> &pvsel)
         activePage = 0;
         break;
     }
+    case eItemPartGroup:
+    {
+        m_elementTypeName.SetWindowText("Group");
+        m_tabs[0] = static_cast<BasePropertyDialog*>(m_tab.AddTabPage(new PartGroupVisualsProperty(&pvsel), _T("Visuals")));
+        m_tabs[1] = static_cast<BasePropertyDialog*>(m_tab.AddTabPage(new TimerProperty(&pvsel), _T("Timer")));
+        if (m_tab.m_activeTabText == CString("Visuals"))
+            activePage = 0;
+        else if (m_tab.m_activeTabText == CString("Timer"))
+            activePage = 1;
+        break;
+    }
     default:
         break;
     }
@@ -438,7 +449,7 @@ void PropertyDialog::UpdateTextureComboBox(const vector<Texture *>& contentList,
         bool texelFound = false;
         for (const auto texel : contentList)
         {
-            if (strncmp(texel->m_szName.c_str(), selectName.c_str(), MAXTOKEN) == 0) //!! lstrcmpi?
+            if (texel->m_szName == selectName) //!! lstrcmpi?
                 texelFound = true;
             need_reset |= combo.FindStringExact(1, texel->m_szName.c_str()) == CB_ERR; // Combo does not contain an image from the image list
         }
@@ -495,7 +506,7 @@ void PropertyDialog::UpdateSurfaceComboBox(const PinTable * const ptable, const 
                 // but no checks are being performed at moment:
                 (ptable->m_vedit[i]->GetItemType() == eItemFlasher))
             {
-                combo.AddString(ptable->GetElementName(ptable->m_vedit[i]));
+                combo.AddString(PinTable::GetElementName(ptable->m_vedit[i]));
             }
         }
     }
@@ -638,7 +649,7 @@ void PropertyDialog::UpdateTabs(VectorProtected<ISelect> &pvsel)
     }
     else
     {
-        m_nameEdit.SetWindowText(psel->GetPTable()->GetElementName(psel->GetIEditable()));
+        m_nameEdit.SetWindowText(PinTable::GetElementName(psel->GetIEditable()));
         m_nameEdit.SetReadOnly(0);
     }
 
@@ -653,22 +664,22 @@ void PropertyDialog::UpdateTabs(VectorProtected<ISelect> &pvsel)
     ShowWindow();
 }
 
-bool PropertyDialog::PreTranslateMessage(MSG* msg)
+BOOL PropertyDialog::PreTranslateMessage(MSG& msg)
 {
    if (!IsWindow())
-      return false;
+      return FALSE;
 
    // only pre-translate mouse and keyboard input events
-   if (((msg->message >= WM_KEYFIRST && msg->message <= WM_KEYLAST) || (msg->message >= WM_MOUSEFIRST && msg->message <= WM_MOUSELAST)))
+   if ((msg.message >= WM_KEYFIRST && msg.message <= WM_KEYLAST) || (msg.message >= WM_MOUSEFIRST && msg.message <= WM_MOUSELAST))
    {
-      const int keyPressed = LOWORD(msg->wParam);
+      const int keyPressed = LOWORD(msg.wParam);
       // only pass F1-F12 to the main VPinball class to open subdialogs from everywhere
       //!! also grab VK_ESCAPE here to avoid weird results when pressing ESC in textboxes (property gets stuck then)
-      if((keyPressed>=VK_F1 && keyPressed<=VK_F12) && TranslateAccelerator(g_pvp->GetHwnd(), m_accel, msg))
-         return true;
+      if((keyPressed>=VK_F1 && keyPressed<=VK_F12) && TranslateAccelerator(g_pvp->GetHwnd(), m_accel, &msg))
+         return TRUE;
    }
 
-   return !!IsSubDialogMessage(*msg);
+   return IsSubDialogMessage(msg);
 }
 
 BOOL PropertyDialog::OnInitDialog()

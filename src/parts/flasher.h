@@ -76,7 +76,7 @@ public:
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
-   virtual HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) override;
+   HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
    Flasher();
    virtual ~Flasher();
@@ -162,30 +162,34 @@ public:
    FlasherData m_d;
 
    bool m_lockedByLS = false;
-   bool m_inPlayState;
+   bool m_inPlayState = false;
 
    BaseTexture *m_dmdFrame = nullptr;
 
 private:
    void InitShape();
 
-   PinTable *m_ptable;
+   PinTable *m_ptable = nullptr;
 
-   unsigned int m_numVertices;
-   int m_numPolys;
-   float m_minx, m_maxx, m_miny, m_maxy;
-   Vertex3D_NoTex2 *m_vertices;
+   unsigned int m_numVertices = 0;
+   int m_numPolys = 0;
+   float m_minx = FLT_MAX;
+   float m_maxx = -FLT_MAX;
+   float m_miny = FLT_MAX;
+   float m_maxy = -FLT_MAX;
+   Vertex3D_NoTex2* m_vertices = nullptr;
+   Vertex3D_NoTex2* m_transformedVertices = nullptr;
 
-   PropertyPane *m_propVisual;
+   PropertyPane *m_propVisual = nullptr;
 
-   bool m_dynamicVertexBufferRegenerate;
+   bool m_dynamicVertexBufferRegenerate = true;
    MeshBuffer *m_meshBuffer = nullptr;
 
    void ResetVideoCap();
    bool m_isVideoCap = false;
    int m_videoCapWidth = 0;
    int m_videoCapHeight = 0;
-   RECT m_videoSourceRect;
+   RECT m_videoSourceRect { 0 };
    HWND m_videoCapHwnd = nullptr;
    BaseTexture* m_videoCapTex = nullptr;
 

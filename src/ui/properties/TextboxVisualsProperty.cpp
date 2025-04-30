@@ -2,13 +2,12 @@
 
 #include "core/stdafx.h"
 #include "ui/properties/TextboxVisualsProperty.h"
-#include <WindowsX.h>
 
 TextboxVisualsProperty::TextboxVisualsProperty(const VectorProtected<ISelect> *pvsel) : BasePropertyDialog(IDD_PROPTEXTBOX_VISUALS, pvsel)
 {
-    m_alignList.push_back("Align Left");
-    m_alignList.push_back("Align Center");
-    m_alignList.push_back("Align Right");
+    m_alignList.push_back("Align Left"s);
+    m_alignList.push_back("Align Center"s);
+    m_alignList.push_back("Align Right"s);
 
     m_textIntensityEdit.SetDialog(this);
     m_posXEdit.SetDialog(this);
@@ -95,7 +94,7 @@ void TextboxVisualsProperty::UpdateProperties(const int dispid)
             {
                 PropertyDialog::StartUndo(text);
                 const CString pattern = m_textEdit.GetWindowText();
-                text->m_d.m_sztext = pattern.c_str();
+                text->m_d.m_sztext = pattern.GetString();
                 PropertyDialog::EndUndo(text);
                 break;
             }

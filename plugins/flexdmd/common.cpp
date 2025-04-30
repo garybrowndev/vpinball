@@ -2,22 +2,7 @@
 
 #include <sstream>
 #include <algorithm>
-
-
-string normalize_path_separators(const string& szPath)
-{
-   string szResult = szPath;
-
-   if (PATH_SEPARATOR_CHAR == '/')
-      std::ranges::replace(szResult.begin(), szResult.end(), '\\', PATH_SEPARATOR_CHAR);
-   else
-      std::ranges::replace(szResult.begin(), szResult.end(), '/', PATH_SEPARATOR_CHAR);
-
-   auto end = std::unique(szResult.begin(), szResult.end(), [](char a, char b) { return a == b && a == PATH_SEPARATOR_CHAR; });
-   szResult.erase(end, szResult.end());
-
-   return szResult;
-}
+#include <filesystem>
 
 static inline char cLower(char c)
 {
@@ -26,18 +11,18 @@ static inline char cLower(char c)
    return c;
 }
 
+static inline bool StrCompareNoCase(const string& strA, const string& strB)
+{
+   return strA.length() == strB.length()
+      && std::equal(strA.begin(), strA.end(), strB.begin(),
+         [](char a, char b) { return cLower(a) == cLower(b); });
+}
+
 string string_to_lower(string str)
 {
    std::ranges::transform(str.begin(), str.end(), str.begin(), cLower);
    return str;
 }
-
-string extension_from_path(const string& path)
-{
-   const size_t pos = path.find_last_of('.');
-   return pos != string::npos ? string_to_lower(path).substr(pos + 1) : string();
-}
-
 
 string trim_string(const string& str)
 {
@@ -95,4 +80,58 @@ int string_to_int(const string& str, int defaultValue)
       return value;
 
    return defaultValue;
+}
+
+string normalize_path_separators(const string& szPath)
+{
+   string szResult = szPath;
+
+   if (PATH_SEPARATOR_CHAR == '/')
+      std::ranges::replace(szResult.begin(), szResult.end(), '\\', PATH_SEPARATOR_CHAR);
+   else
+      std::ranges::replace(szResult.begin(), szResult.end(), '/', PATH_SEPARATOR_CHAR);
+
+   auto end = std::unique(szResult.begin(), szResult.end(),
+      [](char a, char b) { return a == b && a == PATH_SEPARATOR_CHAR; });
+   szResult.erase(end, szResult.end());
+
+   return szResult;
+}
+
+string extension_from_path(const string& path)
+{
+   const size_t pos = path.find_last_of('.');
+   return pos != string::npos ? string_to_lower(path).substr(pos + 1) : string();
+}
+
+string find_case_insensitive_file_path(const string& szPath)
+{
+   string path = normalize_path_separators(szPath);
+   std::filesystem::path p = std::filesystem::path(path).lexically_normal();
+   std::error_code ec;
+
+   if (std::filesystem::exists(p, ec))
+      return path;
+
+   auto parent = p.parent_path();
+   string base;
+   if (parent.empty() || parent == p)
+      base = '.';
+   else {
+      base = find_case_insensitive_file_path(parent.string());
+      if (base.empty())
+         return string();
+   }
+
+   for (auto& ent : std::filesystem::directory_iterator(base, ec)) {
+      if (!ec && StrCompareNoCase(ent.path().filename().string(), p.filename().string())) {
+         auto found = ent.path().string();
+         if (found != path) {
+            LOGI("case insensitive file match: requested \"%s\", actual \"%s\"", path.c_str(), found.c_str());
+         }
+         return found;
+      }
+   }
+
+   return string();
 }

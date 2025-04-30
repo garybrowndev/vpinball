@@ -8,6 +8,8 @@
 #include "../common/WindowManager.h"
 #include "audio/pinsound.h"
 
+#include <filesystem>
+
 #define PINMAME_SETTINGS_WINDOW_X      15
 #define PINMAME_SETTINGS_WINDOW_Y      30 + 218 + 5 + 75 + 5
 #define PINMAME_SETTINGS_WINDOW_WIDTH  290
@@ -54,13 +56,13 @@ void PINMAMECALLBACK VPinMAMEController::OnDisplayAvailable(int index, int displ
       pDisplay->pDMD->SetRomName(pController->m_pPinmameGame->name);
 
       if (g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Standalone, "AltColor"s, true)) {
-         string szAltColorPath = find_directory_case_insensitive(pController->m_szPath, "AltColor");
+         string szAltColorPath = find_case_insensitive_directory_path(pController->m_szPath + "AltColor");
          if (!szAltColorPath.empty())
             pDisplay->pDMD->SetAltColorPath(szAltColorPath.c_str());
       }
 
       if (g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Standalone, "PUPCapture"s, false)) {
-         string szPupVideosPath = find_directory_case_insensitive(g_pvp->m_currentTablePath, "pupvideos");
+         string szPupVideosPath = find_case_insensitive_directory_path(g_pvp->m_currentTablePath + "pupvideos");
          if (!szPupVideosPath.empty())
             pDisplay->pDMD->SetPUPVideosPath(szPupVideosPath.c_str());
       }
@@ -125,14 +127,20 @@ int PINMAMECALLBACK VPinMAMEController::OnAudioUpdated(void* p_buffer, int sampl
 
 void PINMAMECALLBACK VPinMAMEController::OnLogMessage(PINMAME_LOG_LEVEL logLevel, const char* format, va_list args, void* const pUserData)
 {
-   char buffer[4096];
-   vsnprintf(buffer, sizeof(buffer), format, args);
-
-   if (logLevel == PINMAME_LOG_LEVEL_INFO) {
-      PLOGI.printf("%s", buffer);
-   }
-   else if (logLevel == PINMAME_LOG_LEVEL_ERROR) {
-      PLOGE.printf("%s", buffer);
+   va_list args_copy;
+   va_copy(args_copy, args);
+   int size = vsnprintf(nullptr, 0, format, args_copy);
+   va_end(args_copy);
+   if (size > 0) {
+      char* const buffer = static_cast<char*>(malloc(size + 1));
+      vsnprintf(buffer, size + 1, format, args);
+      if (logLevel == PINMAME_LOG_LEVEL_INFO) {
+         PLOGI << buffer;
+      }
+      else if (logLevel == PINMAME_LOG_LEVEL_ERROR) {
+         PLOGE << buffer;
+      }
+      free(buffer);
    }
 }
 
@@ -163,17 +171,16 @@ VPinMAMEController::VPinMAMEController()
 
    Settings* const pSettings = &g_pplayer->m_ptable->m_settings;
 
-   m_szPath = find_directory_case_insensitive(g_pvp->m_currentTablePath, "pinmame");
+   m_szPath = find_case_insensitive_directory_path(g_pvp->m_currentTablePath + "pinmame");
    if (m_szPath.empty()) {
       m_szPath = pSettings->LoadValueWithDefault(Settings::Standalone, "PinMAMEPath"s, ""s);
-
       if (!m_szPath.empty()) {
          if (!m_szPath.ends_with(PATH_SEPARATOR_CHAR))
             m_szPath += PATH_SEPARATOR_CHAR;
       }
       else {
 #if (defined(__APPLE__) && ((defined(TARGET_OS_IOS) && TARGET_OS_IOS) || (defined(TARGET_OS_TV) && TARGET_OS_TV))) || defined(__ANDROID__)
-         m_szPath = find_directory_case_insensitive(g_pvp->m_szMyPath, "pinmame");
+         m_szPath = find_case_insensitive_directory_path(g_pvp->m_szMyPath + "pinmame");
 #else
          m_szPath = string(getenv("HOME")) + PATH_SEPARATOR_CHAR + ".pinmame" + PATH_SEPARATOR_CHAR;
 #endif
@@ -184,10 +191,10 @@ VPinMAMEController::VPinMAMEController()
 
    PLOGI.printf("PinMAME path set to: %s", m_szPath.c_str());
 
-   m_szIniPath = find_directory_case_insensitive(m_szPath, "ini");
+   m_szIniPath = find_case_insensitive_directory_path(m_szPath + "ini");
    if (m_szIniPath.empty()) {
       m_szIniPath = m_szPath + "ini" + PATH_SEPARATOR_CHAR;
-      std::filesystem::create_directory(m_szIniPath);
+      std::filesystem::create_directories(m_szIniPath);
    }
 
    PLOGI.printf("PinMAME ini path set to: %s", m_szIniPath.c_str());

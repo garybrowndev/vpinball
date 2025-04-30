@@ -3,7 +3,7 @@
 // implementation of the VPinball class.
 
 #include "core/stdafx.h"
-#include "parts/VPXFileFeedback.h"
+#include "ui/VPXFileFeedback.h"
 #include "ui/resource.h"
 #ifndef __STANDALONE__
 #include "ui/dialogs/KeysConfigDialog.h"
@@ -211,7 +211,7 @@ void VPinball::GetMyPrefPath()
 {
 #ifdef _WIN32
    // Use standard Windows AppData directory (to avoid requesting write permissions, and behave correctly for Windows restore,...)
-   // That would look something like: C:\Users\bob\AppData\Roaming\VPinballX\ 
+   // That would look something like: "C:\Users\bob\AppData\Roaming\VPinballX\"
    m_szMyPrefPath = string(GetAppDataPath()) + PATH_SEPARATOR_CHAR + "VPinballX" + PATH_SEPARATOR_CHAR;
 #elif defined(__ANDROID__)
    char *szPrefPath = SDL_GetPrefPath(NULL, NULL);
@@ -347,14 +347,14 @@ void VPinball::SetCursorCur(HINSTANCE hInstance, LPCTSTR lpCursorName)
 void VPinball::SetActionCur(const string& szaction)
 {
 #ifndef __STANDALONE__
-   SendMessage(m_hwndStatusBar, SB_SETTEXT, 3 | 0, (size_t)szaction.c_str());
+   ::SendMessage(m_hwndStatusBar, SB_SETTEXT, 3 | 0, (size_t)szaction.c_str());
 #endif
 }
 
 void VPinball::SetStatusBarElementInfo(const string& info)
 {
 #ifndef __STANDALONE__
-   SendMessage(m_hwndStatusBar, SB_SETTEXT, 4 | 0, (size_t)info.c_str());
+   ::SendMessage(m_hwndStatusBar, SB_SETTEXT, 4 | 0, (size_t)info.c_str());
 #endif
 }
 
@@ -374,7 +374,7 @@ bool VPinball::OpenFileDialog(const string& initDir, vector<string>& filename, c
    }
    else
    {
-      filename.push_back(string());
+      filename.emplace_back(string());
 
       return false;
    }
@@ -399,7 +399,7 @@ bool VPinball::SaveFileDialog(const string& initDir, vector<string>& filename, c
    }
    else
    {
-      filename.push_back(string());
+      filename.emplace_back(string());
 
       return false;
    }
@@ -502,25 +502,16 @@ CDockNotes* VPinball::GetNotesDocker()
    return m_dockNotes;
 }
 
-CDockLayers *VPinball::GetDefaultLayersDocker()
-{
-#ifndef __STANDALONE__
-   constexpr int dockStyle = DS_DOCKED_BOTTOM | DS_CLIENTEDGE | DS_NO_CLOSE;
-   m_dockLayers = (CDockLayers *)m_dockProperties->AddDockedChild(new CDockLayers, dockStyle, 380, IDD_LAYERS);
-
-   assert(m_dockLayers->GetContainer());
-   m_dockLayers->GetContainer()->SetHideSingleTab(TRUE);
-   m_layersListDialog = m_dockLayers->GetContainLayers()->GetLayersDialog();
-#endif
-
-   return m_dockLayers;
-}
-
 CDockLayers *VPinball::GetLayersDocker()
 {
 #ifndef __STANDALONE__
    if (m_dockLayers == nullptr || !m_dockLayers->IsWindow())
-      return GetDefaultLayersDocker();
+   {
+      constexpr int dockStyle = DS_DOCKED_BOTTOM | DS_CLIENTEDGE | DS_NO_CLOSE;
+      m_dockLayers = (CDockLayers *)m_dockProperties->AddDockedChild(new CDockLayers, dockStyle, 380, IDD_LAYERS);
+      assert(m_dockLayers->GetContainer());
+      m_dockLayers->GetContainer()->SetHideSingleTab(TRUE);
+   }
 #endif
    return m_dockLayers;
 }
@@ -532,10 +523,9 @@ void VPinball::CreateDocker()
    {
       GetPropertiesDocker();
       GetToolbarDocker();
-      GetLayersDocker();
    }
    m_dockProperties->GetContainer()->SetHideSingleTab(TRUE);
-   m_dockLayers->GetContainer()->SetHideSingleTab(TRUE);
+   GetLayersDocker()->GetContainer()->SetHideSingleTab(TRUE);
    m_dockToolbar->GetContainer()->SetHideSingleTab(TRUE);
 #endif
 }
@@ -546,7 +536,7 @@ void VPinball::SetPosCur(float x, float y)
    // display position 1st column in VP units
    char szT[256];
    sprintf_s(szT, sizeof(szT), "%.4f, %.4f", x, y);
-   SendMessage(m_hwndStatusBar, SB_SETTEXT, 0 | 0, (size_t)szT);
+   ::SendMessage(m_hwndStatusBar, SB_SETTEXT, 0 | 0, (size_t)szT);
 
    // display converted position in separate status
    if (m_convertToUnit != 2) 
@@ -563,7 +553,7 @@ void VPinball::SetPosCur(float x, float y)
                assert(!"wrong unit");
                break;
        }
-       SendMessage(m_hwndStatusBar, SB_SETTEXT, 0 | 2, (size_t)szT);
+       ::SendMessage(m_hwndStatusBar, SB_SETTEXT, 0 | 2, (size_t)szT);
    }
 
    m_mouseCursorPosition.x = x;
@@ -576,14 +566,14 @@ void VPinball::SetObjectPosCur(float x, float y)
    char szT[256];
    sprintf_s(szT, sizeof(szT), "%.4f, %.4f", x, y);
 #ifndef __STANDALONE__
-   SendMessage(m_hwndStatusBar, SB_SETTEXT, 1 | 0, (size_t)szT);
+   ::SendMessage(m_hwndStatusBar, SB_SETTEXT, 1 | 0, (size_t)szT);
 #endif
 }
 
 void VPinball::ClearObjectPosCur()
 {
 #ifndef __STANDALONE__
-   SendMessage(m_hwndStatusBar, SB_SETTEXT, 1 | 0, (size_t)"");
+   ::SendMessage(m_hwndStatusBar, SB_SETTEXT, 1 | 0, (size_t)"");
 #endif
 }
 
@@ -633,7 +623,7 @@ public:
    {
    }
 
-   virtual BOOL OnInitDialog() override
+   BOOL OnInitDialog() override
    {
       SetDlgItemText(IDC_INFOTEXT_EDIT, m_message.c_str());
       return TRUE;
@@ -713,14 +703,14 @@ bool VPinball::ParseCommand(const size_t code, const bool notify)
             if (IDYES == MessageBox("This will lock the table to prevent unexpected modifications.\n\nAre you sure you want to lock the table ?", "Table locking", MB_YESNO | MB_ICONINFORMATION))
             {
                ptCur->ToggleLock();
-               string msg = ptCur->AuditTable();
+               string msg = ptCur->AuditTable(true);
                InfoDialog info(msg);
                info.DoModal();
             }
          }
          ptCur->ClearMultiSel(nullptr);
          SetPropSel(ptCur->m_vmultisel);
-         GetLayersListDialog()->CollapseLayers();
+         GetLayersListDialog()->ResetView();
          ToggleToolbar();
          SetEnableMenuItems();
          ptCur->SetDirtyDraw();
@@ -1185,8 +1175,7 @@ void VPinball::DoPlay(const int playMode)
             #endif
 
             #ifdef ENABLE_SDL_INPUT
-            if (g_pplayer->m_pininput.GetInputAPI() == PinInput::PI_SDL)
-               g_pplayer->m_pininput.HandleSDLEvent(e);
+            g_pplayer->m_pininput.HandleSDLEvent(e);
             #endif
 
             // Limit to 1ms of OS message processing per call
@@ -1250,10 +1239,6 @@ void VPinball::DoPlay(const int playMode)
    if (initError)
    {
       g_pvp->m_table_played_via_SelectTableOnStart = false;
-      #if defined(__APPLE__) && defined(TARGET_OS_TV) && TARGET_OS_TV
-         PLOGE.printf("Load failure detected. Resetting LaunchTable to default.");
-         g_pvp->m_settings.SaveValue(Settings::Standalone, "LaunchTable"s, "assets/exampleTable.vpx");
-      #endif
    }
 
    #ifdef __LIBVPINBALL__
@@ -1297,6 +1282,7 @@ void VPinball::LoadFileName(const string& szFileName, const bool updateEditor, V
       OnInitialUpdate();
 
    m_currentTablePath = PathFromFilename(szFileName);
+
    CloseAllDialogs();
 
    PinTableMDI * const mdiTable = new PinTableMDI(this);
@@ -1315,13 +1301,6 @@ void VPinball::LoadFileName(const string& szFileName, const bool updateEditor, V
       ShowError("This file does not exist, or is corrupt and failed to load.");
 
       delete mdiTable;
-
-#ifdef __STANDALONE__
-#if (defined(__APPLE__) && (defined(TARGET_OS_TV) && TARGET_OS_TV))
-      PLOGE.printf("Load failure detected. Resetting LaunchTable to default.");
-      g_pvp->m_settings.SaveValue(Settings::Standalone, "LaunchTable"s, "assets/exampleTable.vpx");
-#endif
-#endif
    }
    else
    {
@@ -1404,15 +1383,14 @@ void VPinball::LoadFileName(const string& szFileName, const bool updateEditor, V
       if (updateEditor)
       {
 #ifndef __STANDALONE__
-         GetLayersListDialog()->CollapseLayers();
-         GetLayersListDialog()->ExpandLayers();
+         GetLayersListDialog()->ResetView();
          ToggleToolbar();
          if (m_dockNotes != nullptr)
             m_dockNotes->Enable();
 
          SetFocus();
 
-         const string& audit = ppt->AuditTable();
+         const string& audit = ppt->AuditTable(true);
          if (audit.find(". Error:"s) != std::string::npos)
          {
             InfoDialog info("This table contains error(s) that need to be fixed to ensure correct play.\r\n\r\n" + audit);
@@ -1727,13 +1705,13 @@ bool VPinball::processKeyInputForDialogs(MSG *pmsg)
 
       const HWND activeHwnd = ::GetFocus();
       if (!consumed && m_toolbarDialog && (activeHwnd == m_toolbarDialog->GetHwnd()))
-         consumed = m_toolbarDialog->PreTranslateMessage(pmsg);
+         consumed = m_toolbarDialog->PreTranslateMessage(*pmsg);
       if (!consumed && m_propertyDialog)
-         consumed = m_propertyDialog->PreTranslateMessage(pmsg);
-      if (!consumed && m_layersListDialog)
-         consumed = m_layersListDialog->PreTranslateMessage(pmsg);
+         consumed = m_propertyDialog->PreTranslateMessage(*pmsg);
+      if (!consumed && m_dockLayers)
+         consumed = GetLayersListDialog()->PreTranslateMessage(*pmsg);
       if (!consumed && m_notesDialog && activeHwnd == m_notesDialog->GetHwnd())
-         consumed = m_notesDialog->PreTranslateMessage(pmsg);
+         consumed = m_notesDialog->PreTranslateMessage(*pmsg);
    }
 #endif
    return consumed;
@@ -1757,7 +1735,7 @@ bool VPinball::ApcHost_OnTranslateMessage(MSG* pmsg)
    // check if message must be processed by the code editor
    if (m_pcv && (GetZOrder(m_pcv->GetHwnd()) < GetZOrder(GetHwnd())))
    {
-      consumed = m_pcv->PreTranslateMessage(pmsg);
+      consumed = m_pcv->PreTranslateMessage(*pmsg);
 
       if (m_pcv->m_hwndFind && ::IsDialogMessage(m_pcv->m_hwndFind, pmsg))
          consumed = true;
@@ -2267,8 +2245,6 @@ LRESULT VPinball::OnFrontEndControlsMsg(WPARAM wParam, LPARAM lParam)
 LRESULT VPinball::OnMDIActivated(UINT msg, WPARAM wparam, LPARAM lparam)
 {
 #ifndef __STANDALONE__
-   if (m_dockLayers != nullptr)
-      m_dockLayers->GetContainLayers()->GetLayersDialog()->UpdateLayerList();
    if (m_dockNotes != nullptr)
       m_dockNotes->Refresh();
    return CMDIFrameT::OnMDIActivated(msg, wparam, lparam);
@@ -2281,10 +2257,7 @@ LRESULT VPinball::OnMDIDestroyed(UINT msg, WPARAM wparam, LPARAM lparam)
 {
 #ifndef __STANDALONE__
    if (GetAllMDIChildren().size() == 1)
-   {
-      GetLayersListDialog()->ClearList();
       GetLayersListDialog()->SetActiveTable(nullptr);
-   }
    return CMDIFrameT::OnMDIDestroyed(msg, wparam, lparam);
 #else
    return 0L;
@@ -2317,10 +2290,7 @@ Win32xx::DockPtr VPinball::NewDockerFromID(int id)
    case IDD_LAYERS:
    {
       if (m_dockLayers == nullptr)
-      {
          m_dockLayers = new CDockLayers();
-         m_layersListDialog = m_dockLayers->GetContainLayers()->GetLayersDialog();
-      }
       return DockPtr(m_dockLayers);
    }
 //   case IDD_NOTES_DIALOG:
@@ -2968,8 +2938,7 @@ void VPinball::OpenNewTable(size_t tableId)
 
    AddMDITable(mdiTable);
    mdiTable->GetTable()->AddMultiSel(mdiTable->GetTable(), false, true, false);
-   GetLayersListDialog()->CollapseLayers();
-   GetLayersListDialog()->ExpandLayers();
+   GetLayersListDialog()->ResetView();
    ToggleToolbar();
    if (m_dockNotes != nullptr)
       m_dockNotes->Enable();
@@ -3024,7 +2993,7 @@ void VPinball::CopyPasteElement(const CopyPasteModes mode)
 
 //
 
-inline string GetTextFileFromDirectory(const string& szfilename, const string& dirname)
+static inline string GetTextFileFromDirectory(const string& szfilename, const string& dirname)
 {
    string szPath;
    if (!dirname.empty())
@@ -3037,7 +3006,7 @@ static constexpr uint8_t lookupRev[16] = {
 0x0, 0x8, 0x4, 0xc, 0x2, 0xa, 0x6, 0xe,
 0x1, 0x9, 0x5, 0xd, 0x3, 0xb, 0x7, 0xf };
 
-inline uint8_t reverse(const uint8_t n)
+static inline uint8_t reverse(const uint8_t n)
 {
    return (lookupRev[n & 0x0f] << 4) | lookupRev[n >> 4];
 }
@@ -3097,7 +3066,7 @@ static unsigned int GenerateTournamentFileInternal(BYTE *const dmd_data, const u
    vector<string> vbsFiles;
    while(textPos < textEnd)
    {
-      const char* const textFound = strstr(textPos,".vbs\"");
+      const char* const textFound = StrStrI(textPos,".vbs\"");
       if(textFound == nullptr)
          break;
       textPos = textFound+1;
@@ -3106,14 +3075,14 @@ static unsigned int GenerateTournamentFileInternal(BYTE *const dmd_data, const u
       while(*textFoundStart != '"')
          --textFoundStart;
 
-      vbsFiles.push_back(string(textFoundStart+1,textFound+3-textFoundStart));
+      vbsFiles.emplace_back(textFoundStart+1,textFound+3-textFoundStart);
    }
 
    delete [] szText;
 
    vbsFiles.push_back("core.vbs"s);
 
-   for(auto& i3 : vbsFiles)
+   for(const auto& i3 : vbsFiles)
       for(size_t i2 = 0; i2 < std::size(defaultFileNameSearch); ++i2)
          if(fopen_s(&f, GetTextFileFromDirectory(defaultFileNameSearch[i2] + i3, defaultPathSearch[i2]).c_str(), "rb") == 0 && f)
          {

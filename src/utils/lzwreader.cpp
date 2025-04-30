@@ -9,31 +9,19 @@
 
 
 LZWReader::LZWReader(IStream *pstm, int *bits, int width, int height, int pitch)
-{
-   m_cbStride = pitch;
-   m_pbBitsOutCur = ((BYTE *)bits);// - m_cbStride;//+m_cbStride*(height-1);
-
+   : m_pstm(pstm)
+   , m_pbBitsOutCur((BYTE *)bits) // - m_cbStride;//+m_cbStride*(height-1);
+   , m_cbStride(pitch)
 #ifdef _DEBUG
-   bad_code_count = 0;
+   , bad_code_count(0)
 #endif
-
-   m_cfilebuffer = FILE_BUF_SIZE - 1;
-   m_readahead = FILE_BUF_SIZE;
-
-   m_pstm = pstm;
-
-   m_width = width; // 32-bit picture
-   m_height = height;
-   m_linesleft = height + 1; // +1 because 1 gets taken off immediately in Decoder
-
-   //m_pbGifBitsMac = ((BYTE *)bits)+1000;
-   //m_pbGifBitsCur = ((BYTE *)bits);
-}
-
-LZWReader::~LZWReader()
+   , m_cfilebuffer(FILE_BUF_SIZE - 1)
+   , m_width(width) // 32-bit picture
+   , m_height(height)
+   , m_linesleft(height + 1) // +1 because 1 gets taken off immediately in Decoder
+   , m_readahead(FILE_BUF_SIZE)
 {
 }
-
 
 
 /* DECODE.C - An LZW decoder for GIF
@@ -89,7 +77,7 @@ LZWReader::~LZWReader()
 //IMPORT int bad_code_count;
 
 
-int code_mask[13] = {
+static constexpr unsigned int code_mask[13] = {
    0,
    0x0001, 0x0003,
    0x0007, 0x000F,

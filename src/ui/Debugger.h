@@ -2,7 +2,7 @@
 
 #pragma once
 
-class DebuggerDialog : public CDialog
+class DebuggerDialog final : public CDialog
 {
 public:
     DebuggerDialog();
@@ -19,7 +19,6 @@ private:
     void LoadPosition();
     void SavePosition();
 
-private:
     CButton m_playButton;
     CButton m_pauseButton;
     CButton m_stepButton;

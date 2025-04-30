@@ -15,8 +15,8 @@ public:
 
 protected:
    VideoOptionPropPage(UINT templateID, LPCTSTR title, Settings& appSettings, Settings& tableSettings);
-   virtual BOOL OnInitDialog();
-   virtual BOOL OnCommand(WPARAM wParam, LPARAM lParam);
+   BOOL OnInitDialog() override;
+   BOOL OnCommand(WPARAM wParam, LPARAM lParam) override;
 
    Settings& GetEditedSettings() const { return *m_editedSettings; }
    bool IsTableSettings() const { return m_editedSettings == &m_appSettings; }
@@ -70,18 +70,18 @@ class RenderOptPage final : public VideoOptionPropPage
 {
 public:
    RenderOptPage(Settings& appSettings, Settings& tableSettings);
-   virtual ~RenderOptPage() override { }
+   ~RenderOptPage() override { }
 
    RenderOptPage(const RenderOptPage&) = delete;
    RenderOptPage& operator=(const RenderOptPage&) = delete;
 
 protected:
-   virtual BOOL OnInitDialog();
-   virtual BOOL OnCommand(WPARAM wParam, LPARAM lParam);
-   virtual BOOL OnApply() override;
+   BOOL OnInitDialog() override;
+   BOOL OnCommand(WPARAM wParam, LPARAM lParam) override;
+   BOOL OnApply() override;
 
-   virtual void LoadSettings(Settings& settings);
-   virtual void SaveSettings(Settings& settings, bool saveAll);
+   void LoadSettings(Settings& settings) override;
+   void SaveSettings(Settings& settings, bool saveAll) override;
 
 private:
    void ResetVideoPreferences(int profile);
@@ -91,6 +91,7 @@ private:
    CComboBox m_syncMode;
    CEdit m_maxFPS;
    CEdit m_maxFrameLatency;
+   CEdit m_latencyCorrection;
 
    CComboBox m_stereoMode;
    CButton m_stereoFake;
@@ -150,19 +151,19 @@ class DisplayStyleOptPage final : public VideoOptionPropPage
 {
 public:
    DisplayStyleOptPage(Settings& appSettings, Settings& tableSettings);
-   virtual ~DisplayStyleOptPage() override { }
+   ~DisplayStyleOptPage() override { }
 
    DisplayStyleOptPage(const DisplayStyleOptPage&) = delete;
    DisplayStyleOptPage& operator=(const DisplayStyleOptPage&) = delete;
 
 protected:
-   virtual BOOL OnInitDialog();
-   virtual BOOL OnCommand(WPARAM wParam, LPARAM lParam);
-   virtual INT_PTR DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam);
-   virtual BOOL OnApply() override;
+   BOOL OnInitDialog() override;
+   BOOL OnCommand(WPARAM wParam, LPARAM lParam) override;
+   INT_PTR DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam) override;
+   BOOL OnApply() override;
 
-   virtual void LoadSettings(Settings& settings);
-   virtual void SaveSettings(Settings& settings, bool saveAll);
+   void LoadSettings(Settings& settings) override;
+   void SaveSettings(Settings& settings, bool saveAll) override;
 
    void LoadProfile(const int n);
    void ResetProfile(const int n);
@@ -190,18 +191,18 @@ class CabinetOptPage final : public VideoOptionPropPage
 {
 public:
    CabinetOptPage(Settings& appSettings, Settings& tableSettings);
-   virtual ~CabinetOptPage() override { }
+   ~CabinetOptPage() override { }
 
    CabinetOptPage(const RenderOptPage&) = delete;
    CabinetOptPage& operator=(const CabinetOptPage&) = delete;
 
 protected:
-   virtual BOOL OnInitDialog();
-   virtual BOOL OnCommand(WPARAM wParam, LPARAM lParam);
-   virtual BOOL OnApply() override;
+   BOOL OnInitDialog() override;
+   BOOL OnCommand(WPARAM wParam, LPARAM lParam) override;
+   BOOL OnApply() override;
 
-   virtual void LoadSettings(Settings& settings);
-   virtual void SaveSettings(Settings& settings, bool saveAll);
+   void LoadSettings(Settings& settings) override;
+   void SaveSettings(Settings& settings, bool saveAll) override;
 
 private:
    CEdit m_playerX;
@@ -209,28 +210,30 @@ private:
    CEdit m_playerZ;
    CButton m_bamHeadtracking; // TODO move to plugin
 
-   CComboBox m_display;
-   CEdit m_displayWidth;
-   CEdit m_displayHeight;
-   CEdit m_displayInclination;
+   CEdit m_lockbarWidth;
+   CEdit m_lockbarHeight;
+
+   CEdit m_playfieldScreenWidth;
+   CEdit m_playfieldScreenHeight;
+   CEdit m_playfieldScreenInclination;
 };
 
 class PFViewOptPage final : public VideoOptionPropPage
 {
 public:
    PFViewOptPage(Settings& appSettings, Settings& tableSettings);
-   virtual ~PFViewOptPage() override { }
+   ~PFViewOptPage() override { }
 
    PFViewOptPage(const PFViewOptPage&) = delete;
    PFViewOptPage& operator=(const PFViewOptPage&) = delete;
 
 protected:
-   virtual BOOL OnInitDialog();
-   virtual BOOL OnCommand(WPARAM wParam, LPARAM lParam);
-   virtual BOOL OnApply() override;
+   BOOL OnInitDialog() override;
+   BOOL OnCommand(WPARAM wParam, LPARAM lParam) override;
+   BOOL OnApply() override;
 
-   virtual void LoadSettings(Settings& settings);
-   virtual void SaveSettings(Settings& settings, bool saveAll);
+   void LoadSettings(Settings& settings) override;
+   void SaveSettings(Settings& settings, bool saveAll) override;
 
 private:
    CComboBox m_viewMode;
@@ -240,35 +243,35 @@ class ScoreViewOptPage final : public VideoOptionPropPage
 {
 public:
    ScoreViewOptPage(Settings& appSettings, Settings& tableSettings);
-   virtual ~ScoreViewOptPage() override { }
+   ~ScoreViewOptPage() override { }
 
    ScoreViewOptPage(const ScoreViewOptPage&) = delete;
    ScoreViewOptPage& operator=(const ScoreViewOptPage&) = delete;
 
 protected:
-   virtual BOOL OnInitDialog();
-   virtual BOOL OnApply() override;
+   BOOL OnInitDialog() override;
+   BOOL OnApply() override;
 
-   virtual void LoadSettings(Settings& settings);
-   virtual void SaveSettings(Settings& settings, bool saveAll);
+   void LoadSettings(Settings& settings) override;
+   void SaveSettings(Settings& settings, bool saveAll) override;
 };
 
 class AlphaViewOptPage final : public VideoOptionPropPage
 {
 public:
    AlphaViewOptPage(Settings& appSettings, Settings& tableSettings);
-   virtual ~AlphaViewOptPage() override { }
+   ~AlphaViewOptPage() override { }
 
    AlphaViewOptPage(const AlphaViewOptPage&) = delete;
    AlphaViewOptPage& operator=(const AlphaViewOptPage&) = delete;
 
 protected:
-   virtual BOOL OnInitDialog();
-   virtual BOOL OnCommand(WPARAM wParam, LPARAM lParam);
-   virtual BOOL OnApply() override;
+   BOOL OnInitDialog() override;
+   BOOL OnCommand(WPARAM wParam, LPARAM lParam) override;
+   BOOL OnApply() override;
 
-   virtual void LoadSettings(Settings& settings);
-   virtual void SaveSettings(Settings& settings, bool saveAll);
+   void LoadSettings(Settings& settings) override;
+   void SaveSettings(Settings& settings, bool saveAll) override;
 
 private:
    CComboBox m_viewMode;
@@ -278,18 +281,18 @@ class BackglassViewOptPage final : public VideoOptionPropPage
 {
 public:
    BackglassViewOptPage(Settings& appSettings, Settings& tableSettings);
-   virtual ~BackglassViewOptPage() override { }
+   ~BackglassViewOptPage() override { }
 
    BackglassViewOptPage(const BackglassViewOptPage&) = delete;
    BackglassViewOptPage& operator=(const BackglassViewOptPage&) = delete;
 
 protected:
-   virtual BOOL OnInitDialog();
-   virtual BOOL OnCommand(WPARAM wParam, LPARAM lParam);
-   virtual BOOL OnApply() override;
+   BOOL OnInitDialog() override;
+   BOOL OnCommand(WPARAM wParam, LPARAM lParam) override;
+   BOOL OnApply() override;
 
-   virtual void LoadSettings(Settings& settings);
-   virtual void SaveSettings(Settings& settings, bool saveAll);
+   void LoadSettings(Settings& settings) override;
+   void SaveSettings(Settings& settings, bool saveAll) override;
 
 private:
    CComboBox m_viewMode;
@@ -732,7 +735,7 @@ void VideoOptionPropPage::SelectAspectRatio(int width, int height)
 {
    double best = DBL_MAX;
    int bestAR;
-   for (int j = 1; j < std::size(aspectRatios); j++)
+   for (int j = 1; j < (int)std::size(aspectRatios); j++)
    {
       const double fit = abs(1. - (double)(height * aspectRatios[j].x) / (double)(width * aspectRatios[j].y));
       if (fit < best)
@@ -896,6 +899,9 @@ BOOL RenderOptPage::OnInitDialog()
    AddToolTip(m_maxFPS , "Limit the FPS to the given value (energy saving/less heat, framerate stability), 0 will disable it");
    AttachItem(IDC_MAX_PRE_FRAMES, m_maxFrameLatency);
    AddToolTip(m_maxFrameLatency, "Leave at 0 if you have enabled 'Low Latency' or 'Anti Lag' settings in the graphics driver.\r\nOtherwise experiment with 1 or 2 for a chance of lag reduction at the price of a bit of framerate.");
+   AttachItem(IDC_LATENCY_CORRECTION, m_latencyCorrection);
+   AddToolTip(m_latencyCorrection, "Leave at -1 to get default latency correction based on display frequency.\r\nIf you measured your setup latency using tools like Intel's PresentMon, enter the average latency in ms.");
+   
    #if defined(ENABLE_BGFX)
       SetupCombo(m_syncMode, 2, "No Sync", "Vertical Sync");
    #else
@@ -948,7 +954,7 @@ BOOL RenderOptPage::OnInitDialog()
    m_rampDetail.SetTicFreq(1);
    m_rampDetail.SetLineSize(1);
    m_rampDetail.SetPageSize(1);
-   SendMessage(m_rampDetail.GetHwnd(), TBM_SETTHUMBLENGTH, 10, 0);
+   ::SendMessage(m_rampDetail.GetHwnd(), TBM_SETTHUMBLENGTH, 10, 0);
 
    AttachItem(IDC_GLOBAL_TRAIL_CHECK, m_ballTrails);
    AttachItem(IDC_BALL_TRAIL_STRENGTH, m_ballTrailStrength);
@@ -1017,7 +1023,7 @@ BOOL RenderOptPage::OnInitDialog()
    m_nightDay.SetTicFreq(10);
    m_nightDay.SetLineSize(1);
    m_nightDay.SetPageSize(1);
-   SendMessage(m_nightDay.GetHwnd(), TBM_SETTHUMBLENGTH, 10, 0);
+   ::SendMessage(m_nightDay.GetHwnd(), TBM_SETTHUMBLENGTH, 10, 0);
 
    AttachItem(IDC_GFX_BACKEND, m_gfxBackend);
    #if defined(ENABLE_BGFX)
@@ -1045,11 +1051,10 @@ BOOL RenderOptPage::OnInitDialog()
 
 void RenderOptPage::LoadSettings(Settings& settings)
 {
-   char tmp[256];
    BeginLoad();
-   
+
    { // Performance
-      m_initialMaxTexDim = settings.LoadValueWithDefault(Settings::Player, "MaxTexDimension"s, 0);
+      m_initialMaxTexDim = settings.LoadValueInt(Settings::Player, "MaxTexDimension"s);
       const int maxTexDim = ((1023 + m_initialMaxTexDim) / 1024) - 1;
       m_maxTexSize.SetCurSel(maxTexDim < 0 ? 7 : maxTexDim);
       
@@ -1082,9 +1087,7 @@ void RenderOptPage::LoadSettings(Settings& settings)
       m_forceTMOff.EnableWindow(false);
       m_forceTMscale.EnableWindow(false);
 #endif
-      const float forceTMscale = settings.LoadValueWithDefault(Settings::Player, "HDRGlobalExposure"s, 1.0f);
-      sprintf_s(tmp, sizeof(tmp), "%.2f", forceTMscale);
-      m_forceTMscale.SetWindowText(tmp);
+      m_forceTMscale.SetWindowText(f2sz(settings.LoadValueWithDefault(Settings::Player, "HDRGlobalExposure"s, 1.0f)).c_str());
 
       m_forceBloomOff.SetCheck(settings.LoadValueWithDefault(Settings::Player, "ForceBloomOff"s, false) ? BST_CHECKED : BST_UNCHECKED);
       m_forceAnisoMax.SetCheck(settings.LoadValueWithDefault(Settings::Player, "ForceAnisotropicFiltering"s, true) ? BST_CHECKED : BST_UNCHECKED);
@@ -1102,29 +1105,17 @@ void RenderOptPage::LoadSettings(Settings& settings)
       
    }
 
-   int maxFPS = settings.LoadValueWithDefault(Settings::Player, "MaxFramerate"s, -1);
-   if(maxFPS > 0 && maxFPS <= 24) // at least 24 fps
-      maxFPS = 24;
-   VideoSyncMode syncMode = (VideoSyncMode)settings.LoadValueWithDefault(Settings::Player, "SyncMode"s, VSM_INVALID);
-   if (maxFPS < 0 && syncMode == VideoSyncMode::VSM_INVALID)
-   {
-      const int vsync = settings.LoadValueWithDefault(Settings::Player, "AdaptiveVSync"s, -1);
-      switch (vsync)
-      {
-      case -1: maxFPS = 0; syncMode = VideoSyncMode::VSM_FRAME_PACING; break;
-      case 0: maxFPS = 0; syncMode = VideoSyncMode::VSM_NONE; break;
-      case 1: maxFPS = 0; syncMode = VideoSyncMode::VSM_VSYNC; break;
-      case 2: maxFPS = 0; syncMode = VideoSyncMode::VSM_ADAPTIVE_VSYNC; break;
-      default: maxFPS = vsync; syncMode = VideoSyncMode::VSM_ADAPTIVE_VSYNC; break;
-      }
-   }
-   if (maxFPS < 0)
-      maxFPS = 0;
-   SetDlgItemInt(IDC_MAX_FPS, maxFPS, TRUE);
+   float maxFPS = settings.LoadValueFloat(Settings::Player, "MaxFramerate"s);
+   if (maxFPS > 0.f && maxFPS <= 24.f) // at least 24 fps
+      maxFPS = 24.f;
+   if (maxFPS < 0.f)
+      maxFPS = -1.f;
+   m_maxFPS.SetWindowText(f2sz(maxFPS).c_str());
+   VideoSyncMode syncMode = static_cast<VideoSyncMode>(settings.LoadValueUInt(Settings::Player, "SyncMode"s));
    #if defined(ENABLE_BGFX)
-   syncMode = (VideoSyncMode)clamp(syncMode, VSM_NONE, VSM_VSYNC);
+      syncMode = (VideoSyncMode)clamp(syncMode, VSM_NONE, VSM_VSYNC);
    #else
-   syncMode = (VideoSyncMode)clamp(syncMode, VSM_NONE, VSM_FRAME_PACING);
+      syncMode = (VideoSyncMode)clamp(syncMode, VSM_NONE, VSM_FRAME_PACING);
    #endif
    SendDlgItemMessage(IDC_VIDEO_SYNC_MODE, CB_SETCURSEL, syncMode, 0);
    const int maxPrerenderedFrames = settings.LoadValueWithDefault(Settings::Player, "MaxPrerenderedFrames"s, 0);
@@ -1132,6 +1123,8 @@ void RenderOptPage::LoadSettings(Settings& settings)
    #if defined(ENABLE_OPENGL)
    m_maxFrameLatency.EnableWindow(false); // OpenGL does not support this option
    #endif
+   const int latencyCorrectionMs = settings.LoadValueWithDefault(Settings::Player, "VisualLatencyCorrection"s, -1);
+   SetDlgItemInt(IDC_LATENCY_CORRECTION, latencyCorrectionMs, TRUE);
 
    const float AAfactor = settings.LoadValueWithDefault(Settings::Player, "AAFactor"s, settings.LoadValueWithDefault(Settings::Player, "USEAA"s, false) ? 1.5f : 1.0f);
    m_supersampling.SetCurSel(getBestMatchingAAfactorIndex(AAfactor));
@@ -1143,21 +1136,13 @@ void RenderOptPage::LoadSettings(Settings& settings)
    const int sharpen = settings.LoadValueWithDefault(Settings::Player, "Sharpen"s, 0);
    m_sharpen.SetCurSel(sharpen);
 
-   const float nudgeStrength = settings.LoadValueWithDefault(Settings::Player, "NudgeStrength"s, 2e-2f);
-   sprintf_s(tmp, sizeof(tmp), "%.3f", nudgeStrength);
-   m_visualNudge.SetWindowText(tmp);
-   const bool ssreflection = settings.LoadValueWithDefault(Settings::Player, "SSRefl"s, false);
-   m_useAdditionalSSR.SetCheck(ssreflection ? BST_CHECKED : BST_UNCHECKED);
+   m_visualNudge.SetWindowText(f2sz(settings.LoadValueWithDefault(Settings::Player, "NudgeStrength"s, 2e-2f)).c_str());
+   m_useAdditionalSSR.SetCheck(settings.LoadValueWithDefault(Settings::Player, "SSRefl"s, false) ? BST_CHECKED : BST_UNCHECKED);
 
-   const bool trail = settings.LoadValueWithDefault(Settings::Player, "BallTrail"s, true);
-   m_ballTrails.SetCheck(trail ? BST_CHECKED : BST_UNCHECKED);
-   const float trailStrength = settings.LoadValueWithDefault(Settings::Player, "BallTrailStrength"s, 0.5f);
-   sprintf_s(tmp, sizeof(tmp), "%.3f", trailStrength);
-   m_ballTrailStrength.SetWindowText(tmp);
-   const bool ballAntiStretch = settings.LoadValueWithDefault(Settings::Player, "BallAntiStretch"s, false);
-   m_ballForceRound.SetCheck(ballAntiStretch ? BST_CHECKED : BST_UNCHECKED);
-   const bool disableLighting = settings.LoadValueWithDefault(Settings::Player, "DisableLightingForBalls"s, false);
-   m_ballDisableLighting.SetCheck(disableLighting ? BST_CHECKED : BST_UNCHECKED);
+   m_ballTrails.SetCheck(settings.LoadValueWithDefault(Settings::Player, "BallTrail"s, true) ? BST_CHECKED : BST_UNCHECKED);
+   m_ballTrailStrength.SetWindowText(f2sz(settings.LoadValueWithDefault(Settings::Player, "BallTrailStrength"s, 0.5f)).c_str());
+   m_ballForceRound.SetCheck(settings.LoadValueWithDefault(Settings::Player, "BallAntiStretch"s, false) ? BST_CHECKED : BST_UNCHECKED);
+   m_ballDisableLighting.SetCheck(settings.LoadValueWithDefault(Settings::Player, "DisableLightingForBalls"s, false) ? BST_CHECKED : BST_UNCHECKED);
    const bool overwiteBallImage = settings.LoadValueWithDefault(Settings::Player, "OverwriteBallImage"s, false);
    m_ballOverrideImages.SetCheck(overwiteBallImage ? BST_CHECKED : BST_UNCHECKED);
    string imageName;
@@ -1167,7 +1152,7 @@ void RenderOptPage::LoadSettings(Settings& settings)
    if (!settings.LoadValue(Settings::Player, "DecalImage"s, imageName))
       imageName.clear();
    m_ballDecal.SetWindowText(imageName.c_str());
-   if (overwiteBallImage == 0)
+   if (!overwiteBallImage)
    {
       GetDlgItem(IDC_BROWSE_BALL_IMAGE).EnableWindow(FALSE);
       GetDlgItem(IDC_BROWSE_BALL_DECAL).EnableWindow(FALSE);
@@ -1176,14 +1161,10 @@ void RenderOptPage::LoadSettings(Settings& settings)
    }
 
    m_overrideNightDay.SetCheck(settings.LoadValueWithDefault(Settings::TableOverride, "OverrideEmissionScale"s, false) ? BST_CHECKED : BST_UNCHECKED);
-   m_nightDay.SetPos((int)(100.f * settings.LoadValueWithDefault(Settings::Player, "EmissionScale"s, 0.5f)),1);
+   m_nightDay.SetPos((int)(100.f * settings.LoadValueFloat(Settings::Player, "EmissionScale"s)),1);
    m_autoNightDay.SetCheck(settings.LoadValueWithDefault(Settings::Player, "DynamicDayNight"s, false) ? BST_CHECKED : BST_UNCHECKED);
-   const float lat = settings.LoadValueWithDefault(Settings::Player, "Latitude"s, 52.52f);
-   sprintf_s(tmp, sizeof(tmp), "%.3f", lat);
-   m_geoposLat.SetWindowText(tmp);
-   const float lon = settings.LoadValueWithDefault(Settings::Player, "Longitude"s, 13.37f);
-   sprintf_s(tmp, sizeof(tmp), "%.3f", lon);
-   m_geoposLon.SetWindowText(tmp);
+   m_geoposLat.SetWindowText(f2sz(settings.LoadValueWithDefault(Settings::Player, "Latitude"s, 52.52f)).c_str());
+   m_geoposLon.SetWindowText(f2sz(settings.LoadValueWithDefault(Settings::Player, "Longitude"s, 13.37f)).c_str());
    OnCommand(IDC_OVERRIDE_DN, 0L); // Force UI update
    
    { // Stereo
@@ -1210,30 +1191,13 @@ void RenderOptPage::LoadSettings(Settings& settings)
 
       m_stereoYAxis.SetCheck(settings.LoadValueWithDefault(Settings::Player, "Stereo3DYAxis"s, false) ? BST_CHECKED : BST_UNCHECKED);
 
-      const float stereo3DOfs = settings.LoadValueWithDefault(Settings::Player, "Stereo3DOffset"s, 0.f);
-      sprintf_s(tmp, sizeof(tmp), "%f", stereo3DOfs);
-      m_stereoOffset.SetWindowText(tmp);
+      m_stereoOffset.SetWindowText(f2sz(settings.LoadValueWithDefault(Settings::Player, "Stereo3DOffset"s, 0.f)).c_str());
+      m_stereoMaxSeparation.SetWindowText(f2sz(settings.LoadValueWithDefault(Settings::Player, "Stereo3DMaxSeparation"s, 0.03f)).c_str());
+      m_stereoEyeSeparation.SetWindowText(f2sz(settings.LoadValueWithDefault(Settings::Player, "Stereo3DEyeSeparation"s, 63.0f)).c_str());
+      m_stereoZPD.SetWindowText(f2sz(settings.LoadValueWithDefault(Settings::Player, "Stereo3DZPD"s, 0.5f)).c_str());
+      m_stereoBrightness.SetWindowText(f2sz(settings.LoadValueWithDefault(Settings::Player, "Stereo3DBrightness"s, 1.0f)).c_str());
+      m_stereoSaturation.SetWindowText(f2sz(settings.LoadValueWithDefault(Settings::Player, "Stereo3DSaturation"s, 1.0f)).c_str());
 
-      const float stereo3DMS = settings.LoadValueWithDefault(Settings::Player, "Stereo3DMaxSeparation"s, 0.03f);
-      sprintf_s(tmp, sizeof(tmp), "%f", stereo3DMS);
-      m_stereoMaxSeparation.SetWindowText(tmp);
-
-      const float stereo3DES = settings.LoadValueWithDefault(Settings::Player, "Stereo3DEyeSeparation"s, 63.0f);
-      sprintf_s(tmp, sizeof(tmp), "%.1f", stereo3DES);
-      m_stereoEyeSeparation.SetWindowText(tmp);
-
-      const float stereo3DZPD = settings.LoadValueWithDefault(Settings::Player, "Stereo3DZPD"s, 0.5f);
-      sprintf_s(tmp, sizeof(tmp), "%f", stereo3DZPD);
-      m_stereoZPD.SetWindowText(tmp);
-
-      const float stereo3DBrightness = settings.LoadValueWithDefault(Settings::Player, "Stereo3DBrightness"s, 1.0f);
-      sprintf_s(tmp, sizeof(tmp), "%.2f", stereo3DBrightness);
-      m_stereoBrightness.SetWindowText(tmp);
-
-      const float stereo3DSaturation = settings.LoadValueWithDefault(Settings::Player, "Stereo3DSaturation"s, 1.0f);
-      sprintf_s(tmp, sizeof(tmp), "%.2f", stereo3DSaturation);
-      m_stereoSaturation.SetWindowText(tmp);
-      
       OnCommand(IDC_FAKE_STEREO, 0L); // Force UI update
    }
 
@@ -1255,10 +1219,11 @@ void RenderOptPage::SaveSettings(Settings& settings, bool saveAll)
 {
    BOOL nothing = 0;
    
-   settings.SaveValue(Settings::Player, "MaxFramerate"s, (int)GetDlgItemInt(IDC_MAX_FPS, nothing, TRUE), !saveAll);
+   settings.SaveValue(Settings::Player, "MaxFramerate"s, sz2f(GetDlgItemText(IDC_MAX_FPS).GetString()), !saveAll);
    int syncMode = m_syncMode.GetCurSel();
    settings.SaveValue(Settings::Player, "SyncMode"s, syncMode < 0 ? VideoSyncMode::VSM_FRAME_PACING : syncMode, !saveAll);
    settings.SaveValue(Settings::Player, "MaxPrerenderedFrames"s, (int)GetDlgItemInt(IDC_MAX_PRE_FRAMES, nothing, TRUE), !saveAll);
+   settings.SaveValue(Settings::Player, "VisualLatencyCorrection"s, (int)GetDlgItemInt(IDC_LATENCY_CORRECTION, nothing, TRUE), !saveAll);
 
    int fxaa = m_postprocAA.GetCurSel();
    settings.SaveValue(Settings::Player, "FXAA"s, fxaa == -1 ? Standard_FXAA : fxaa, !saveAll);
@@ -1305,13 +1270,13 @@ void RenderOptPage::SaveSettings(Settings& settings, bool saveAll)
    settings.SaveValue(Settings::Player, "AlphaRampAccuracy"s, (int)SendDlgItemMessage(IDC_ARASlider, TBM_GETPOS, 0, 0), !saveAll);
    settings.SaveValue(Settings::Player, "UseNVidiaAPI"s, m_useAltDepth.GetCheck() == BST_CHECKED, !saveAll);
    settings.SaveValue(Settings::Player, "HDRDisableToneMapper"s, m_forceTMOff.GetCheck() == BST_CHECKED, !saveAll);
-   settings.SaveValue(Settings::Player, "HDRGlobalExposure"s, GetDlgItemText(IDC_TM_HDR_SCALE).GetString(), !saveAll);
+   settings.SaveValue(Settings::Player, "HDRGlobalExposure"s, sz2f(GetDlgItemText(IDC_TM_HDR_SCALE).GetString()), !saveAll);
    settings.SaveValue(Settings::Player, "ForceBloomOff"s, m_forceBloomOff.GetCheck() == BST_CHECKED, !saveAll);
    settings.SaveValue(Settings::Player, "ForceMotionBlurOff"s, m_forceMotionBlurOff.GetCheck() == BST_CHECKED, !saveAll);
    settings.SaveValue(Settings::Player, "DisableDWM"s, m_disableDWM.GetCheck() == BST_CHECKED, !saveAll);
    settings.SaveValue(Settings::Player, "AlphaRampAccuracy"s, m_rampDetail.GetPos(), !saveAll);
 
-   settings.SaveValue(Settings::Player, "NudgeStrength"s, GetDlgItemText(IDC_NUDGE_STRENGTH).GetString(), !saveAll);
+   settings.SaveValue(Settings::Player, "NudgeStrength"s, sz2f(GetDlgItemText(IDC_NUDGE_STRENGTH).GetString()), !saveAll);
    settings.SaveValue(Settings::Player, "SSRefl"s, m_useAdditionalSSR.GetCheck() == BST_CHECKED, !saveAll);
 
    int stereo3D = m_stereoMode.GetCurSel();
@@ -1320,15 +1285,15 @@ void RenderOptPage::SaveSettings(Settings& settings, bool saveAll)
    settings.SaveValue(Settings::Player, "Stereo3D"s, (int)stereo3D, !saveAll);
    settings.SaveValue(Settings::Player, "Stereo3DEnabled"s, stereo3D != STEREO_OFF, !saveAll);
    settings.SaveValue(Settings::Player, "Stereo3DYAxis"s, m_stereoYAxis.GetCheck() == BST_CHECKED, !saveAll);
-   settings.SaveValue(Settings::Player, "Stereo3DOffset"s, GetDlgItemText(IDC_3D_STEREO_OFS).GetString(), !saveAll);
+   settings.SaveValue(Settings::Player, "Stereo3DOffset"s, sz2f(GetDlgItemText(IDC_3D_STEREO_OFS).GetString()), !saveAll);
    #if defined(ENABLE_OPENGL) || defined(ENABLE_BGFX)
       settings.SaveValue(Settings::Player, "Stereo3DFake"s, m_stereoFake.GetCheck() == BST_CHECKED, !saveAll);
    #endif
-   settings.SaveValue(Settings::Player, "Stereo3DMaxSeparation"s, GetDlgItemText(IDC_3D_STEREO_MS).GetString(), !saveAll);
-   settings.SaveValue(Settings::Player, "Stereo3DEyeSeparation"s, GetDlgItemText(IDC_3D_STEREO_ES).GetString(), !saveAll);
-   settings.SaveValue(Settings::Player, "Stereo3DZPD"s, GetDlgItemText(IDC_3D_STEREO_ZPD).GetString(), !saveAll);
-   settings.SaveValue(Settings::Player, "Stereo3DBrightness"s, GetDlgItemText(IDC_3D_STEREO_BRIGHTNESS).GetString(), !saveAll);
-   settings.SaveValue(Settings::Player, "Stereo3DSaturation"s, GetDlgItemText(IDC_3D_STEREO_DESATURATION).GetString(), !saveAll);
+   settings.SaveValue(Settings::Player, "Stereo3DMaxSeparation"s, sz2f(GetDlgItemText(IDC_3D_STEREO_MS).GetString()), !saveAll);
+   settings.SaveValue(Settings::Player, "Stereo3DEyeSeparation"s, sz2f(GetDlgItemText(IDC_3D_STEREO_ES).GetString()), !saveAll);
+   settings.SaveValue(Settings::Player, "Stereo3DZPD"s, sz2f(GetDlgItemText(IDC_3D_STEREO_ZPD).GetString()), !saveAll);
+   settings.SaveValue(Settings::Player, "Stereo3DBrightness"s, sz2f(GetDlgItemText(IDC_3D_STEREO_BRIGHTNESS).GetString()), !saveAll);
+   settings.SaveValue(Settings::Player, "Stereo3DSaturation"s, sz2f(GetDlgItemText(IDC_3D_STEREO_DESATURATION).GetString()), !saveAll);
    if (IsAnaglyphStereoMode(stereo3D))
    {
       int glassesIndex = stereo3D - STEREO_ANAGLYPH_1;
@@ -1339,7 +1304,7 @@ void RenderOptPage::SaveSettings(Settings& settings, bool saveAll)
    }
 
    settings.SaveValue(Settings::Player, "BallTrail"s, m_ballTrails.GetCheck() == BST_CHECKED, !saveAll);
-   settings.SaveValue(Settings::Player, "BallTrailStrength"s, GetDlgItemText(IDC_BALL_TRAIL_STRENGTH).GetString(), !saveAll);
+   settings.SaveValue(Settings::Player, "BallTrailStrength"s, sz2f(GetDlgItemText(IDC_BALL_TRAIL_STRENGTH).GetString()), !saveAll);
    settings.SaveValue(Settings::Player, "DisableLightingForBalls"s, m_ballDisableLighting.GetCheck() == BST_CHECKED, !saveAll);
    settings.SaveValue(Settings::Player, "BallAntiStretch"s, m_ballForceRound.GetCheck() == BST_CHECKED, !saveAll);
    const bool overwriteEnabled = m_ballOverrideImages.GetCheck() == BST_CHECKED;
@@ -1358,11 +1323,11 @@ void RenderOptPage::SaveSettings(Settings& settings, bool saveAll)
    settings.SaveValue(Settings::TableOverride, "OverrideEmissionScale"s, m_overrideNightDay.GetCheck() == BST_CHECKED, !saveAll);
    settings.SaveValue(Settings::Player, "EmissionScale"s, (float)SendDlgItemMessage(IDC_DAYNIGHT_SLIDER, TBM_GETPOS, 0, 0) / 100.f, !saveAll);
    settings.SaveValue(Settings::Player, "DynamicDayNight"s, m_autoNightDay.GetCheck() == BST_CHECKED, !saveAll);
-   settings.SaveValue(Settings::Player, "Longitude"s, GetDlgItemText(IDC_DN_LONGITUDE).GetString(), !saveAll);
-   settings.SaveValue(Settings::Player, "Latitude"s, GetDlgItemText(IDC_DN_LATITUDE).GetString(), !saveAll);
+   settings.SaveValue(Settings::Player, "Longitude"s, sz2f(GetDlgItemText(IDC_DN_LONGITUDE).GetString()), !saveAll);
+   settings.SaveValue(Settings::Player, "Latitude"s, sz2f(GetDlgItemText(IDC_DN_LATITUDE).GetString()), !saveAll);
 
    #if defined(ENABLE_BGFX)
-      const string gfxBackend = m_gfxBackend.GetWindowText().c_str();
+      const string gfxBackend = m_gfxBackend.GetWindowText().GetString();
       settings.SaveValue(Settings::Player, "GfxBackend"s, gfxBackend, !saveAll);
    #endif
 }
@@ -1401,8 +1366,10 @@ void RenderOptPage::ResetVideoPreferences(int profile)
       m_ballDecal.SetWindowText("");
    }
 
-   SetDlgItemInt(IDC_MAX_FPS, 0, TRUE);
+   m_syncMode.SetCurSel(0); // No sync
+   SetDlgItemInt(IDC_MAX_FPS, -1, TRUE); // Sync to display framerate
    SetDlgItemInt(IDC_MAX_PRE_FRAMES, 0, TRUE);
+   SetDlgItemInt(IDC_LATENCY_CORRECTION, -1, TRUE); // Use default latency correction
 
    m_maxAO.SetCurSel(profile == 2 ? 2 : 1);
    m_maxReflection.SetCurSel(profile == 1 ? RenderProbe::REFL_STATIC_N_BALLS : RenderProbe::REFL_DYNAMIC);
@@ -1456,6 +1423,7 @@ BOOL RenderOptPage::OnCommand(WPARAM wParam, LPARAM lParam)
    case IDC_3D_STEREO_OFS:
    case IDC_MAX_FPS:
    case IDC_MAX_PRE_FRAMES:
+   case IDC_LATENCY_CORRECTION:
    case IDC_TM_HDR_SCALE:
    case IDC_DN_LATITUDE:
    case IDC_DN_LONGITUDE:
@@ -1611,14 +1579,16 @@ BOOL CabinetOptPage::OnInitDialog()
    AttachItem(IDC_HEADTRACKING, m_bamHeadtracking);
    AddToolTip(m_bamHeadtracking, "Enables BAM Headtracking. See https://www.ravarcade.pl for details.");
 
-   AttachItem(IDC_DISPLAY_ID, m_display);
-   AttachItem(IDC_SCREEN_WIDTH, m_displayWidth);
-   AddToolTip(m_displayWidth, "Physical width of the display area of the screen in centimeters, in landscape orientation (width > height).\r\n\r\nThis is needed to get the correct size when using 'Window' mode for the camera.");
-   AttachItem(IDC_SCREEN_HEIGHT, m_displayHeight);
-   AddToolTip(m_displayHeight, "Physical height of the display area of the screen in centimeters, in landscape orientation (width > height).\r\n\r\nThis is needed to get the correct size when using 'Window' mode for the camera.");
-   AttachItem(IDC_SCREEN_INCLINATION, m_displayInclination);
+   AttachItem(IDC_SCREEN_WIDTH, m_playfieldScreenWidth);
+   AddToolTip(m_playfieldScreenWidth, "Physical width of the display area of the playfield screen in centimeters, in landscape orientation (width > height).\r\n\r\nThis is needed to get the correct size when using 'Window' mode for the camera.");
+   AttachItem(IDC_SCREEN_HEIGHT, m_playfieldScreenHeight);
+   AddToolTip(m_playfieldScreenHeight, "Physical height of the display area of the playfield screen in centimeters, in landscape orientation (width > height).\r\n\r\nThis is needed to get the correct size when using 'Window' mode for the camera.");
+   AttachItem(IDC_SCREEN_INCLINATION, m_playfieldScreenInclination);
 
-   m_display.EnableWindow(false); // FIXME Not yet implemented: screen informations apply to playfield display only
+   AttachItem(IDC_LOCKBAR_WIDTH, m_lockbarWidth);
+   AddToolTip(m_lockbarWidth, "Physical width of the lockbar in centimeters.\r\n\r\nThis is needed for Virtual Reality automatic scaling mode.");
+   AttachItem(IDC_LOCKBAR_HEIGHT_FROM_GROUND, m_lockbarHeight);
+   AddToolTip(m_lockbarHeight, "Physical height of the lockbar in centimeters measured from ground.\r\n\r\nThis is used for Virtual Reality positionning.");
 
    LoadSettings(GetEditedSettings());
    return TRUE;
@@ -1628,42 +1598,34 @@ void CabinetOptPage::LoadSettings(Settings& settings)
 {
    BeginLoad();
 
-   char tmp[256];
-   const float screenPlayerX = settings.LoadValueWithDefault(Settings::Player, "ScreenPlayerX"s, 0.0f);
-   sprintf_s(tmp, sizeof(tmp), "%.1f", screenPlayerX);
-   m_playerX.SetWindowText(tmp);
-   const float screenPlayerY = settings.LoadValueWithDefault(Settings::Player, "ScreenPlayerY"s, 0.0f);
-   sprintf_s(tmp, sizeof(tmp), "%.1f", screenPlayerY);
-   m_playerY.SetWindowText(tmp);
-   const float screenPlayerZ = settings.LoadValueWithDefault(Settings::Player, "ScreenPlayerZ"s, 70.0f);
-   sprintf_s(tmp, sizeof(tmp), "%.1f", screenPlayerZ);
-   m_playerZ.SetWindowText(tmp);
-   const bool bamHeadtracking = settings.LoadValueWithDefault(Settings::Player, "BAMHeadTracking"s, false);
-   m_bamHeadtracking.SetCheck(bamHeadtracking ? BST_CHECKED : BST_UNCHECKED);
+   m_playerX.SetWindowText(f2sz(settings.LoadValueFloat(Settings::Player, "ScreenPlayerX"s)).c_str());
+   m_playerY.SetWindowText(f2sz(settings.LoadValueFloat(Settings::Player, "ScreenPlayerY"s)).c_str());
+   m_playerZ.SetWindowText(f2sz(settings.LoadValueFloat(Settings::Player, "ScreenPlayerZ"s)).c_str());
+   m_bamHeadtracking.SetCheck(settings.LoadValueWithDefault(Settings::Player, "BAMHeadTracking"s, false) ? BST_CHECKED : BST_UNCHECKED);
 
-   const float screenWidth = settings.LoadValueWithDefault(Settings::Player, "ScreenWidth"s, 0.0f);
-   sprintf_s(tmp, sizeof(tmp), "%.1f", screenWidth);
-   m_displayWidth.SetWindowText(tmp);
-   const float screenHeight = settings.LoadValueWithDefault(Settings::Player, "ScreenHeight"s, 0.0f);
-   sprintf_s(tmp, sizeof(tmp), "%.1f", screenHeight);
-   m_displayHeight.SetWindowText(tmp);
-   const float screenInclination = settings.LoadValueWithDefault(Settings::Player, "ScreenInclination"s, 0.0f);
-   sprintf_s(tmp, sizeof(tmp), "%.3f", screenInclination);
-   m_displayInclination.SetWindowText(tmp);
+   m_playfieldScreenWidth.SetWindowText(f2sz(settings.LoadValueFloat(Settings::Player, "ScreenWidth"s)).c_str());
+   m_playfieldScreenHeight.SetWindowText(f2sz(settings.LoadValueFloat(Settings::Player, "ScreenHeight"s)).c_str());
+   m_playfieldScreenInclination.SetWindowText(f2sz(settings.LoadValueFloat(Settings::Player, "ScreenInclination"s)).c_str());
 
+   m_lockbarWidth.SetWindowText(f2sz(settings.LoadValueFloat(Settings::Player, "LockbarWidth"s)).c_str());
+   m_lockbarHeight.SetWindowText(f2sz(settings.LoadValueFloat(Settings::Player, "LockbarHeight"s)).c_str());
+   
    EndLoad();
 }
 
 void CabinetOptPage::SaveSettings(Settings& settings, bool saveAll)
 {
-   settings.SaveValue(Settings::Player, "ScreenPlayerX"s, GetDlgItemText(IDC_SCREEN_PLAYERX).GetString(), !saveAll);
-   settings.SaveValue(Settings::Player, "ScreenPlayerY"s, GetDlgItemText(IDC_SCREEN_PLAYERY).GetString(), !saveAll);
-   settings.SaveValue(Settings::Player, "ScreenPlayerZ"s, GetDlgItemText(IDC_SCREEN_PLAYERZ).GetString(), !saveAll);
+   settings.SaveValue(Settings::Player, "ScreenPlayerX"s, sz2f(GetDlgItemText(IDC_SCREEN_PLAYERX).GetString()), !saveAll);
+   settings.SaveValue(Settings::Player, "ScreenPlayerY"s, sz2f(GetDlgItemText(IDC_SCREEN_PLAYERY).GetString()), !saveAll);
+   settings.SaveValue(Settings::Player, "ScreenPlayerZ"s, sz2f(GetDlgItemText(IDC_SCREEN_PLAYERZ).GetString()), !saveAll);
    settings.SaveValue(Settings::Player, "BAMheadTracking"s, m_bamHeadtracking.GetCheck() == BST_CHECKED, !saveAll);
 
-   settings.SaveValue(Settings::Player, "ScreenWidth"s, GetDlgItemText(IDC_SCREEN_WIDTH).GetString(), !saveAll);
-   settings.SaveValue(Settings::Player, "ScreenHeight"s, GetDlgItemText(IDC_SCREEN_HEIGHT).GetString(), !saveAll);
-   settings.SaveValue(Settings::Player, "ScreenInclination"s, GetDlgItemText(IDC_SCREEN_INCLINATION).GetString(), !saveAll);
+   settings.SaveValue(Settings::Player, "ScreenWidth"s, sz2f(GetDlgItemText(IDC_SCREEN_WIDTH).GetString()), !saveAll);
+   settings.SaveValue(Settings::Player, "ScreenHeight"s, sz2f(GetDlgItemText(IDC_SCREEN_HEIGHT).GetString()), !saveAll);
+   settings.SaveValue(Settings::Player, "ScreenInclination"s, sz2f(GetDlgItemText(IDC_SCREEN_INCLINATION).GetString()), !saveAll);
+
+   settings.SaveValue(Settings::Player, "LockbarWidth"s, sz2f(GetDlgItemText(IDC_LOCKBAR_WIDTH).GetString()), !saveAll);
+   settings.SaveValue(Settings::Player, "LockbarHeight"s, sz2f(GetDlgItemText(IDC_LOCKBAR_HEIGHT_FROM_GROUND).GetString()), !saveAll);
 }
 
 BOOL CabinetOptPage::OnApply()
@@ -1682,6 +1644,8 @@ BOOL CabinetOptPage::OnCommand(WPARAM wParam, LPARAM lParam)
    case IDC_SCREEN_WIDTH:
    case IDC_SCREEN_HEIGHT:
    case IDC_SCREEN_INCLINATION:
+   case IDC_LOCKBAR_WIDTH:
+   case IDC_LOCKBAR_HEIGHT_FROM_GROUND:
       if (HIWORD(wParam) == EN_CHANGE)
          PropChanged();
       break;
@@ -1840,7 +1804,6 @@ void DisplayStyleOptPage::ResetProfile(const int n)
 
 void DisplayStyleOptPage::LoadProfile(const int n)
 {
-   char tmp[256];
    BeginLoad();
    Settings& settings = GetEditedSettings();
    m_editedProfile = n;
@@ -1854,14 +1817,10 @@ void DisplayStyleOptPage::LoadProfile(const int n)
       m_dmdScaleFX.SetCheck(settings.LoadValueBool(Settings::DMD, prefix + "ScaleFX") ? BST_CHECKED : BST_UNCHECKED);
       m_dotTint.SetColor(settings.LoadValueUInt(Settings::DMD, prefix + "DotTint"));
       m_unlitDotColor.SetColor(settings.LoadValueUInt(Settings::DMD, prefix + "UnlitDotColor"));
-      sprintf_s(tmp, sizeof(tmp), "%.3f", settings.LoadValueFloat(Settings::DMD, prefix + "DotSize"));
-      m_dotSize.SetWindowText(tmp);
-      sprintf_s(tmp, sizeof(tmp), "%.3f", settings.LoadValueFloat(Settings::DMD, prefix + "DotBrightness"));
-      m_dotBrightness.SetWindowText(tmp);
-      sprintf_s(tmp, sizeof(tmp), "%.3f", settings.LoadValueFloat(Settings::DMD, prefix + "DotSharpness"));
-      m_dotSharpness.SetWindowText(tmp);
-      sprintf_s(tmp, sizeof(tmp), "%.3f", settings.LoadValueFloat(Settings::DMD, prefix + "DiffuseGlow"));
-      m_diffuseGlow.SetWindowText(tmp);
+      m_dotSize.SetWindowText(f2sz(settings.LoadValueFloat(Settings::DMD, prefix + "DotSize")).c_str());
+      m_dotBrightness.SetWindowText(f2sz(settings.LoadValueFloat(Settings::DMD, prefix + "DotBrightness")).c_str());
+      m_dotSharpness.SetWindowText(f2sz(settings.LoadValueFloat(Settings::DMD, prefix + "DotSharpness")).c_str());
+      m_diffuseGlow.SetWindowText(f2sz(settings.LoadValueFloat(Settings::DMD, prefix + "DiffuseGlow")).c_str());
    }
    else if (n < 7 + 8) // Alpha Seg
    {
@@ -1869,10 +1828,8 @@ void DisplayStyleOptPage::LoadProfile(const int n)
       const string prefix = "Profile." + std::to_string(n - 7 + 1) + '.';
       m_dotTint.SetColor(settings.LoadValueUInt(Settings::Alpha, prefix + "Color"));
       m_unlitDotColor.SetColor(settings.LoadValueUInt(Settings::Alpha, prefix + "Unlit"));
-      sprintf_s(tmp, sizeof(tmp), "%.3f", settings.LoadValueFloat(Settings::Alpha, prefix + "Brightness"));
-      m_dotBrightness.SetWindowText(tmp);
-      sprintf_s(tmp, sizeof(tmp), "%.3f", settings.LoadValueFloat(Settings::Alpha, prefix + "DiffuseGlow"));
-      m_diffuseGlow.SetWindowText(tmp);
+      m_dotBrightness.SetWindowText(f2sz(settings.LoadValueFloat(Settings::Alpha, prefix + "Brightness")).c_str());
+      m_diffuseGlow.SetWindowText(f2sz(settings.LoadValueFloat(Settings::Alpha, prefix + "DiffuseGlow")).c_str());
    }
 
    m_legacyRenderer.ShowWindow(mode == 0 ? SW_SHOWNORMAL : SW_HIDE);
@@ -1902,18 +1859,18 @@ void DisplayStyleOptPage::SaveProfile()
       settings.SaveValue(Settings::DMD, prefix + "ScaleFX", m_dmdScaleFX.GetCheck() == BST_CHECKED, !saveAll);
       settings.SaveValue(Settings::DMD, prefix + "DotTint", static_cast<unsigned int>(m_dotTint.GetColor()), !saveAll);
       settings.SaveValue(Settings::DMD, prefix + "UnlitDotColor", static_cast<unsigned int>(m_unlitDotColor.GetColor()), !saveAll);
-      settings.SaveValue(Settings::DMD, prefix + "DotSize", m_dotSize.GetWindowText().GetString(), !saveAll);
-      settings.SaveValue(Settings::DMD, prefix + "DotBrightness", m_dotBrightness.GetWindowText().GetString(), !saveAll);
-      settings.SaveValue(Settings::DMD, prefix + "DotSharpness", m_dotSharpness.GetWindowText().GetString(), !saveAll);
-      settings.SaveValue(Settings::DMD, prefix + "DiffuseGlow", m_diffuseGlow.GetWindowText().GetString(), !saveAll);
+      settings.SaveValue(Settings::DMD, prefix + "DotSize", sz2f(m_dotSize.GetWindowText().GetString()), !saveAll);
+      settings.SaveValue(Settings::DMD, prefix + "DotBrightness", sz2f(m_dotBrightness.GetWindowText().GetString()), !saveAll);
+      settings.SaveValue(Settings::DMD, prefix + "DotSharpness", sz2f(m_dotSharpness.GetWindowText().GetString()), !saveAll);
+      settings.SaveValue(Settings::DMD, prefix + "DiffuseGlow", sz2f(m_diffuseGlow.GetWindowText().GetString()), !saveAll);
    }
    else if (m_editedProfile < 7 + 8) // AlphaSeg
    {
       const string prefix = "Profile." + std::to_string(m_editedProfile - 7 + 1) + '.';
       settings.SaveValue(Settings::Alpha, prefix + "Color", static_cast<unsigned int>(m_dotTint.GetColor()), !saveAll);
       settings.SaveValue(Settings::Alpha, prefix + "Unlit", static_cast<unsigned int>(m_unlitDotColor.GetColor()), !saveAll);
-      settings.SaveValue(Settings::Alpha, prefix + "Brightness", m_dotBrightness.GetWindowText().GetString(), !saveAll);
-      settings.SaveValue(Settings::Alpha, prefix + "DiffuseGlow", m_diffuseGlow.GetWindowText().GetString(), !saveAll);
+      settings.SaveValue(Settings::Alpha, prefix + "Brightness", sz2f(m_dotBrightness.GetWindowText().GetString()), !saveAll);
+      settings.SaveValue(Settings::Alpha, prefix + "DiffuseGlow", sz2f(m_diffuseGlow.GetWindowText().GetString()), !saveAll);
    }
 }
 

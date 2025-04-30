@@ -13,6 +13,8 @@
 
 #include "RSJparser/RSJparser.tcc"
 
+#include <filesystem>
+
 PUPLabel::PUPLabel(const string& szName, const string& szFont, float size, LONG color, float angle, PUP_LABEL_XALIGN xAlign, PUP_LABEL_YALIGN yAlign, float xPos, float yPos, int pagenum, bool visible)
 {
    m_szName = szName;
@@ -85,6 +87,10 @@ void PUPLabel::SetCaption(const string& szCaption)
                if (!szPath.empty()) {
                   m_szPath = szPath;
                   m_type = (szExt == "gif") ? PUP_LABEL_TYPE_GIF : PUP_LABEL_TYPE_IMAGE;
+               } else {
+                  PLOGW.printf("Image not found: screen=%d, label=%s, path=%s", m_pScreen->GetScreenNum(), m_szName.c_str(), szText.c_str());
+                  // we need to set a path otherwise the caption will be used as text
+                  m_szPath = szText;
                }
             }
          }
@@ -384,7 +390,7 @@ void PUPLabel::Render(SDL_Renderer* pRenderer, SDL_Rect& rect, int pagenum)
 
 void PUPLabel::UpdateLabelTexture(SDL_Renderer* pRenderer, SDL_Rect& rect)
 {
-   static robin_hood::unordered_map<string, robin_hood::unordered_set<string>> warnedLabels;
+   static ankerl::unordered_dense::map<string, ankerl::unordered_dense::set<string>> warnedLabels;
 
    if (m_pTexture) {
       SDL_DestroyTexture(m_pTexture);

@@ -13,12 +13,13 @@ const char* PUP_TRIGGER_PLAY_ACTION_STRINGS[] = {
    "PUP_TRIGGER_PLAY_ACTION_STOP_FILE",
    "PUP_TRIGGER_PLAY_ACTION_SET_BG",
    "PUP_TRIGGER_PLAY_ACTION_PLAY_SSF",
-   "PUP_TRIGGER_PLAY_ACTION_SKIP_SAME_PRTY"
+   "PUP_TRIGGER_PLAY_ACTION_SKIP_SAME_PRTY",
+   "PUP_TRIGGER_PLAY_ACTION_CUSTOM_FUNC"
 };
 
 const char* PUP_TRIGGER_PLAY_ACTION_TO_STRING(PUP_TRIGGER_PLAY_ACTION value)
 {
-   if ((int)value < 0 || (size_t)value >= sizeof(PUP_TRIGGER_PLAY_ACTION_STRINGS) / sizeof(PUP_TRIGGER_PLAY_ACTION_STRINGS[0]))
+   if ((size_t)value >= std::size(PUP_TRIGGER_PLAY_ACTION_STRINGS))
       return "UNKNOWN";
    return PUP_TRIGGER_PLAY_ACTION_STRINGS[value];
 }
@@ -80,6 +81,9 @@ PUPTrigger* PUPTrigger::CreateFromCSV(PUPScreen* pScreen, string line)
       return nullptr;
    }
 
+   const string& triggerPlaylist = parts[5];
+   const string& triggerPlayAction = parts[12];
+
    int screen = string_to_int(parts[4], -1);
    if (screen != pScreen->GetScreenNum())
       return nullptr;
@@ -90,9 +94,21 @@ PUPTrigger* PUPTrigger::CreateFromCSV(PUPScreen* pScreen, string line)
       return nullptr;
    }
 
-   PUPPlaylist* pPlaylist = pScreen->GetPlaylist(parts[5]);
+   if (StrCompareNoCase(triggerPlayAction, "CustomFunc")) {
+      // TODO parse the custom function and call PUPPinDisplay::SendMSG when triggered
+      PLOGW.printf("CustomFunc not implemented: %s", line.c_str());
+      return nullptr;
+   }
+
+   // Sometimes an empty playlist but with description is used as a comment/separator.
+   if (triggerPlaylist.empty()) {
+      // TODO A PuP Pack Audit should mark these as comment triggers if the trigger is active
+      return nullptr;
+   }
+
+   PUPPlaylist* pPlaylist = pScreen->GetPlaylist(triggerPlaylist);
    if (!pPlaylist) {
-      PLOGW.printf("Playlist not found: %s", parts[5].c_str());
+      PLOGW.printf("Playlist not found: %s", triggerPlaylist.c_str());
       return nullptr;
    }
 
@@ -100,28 +116,30 @@ PUPTrigger* PUPTrigger::CreateFromCSV(PUPScreen* pScreen, string line)
    if (!szPlayFile.empty()) {
       szPlayFile = pPlaylist->GetPlayFile(szPlayFile);
       if (szPlayFile.empty()) {
-         PLOGW.printf("PlayFile not found: %s", parts[6].c_str());
+         PLOGW.printf("PlayFile not found for playlist %s: %s", pPlaylist->GetFolder().c_str(), parts[6].c_str());
          return nullptr;
       }
    }
 
    PUP_TRIGGER_PLAY_ACTION playAction;
-   if (string_compare_case_insensitive(parts[12], "Loop"))
+   if (StrCompareNoCase(triggerPlayAction, "Loop"))
       playAction = PUP_TRIGGER_PLAY_ACTION_LOOP;
-   else if (string_compare_case_insensitive(parts[12], "SplashReset"))
+   else if (StrCompareNoCase(triggerPlayAction, "SplashReset"))
       playAction = PUP_TRIGGER_PLAY_ACTION_SPLASH_RESET;
-   else if (string_compare_case_insensitive(parts[12], "SplashReturn"))
+   else if (StrCompareNoCase(triggerPlayAction, "SplashReturn"))
       playAction = PUP_TRIGGER_PLAY_ACTION_SPLASH_RESET;
-   else if (string_compare_case_insensitive(parts[12], "StopPlayer"))
+   else if (StrCompareNoCase(triggerPlayAction, "StopPlayer"))
       playAction = PUP_TRIGGER_PLAY_ACTION_STOP_PLAYER;
-   else if (string_compare_case_insensitive(parts[12], "StopFile"))
+   else if (StrCompareNoCase(triggerPlayAction, "StopFile"))
       playAction = PUP_TRIGGER_PLAY_ACTION_STOP_FILE;
-   else if (string_compare_case_insensitive(parts[12], "SetBG"))
+   else if (StrCompareNoCase(triggerPlayAction, "SetBG"))
       playAction = PUP_TRIGGER_PLAY_ACTION_SET_BG;
-   else if (string_compare_case_insensitive(parts[12], "PlaySSF"))
+   else if (StrCompareNoCase(triggerPlayAction, "PlaySSF"))
       playAction = PUP_TRIGGER_PLAY_ACTION_PLAY_SSF;
-   else if (string_compare_case_insensitive(parts[12], "SkipSamePrty"))
+   else if (StrCompareNoCase(triggerPlayAction, "SkipSamePrty"))
       playAction = PUP_TRIGGER_PLAY_ACTION_SKIP_SAME_PRTY;
+   else if (StrCompareNoCase(triggerPlayAction, "CustomFunc"))
+      playAction = PUP_TRIGGER_PLAY_ACTION_CUSTOM_FUNC;
    else
       playAction = PUP_TRIGGER_PLAY_ACTION_NORMAL;
 

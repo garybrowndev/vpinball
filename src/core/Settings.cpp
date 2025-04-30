@@ -12,7 +12,7 @@ static const string regKey[Settings::Plugin00] = { "Controller"s, "Editor"s, "St
       "DefaultProps\\Gate"s, "DefaultProps\\HitTarget"s, "DefaultProps\\Kicker"s, "DefaultProps\\Light"s, "DefaultProps\\LightSequence"s,
       "DefaultProps\\Plunger"s, "DefaultProps\\Primitive"s, "DefaultProps\\Ramp"s, "DefaultProps\\Rubber"s, "DefaultProps\\Spinner"s,
       "DefaultProps\\Wall"s, "DefaultProps\\Target"s, "DefaultProps\\TextBox"s, "DefaultProps\\Timer"s, "DefaultProps\\Trigger"s,
-      "Defaults\\Camera"s
+      "Defaults\\Camera"s, "Defaults\\PartGroup"s
    };
 vector<string> Settings::m_settingKeys = vector<string>(regKey, regKey + Settings::Section::Plugin00);
 vector<Settings::OptionDef> Settings::m_pluginOptions;
@@ -40,9 +40,10 @@ Settings::Settings(const Settings* parent)
 {
 }
 
-void Settings::Validate(const Section section, const string &key, const string& defVal, const bool addDefaults)
+void Settings::RegisterStringSetting(const Section section, const string &key, const string &defVal, const bool addDefaults, const string &comments)
 {
    #ifdef DEBUG
+      assert(m_validatedKeys[section].find(key) == m_validatedKeys[section].end());
       m_validatedKeys[section].insert(key);
    #endif
    string val;
@@ -51,9 +52,10 @@ void Settings::Validate(const Section section, const string &key, const string& 
       SaveValue(section, key, defVal);
 }
 
-void Settings::Validate(const Section section, const string &key, const bool defVal, const bool addDefaults)
+void Settings::RegisterBoolSetting(const Section section, const string &key, const bool defVal, const bool addDefaults, const string &comments)
 {
    #ifdef DEBUG
+      assert(m_validatedKeys[section].find(key) == m_validatedKeys[section].end());
       m_validatedKeys[section].insert(key);
    #endif
    int val;
@@ -67,9 +69,11 @@ void Settings::Validate(const Section section, const string &key, const bool def
       SaveValue(section, key, defVal);
 }
 
-void Settings::Validate(const Section section, const string &key, const int defVal, const int minVal, const int maxVal, const bool addDefaults)
+void Settings::RegisterIntSetting(const Section section, const string &key, const int defVal, const int minVal, const int maxVal, const bool addDefaults, const string &comments)
 {
+   assert((minVal <= defVal) && (defVal <= maxVal));
    #ifdef DEBUG
+      assert(m_validatedKeys[section].find(key) == m_validatedKeys[section].end());
       m_validatedKeys[section].insert(key);
    #endif
    int val;
@@ -83,9 +87,11 @@ void Settings::Validate(const Section section, const string &key, const int defV
       SaveValue(section, key, defVal);
 }
 
-void Settings::Validate(const Section section, const string &key, const float defVal, const float minVal, const float maxVal, const bool addDefaults)
+void Settings::RegisterFloatSetting(const Section section, const string &key, const float defVal, const float minVal, const float maxVal, const bool addDefaults, const string &comments)
 {
+   assert((minVal <= defVal) && (defVal <= maxVal));
    #ifdef DEBUG
+      assert(m_validatedKeys[section].find(key) == m_validatedKeys[section].end());
       m_validatedKeys[section].insert(key);
    #endif
    float val;
@@ -99,16 +105,166 @@ void Settings::Validate(const Section section, const string &key, const float de
       SaveValue(section, key, defVal);
 }
 
+
+// This methods declares the static settings supported by VPX.
+//
+// All static (known at compile time) settings should be declared here with their corresponding properties, allowing 
+// to improve setting management by:
+// - adding the ability to validate all settings against a validity range, and therefore guarantee a valid value for any setting
+// - adding the ability to generate a friendly up-to-date default setting file with usage comments
+// - adding static, explicit typîng to avoid unexpected data conversions
+// - remove duplicated default values spread all over the codebase which happens to not always be equals
+// - allow to move to a simple array based access, improving performance and lowering the need to cache settings into local unsinced fields
+//
+// To allow a slow and smooth transition, settings are declared here little by little. Once registered here, settings may not be accessed
+// using LoadWithDefaultValue (it is asserted in Debug builds).
+//
+// We use macro definition instead of directly calling Validate function in order to be able to duplicate this definition list into 
+// a static enum definition in Settings.h which will be used for array access.
 void Settings::Validate(const bool addDefaults)
 {
+   #define SettingString(section, name, defVal, comment) RegisterStringSetting(section, name, defVal, addDefaults, comment);
+   #define SettingBool(section, name, defVal, comment) RegisterBoolSetting(section, name, defVal, addDefaults, comment);
+   #define SettingFloat(section, name, defVal, minVal, maxVal, comment) RegisterFloatSetting(section, name, defVal, minVal, maxVal, addDefaults, comment);
+   #define SettingInt(section, name, defVal, minVal, maxVal, comment) RegisterIntSetting(section, name, defVal, minVal, maxVal, addDefaults, comment);
+   
+   //////////////////////////////////////////////////////////////////////////
+   // Input section
+
+   SettingInt(Section::Player, "Exitconfirm"s, 120, 0, 30*60, "Length of a long ESC press that directly closes the app, (sadly) expressed in seconds * 60."s);
+   SettingBool(Section::Player, "PBWDefaultLayout"s, false, "Disable default layout of recognized Pincab controllers (DirectInput only)."s);
+   SettingBool(Section::Player, "DisableESC"s, false, "Disable ESC key as exit action button."s);
+
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eLeftFlipperKey], DIK_LSHIFT, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eRightFlipperKey], DIK_RSHIFT, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eStagedLeftFlipperKey], DIK_LWIN, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eStagedRightFlipperKey], DIK_RALT, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eLeftTiltKey], DIK_Z, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eRightTiltKey], DIK_SLASH, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eCenterTiltKey], DIK_SPACE, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::ePlungerKey], DIK_RETURN, 0x00, 0xFFFF, ""s);
+   #if !defined(__APPLE__) && !defined(__ANDROID__)
+      SettingInt(Section::Player, regkey_string[EnumAssignKeys::eFrameCount], DIK_F11, 0x00, 0xFFFF, ""s);
+   #else
+      SettingInt(Section::Player, regkey_string[EnumAssignKeys::eFrameCount], DIK_F1, 0x00, 0xFFFF, ""s);
+   #endif
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eDBGBalls], DIK_O, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eDebugger], DIK_D, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eAddCreditKey], DIK_5, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eAddCreditKey2], DIK_4, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eStartGameKey], DIK_1, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eMechanicalTilt], DIK_T, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eRightMagnaSave], DIK_RCONTROL, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eLeftMagnaSave], DIK_LCONTROL, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eExitGame], DIK_Q, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eVolumeUp], DIK_EQUALS, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eVolumeDown], DIK_MINUS, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eLockbarKey], DIK_LALT, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eEnable3D], DIK_F10, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eTableRecenter], DIK_NUMPAD5, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eTableUp], DIK_NUMPAD8, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eTableDown], DIK_NUMPAD2, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eEscape], DIK_ESCAPE, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::ePause], DIK_P, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eTweak], DIK_F12, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eBallHistoryMenu], DIK_C, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eBallHistoryRecall], DIK_R, 0x00, 0xFFFF, ""s);
+
+#ifdef ENABLE_SDL_INPUT
+   SettingInt(Settings::Player, "JoyLFlipKey"s, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER + 1, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyRFlipKey"s, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER + 1, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyStagedLFlipKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyStagedRFlipKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyLTiltKey"s, SDL_GAMEPAD_BUTTON_DPAD_LEFT + 1, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyRTiltKey"s, SDL_GAMEPAD_BUTTON_DPAD_RIGHT + 1, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyCTiltKey"s, SDL_GAMEPAD_BUTTON_DPAD_UP + 1, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyPlungerKey"s, SDL_GAMEPAD_BUTTON_DPAD_DOWN + 1, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyFrameCount"s, SDL_GAMEPAD_BUTTON_WEST + 1, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyDebugKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyDebuggerKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyAddCreditKey"s, SDL_GAMEPAD_BUTTON_SOUTH + 1, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyAddCredit2Key"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyStartGameKey"s, SDL_GAMEPAD_BUTTON_EAST + 1, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyMechTiltKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyRMagnaSave"s, SDL_GAMEPAD_BUTTON_RIGHT_STICK + 1, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyLMagnaSave"s, SDL_GAMEPAD_BUTTON_LEFT_STICK + 1, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyExitGameKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyVolumeUp"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyVolumeDown"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyLockbarKey"s, SDL_GAMEPAD_BUTTON_GUIDE + 1, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyTableRecenterKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyTableUpKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyTableDownKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyPauseKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyTweakKey"s, 0, 0x00, 0xFFFF, ""s);
+#else
+   SettingInt(Settings::Player, "JoyLFlipKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyRFlipKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyStagedLFlipKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyStagedRFlipKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyLTiltKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyRTiltKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyCTiltKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyPlungerKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyFrameCount"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyDebugKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyDebuggerKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyAddCreditKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyAddCredit2Key"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyStartGameKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyMechTiltKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyRMagnaSave"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyLMagnaSave"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyExitGameKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyVolumeUp"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyVolumeDown"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyLockbarKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyTableRecenterKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyTableUpKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyTableDownKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyPauseKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyTweakKey"s, 0, 0x00, 0xFFFF, ""s);
+#endif
+
+
+   //////////////////////////////////////////////////////////////////////////
+   // Rendering section
+
+   SettingFloat(Section::Player, "EmissionScale"s, 0.5f, 0.f, 1.f, ""s);
+   SettingInt(Section::Player, "MaxTexDimension"s, 0, 0, 16384, "Maximum texture dimension. Images sized above this limit will be automatically scaled down on load."s);
+
+
+   //////////////////////////////////////////////////////////////////////////
+   // VR Player section
+
+   SettingFloat(Settings::PlayerVR, "TableX"s, 0.f, -300.f, 300.f, "VR scene horizontal X offset (cm)."s);
+   SettingFloat(Settings::PlayerVR, "TableY"s, 0.f, -300.f, 300.f, "VR scene horizontal Y offset (cm)."s);
+   SettingFloat(Settings::PlayerVR, "TableZ"s, 0.f, -300.f, 300.f, "VR scene vertical offset (cm)s"s);
+
+
+   //////////////////////////////////////////////////////////////////////////
+   // Cabinet section
+
+   SettingFloat(Section::Player, "ScreenPlayerX"s, 0.f, -100.f, 100.f, ""s);
+   SettingFloat(Section::Player, "ScreenPlayerY"s, 0.f, -100.f, 100.f, ""s);
+   SettingFloat(Section::Player, "ScreenPlayerZ"s, 70.f, -100.f, 200.f, ""s);
+   SettingFloat(Section::Player, "ScreenWidth"s, 95.89f, 1.f, 500.f, "Physical width (cm) of the display area of the playfield (main) screen."s);
+   SettingFloat(Section::Player, "ScreenHeight"s, 53.94f, 1.f, 500.f, "Physical height (cm) of the display area of the playfield (main) screen."s);
+   SettingFloat(Section::Player, "ScreenInclination"s, 0.0f, -15.f, 15.f, "Inclination (degree) of the playfield (main) screen. 0 is horizontal."s);
+   SettingFloat(Section::Player, "LockbarWidth"s, 70.f, 10.f, 150.f, "Lockbar width in centimeters (measured on the cabinet)."s);
+   SettingFloat(Section::Player, "LockbarHeight"s, 85.f, 0.f, 250.f, "Lockbar height in centimeters (measured on the cabinet, from ground to top of lockbar)."s);
+
+
    //////////////////////////////////////////////////////////////////////////
    // ScoreView section
 
-   /* Validate(Section::DMD, "DMDOutput"s, 0, 0, 100, addDefaults);
-   Validate(Section::DMD, "DMDWndX"s, 0, -10000, 10000, addDefaults);
-   Validate(Section::DMD, "DMDWndY"s, 0, -10000, 10000, addDefaults);
-   Validate(Section::DMD, "DMDWidth"s, 512, 1, 16384, addDefaults);
-   Validate(Section::DMD, "DMDHeight"s, 128, 1, 16384, addDefaults);*/
+
+   //////////////////////////////////////////////////////////////////////////
+   // Playfield view section
+
+   SettingFloat(Section::Player, "MaxFramerate"s, -1.f, -1.f, 1000.f, "Maximum FPS of playfield view (minimum: 24FPS), 0 is unlimited, < 0 is limited to the display refresh rate."s);
+   SettingInt(Section::Player, "SyncMode"s, VSM_NONE, VSM_NONE, VSM_FRAME_PACING, "Hardware video sync mode to use: None / Vertical Sync / Adaptative Sync / Frame Pacing."s);
+
 
    //////////////////////////////////////////////////////////////////////////
    // DMD section
@@ -128,15 +284,16 @@ void Settings::Validate(const bool addDefaults)
       case 7: dotColor = 0x00FFFFFF; break; // Generic Led
       default: assert(false);
       }
-      Validate(Section::DMD, prefix + "Legacy",        i == 1, addDefaults);
-      Validate(Section::DMD, prefix + "ScaleFX",       false, addDefaults);
-      Validate(Section::DMD, prefix + "DotTint",       dotColor,   0x00000000, 0x00FFFFFF, addDefaults);
-      Validate(Section::DMD, prefix + "UnlitDotColor", 0x00404040, 0x00000000, 0x00FFFFFF, addDefaults);
-      Validate(Section::DMD, prefix + "DotBrightness", 25.0f,  0.001f, 100.f, addDefaults);
-      Validate(Section::DMD, prefix + "DotSize",       (i == 2 || i == 6) ? 0.6f : 0.75f,  0.001f, 1.f, addDefaults); // WPC & GTS3 Neon Plasma: 0.6, Stern Red LED: 0.75
-      Validate(Section::DMD, prefix + "DotSharpness",  0.90f, 0.f,    1.f, addDefaults);
-      Validate(Section::DMD, prefix + "DiffuseGlow",   0.10f, 0.f,    10.f, addDefaults);
+      SettingBool(Section::DMD, prefix + "Legacy",       i == 1, ""s);
+      SettingBool(Section::DMD, prefix + "ScaleFX",      false, ""s);
+      SettingInt(Section::DMD, prefix + "DotTint",       dotColor,   0x00000000, 0x00FFFFFF, ""s);
+      SettingInt(Section::DMD, prefix + "UnlitDotColor", 0x00404040, 0x00000000, 0x00FFFFFF, ""s);
+      SettingFloat(Section::DMD, prefix + "DotBrightness", 25.0f,  0.001f, 100.f, ""s);
+      SettingFloat(Section::DMD, prefix + "DotSize",       (i == 2 || i == 6) ? 0.6f : 0.75f,  0.001f, 1.f, ""s); // WPC & GTS3 Neon Plasma: 0.6, Stern Red LED: 0.75
+      SettingFloat(Section::DMD, prefix + "DotSharpness",  0.90f, 0.f, 1.f, ""s);
+      SettingFloat(Section::DMD, prefix + "DiffuseGlow",   0.10f, 0.f, 10.f, ""s);
    }
+
 
    //////////////////////////////////////////////////////////////////////////
    // Alpha segment section
@@ -159,11 +316,28 @@ void Settings::Validate(const bool addDefaults)
       case 8: color = 0x00FFFFFF; break; // Generic Led
       default: assert(false);
       }
-      Validate(Section::Alpha, prefix + "Color", color, 0x00000000, 0x00FFFFFF, addDefaults);
-      Validate(Section::Alpha, prefix + "Unlit", 0x00404040, 0x00000000, 0x00FFFFFF, addDefaults);
-      Validate(Section::Alpha, prefix + "Brightness", 5.0f, 0.001f, 100.f, addDefaults);
-      Validate(Section::Alpha, prefix + "DiffuseGlow", 1.0f, 0.f, 10.f, addDefaults);
+      SettingInt(Section::Alpha, prefix + "Color", color, 0x00000000, 0x00FFFFFF, ""s);
+      SettingInt(Section::Alpha, prefix + "Unlit", 0x00404040, 0x00000000, 0x00FFFFFF, ""s);
+      SettingFloat(Section::Alpha, prefix + "Brightness", 5.0f, 0.001f, 100.f, ""s);
+      SettingFloat(Section::Alpha, prefix + "DiffuseGlow", 1.0f, 0.f, 10.f, ""s);
    }
+
+
+   //////////////////////////////////////////////////////////////////////////
+   // Sound section
+
+   SettingInt(Settings::Player, "Sound3D"s, SoundConfigTypes::SNDCFG_SND3D2CH, SoundConfigTypes::SNDCFG_SND3D2CH, SoundConfigTypes::SNDCFG_SND3DSSF, ""s);
+
+
+   //////////////////////////////////////////////////////////////////////////
+   // Editor section
+
+   SettingBool(Settings::Editor, "EnableLog"s, true, "Enable general logging to the vinball.log file."s);
+
+   #undef SettingString
+   #undef SettingBool
+   #undef SettingFloat
+   #undef SettingInt
 }
 
 void Settings::ResetValue(const Section section, const string& key)
@@ -368,102 +542,75 @@ bool Settings::HasValue(const Section section, const string& key, const bool sea
    return hasInIni;
 }
 
-bool Settings::LoadValue(const Section section, const string &key, string &buffer) const
+#if 0
+bool Settings::LoadValue(const Section section, const string &key, void *const szbuffer, const size_t size) const
 {
-   DataType type = DT_SZ;
-   char szbuffer[MAXSTRING];
-   szbuffer[0] = '\0';
-   const bool success = LoadValue(section, key, type, szbuffer, MAXSTRING);
-   if (success)
-      buffer = szbuffer;
-   return success && (type == DT_SZ);
-}
+   if (size == 0)
+      return false;
 
-bool Settings::LoadValue(const Section section, const string &key, void *const szbuffer, const DWORD size) const
-{
-   if (size > 0) // clear string in case of reg value being set, but being null string which results in szbuffer being kept as-is
+   string val;
+   const bool success = LoadValue(section, key, val);
+   if (success)
+      strncpy_s((char *)szbuffer, size, val.c_str(), size - 1);
+   else
       ((char *)szbuffer)[0] = '\0';
-   DataType type = DT_SZ;
-   const bool success = LoadValue(section, key, type, szbuffer, size);
-   return success && (type == DT_SZ);
+
+   return success;
 }
+#endif
 
 bool Settings::LoadValue(const Section section, const string &key, float &pfloat) const
 {
-   DataType type = DT_SZ;
-   char szbuffer[16];
-   const bool success = LoadValue(section, key, type, szbuffer, sizeof(szbuffer));
-   if (!success || (type != DT_SZ))
+   string val;
+   if (!LoadValue(section, key, val))
       return false;
-   const int len = lstrlen(szbuffer);
-   if (len == 0)
-      return false;
-   char *const fo = strchr(szbuffer, ',');
-   if (fo != nullptr)
-      *fo = '.';
-   if (szbuffer[0] == '-')
-   {
-      if (len < 2)
-         return false;
-      pfloat = (float)atof(&szbuffer[1]);
-      pfloat = -pfloat;
-   }
-   else
-      pfloat = (float)atof(szbuffer);
+   pfloat = sz2f(val,true);
    return true;
 }
 
 bool Settings::LoadValue(const Section section, const string &key, int &pint) const
 {
-   DataType type = DT_DWORD;
-   const bool success = LoadValue(section, key, type, (void *)&pint, 4);
-   return success && (type == DT_DWORD);
-}
-
-bool Settings::LoadValue(const Section section, const string &key, unsigned int &pint) const
-{
-   DataType type = DT_DWORD;
-   const bool success = LoadValue(section, key, type, (void *)&pint, 4);
-   return success && (type == DT_DWORD);
-}
-
-bool Settings::LoadValue(const Section section, const string &key, DataType &type, void *pvalue, const DWORD size) const
-{
-   if (size == 0)
-   {
-      type = DT_ERROR;
+   unsigned int val;
+   if (!LoadValue(section, key, val))
       return false;
+   pint = val;
+   return true;
+}
+
+bool Settings::LoadValue(const Section section, const string &key, string &val) const
+{
+   const string value = m_ini.get(m_settingKeys[section]).get(key);
+   if (!value.empty())
+   {
+      val = value;
+      return true;
    }
 
-      const string value = m_ini.get(m_settingKeys[section]).get(key);
-      if (!value.empty())
-      {
-         // Value is empty (just a marker for text formatting), consider it as undefined
-         if (type == DT_SZ)
-         {
-            const DWORD len = (DWORD)value.length() + 1;
-            const DWORD len_min = min(len, size) - 1;
-            memcpy(pvalue, value.c_str(), len_min);
-            ((char *)pvalue)[len_min] = '\0';
-            return true;
-         }
-         else if (type == DT_DWORD)
-         {
-            *((DWORD *)pvalue) = (DWORD)atoll(value.c_str());
-            return true;
-         }
-         else
-         {
-            assert(!"Bad Type");
-            type = DT_ERROR;
-            return false;
-         }
-      }
+   if (m_parent != nullptr)
+      return m_parent->LoadValue(section, key, val);
+
+   return false;
+}
+
+bool Settings::LoadValue(const Section section, const string &key, unsigned int &val) const
+{
+   const string value = m_ini.get(m_settingKeys[section]).get(key);
+   if (!value.empty())
+   {
+      const char *const szp = value.c_str();
+      char *sze;
+      const unsigned int tmp = (unsigned int)std::strtoll(szp, &sze, 10);
+
+      if (szp == sze)
+         return false;
+
+      val = tmp;
+      return true;
+   }
 
    if (m_parent != nullptr)
-      return m_parent->LoadValue(section, key, type, pvalue, size);
+      return m_parent->LoadValue(section, key, val);
 
-   type = DT_ERROR;
    return false;
 }
 
@@ -499,16 +646,14 @@ string Settings::LoadValueWithDefault(const Section section, const string &key, 
    return LoadValue(section, key, val) ? val : def;
 }
 
-bool Settings::SaveValue(const Section section, const string &key, const DataType type, const void *pvalue, const DWORD size, const bool overrideMode)
+bool Settings::SaveValue(const Section section, const string &key, const string &val, const bool overrideMode)
 {
-   assert(type == DT_SZ || type == DT_DWORD);
-   if (key.empty() || (type != DT_SZ && type != DT_DWORD))
+   if (key.empty())
       return false;
-   const string copy = type == DT_SZ ? std::string((char*)pvalue) : std::to_string(*(DWORD *)pvalue);
    if (m_parent && overrideMode)
    {
       string value;
-      if (m_parent->LoadValue(section, key, value) && value == copy)
+      if (m_parent->LoadValue(section, key, value) && value == val)
       {
          // This is an override and it has the same value as parent: remove it and rely on parent
          if (m_ini.get(m_settingKeys[section]).has(key))
@@ -520,42 +665,36 @@ bool Settings::SaveValue(const Section section, const string &key, const DataTyp
       }
    }
    m_modified = true;
-   m_ini[m_settingKeys[section]][key] = copy;
+   m_ini[m_settingKeys[section]][key] = val;
    return true;
 }
 
 bool Settings::SaveValue(const Section section, const string &key, const bool val, const bool overrideMode)
 {
-   const DWORD dwval = val ? 1 : 0;
-   return SaveValue(section, key, DT_DWORD, &dwval, sizeof(DWORD), overrideMode);
+   return SaveValue(section, key, val ? "1"s : "0"s, overrideMode);
 }
 
 bool Settings::SaveValue(const Section section, const string &key, const int val, const bool overrideMode)
 {
-   return SaveValue(section, key, DT_DWORD, &val, sizeof(DWORD), overrideMode);
+   return SaveValue(section, key, std::to_string(val), overrideMode);
 }
 
 bool Settings::SaveValue(const Section section, const string &key, const unsigned int val, const bool overrideMode)
 {
-   return SaveValue(section, key, DT_DWORD, &val, sizeof(DWORD), overrideMode);
+   return SaveValue(section, key, std::to_string(val), overrideMode);
 }
 
 bool Settings::SaveValue(const Section section, const string &key, const float val, const bool overrideMode)
 {
-   char buf[16];
-   sprintf_s(buf, sizeof(buf), "%f", val);
-   return SaveValue(section, key, DT_SZ, buf, lstrlen(buf), overrideMode);
+   return SaveValue(section, key, f2sz(val,false), overrideMode);
 }
 
+#if 0
 bool Settings::SaveValue(const Section section, const string &key, const char *val, const bool overrideMode)
 {
-   return SaveValue(section, key, DT_SZ, val, lstrlen(val), overrideMode);
+   return SaveValue(section, key, string(val), overrideMode);
 }
-
-bool Settings::SaveValue(const Section section, const string &key, const string &val, const bool overrideMode)
-{
-   return SaveValue(section, key, DT_SZ, val.c_str(), (DWORD)val.length(), overrideMode);
-}
+#endif
 
 bool Settings::DeleteValue(const Section section, const string &key, const bool deleteFromParent)
 {

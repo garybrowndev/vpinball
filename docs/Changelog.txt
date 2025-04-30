@@ -13,18 +13,30 @@ FEATURES:
 
 - balls can now be created and edited directly from the editor like all other parts, and not only from the script
 
-- improved physics model for the emulated plumb tilt. Its settings will need to be adjusted either through the main editor or using the LiveUI which as a dedicated UI for it.
+- improved physics model for the emulated plumb tilt. Its settings will need to be adjusted either through the main editor, or using the LiveUI which has a dedicated UI for it with live feedback.
+  For the time being, there are 3 models available for nudge simulation (from keyboard or the cabinet sensor)
+   1. Legacy nudge
+      - Perform a keyboard nudge by applying a force directly to the balls, first in the forward direction, then, after a little while, in the opposite direction
+      - No hardware nudging support
+   2. Acceleration based nudge
+      - Perform a keyboard nudge by applying an impulse to a physics model of the cabinet (spring-mass model)
+      - Acquire cabinet acceleration from sensor and apply it directly to balls
+   3. Velocity based nudge
+      - Perform a keyboard nudge by applying an impulse to a physics model of the cabinet (spring-mass model)
+      - Acquire cabinet velocity from sensor and apply it to the physics model of the cabinet (same spring-mass model as for the keyboard nudge)
 
 - add a new flavor of VPX named 'BGFX'. This flavor uses the BGFX library to interface with all the latest rendering backends (Vulkan, Metal, DirectX11/12, OpenGL,...) with some unique benefits:
   . it supports Variable Refresh Rate display (when VSync is switched off)
-  . it uses multiple CPU cores to separately process the rendering from the game simulation, allowing for lower input latency, more stable gameplay emulation, as well as a performance boost
+  . it uses multiple CPU cores to separately process the rendering from the game simulation, allowing for lower input/physics/controller latency, more stable gameplay emulation, as well as a performance boost
   . it supports rendering to multiple outputs (windows)
 
-- add a new 'DMD view' which renders the virtual DMD to a dedicated window (BGFX variant only)
+- add a new 'ScoreView' which renders the segment displays or DMD to a dedicated window (BGFX variant only). The scoreview uses a layout defined in a 'scv' file placed along the table file
+  matching its name, or by automatically selecting one of the default layouts matching the available displays at runtime. Default layout files in the asset folder show the syntax used to
+  define the layout.
 
 - add 'raytraced' ball motion blur (BGFX only)
 
-- add Wide Color Gamut output (a.k.a. HDR display) support (BGFX using DirextX output only)
+- add Wide Color Gamut output (a.k.a. HDR display) support (BGFX using DirectX output only):
   this comes with an additional video preference option to ignore all tonemappers in order to fully exploit the high dynamic range
   and an additional global exposure scale multiplier to adapt to the display capabilities
   (note that one should use Windows 11 and the MS HDR calibration tool for best results with optimal range)
@@ -36,6 +48,35 @@ FEATURES:
    One can select any row of the listview and click a button on the dialog labeled 'Edit Control' and it will place
    that table object into the 'Properties' editor dialog for you.
 
+- VR was rewritten to use OpenXR instead of OpenVR (OpenVR is still available when using the VPX OpenGL variant, but is deprecated and will be removed in future
+  versions, as it relies on deprecated components and has a few known bugs that won't be solved, like in game UI, invalid colorspace,...). OpenXR is automatically used
+  in the BGFX variant. It comes with the following improvements:
+  . it should work with any OpenXR backend (Virtual Desktop, SteamVR, Meta Quest Link, ...),
+  . correct colorspace for all headsets (no more washed out colors that needed hacks),
+  . support for color keyed passthrough mode (for example using Virtual Desktop),
+  . implement OpenXR latency reduction framework:
+    - by taking into account the headset latency when rendering,
+    - by providing the headset with information for live reprojection (depth data),
+  . integrate VR with VPX's TweakUI, which allows to adjust all settings in-game using the usual pinball controls, also supporting continuous recentering by
+    keeping the 'reset' button pressed.
+
+- number of layers is not limited anymore. Layers can also be nested and they now feature properties:
+  . a visibility mask, that allows to filter on which output, or VR mode layers are active (playfield, virtual reality, mixed reality, ...)
+  . a space reference, to ease virtual/mixed reality support:
+    - 'playfield' is the default space reference, and is the only one where parts contribute to physics simulation, it corresponds to the usual playfield.
+    - 'room' is tied to the real world room, it is not scaled or inclined like playfield, and should be used for the VR room.
+    - 'cabinet' is tied to the real world cabinet, it is not inclined like playfield but it is scaled and height offseted to match the real world cabinet.
+    - 'cabinet feet' is tied to the real world cabinet feet, unlike 'cabinet' it is not height offseted, allowing to keep the cabinet's feet on the real room ground.
+
+- flashers have been improved:
+  . these now feature advanced options for rendering DMD, segments and video displays. The rendering mode between these can be selected in the part properties,
+    then each mode has its own rendering options:
+    The display rendering mode is designed the same for the 3 supported sources (DMD, segments, video). It
+    consists of a light source with an optional glass above it. A render profile for the light source corresponding to the physical part (Neon Plasma DMD,
+    VFD segment display, CRT video, ...) needs to be chosen. A few options allow to setup the glass tint/roughness and the position of the light source
+    beneath it. Segment display flashers are 'max blended' to support overlapping without graphical glitches.
+  . flashers may now be placed on the desktop backdrop, deprecating the use of a textbox for DMD rendering on the desktop backdrop.
+
 FIXES:
 
 - fix 0-scaled rubber crash (like it can happen if invalid UI-inputs like 'Scale' are mapped to 0)
@@ -43,18 +84,23 @@ FIXES:
 - export of a sound from the sound manager will now export the sound file as-is (without adding a wave header in front of non-WAV files)
 - fix wrong/too-loud volume for the test play in the sound manager
 
+- respect the decimal point locale in more UI editboxes (e.g. video/vr/physics preferences)
+  and be more robust against wrong inputs (including the .ini files)
+
 - note that the support for ancient windows versions (e.g. Windows XP) for the DX9 build has been removed in order to be able to use newer compilers
 - due to this, VPX now allows to use the C++20 language feature set, which means that the windows build system requires Visual Studio 2019 or newer
 
 - SDL2 code was updated and modernized to SDL3
 
-- the BASS sound engine was replaced/unified with SDL3(_mixer)
+- the BASS sound engine was replaced/unified with SDL3(_mixer), fixing pitch/volume adjustment of 'ogg' files.
+  As a consequence 'ogg' files should now be favored over legacy 'wav'.
 
 - DirectX 8 port for input handling (currently disabled)
 
 - see Changelog_Scripts.txt for the respective core script changes (version 3.62)
 - see CommandReference.txt for the changelog of all the scripting properties/interface changes
 - see Scripts.txt for the actual usage and "documentation" of the scripts that come with VPX
+
 
 VP 10.8.0 Changelog
 ------------------------

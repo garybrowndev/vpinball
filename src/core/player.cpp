@@ -15,13 +15,14 @@
 
 #ifdef __STANDALONE__
 #include "standalone/Standalone.h"
-#include <map>
+#include "unordered_dense.h"
 #endif
 
 #ifdef __LIBVPINBALL__
 #include "standalone/VPinballLib.h"
 #endif
 
+#include <iomanip>
 #include <ctime>
 #include <fstream>
 #include <sstream>
@@ -35,7 +36,9 @@
 #include "renderer/captureExt.h"
 #endif
 #ifdef _MSC_VER
+#if !defined(ENABLE_SDL_VIDEO)
 #include "winsdk/legacy_touch.h"
+#endif
 // Used to log which program steals the focus from VPX
 #include "psapi.h"
 #pragma comment(lib, "Psapi")
@@ -53,14 +56,6 @@
 #include <cvmarkersobj.h>
 using namespace Concurrency::diagnostic;
 extern marker_series series;
-#endif
-
-#if !defined(__clang__)
-#define stable_sort std::ranges::stable_sort
-#define sort std::ranges::sort
-#else
-#define stable_sort std::stable_sort
-#define sort std::sort
 #endif
 
 //
@@ -142,11 +137,7 @@ LRESULT CALLBACK PlayerWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
                      g_pplayer->m_ptable->mViewSetups[g_pplayer->m_ptable->m_BG_current_set].GetRotation(g_pplayer->m_playfieldWnd->GetWidth(), g_pplayer->m_playfieldWnd->GetHeight()) != 0.f))
                {
                   g_pplayer->m_touchregion_pressed[i] = (uMsg == WM_POINTERDOWN);
-
-                  DIDEVICEOBJECTDATA didod;
-                  didod.dwOfs = g_pplayer->m_rgKeys[touchkeymap[i]];
-                  didod.dwData = g_pplayer->m_touchregion_pressed[i] ? 0x80 : 0;
-                  g_pplayer->m_pininput.PushQueue(&didod, APP_TOUCH /*, curr_time_msec*/);
+                  g_pplayer->m_pininput.PushActionEvent(touchActionMap[i], g_pplayer->m_touchregion_pressed[i]);
                }
          }
       }
@@ -210,17 +201,8 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    }
 #endif
 
-   for (int i = 0; i < PININ_JOYMXCNT; ++i)
-   {
-      m_curAccel[i] = int2(0, 0);
-      m_curPlunger[i] = 0;
-      m_curPlungerSpeed[i] = 0;
-   }
-
    m_plungerSpeedScale = 1.0f;
    m_curMechPlungerPos = 0;
-   m_curMechPlungerSpeed = 0;
-   m_fExtPlungerSpeed = false;
 
    m_plungerSpeedScale = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "PlungerSpeedScale"s, 100.0f) / 100.0f;
    if (m_plungerSpeedScale <= 0.0f)
@@ -298,8 +280,7 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    PLOGI << "Creating main window"; // For profiling
    {
       #if defined(_MSC_VER) && !defined(__STANDALONE__)
-         WNDCLASS wc;
-         ZeroMemory(&wc, sizeof(wc));
+         WNDCLASS wc = {};
          wc.hInstance = g_pvp->theInstance;
          #ifndef ENABLE_SDL_VIDEO
          wc.lpfnWndProc = PlayerWindowProc;
@@ -320,36 +301,35 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
       m_playfieldWnd = new VPX::Window(WIN32_WND_TITLE, stereo3D == STEREO_VR ? Settings::PlayerVR : Settings::Player, stereo3D == STEREO_VR ? "Preview" : "Playfield");
 
       float pfRefreshRate = m_playfieldWnd->GetRefreshRate(); 
-      m_maxFramerate = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "MaxFramerate"s, -1.f);
+      m_maxFramerate = m_ptable->m_settings.LoadValueFloat(Settings::Player, "MaxFramerate"s);
       if(m_maxFramerate > 0.f && m_maxFramerate < 24.f) // at least 24 fps
          m_maxFramerate = 24.f;
-      m_videoSyncMode = (VideoSyncMode)m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "SyncMode"s, VSM_INVALID);
-      if (m_maxFramerate < 0 && m_videoSyncMode == VideoSyncMode::VSM_INVALID)
-      {
-         const int vsync = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "AdaptiveVSync"s, -1);
-         switch (vsync)
-         {
-         case -1: m_maxFramerate = pfRefreshRate; m_videoSyncMode = VideoSyncMode::VSM_FRAME_PACING; break;
-         case  0: m_maxFramerate = pfRefreshRate; m_videoSyncMode = VideoSyncMode::VSM_NONE; break;
-         case  1: m_maxFramerate = pfRefreshRate; m_videoSyncMode = VideoSyncMode::VSM_VSYNC; break;
-         case  2: m_maxFramerate = pfRefreshRate; m_videoSyncMode = VideoSyncMode::VSM_ADAPTIVE_VSYNC; break;
-         default: m_maxFramerate = pfRefreshRate; m_videoSyncMode = VideoSyncMode::VSM_ADAPTIVE_VSYNC; break;
-         }
-      }
-      if (m_videoSyncMode == VideoSyncMode::VSM_INVALID)
-         m_videoSyncMode = VideoSyncMode::VSM_FRAME_PACING;
       if (m_maxFramerate < 0.f) // Negative is display refresh rate
          m_maxFramerate = pfRefreshRate;
       if (m_maxFramerate == 0.f) // 0 is unbound refresh rate
          m_maxFramerate = 10000.f;
-      if (m_videoSyncMode != VideoSyncMode::VSM_NONE && m_maxFramerate > pfRefreshRate)
-         m_maxFramerate = pfRefreshRate;
+      m_videoSyncMode = static_cast<VideoSyncMode>(m_ptable->m_settings.LoadValueUInt(Settings::Player, "SyncMode"s));
+      if (m_videoSyncMode != VideoSyncMode::VSM_NONE)
+      {
+         if (m_maxFramerate > pfRefreshRate)
+            // User requested a max framerate above display rate but using VSync => limit to display refresh rate
+            m_maxFramerate = pfRefreshRate;
+         else if (m_maxFramerate < pfRefreshRate)
+         {
+            // User requested a max framerate below display rate but using VSync => limit to an integral division of the display refresh rate (keeping the FPS above 24FPS)
+            float divider = 1.f;
+            while ((m_maxFramerate * divider > pfRefreshRate) && (24.f * divider <= pfRefreshRate))
+               divider += 1.f;
+            m_maxFramerate = pfRefreshRate / divider;
+         }
+      }
       if (stereo3D == STEREO_VR)
       {
          // Disable VSync for VR (sync is performed by the OpenVR runtime)
          m_videoSyncMode = VideoSyncMode::VSM_NONE;
          m_maxFramerate = 10000.f;
       }
+      assert(24.f <= m_maxFramerate && m_maxFramerate <= 10000.f); // We guarantee a target framerate from 24 FPS to unbound, expressed as 10000 FPS
       PLOGI << "Synchronization mode: " << m_videoSyncMode << " with maximum FPS: " << m_maxFramerate << ", display FPS: " << pfRefreshRate;
    }
 
@@ -444,13 +424,7 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    m_progressDialog.SetProgress("Initializing Visuals..."s, 10);
 
    for(unsigned int i = 0; i < eCKeys; ++i)
-   {
-      int key;
-      const bool hr = m_ptable->m_settings.LoadValue(Settings::Player, regkey_string[i], key);
-      if (!hr || key > 0xdd)
-          key = regkey_defdik[i];
-      m_rgKeys[i] = (EnumAssignKeys)key;
-   }
+      m_rgKeys[i] = m_ptable->m_settings.LoadValueInt(Settings::Player, regkey_string[i]);
 
    m_PlayMusic = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "PlayMusic"s, true);
    m_PlaySound = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "PlaySound"s, true);
@@ -508,12 +482,10 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
 
    PLOGI << "Initializing inputs & implicit objects"; // For profiling
 
-   m_pininput.LoadSettings(m_ptable->m_settings);
    #ifdef _WIN32
-      m_pininput.Init(m_playfieldWnd->GetNativeHWND());
-   #else
-      m_pininput.Init();
+      m_pininput.SetFocusWindow(m_playfieldWnd->GetNativeHWND());
    #endif
+   m_pininput.Init();
 
 #ifndef __STANDALONE__
    const unsigned int lflip = get_vk(m_rgKeys[eLeftFlipperKey]);
@@ -553,8 +525,6 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    m_renderer->m_renderDevice->CopyRenderStates(false, state);
    m_renderer->m_renderDevice->SetDefaultRenderState();
    m_renderer->InitLayout();
-
-   m_accelerometer = Vertex2D(0.f, 0.f);
 
    Ball::ResetBallIDCounter();
 
@@ -648,7 +618,7 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
             std::ifstream myFile(path);
             buffer << myFile.rdbuf();
             myFile.close();
-            auto xml = buffer.str();
+            const string xml = buffer.str();
             tinyxml2::XMLDocument xmlDoc;
             if (xmlDoc.Parse(xml.c_str()) == tinyxml2::XML_SUCCESS)
             {
@@ -680,25 +650,23 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    PLOGI << "Initializing renderer"; // For profiling
    m_progressDialog.SetProgress("Initializing Renderer..."s, 60);
 
-   m_renderer->m_render_mask = m_vrDevice ? Renderer::DISABLE_BACKDROP : Renderer::DEFAULT;
-
-   // Start the frame.
+   // Setup rendering and timers
    for (RenderProbe *probe : m_ptable->m_vrenderprobe)
       probe->RenderSetup(m_renderer);
    for (auto editable : m_ptable->m_vedit)
       if (editable->GetIHitable())
-         m_vhitables.push_back(editable->GetIHitable());
-   for (Hitable *hitable : m_vhitables)
+         m_vhitables.push_back(editable);
+   for (IEditable *hitable : m_vhitables)
    {
-      hitable->TimerSetup(m_vht);
-      hitable->RenderSetup(m_renderer->m_renderDevice);
-      if (hitable->HitableGetItemType() == ItemTypeEnum::eItemBall)
-         m_vball.push_back(&((Ball*)hitable)->m_hitBall);
+      hitable->GetIHitable()->TimerSetup(m_vht);
+      hitable->GetIHitable()->RenderSetup(m_renderer->m_renderDevice);
+      if (hitable->GetItemType() == ItemTypeEnum::eItemBall)
+         m_vball.push_back(&static_cast<Ball *>(hitable)->m_hitBall);
    }
 
    // Setup anisotropic filtering
    const bool forceAniso = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "ForceAnisotropicFiltering"s, true);
-   m_renderer->m_renderDevice->SetMainTextureDefaultFiltering(forceAniso ? SF_ANISOTROPIC : SF_TRILINEAR);
+   RenderDevice::SetMainTextureDefaultFiltering(forceAniso ? SF_ANISOTROPIC : SF_TRILINEAR);
 
    #if defined(EXT_CAPTURE)
    if (m_renderer->m_stereo3D == STEREO_VR)
@@ -724,25 +692,23 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
 
       // Fire Init event for table object and all 'hitable' parts, also fire Animate event of parts having it since initial setup is considered as the initial animation event
       m_ptable->FireVoidEvent(DISPID_GameEvents_Init);
-      for (Hitable *const ph : m_vhitables)
+      for (IEditable *const ph : m_vhitables)
       {
-         if (ph->GetEventProxyBase())
+         if (ph->GetIHitable()->GetEventProxyBase())
          {
-            ph->GetEventProxyBase()->FireVoidEvent(DISPID_GameEvents_Init);
-            ItemTypeEnum type = ph->HitableGetItemType();
+            ph->GetIHitable()->GetEventProxyBase()->FireVoidEvent(DISPID_GameEvents_Init);
+            ItemTypeEnum type = ph->GetItemType();
             if (type == ItemTypeEnum::eItemBumper || type == ItemTypeEnum::eItemDispReel || type == ItemTypeEnum::eItemFlipper || type == ItemTypeEnum::eItemGate
                || type == ItemTypeEnum::eItemHitTarget || type == ItemTypeEnum::eItemLight || type == ItemTypeEnum::eItemSpinner || type == ItemTypeEnum::eItemTrigger)
-               ph->GetEventProxyBase()->FireVoidEvent(DISPID_AnimateEvents_Animate);
+               ph->GetIHitable()->GetEventProxyBase()->FireVoidEvent(DISPID_AnimateEvents_Animate);
          }
       }
-      m_ptable->FireKeyEvent(DISPID_GameEvents_OptionEvent, 0 /* custom option init event */);
+      m_ptable->FireOptionEvent(0); // Custom option init event
       m_ptable->FireVoidEvent(DISPID_GameEvents_Paused);
    }
 
    // Initialize stereo rendering
    m_renderer->UpdateStereoShaderState();
-
-   ReadAccelerometerCalibration();
 
 #ifdef PLAYBACK
    if (m_playback)
@@ -756,19 +722,19 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    m_BallHistory.Init(*this, 0, true);
 
    // Signal plugins before performing static prerendering. The only thing not fully initialized is the physics (is this ok ?)
-   m_getDmdSrcMsgId = VPXPluginAPIImpl::GetInstance().GetMsgID(CTLPI_NAMESPACE, CTLPI_GETDMD_SRC_MSG);
-   m_getDmdMsgId = VPXPluginAPIImpl::GetInstance().GetMsgID(CTLPI_NAMESPACE, CTLPI_GETDMD_RENDER_MSG);
-   m_onDmdChangedMsgId = VPXPluginAPIImpl::GetInstance().GetMsgID(CTLPI_NAMESPACE, CTLPI_ONDMD_SRC_CHG_MSG);
+   m_getDmdSrcMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_GETDMD_SRC_MSG);
+   m_getDmdMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_GETDMD_RENDER_MSG);
+   m_onDmdChangedMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_ONDMD_SRC_CHG_MSG);
    MsgPluginManager::GetInstance().GetMsgAPI().SubscribeMsg(VPXPluginAPIImpl::GetInstance().GetVPXEndPointId(), m_onDmdChangedMsgId, OnDmdChanged, this);
-   m_getSegSrcMsgId = VPXPluginAPIImpl::GetInstance().GetMsgID(CTLPI_NAMESPACE, CTLPI_GETSEG_SRC_MSG);
-   m_getSegMsgId = VPXPluginAPIImpl::GetInstance().GetMsgID(CTLPI_NAMESPACE, CTLPI_GETSEG_MSG);
-   m_onSegChangedMsgId = VPXPluginAPIImpl::GetInstance().GetMsgID(CTLPI_NAMESPACE, CTLPI_ONSEG_SRC_CHG_MSG);
+   m_getSegSrcMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_GETSEG_SRC_MSG);
+   m_getSegMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_GETSEG_MSG);
+   m_onSegChangedMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_ONSEG_SRC_CHG_MSG);
    MsgPluginManager::GetInstance().GetMsgAPI().SubscribeMsg(VPXPluginAPIImpl::GetInstance().GetVPXEndPointId(), m_onSegChangedMsgId, OnSegChanged, this);
-   m_onAudioUpdatedMsgId = VPXPluginAPIImpl::GetInstance().GetMsgID(CTLPI_NAMESPACE, CTLPI_ONAUDIO_UPDATE_MSG);
+   m_onAudioUpdatedMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_ONAUDIO_UPDATE_MSG);
    MsgPluginManager::GetInstance().GetMsgAPI().SubscribeMsg(VPXPluginAPIImpl::GetInstance().GetVPXEndPointId(), m_onAudioUpdatedMsgId, OnAudioUpdated, this);
-   m_onGameStartMsgId = VPXPluginAPIImpl::GetInstance().GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_GAME_START);
+   m_onGameStartMsgId = VPXPluginAPIImpl::GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_GAME_START);
    VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(m_onGameStartMsgId, nullptr);
-   m_onPrepareFrameMsgId = VPXPluginAPIImpl::GetInstance().GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_PREPARE_FRAME);
+   m_onPrepareFrameMsgId = VPXPluginAPIImpl::GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_PREPARE_FRAME);
 
    m_scoreView.Select(m_scoreviewOutput);
 
@@ -784,7 +750,7 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    #if defined(ENABLE_BGFX)
    m_renderer->m_renderDevice->m_frameMutex.lock();
    #endif
-   m_renderer->RenderStaticPrepass();
+   m_renderer->RenderFrame();
    #if defined(ENABLE_BGFX)
    m_renderer->m_renderDevice->m_frameMutex.unlock();
    #endif
@@ -872,7 +838,7 @@ Player::~Player()
 #endif
 
    // Signal plugins early since most fields will become invalid
-   const unsigned int onGameEndMsgId = VPXPluginAPIImpl::GetInstance().GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_GAME_END);
+   const unsigned int onGameEndMsgId = VPXPluginAPIImpl::GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_GAME_END);
    VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(onGameEndMsgId, nullptr);
 
    // signal the script that the game is now exited to allow any cleanup
@@ -888,18 +854,18 @@ Player::~Player()
 
    // Release plugin message Ids
    MsgPluginManager::GetInstance().GetMsgAPI().UnsubscribeMsg(m_onSegChangedMsgId, OnSegChanged);
-   VPXPluginAPIImpl::GetInstance().ReleaseMsgID(m_onSegChangedMsgId);
-   VPXPluginAPIImpl::GetInstance().ReleaseMsgID(m_getSegSrcMsgId);
-   VPXPluginAPIImpl::GetInstance().ReleaseMsgID(m_getSegMsgId);
+   VPXPluginAPIImpl::ReleaseMsgID(m_onSegChangedMsgId);
+   VPXPluginAPIImpl::ReleaseMsgID(m_getSegSrcMsgId);
+   VPXPluginAPIImpl::ReleaseMsgID(m_getSegMsgId);
    MsgPluginManager::GetInstance().GetMsgAPI().UnsubscribeMsg(m_onDmdChangedMsgId, OnDmdChanged);
-   VPXPluginAPIImpl::GetInstance().ReleaseMsgID(m_onDmdChangedMsgId);
-   VPXPluginAPIImpl::GetInstance().ReleaseMsgID(m_getDmdSrcMsgId);
-   VPXPluginAPIImpl::GetInstance().ReleaseMsgID(m_getDmdMsgId);
+   VPXPluginAPIImpl::ReleaseMsgID(m_onDmdChangedMsgId);
+   VPXPluginAPIImpl::ReleaseMsgID(m_getDmdSrcMsgId);
+   VPXPluginAPIImpl::ReleaseMsgID(m_getDmdMsgId);
    MsgPluginManager::GetInstance().GetMsgAPI().UnsubscribeMsg(m_onAudioUpdatedMsgId, OnAudioUpdated);
-   VPXPluginAPIImpl::GetInstance().ReleaseMsgID(m_onAudioUpdatedMsgId);
-   VPXPluginAPIImpl::GetInstance().ReleaseMsgID(m_onGameStartMsgId);
-   VPXPluginAPIImpl::GetInstance().ReleaseMsgID(onGameEndMsgId);
-   VPXPluginAPIImpl::GetInstance().ReleaseMsgID(m_onPrepareFrameMsgId);
+   VPXPluginAPIImpl::ReleaseMsgID(m_onAudioUpdatedMsgId);
+   VPXPluginAPIImpl::ReleaseMsgID(m_onGameStartMsgId);
+   VPXPluginAPIImpl::ReleaseMsgID(onGameEndMsgId);
+   VPXPluginAPIImpl::ReleaseMsgID(m_onPrepareFrameMsgId);
 
    // Save list of used textures to avoid stuttering in next play
    if ((m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "CacheMode"s, 1) > 0) && FileExists(m_ptable->m_szFileName))
@@ -909,15 +875,15 @@ Player::~Player()
 
       tinyxml2::XMLDocument xmlDoc;
       tinyxml2::XMLElement* root;
-      std::map<string, tinyxml2::XMLElement*> textureAge;
-      string path = dir + "used_textures.xml";
+      ankerl::unordered_dense::map<string, tinyxml2::XMLElement*> textureAge;
+      const string path = dir + "used_textures.xml";
       if (FileExists(path))
       {
          std::ifstream myFile(path);
          std::stringstream buffer;
          buffer << myFile.rdbuf();
          myFile.close();
-         auto xml = buffer.str();
+         const string xml = buffer.str();
          if (xmlDoc.Parse(xml.c_str()) == tinyxml2::XML_SUCCESS)
          {
             vector<tinyxml2::XMLElement *> toRemove;
@@ -928,9 +894,10 @@ Player::~Player()
                const char *name = node->GetText();
                if (name)
                {
-                  if (textureAge.count(name) == 1)
-                     toRemove.push_back(textureAge[name]);
-                  textureAge[name] = node;
+                  const string name_s = name;
+                  if (textureAge.count(name_s) == 1)
+                     toRemove.push_back(textureAge[name_s]);
+                  textureAge[name_s] = node;
                   if (node->QueryIntAttribute("age", &age) == tinyxml2::XML_SUCCESS)
                      node->SetAttribute("age", age + 1);
                   else
@@ -1032,9 +999,9 @@ Player::~Player()
    for (auto probe : m_ptable->m_vrenderprobe)
       probe->RenderRelease();
    for (auto renderable : m_vhitables)
-      renderable->RenderRelease();
+      renderable->GetIHitable()->RenderRelease();
    for (auto hitable : m_vhitables)
-      hitable->TimerRelease();
+      hitable->GetIHitable()->TimerRelease();
    assert(m_vballDelete.empty());
    m_vball.clear();
 
@@ -1425,74 +1392,6 @@ void Player::ApplyDeferredTimerChanges()
 
 #pragma region Physics
 
-void Player::ReadAccelerometerCalibration()
-{
-   m_accelerometerEnabled = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "PBWEnabled"s, true); // true if electronic accelerometer enabled
-   m_accelerometerFaceUp = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "PBWNormalMount"s, true); // true is normal mounting (left hand coordinates)
-
-   m_accelerometerAngle = 0.0f; // 0 degrees rotated counterclockwise (GUI is lefthand coordinates)
-   const bool accel = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "PBWRotationCB"s, false);
-   if (accel)
-      m_accelerometerAngle = (float)m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "PBWRotationValue"s, 0);
-
-   m_accelerometerSensitivity = clamp((float)m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "NudgeSensitivity"s, 500) * (float)(1.0/1000.0), 0.f, 1.f);
-
-   m_accelerometerMax.x = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "PBWAccelMaxX"s, 100) * JOYRANGEMX / 100;
-   m_accelerometerMax.y = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "PBWAccelMaxY"s, 100) * JOYRANGEMX / 100;
-   m_accelerometerGain.x = dequantizeUnsignedPercentNoClamp(m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "PBWAccelGainX"s, 150));
-   m_accelerometerGain.y = dequantizeUnsignedPercentNoClamp(m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "PBWAccelGainY"s, 150));
-
-   m_pininput.LoadSettings(m_ptable->m_settings);
-}
-
-void Player::SetNudgeX(const int x, const int joyidx)
-{
-   m_accelerometerDirty |= m_accelerometerEnabled;
-   m_curAccel[joyidx].x = clamp(x, -m_accelerometerMax.x, m_accelerometerMax.x);
-}
-
-void Player::SetNudgeY(const int y, const int joyidx)
-{
-   m_accelerometerDirty |= m_accelerometerEnabled;
-   m_curAccel[joyidx].y = clamp(y, -m_accelerometerMax.y, m_accelerometerMax.y);
-}
-
-const Vertex2D& Player::GetRawAccelerometer() const
-{
-   if (m_accelerometerDirty)
-   {
-      m_accelerometerDirty = false;
-      m_accelerometer = Vertex2D(0.f, 0.f); 
-      if (m_accelerometerEnabled)
-      {
-         // accumulate over joysticks, these acceleration values are used in update ball velocity calculations
-         // and are required to be acceleration values (not velocity or displacement)
-
-         // rotate to match hardware mounting orientation, including left or right coordinates
-         const float a = ANGTORAD(m_accelerometerAngle);
-         const float cna = cosf(a);
-         const float sna = sinf(a);
-
-         for (int j = 0; j < m_pininput.m_num_joy; ++j)
-         {
-            // Scale to normalized float range, -1.0f..+1.0f
-            // NOTE! The normalization factor assumes that the input axis is
-            // symmetrical across its positive and negative extent, which is
-            // to say, JOYRANGMX == -JOYRANGEMN (thus the assertion).
-            static_assert(JOYRANGEMN == -JOYRANGEMX);
-            float dx = ((float)m_curAccel[j].x)*(float)(1.0 / JOYRANGEMX);
-            const float dy = ((float)m_curAccel[j].y)*(float)(1.0 / JOYRANGEMX);
-            if (m_ptable->m_tblMirrorEnabled)
-               dx = -dx;
-            m_accelerometer.x += m_accelerometerGain.x * (dx * cna + dy * sna) * (1.0f - m_accelerometerSensitivity); // calc Green's transform component for X
-            const float nugY   = m_accelerometerGain.y * (dy * cna - dx * sna) * (1.0f - m_accelerometerSensitivity); // calc Green's transform component for Y
-            m_accelerometer.y += m_accelerometerFaceUp ? nugY : -nugY; // add as left or right hand coordinate system
-         }
-      }
-   }
-   return m_accelerometer;
-}
-
 #ifdef UNUSED_TILT
 int Player::NudgeGetTilt()
 {
@@ -1546,17 +1445,9 @@ static constexpr float IIR_b[IIR_Order + 1] = {
    -1.0546654f,
    0.1873795f };
 
-void Player::MechPlungerUpdate()   // called on every integral physics frame, only really triggered if before MechPlungerIn() was called, which again relies on USHOCKTYPE_GENERIC,USHOCKTYPE_ULTRACADE,USHOCKTYPE_PBWIZARD,USHOCKTYPE_VIRTUAPIN,USHOCKTYPE_SIDEWINDER being used
+// called on every integral physics frame, only really triggered if before MechPlungerIn() was called, which again relies on an hardware device being used
+void Player::MechPlungerUpdate()
 {
-   // if we're receiving speed inputs, take a current snapshot
-   if (m_fExtPlungerSpeed)
-   {
-      // compute the sum over joysticks
-      m_curMechPlungerSpeed = 0;
-      for (int i = 0; i < PININ_JOYMXCNT; ++i)
-         m_curMechPlungerSpeed += m_curPlungerSpeed[i];
-   }
-
    static int init = IIR_Order; // first time call
    static float x[IIR_Order + 1] = { 0, 0, 0, 0, 0 };
    static float y[IIR_Order + 1] = { 0, 0, 0, 0, 0 };
@@ -1565,7 +1456,8 @@ void Player::MechPlungerUpdate()   // called on every integral physics frame, on
    // (this applet is set to 8000Hz sample rate, therefore, multiply ...
    // our values by 80 to shift sample clock of 100hz to 8000hz)
 
-   if (m_movedPlunger < 3)
+   m_plungerUpdateCount++;
+   if (m_plungerUpdateCount <= 3)
    {
       init = IIR_Order;
       m_curMechPlungerPos = 0;
@@ -1573,9 +1465,7 @@ void Player::MechPlungerUpdate()   // called on every integral physics frame, on
    }
 
    // get the sum of current plunger inputs across joysticks
-   float curPos = 0;
-   for (int i = 0; i < PININ_JOYMXCNT; ++i)
-      curPos += (float)m_curPlunger[i];
+   float curPos = m_pininput.GetPlungerPos();
 
    if (!m_ptable->m_plungerFilter)
    {
@@ -1601,143 +1491,9 @@ void Player::MechPlungerUpdate()   // called on every integral physics frame, on
    m_curMechPlungerPos = y[0];
 }
 
-int Player::GetMechPlungerSpeed() const 
+float Player::GetMechPlungerSpeed() const 
 { 
-    return m_curMechPlungerSpeed; 
-}
-
-// MechPlunger NOTE: Normalized position is from 0.0 to +1.0f
-// +1.0 is fully retracted, 0.0 is all the way forward.
-//
-// The traditional normalization formula requires the user to calibrate the plunger in the
-// system joystick control panel (on Windows, JOY.CPL, "Set up USB Game Controllers").  The
-// user must adjust the calibration such that the calibrated zero point on the calibrated
-// axis matches the physical rest position of the mechanical plunger, the positive maximum
-// axis value matches the full retraction position, and the negative maximum matches the
-// fully-pushed-forward position (with the plunger pressed in as far as possible against 
-// the barrel spring).   This results in a system-level scaling from HID units to joystick
-// units where the HID-to-joystick-units scaling factor is about 5X the value on the negative
-// side of the axis vs the positive side, because the total PHYSICAL travel distance on the 
-// retraction side is about 5X wider than the forward travel distance.  Our goal here is to
-// translate things back to the actual PHYSICAL position of the input before all of these
-// unit conversions, where it's linear across the whole range.  That means that we have to
-// undo the asymmetrical Windows calibration by applying the inverse asymmetrical scaling
-// here.  So: we use a "dual-piecewise" mapping, where we use one scaling factor on the
-// positive side and a different scaling factor on the negative side.
-// 
-// There's a much better and simpler way to do this, which is to tell the user NOT to run 
-// that stupid Windows JOY.CPL calibration in the first place, which allows the Windows 
-// joystick input processing to pass through the native device reports without any extra 
-// scaling.  That eliminates the asymmetrical positive/negative scaling in the Windows
-// processing, which lets us see the linear units that the device reports natively.  We
-// don't have to undo the screwy asymmetrical scaling in the Windows input because Windows
-// never applies it in the first place.  We can thus normalize the input with a simple
-// linear scaling across the whole axis.  This produces much more stable tracking to
-// the physical plunger position because there's no point of instability around the park
-// position where the scaling factor abruptly changes by a factor of 5.  The only snag is
-// that we have to be working with a plunger input device that's programmed to report its
-// position across HID on a fully linear scale like this.  We call these devices "linear
-// plunger" devices to distinguish them from the older ones that natively report on the
-// asymmetrical scale and thus required the Windows JOY.CPL calibration to work at all.
-// PinInput.cpp has the logic to recognize which plungers have the linear scaling and
-// which ones use the asymmetrical split axis scaling, and set the m_linearPlunger flag
-// accordingly.
-float PlungerMoverObject::MechPlunger() const
-{
-   if (g_pplayer->m_pininput.m_linearPlunger)
-   {
-      // Linear plunger device - the joystick must be calibrated such that the park
-      // position reads as 0 and the fully retracted position reads as JOYRANGEMX.  The
-      // scaling factor between physical units and joystick units must be the same on the
-      // positive and negative sides.  (The maximum forward position is not calibrated.)
-      const float m = (1.0f - m_restPos)*(float)(1.0 / JOYRANGEMX), b = m_restPos;
-      return m * g_pplayer->m_curMechPlungerPos + b;
-   }
-   else
-   {
-      // Standard plunger device - the joystick must be calibrated such that the park
-      // position reads as 0, the fully retracted position reads as JOYRANGEMN, and the
-      // full forward position reads as JOYRANGMN.
-      const float range = (float)JOYRANGEMX * (1.0f - m_restPos) - (float)JOYRANGEMN *m_restPos; // final range limit
-      const float tmp = (g_pplayer->m_curMechPlungerPos < 0) ? g_pplayer->m_curMechPlungerPos * m_restPos : g_pplayer->m_curMechPlungerPos * (1.0f - m_restPos);
-      return tmp / range + m_restPos;              //scale and offset
-   }
-}
-
-// Mechanical plunger speed, from I/O controller speed input, if configured.
-// This takes input from the Plunger Speed axis, separate from the Plunger
-// Position axis, allowing the controller to report instantaneous speeds
-// along with position.  I/O controllers can usually measure the physical
-// plunger's speed accurately thanks to their high-speed access to the raw
-// sensor data.  It's impossible for the host to accurately compute the
-// speed from position reports alone (via a first derivative of sequential
-// position reports), because USB HID reports don't provide sufficient time
-// resolution - physical plungers simply move too fast, so taking the first
-// derivative results in pretty much random garbage a lot of the time.  The
-// I/O controller can typically take readings at a high enough sampling
-// rate to accurate track the speed, so we use its speed reports if they're
-// available in preference to our internal speed calculations, which are
-// unreliable at best.
-float PlungerMoverObject::MechPlungerSpeed() const
-{
-   // Get the current speed reading
-   float v = (float)g_pplayer->GetMechPlungerSpeed();
-
-   // normalized the joystick input to -1..+1
-   v *= (1.0f / (JOYRANGEMX - JOYRANGEMN));
-
-   // The joystick report is device-defined speed units.  We
-   // need to convert these to local speed units.  Since the
-   // report units are device-specific, the conversion factor
-   // is also device-specific, so the most general way to
-   // handle it is as a user-adjustable setting.  This also
-   // has the benefit that it allows the user to fine-tune the
-   // feel to their liking.
-   //
-   // For reference, Pinscape Pico uses units where 1.0 (after
-   // normalization) is the plunger travel length per
-   // centisecond (10ms).  After scaling to the simulated
-   // plunger length, that happens to equal VP9's native speed
-   // units, so the scaling factor should be set to about 100%
-   // when a Pinscape Pico is in use.
-   v *= g_pplayer->m_plungerSpeedScale;
-
-   // Scale to the virtual plunger we're operating.  The device
-   // units are inherently relative to the length of the actual
-   // mechanical plunger, so after conversion to simulation
-   // units, they should maintain that proportionality to the
-   // simulated plunger length.
-   v *= m_frameLen;
-
-   // Now apply the "mechanical strength" scaling.  This lets
-   // the game set the relative strength of the plunger to be
-   // higher or lower than "standard" (which is an arbitrary
-   // reference point).  The strength is relative to the mass.
-   // (The mass is actually a fixed constant, so including it
-   // doesn't have any practical effect other than changing
-   // the scale of the user-adjustable unit conversion factor
-   // above, but we'll include it for consistency with other
-   // places in the code where the mech strength is used.)
-   v *= m_plunger->m_d.m_mechStrength / m_mass;
-
-   // Return the result
-   return v;
-}
-
-void Player::MechPlungerIn(const int z, const int joyidx)
-{
-   m_curPlunger[joyidx] = -z; //axis reversal
-
-   if (++m_movedPlunger == 0xffffffff) m_movedPlunger = 3; //restart at 3
-}
-
-void Player::MechPlungerSpeedIn(const int z, const int joyidx)
-{
-   // record it
-   m_curPlungerSpeed[joyidx] = -z;
-
-   // flag that an external speed setting has been applied
-   m_fExtPlungerSpeed = fTrue;
+    return m_pininput.GetPlungerSpeed();
 }
 
 //++++++++++++++++++++++++++++++++++++++++
@@ -1749,9 +1505,9 @@ string Player::GetPerfInfo()
 {
    // Make it more or less readable by updating only once per second
    static string txt;
-   static U32 lastUpdate = -1;
+   static U32 lastUpdate = 0;
    U32 now = msec();
-   if (lastUpdate != -1 && now - lastUpdate < 1000)
+   if (lastUpdate != 0 && now - lastUpdate < 1000)
       return txt;
 
    lastUpdate = now;
@@ -1774,7 +1530,7 @@ string Player::GetPerfInfo()
    info << "State changes: " << m_renderer->m_renderDevice->Perf_GetNumStateChanges() << '\n';
    info << "Texture changes: " << m_renderer->m_renderDevice->Perf_GetNumTextureChanges() << " (" << m_renderer->m_renderDevice->Perf_GetNumTextureUploads() << " Uploads)\n";
    info << "Shader/Parameter changes: " << m_renderer->m_renderDevice->Perf_GetNumTechniqueChanges() << " / " << m_renderer->m_renderDevice->Perf_GetNumParameterChanges() << '\n';
-   info << "Objects: " << (unsigned int)m_vhitables.size() << '\n';
+   info << "Objects: " << static_cast<unsigned int>(m_vhitables.size()) << '\n';
    info << '\n';
 
    // Physics additional information
@@ -1841,7 +1597,8 @@ void Player::LockForegroundWindow(const bool enable)
 
 void Player::GameLoop(std::function<void()> ProcessOSMessages)
 {
-   assert(m_renderer->m_stereo3D != STEREO_VR || (m_videoSyncMode == VideoSyncMode::VSM_NONE && m_maxFramerate > 1000.f)); // Stereo must be run unthrottled to let OpenVR set the frame pace according to the head set
+   // Stereo must be run unthrottled to let OpenVR set the frame pace according to the head set
+   assert(!(m_renderer->m_stereo3D == STEREO_VR && (m_videoSyncMode != VideoSyncMode::VSM_NONE || m_maxFramerate < 1000.f)));
 
    auto sync = [this, ProcessOSMessages]()
    {
@@ -1853,7 +1610,7 @@ void Player::GameLoop(std::function<void()> ProcessOSMessages)
       ProcessOSMessages();
       if (!IsEditorMode())
       {
-         m_pininput.ProcessKeys(/*sim_msec,*/ -(int)(m_startFrameTick / 1000)); // Trigger key events to sync with controller
+         m_pininput.ProcessInput(); // Trigger key events to sync with controller
          m_physics->UpdatePhysics(); // Update physics (also triggering events, syncing with controller)
          FireSyncController(); // Trigger script sync event (to sync solenoids back)
       }
@@ -2231,13 +1988,14 @@ void Player::FinishFrame()
    // Update FPS counter
    m_fps = (float) (1e6 / m_logicProfiler.GetSlidingAvg(FrameProfiler::PROFILE_FRAME));
 
-#ifndef ACCURATETIMERS
-   ApplyDeferredTimerChanges();
-   FireTimers(m_time_msec);
-#else
-   if (m_videoSyncMode != VideoSyncMode::VSM_FRAME_PACING)
-      m_pininput.ProcessKeys(/*sim_msec,*/ -(int)(m_startFrameTick / 1000)); // trigger key events mainly for VPM<->VP roundtrip
-#endif
+   #ifndef ACCURATETIMERS
+      ApplyDeferredTimerChanges();
+      FireTimers(m_time_msec);
+   #elif !defined(ENABLE_BGFX)
+      // Not applied for BGFX as physics & input sync is managed more cleanly in the main (multithreaded) loop
+      if (m_videoSyncMode != VideoSyncMode::VSM_FRAME_PACING)
+         m_pininput.ProcessInput(); // trigger input events mainly for VPM<->VP roundtrip
+   #endif
 
    // Detect & fire end of music events
    if (IsPlaying() && m_audio && !m_audio->MusicActive())
@@ -2258,8 +2016,8 @@ void Player::FinishFrame()
       pBall->RenderRelease();
       pBall->TimerRelease();
       pBall->Release();
-      RemoveFromVectorSingle(m_ptable->m_vedit, (IEditable*) pBall);
-      RemoveFromVectorSingle(m_vhitables, (Hitable *)pBall);
+      RemoveFromVectorSingle(m_ptable->m_vedit, static_cast<IEditable *>(pBall));
+      RemoveFromVectorSingle(m_vhitables, static_cast<IEditable *>(pBall));
    }
    m_vballDelete.clear();
 
@@ -2272,10 +2030,6 @@ void Player::FinishFrame()
       m_closing = CS_STOP_PLAY;
 #else
       m_closing = CS_CLOSE_APP;
-#if (defined(__APPLE__) && (defined(TARGET_OS_TV) && TARGET_OS_TV))
-      PLOGE.printf("Runtime error detected. Resetting LaunchTable to default.");
-      g_pvp->m_settings.SaveValue(Settings::Standalone, "LaunchTable"s, "assets/exampleTable.vpx");
-#endif
 #endif
    }
 
@@ -2350,7 +2104,7 @@ void Player::UpdateVolume()
       m_audio->UpdateVolume();
    for (auto sound : m_ptable->m_vsound)
       sound->UpdateVolume();
-   for (auto players : m_externalAudioPlayers)
+   for (const auto& players : m_externalAudioPlayers)
       players.second->UpdateVolume();
 }
 
@@ -2426,13 +2180,13 @@ Player::ControllerSegDisplay Player::GetControllerSegDisplay(CtlResId id)
          auto pCD = std::ranges::find_if(m_controllerSegDisplays.begin(), m_controllerSegDisplays.end(), [&](const ControllerSegDisplay &cd) { return cd.segId.id == m_defaultSegId.id; });
          if (pCD == m_controllerSegDisplays.end())
          {
-            m_controllerSegDisplays.push_back({ m_defaultSegId, 0, nullptr });
+            m_controllerSegDisplays.push_back({m_defaultSegId, 0, nullptr});
             display = &m_controllerSegDisplays.back();
             for (unsigned int i = 0; i < getSrcMsg.count; i++)
             {
                if (getSrcMsg.entries[0].id.id == m_defaultSegId.id)
                {
-                  display->displays.push_back(vector<SegElementType>(&getSrcMsg.entries[i].elementType[0], &getSrcMsg.entries[i].elementType[getSrcMsg.entries[i].nElements]));
+                  display->displays.emplace_back(&getSrcMsg.entries[i].elementType[0], &getSrcMsg.entries[i].elementType[getSrcMsg.entries[i].nElements]);
                   display->nElements += getSrcMsg.entries[i].nElements;
                }
             }
@@ -2452,13 +2206,13 @@ Player::ControllerSegDisplay Player::GetControllerSegDisplay(CtlResId id)
          // Search for the requested display
          GetSegSrcMsg getSrcMsg = { 1024, 0, new SegSrcId[1024] };
          VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(m_getSegSrcMsgId, &getSrcMsg);
-         m_controllerSegDisplays.push_back({ id, 0, nullptr });
+         m_controllerSegDisplays.push_back({id, 0, nullptr});
          display = &m_controllerSegDisplays.back();
          for (unsigned int i = 0; i < getSrcMsg.count; i++)
          {
             if (getSrcMsg.entries[0].id.id == m_defaultSegId.id)
             {
-               display->displays.push_back(vector<SegElementType>(getSrcMsg.entries[i].elementType[0], getSrcMsg.entries[i].elementType[getSrcMsg.entries[i].nElements - 1]));
+               display->displays.emplace_back(&getSrcMsg.entries[i].elementType[0], &getSrcMsg.entries[i].elementType[getSrcMsg.entries[i].nElements - 1]);
                display->nElements += getSrcMsg.entries[i].nElements;
             }
          }
@@ -2570,7 +2324,7 @@ Player::ControllerDisplay Player::GetControllerDisplay(CtlResId id)
          delete[] getSrcMsg.entries;
          if (!dmdFound)
             return { { 0 }, -1, nullptr };
-         m_controllerDisplays.push_back({ dmdId, -1, nullptr });
+         m_controllerDisplays.push_back({dmdId, -1, nullptr});
          display = &m_controllerDisplays.back();
       }
       else
@@ -2689,11 +2443,11 @@ float Player::ParseLog(LARGE_INTEGER *pli1, LARGE_INTEGER *pli2)
          sscanf_s(szLine, "%s %s %d",szWord, (unsigned)_countof(szWord), szSubWord, (unsigned)_countof(szSubWord), &index);
          if (!strcmp(szSubWord, "Down"))
          {
-            m_ptable->FireKeyEvent(DISPID_GameEvents_KeyDown, index);
+            m_ptable->FireGenericKeyEvent(DISPID_GameEvents_KeyDown, index);
          }
          else // Release
          {
-            m_ptable->FireKeyEvent(DISPID_GameEvents_KeyUp, index);
+            m_ptable->FireGenericKeyEvent(DISPID_GameEvents_KeyUp, index);
          }
       }
       else if (!strcmp(szWord, "Physics"))

@@ -191,8 +191,6 @@ public:
    memcpy(dst->m_wzName, m_wzName, sizeof(m_wzName)); \
    if (dst->GetScriptable()) \
       table->m_pcv->AddItem(dst->GetScriptable(), false); \
-   dst->m_oldLayerIndex = m_oldLayerIndex; \
-   dst->m_layerName = m_layerName; \
    dst->m_isVisible = m_isVisible; \
    dst->m_backglass = m_backglass; \
    dst->m_locked = m_locked; \
@@ -204,7 +202,7 @@ public:
       dst->points[i]->Release(); \
    dst->points.clear(); \
    CComObject<DragPoint> *pdp; \
-   for (auto dpt : m_vdpoint) \
+   for (const auto dpt : m_vdpoint) \
    { \
       CComObject<DragPoint>::CreateInstance(&pdp); \
       if (pdp) \
@@ -219,8 +217,6 @@ public:
       } \
    }
 
-class EventProxyBase;
-class ObjLoader;
 // IEditable is the subclass for anything class which is a self-contained table element.
 // It knows how to draw itself, interact with event and properties,
 // And talk to the player
@@ -230,7 +226,7 @@ class IEditable
 {
 public:
    IEditable();
-   virtual ~IEditable();
+   virtual ~IEditable() { }
 
    // this function draws the shape of the object with a solid fill
    // only used in the UI/editor and not the game
@@ -246,7 +242,7 @@ public:
 
    virtual void RenderBlueprint(Sur *psur, const bool solid);
 
-   virtual void ExportMesh(ObjLoader& loader) {}
+   virtual void ExportMesh(class ObjLoader& loader) {}
 
    virtual ULONG STDMETHODCALLTYPE AddRef() = 0;
    virtual ULONG STDMETHODCALLTYPE Release() = 0;
@@ -254,13 +250,13 @@ public:
    virtual PinTable *GetPTable() = 0;
    virtual const PinTable *GetPTable() const = 0;
 
-   void SetDirtyDraw();
+   virtual void SetDirtyDraw();
 
    virtual Hitable *GetIHitable() { return nullptr; }
    virtual const Hitable *GetIHitable() const { return nullptr; }
 
    virtual HRESULT SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool saveForUndo) = 0;
-   virtual void ClearForOverwrite();
+   virtual void ClearForOverwrite() { }
    virtual HRESULT InitLoad(IStream *pstm, PinTable *ptable, int *pid, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey) = 0;
    virtual HRESULT InitPostLoad() = 0;
    virtual HRESULT InitVBA(BOOL fNew, int id, WCHAR * const wzName) = 0;
@@ -276,17 +272,22 @@ public:
 
    virtual void WriteRegDefaults() {}
 
-   void BeginUndo();
-   void EndUndo();
+   virtual void BeginUndo();
+   virtual void EndUndo();
    void MarkForUndo();
    void MarkForDelete();
    void Undelete();
-   const char *GetName();
+   const char *GetName() const;
    void SetName(const string& name);
-   void Delete();
-   void Uncreate();
+   virtual void Delete();
+   virtual void Uncreate();
 
    bool m_backglass = false; // if the light/decal (+dispreel/textbox is always true) is on the table (false) or a backglass view
+
+   void SetPartGroup(class PartGroup *partGroup);
+   class PartGroup* GetPartGroup() const { return m_partGroup; } 
+   string GetPathString(const bool isDirOnly) const;
+   bool IsChild(const PartGroup* group) const;
 
    HRESULT put_TimerEnabled(VARIANT_BOOL newVal, BOOL *pte);
    HRESULT put_TimerInterval(long newVal, int *pti);
@@ -300,10 +301,10 @@ public:
 private:
    VARIANT m_uservalue;
 
+   class PartGroup* m_partGroup = nullptr; // Parenting to group (or top level layers) for base transform and visibility
+
 #pragma region Script events
 public:
-   void TimerSetup(vector<HitTimer *> &pvht, TimerDataRoot *const tdr = nullptr, IFireEvents *fe = nullptr);
-   void TimerRelease();
    HitTimer *m_phittimer = nullptr; // timer event defined when playing (between TimerSetup and TimerRelease)
 
    // In game filtered copy of m_vCollection/m_viCollection for slightly faster event dispatching

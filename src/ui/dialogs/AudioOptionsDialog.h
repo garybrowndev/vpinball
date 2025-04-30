@@ -2,14 +2,14 @@
 
 #pragma once
 
-class AudioOptionsDialog : public CDialog
+class AudioOptionsDialog final : public CDialog
 {
 public:
    AudioOptionsDialog();
 
 protected:
-   BOOL OnInitDialog() final;
-   BOOL OnCommand(WPARAM wParam, LPARAM lParam) final;
+   BOOL OnInitDialog() override;
+   BOOL OnCommand(WPARAM wParam, LPARAM lParam) override;
 
    Settings& GetEditedSettings();
    void LoadSettings();
