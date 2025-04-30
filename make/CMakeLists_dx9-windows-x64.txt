@@ -114,6 +114,8 @@ add_executable(vpinball WIN32
    src/audio/pinsound.h
 
    src/core/dispid.h
+   src/core/ballhistory.cpp
+   src/core/ballhistory.h
    src/core/DynamicScript.cpp
    src/core/DynamicScript.h
    src/core/editablereg.cpp
