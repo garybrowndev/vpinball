@@ -122,17 +122,23 @@ INT_PTR ImageDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
          lvcol.fmt = LVCFMT_CENTER;
          ListView_InsertColumn(hListView, 3, &lvcol);
 
-         const LocalString ls5(IDS_IMAGE_RAW_SIZE);
-         lvcol.pszText = (LPSTR)ls5.m_szbuffer; // = "Raw Size";
-         lvcol.cx = 60;
+         const LocalString ls5(IDS_IMAGE_FILE_SIZE);
+         lvcol.pszText = (LPSTR)ls5.m_szbuffer; // = "File Size";
+         lvcol.cx = 100;
          lvcol.fmt = LVCFMT_RIGHT;
          ListView_InsertColumn(hListView, 4, &lvcol);
 
-         const LocalString ls6(IDS_FORMAT);
-         lvcol.pszText = (LPSTR)ls6.m_szbuffer; // = "Format";
-         lvcol.cx = 70;
-         lvcol.fmt = LVCFMT_CENTER;
+         const LocalString ls6(IDS_IMAGE_GPU_SIZE);
+         lvcol.pszText = (LPSTR)ls6.m_szbuffer; // = "GPU Size";
+         lvcol.cx = 100;
+         lvcol.fmt = LVCFMT_RIGHT;
          ListView_InsertColumn(hListView, 5, &lvcol);
+
+         const LocalString ls7(IDS_FORMAT);
+         lvcol.pszText = (LPSTR)ls7.m_szbuffer; // = "Format";
+         lvcol.cx = 100;
+         lvcol.fmt = LVCFMT_CENTER;
+         ListView_InsertColumn(hListView, 6, &lvcol);
 
          ListImages(hListView);
 
@@ -184,7 +190,7 @@ INT_PTR ImageDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                Texture * const ppi = (Texture *)lvitem.lParam;
                if (ppi != nullptr)
                {
-                  ppi->m_szName = pinfo->item.pszText;
+                  ppi->m_name = pinfo->item.pszText;
                   CCO(PinTable) * const pt = g_pvp->GetActiveTable();
                   if (pt)
                   {
@@ -214,9 +220,10 @@ INT_PTR ImageDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                   Texture * const ppi = (Texture *)lvitem.lParam;
                   if (ppi != nullptr)
                   {
+                     ppi->GetGDIBitmap();
                      SetDlgItemText(IDC_ALPHA_MASK_EDIT, f2sz(255.f * ppi->m_alphaTestValue).c_str());
-                     GetDlgItem(IDC_ALPHA_MASK_EDIT).ShowWindow(ppi->m_pdsBuffer && ppi->m_pdsBuffer->has_alpha());
-                     GetDlgItem(IDC_STATIC_ALPHA).ShowWindow(ppi->m_pdsBuffer && ppi->m_pdsBuffer->has_alpha());
+                     GetDlgItem(IDC_ALPHA_MASK_EDIT).ShowWindow(!ppi->IsOpaque());
+                     GetDlgItem(IDC_STATIC_ALPHA).ShowWindow(!ppi->IsOpaque());
                   }
                }
                ::InvalidateRect(GetDlgItem(IDC_PICTUREPREVIEW).GetHwnd(), nullptr, fTrue);
@@ -297,11 +304,15 @@ INT_PTR ImageDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                const int x = (xsize - width) / 2;
                const int y = (ysize - height) / 2;
 
-               HDC hdcDD;
-               ppi->GetTextureDC(&hdcDD);
-               SetStretchBltMode(pdis->hDC, HALFTONE); // somehow enables filtering
-               StretchBlt(pdis->hDC, x, y, width, height, hdcDD, 0, 0, ppi->m_width, ppi->m_height, SRCCOPY);
-               ppi->ReleaseTextureDC(hdcDD);
+               if (ppi->GetGDIBitmap())
+               {
+                  HDC hdcDD = CreateCompatibleDC(nullptr);
+                  HBITMAP oldHBM = (HBITMAP)SelectObject(hdcDD, ppi->GetGDIBitmap());
+                  SetStretchBltMode(pdis->hDC, HALFTONE); // somehow enables filtering
+                  StretchBlt(pdis->hDC, x, y, width, height, hdcDD, 0, 0, ppi->m_width, ppi->m_height, SRCCOPY);
+                  SelectObject(hdcDD, oldHBM);
+                  DeleteDC(hdcDD);
+               }
             }
          }
          else
@@ -488,11 +499,11 @@ void ImageDialog::Export()
 
             if (!renameOnExport)
             {
-               const int len0 = (int)ppi->m_szPath.length();
+               const int len0 = (int)ppi->GetFilePath().length();
                int begin; //select only file name from pathfilename
                for (begin = len0; begin >= 0; begin--)
                {
-                  if (ppi->m_szPath[begin] == '\\' || ppi->m_szPath[begin] == '/')
+                  if (ppi->GetFilePath()[begin] == '\\' || ppi->GetFilePath()[begin] == '/')
                   {
                      begin++;
                      break;
@@ -500,15 +511,15 @@ void ImageDialog::Export()
                }
                if (begin > 0)
                {
-                  memcpy(g_filename, ppi->m_szPath.c_str()+begin, len0 - begin);
+                  memcpy(g_filename, ppi->GetFilePath().c_str() + begin, len0 - begin);
                   g_filename[len0 - begin] = 0;
                }
             }
             else
             {
-               strncat_s(g_filename, ppi->m_szName.c_str(), sizeof(g_filename)-strnlen_s(g_filename, sizeof(g_filename))-1);
-               const size_t idx = ppi->m_szPath.find_last_of('.');
-               strncat_s(g_filename, ppi->m_szPath.c_str() + idx, sizeof(g_filename)-strnlen_s(g_filename, sizeof(g_filename))-1);
+               strncat_s(g_filename, ppi->m_name.c_str(), sizeof(g_filename)-strnlen_s(g_filename, sizeof(g_filename))-1);
+               const size_t idx = ppi->GetFilePath().find_last_of('.');
+               strncat_s(g_filename, ppi->GetFilePath().c_str() + idx, sizeof(g_filename) - strnlen_s(g_filename, sizeof(g_filename)) - 1);
             }
             ofn.lpstrFile = g_filename;
             ofn.nMaxFile = sizeof(g_filename);
@@ -581,21 +592,21 @@ void ImageDialog::Export()
                      strncpy_s(g_filename, pathName, sizeof(g_filename)-1);
                      if (!renameOnExport)
                      {
-                        for (begin = (int)ppi->m_szPath.length(); begin >= 0; begin--)
+                        for (begin = (int)ppi->GetFilePath().length(); begin >= 0; begin--)
                         {
-                           if (ppi->m_szPath[begin] == PATH_SEPARATOR_CHAR)
+                           if (ppi->GetFilePath()[begin] == PATH_SEPARATOR_CHAR)
                            {
                               begin++;
                               break;
                            }
                         }
-                        strncat_s(g_filename, ppi->m_szPath.c_str()+begin, sizeof(g_filename)-strnlen_s(g_filename, sizeof(g_filename))-1);
+                        strncat_s(g_filename, ppi->GetFilePath().c_str() + begin, sizeof(g_filename) - strnlen_s(g_filename, sizeof(g_filename)) - 1);
                      }
                      else
                      {
-                        strncat_s(g_filename, ppi->m_szName.c_str(), sizeof(g_filename)-strnlen_s(g_filename, sizeof(g_filename))-1);
-                        const size_t idx = ppi->m_szPath.find_last_of('.');
-                        strncat_s(g_filename, ppi->m_szPath.c_str() + idx, sizeof(g_filename)-strnlen_s(g_filename, sizeof(g_filename))-1);
+                        strncat_s(g_filename, ppi->m_name.c_str(), sizeof(g_filename)-strnlen_s(g_filename, sizeof(g_filename))-1);
+                        const size_t idx = ppi->GetFilePath().find_last_of('.');
+                        strncat_s(g_filename, ppi->GetFilePath().c_str() + idx, sizeof(g_filename) - strnlen_s(g_filename, sizeof(g_filename)) - 1);
                      }
                   }
 
@@ -683,18 +694,25 @@ void ImageDialog::Reimport()
             Texture * const ppi = (Texture*)lvitem.lParam;
             if (ppi != nullptr)
             {
-               const HANDLE hFile = CreateFile(ppi->m_szPath.c_str(), GENERIC_READ, FILE_SHARE_READ,
+               const HANDLE hFile = CreateFile(ppi->GetFilePath().c_str(), GENERIC_READ, FILE_SHARE_READ,
                                                nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 
                if (hFile != INVALID_HANDLE_VALUE)
                {
                   CloseHandle(hFile);
                   CCO(PinTable) * const pt = g_pvp->GetActiveTable();
-                  ppi->LoadFromFile(ppi->m_szPath, false);
+                  Texture *newImage = pt->ImportImage(ppi->GetFilePath(), ppi->m_name);
+                  if (newImage != ppi)
+                  {
+                     ListView_DeleteItem(GetDlgItem(IDC_SOUNDLIST).GetHwnd(), sel);
+                     const int index = AddListImage(GetDlgItem(IDC_SOUNDLIST).GetHwnd(), newImage);
+                     ListView_SetItemState(GetDlgItem(IDC_SOUNDLIST).GetHwnd(), index, LVIS_SELECTED, LVIS_SELECTED);
+                  }
                   pt->SetNonUndoableDirty(eSaveDirty);
+                  pt->UpdatePropertyImageList();
                }
                else
-                  MessageBox(ppi->m_szPath.c_str(), "FILE NOT FOUND!", MB_OK);
+                  MessageBox(ppi->GetFilePath().c_str(), "FILE NOT FOUND!", MB_OK);
 
                sel = ListView_GetNextItem(hSoundList, sel, LVNI_SELECTED);
             }
@@ -722,13 +740,20 @@ void ImageDialog::UpdateAll()
       Texture * const ppi = (Texture*)lvitem.lParam;
       if (ppi != nullptr)
       {
-         const HANDLE hFile = CreateFile(ppi->m_szPath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+         const HANDLE hFile = CreateFile(ppi->GetFilePath().c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
          if (hFile != INVALID_HANDLE_VALUE)
          {
             CloseHandle(hFile);
             CCO(PinTable) * const pt = g_pvp->GetActiveTable();
-            ppi->LoadFromFile(ppi->m_szPath, false);
+            Texture *newImage = pt->ImportImage(ppi->GetFilePath(), ppi->m_name);
+            if (newImage != ppi)
+            {
+               ListView_DeleteItem(GetDlgItem(IDC_SOUNDLIST).GetHwnd(), sel);
+               const int index = AddListImage(GetDlgItem(IDC_SOUNDLIST).GetHwnd(), newImage);
+               ListView_SetItemState(GetDlgItem(IDC_SOUNDLIST).GetHwnd(), index, LVIS_SELECTED, LVIS_SELECTED);
+            }
             pt->SetNonUndoableDirty(eSaveDirty);
+            pt->UpdatePropertyImageList();
          }
          else
             errorOccurred = true;
@@ -782,8 +807,13 @@ void ImageDialog::ReimportFrom()
                   g_pvp->m_settings.SaveValue(Settings::RecentDir, "ImageDir"s, szFileName[0].substr(0, index));
 
                CCO(PinTable) * const pt = g_pvp->GetActiveTable();
-               ppi->LoadFromFile(szFileName[0], false);
-               ListView_SetItemText(hSoundList, sel, 1, (LPSTR)ppi->m_szPath.c_str());
+               Texture* newImage = pt->ImportImage(szFileName[0], ppi->m_name);
+               if (newImage != ppi)
+               {
+                  ListView_DeleteItem(GetDlgItem(IDC_SOUNDLIST).GetHwnd(), sel);
+                  const int index = AddListImage(GetDlgItem(IDC_SOUNDLIST).GetHwnd(), newImage);
+                  ListView_SetItemState(GetDlgItem(IDC_SOUNDLIST).GetHwnd(), index, LVIS_SELECTED, LVIS_SELECTED);
+               }
                pt->SetNonUndoableDirty(eSaveDirty);
                pt->UpdatePropertyImageList();
                // Display new image
@@ -838,70 +868,32 @@ int ImageDialog::AddListImage(HWND hwndListView, Texture *const ppi)
    lvitem.mask = LVIF_DI_SETITEM | LVIF_TEXT | LVIF_PARAM;
    lvitem.iItem = 0;
    lvitem.iSubItem = 0;
-   lvitem.pszText = (LPSTR)ppi->m_szName.c_str();
+   lvitem.pszText = (LPSTR)ppi->m_name.c_str();
    lvitem.lParam = (LPARAM)ppi;
 
-   if (ppi->m_realWidth == ppi->m_width && ppi->m_realHeight == ppi->m_height)
-      _snprintf_s(sizeString, MAXTOKEN - 1, "%ix%i", ppi->m_realWidth, ppi->m_realHeight);
-   else if (ppi->m_realWidth > ppi->m_width || ppi->m_realHeight > ppi->m_height)
-      _snprintf_s(sizeString, MAXTOKEN - 1, "%ix%i downsized to %ix%i", ppi->m_realWidth, ppi->m_realHeight, ppi->m_width, ppi->m_height);
-   else
-      _snprintf_s(sizeString, MAXTOKEN - 1, "%ix%i upscaled to %ix%i", ppi->m_realWidth, ppi->m_realHeight, ppi->m_width, ppi->m_height);
+   _snprintf_s(sizeString, MAXTOKEN - 1, "%ix%i", ppi->m_width, ppi->m_height);
    const int index = ListView_InsertItem(hwndListView, &lvitem);
 
-   ListView_SetItemText(hwndListView, index, 1, (LPSTR)ppi->m_szPath.c_str());
+   ListView_SetItemText(hwndListView, index, 1, (LPSTR)ppi->GetFilePath().c_str());
    ListView_SetItemText(hwndListView, index, 2, sizeString);
    ListView_SetItemText(hwndListView, index, 3, (LPSTR)usedStringNo);
 
-   char *const sizeConv = StrFormatByteSize64((size_t)ppi->m_pdsBuffer->height() * ppi->m_pdsBuffer->pitch(), sizeString, MAXTOKEN);
+   char *const sizeConv = StrFormatByteSize64((size_t)ppi->GetEstimatedGPUSize(), sizeString, MAXTOKEN);
    ListView_SetItemText(hwndListView, index, 4, sizeConv);
 
-   if (ppi->m_pdsBuffer == nullptr)
-   {
-      ListView_SetItemText(hwndListView, index, 5, (LPSTR) "-");
-   }
-   else if (ppi->m_pdsBuffer->m_format == BaseTexture::SRGB)
-   {
-      ListView_SetItemText(hwndListView, index, 5, (LPSTR) "sRGB");
-   }
-   else if (ppi->m_pdsBuffer->m_format == BaseTexture::SRGBA)
-   {
-      ListView_SetItemText(hwndListView, index, 5, (LPSTR) "sRGBA");
-   }
-   else if (ppi->m_pdsBuffer->m_format == BaseTexture::RGB)
-   {
-      ListView_SetItemText(hwndListView, index, 5, (LPSTR) "RGB");
-   }
-   else if (ppi->m_pdsBuffer->m_format == BaseTexture::RGBA)
-   {
-      ListView_SetItemText(hwndListView, index, 5, (LPSTR) "RGBA");
-   }
-   else if (ppi->m_pdsBuffer->m_format == BaseTexture::RGB_FP16)
-   {
-      ListView_SetItemText(hwndListView, index, 5, (LPSTR) "RGB 16F");
-   }
-   else if (ppi->m_pdsBuffer->m_format == BaseTexture::RGBA_FP16)
-   {
-      ListView_SetItemText(hwndListView, index, 5, (LPSTR) "RGBA 16F");
-   }
-   else if (ppi->m_pdsBuffer->m_format == BaseTexture::RGB_FP32)
-   {
-      ListView_SetItemText(hwndListView, index, 5, (LPSTR) "RGB 32F");
-   }
-   else if (ppi->m_pdsBuffer->m_format == BaseTexture::RGBA_FP32)
-   {
-      ListView_SetItemText(hwndListView, index, 5, (LPSTR) "RGBA 32F");
-   }
-   else
-      assert(!"unknown format");
+   char *const sizeConv2 = StrFormatByteSize64((size_t)ppi->GetFileSize(), sizeString, MAXTOKEN);
+   ListView_SetItemText(hwndListView, index, 5, sizeConv2);
+
+   const char *format = ppi->IsHDR() ? (ppi->IsOpaque() ? "RGB_ HDR" : "RGBA HDR") : (ppi->IsOpaque() ? "RGB_" : "RGBA");
+   ListView_SetItemText(hwndListView, index, 6, (LPSTR)format);
 
    CCO(PinTable) *const pt = g_pvp->GetActiveTable();
    if (pt)
    {
-      if (StrCompareNoCase(pt->m_image, ppi->m_szName) || StrCompareNoCase(pt->m_ballImage, ppi->m_szName)
-       || StrCompareNoCase(pt->m_ballImageDecal, ppi->m_szName) || StrCompareNoCase(pt->m_envImage, ppi->m_szName)
-       || StrCompareNoCase(pt->m_BG_image[BG_DESKTOP], ppi->m_szName) || StrCompareNoCase(pt->m_BG_image[BG_FSS], ppi->m_szName)
-       || StrCompareNoCase(pt->m_BG_image[BG_FULLSCREEN], ppi->m_szName) || StrCompareNoCase(pt->m_imageColorGrade, ppi->m_szName))
+      if (StrCompareNoCase(pt->m_image, ppi->m_name) || StrCompareNoCase(pt->m_ballImage, ppi->m_name)
+       || StrCompareNoCase(pt->m_ballImageDecal, ppi->m_name) || StrCompareNoCase(pt->m_envImage, ppi->m_name)
+       || StrCompareNoCase(pt->m_BG_image[BG_DESKTOP], ppi->m_name) || StrCompareNoCase(pt->m_BG_image[BG_FSS], ppi->m_name)
+       || StrCompareNoCase(pt->m_BG_image[BG_FULLSCREEN], ppi->m_name) || StrCompareNoCase(pt->m_imageColorGrade, ppi->m_name))
       {
          ListView_SetItemText(hwndListView, index, 3, (LPSTR)usedStringYes);
       }
@@ -919,84 +911,84 @@ int ImageDialog::AddListImage(HWND hwndListView, Texture *const ppi)
             case eItemDispReel:
             {
                const DispReel *const pReel = (DispReel *)pEdit;
-               if (StrCompareNoCase(pReel->m_d.m_szImage, ppi->m_szName))
+               if (StrCompareNoCase(pReel->m_d.m_szImage, ppi->m_name))
                   inUse = true;
                break;
             }
             case eItemPrimitive:
             {
                const Primitive *const pPrim = (Primitive *)pEdit;
-               if (StrCompareNoCase(pPrim->m_d.m_szImage, ppi->m_szName) || StrCompareNoCase(pPrim->m_d.m_szNormalMap, ppi->m_szName))
+               if (StrCompareNoCase(pPrim->m_d.m_szImage, ppi->m_name) || StrCompareNoCase(pPrim->m_d.m_szNormalMap, ppi->m_name))
                   inUse = true;
                break;
             }
             case eItemRamp:
             {
                const Ramp *const pRamp = (Ramp *)pEdit;
-               if (StrCompareNoCase(pRamp->m_d.m_szImage, ppi->m_szName))
+               if (StrCompareNoCase(pRamp->m_d.m_szImage, ppi->m_name))
                   inUse = true;
                break;
             }
             case eItemSurface:
             {
                const Surface *const pSurf = (Surface *)pEdit;
-               if (StrCompareNoCase(pSurf->m_d.m_szImage, ppi->m_szName) || StrCompareNoCase(pSurf->m_d.m_szSideImage, ppi->m_szName))
+               if (StrCompareNoCase(pSurf->m_d.m_szImage, ppi->m_name) || StrCompareNoCase(pSurf->m_d.m_szSideImage, ppi->m_name))
                   inUse = true;
                break;
             }
             case eItemDecal:
             {
                const Decal *const pDecal = (Decal *)pEdit;
-               if (StrCompareNoCase(pDecal->m_d.m_szImage, ppi->m_szName))
+               if (StrCompareNoCase(pDecal->m_d.m_szImage, ppi->m_name))
                   inUse = true;
                break;
             }
             case eItemFlasher:
             {
                const Flasher *const pFlash = (Flasher *)pEdit;
-               if (StrCompareNoCase(pFlash->m_d.m_szImageA, ppi->m_szName) || StrCompareNoCase(pFlash->m_d.m_szImageB, ppi->m_szName))
+               if (StrCompareNoCase(pFlash->m_d.m_szImageA, ppi->m_name) || StrCompareNoCase(pFlash->m_d.m_szImageB, ppi->m_name))
                   inUse = true;
                break;
             }
             case eItemFlipper:
             {
                const Flipper *const pFlip = (Flipper *)pEdit;
-               if (StrCompareNoCase(pFlip->m_d.m_szImage, ppi->m_szName))
+               if (StrCompareNoCase(pFlip->m_d.m_szImage, ppi->m_name))
                   inUse = true;
                break;
             }
             case eItemHitTarget:
             {
                const HitTarget *const pHit = (HitTarget *)pEdit;
-               if (StrCompareNoCase(pHit->m_d.m_szImage, ppi->m_szName))
+               if (StrCompareNoCase(pHit->m_d.m_szImage, ppi->m_name))
                   inUse = true;
                break;
             }
             case eItemLight:
             {
                const Light *const pLight = (Light *)pEdit;
-               if (StrCompareNoCase(pLight->m_d.m_szImage, ppi->m_szName))
+               if (StrCompareNoCase(pLight->m_d.m_szImage, ppi->m_name))
                   inUse = true;
                break;
             }
             case eItemPlunger:
             {
                const Plunger *const pPlung = (Plunger *)pEdit;
-               if (StrCompareNoCase(pPlung->m_d.m_szImage, ppi->m_szName))
+               if (StrCompareNoCase(pPlung->m_d.m_szImage, ppi->m_name))
                   inUse = true;
                break;
             }
             case eItemRubber:
             {
                const Rubber *const pRub = (Rubber *)pEdit;
-               if (StrCompareNoCase(pRub->m_d.m_szImage, ppi->m_szName))
+               if (StrCompareNoCase(pRub->m_d.m_szImage, ppi->m_name))
                   inUse = true;
                break;
             }
             case eItemSpinner:
             {
                const Spinner *const pSpin = (Spinner *)pEdit;
-               if (StrCompareNoCase(pSpin->m_d.m_szImage, ppi->m_szName))
+               if (StrCompareNoCase(pSpin->m_d.m_szImage, ppi->m_name))
                   inUse = true;
                break;
             }

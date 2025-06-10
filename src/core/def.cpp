@@ -10,6 +10,7 @@
 #include "standalone/PoleStorage.h"
 #endif
 
+#include <charconv>
 #include <iomanip>
 #include <filesystem>
 
@@ -18,7 +19,7 @@ static const char point = std::use_facet<std::numpunct<char>>(std::locale("")).d
 unsigned long long mwc64x_state = 4077358422479273989ull;
 
 
-// used by dialogues, etc, locale specific, otherwise use e.g. std::stof() directly
+// used by dialogues, etc, locale specific, otherwise use std::from_chars (or e.g. std::stof() (with exception handling) or std::strtof()) directly
 float sz2f(string sz, const bool force_convert_decimal_point)
 {
 #if 1
@@ -29,14 +30,19 @@ float sz2f(string sz, const bool force_convert_decimal_point)
          sz[pos] = '.';
    }
 
-   const char* const szp = sz.c_str();
-   char* sze;
-   const float result = std::strtof(szp, &sze);
+#if defined(__clang__)
+   const char* const p = sz.c_str();
+   char* e;
+   const float result = std::strtof(p, &e);
 
-   if (szp == sze)
+   if (p == e)
       return 0.0f; //!! use inf or NaN instead?
 
    return result;
+#else
+   float result;
+   return (std::from_chars(sz.c_str(), sz.c_str() + sz.length(), result).ec == std::errc{}) ? result : 0.0f; //!! use inf or NaN instead?
+#endif
 #else
    const int len = (int)sz.length()+1;
    WCHAR * const wzT = new WCHAR[len];
@@ -95,61 +101,25 @@ string f2sz(const float f, const bool can_convert_decimal_point)
 
 void WideStrNCopy(const WCHAR* wzin, WCHAR* wzout, const size_t wzoutMaxLen)
 {
-   DWORD i = 0;
+   size_t i = 0;
    while (*wzin && (++i < wzoutMaxLen)) { *wzout++ = *wzin++; }
-   *wzout = 0;
+   *wzout = L'\0';
 }
 
 void WideStrCat(const WCHAR* wzin, WCHAR* wzout, const size_t wzoutMaxLen)
 {
-   DWORD i = lstrlenW(wzout);
+   size_t i = lstrlenW(wzout);
    wzout += i;
    while (*wzin && (++i < wzoutMaxLen)) { *wzout++ = *wzin++; }
-   *wzout = 0;
+   *wzout = L'\0';
 }
 
-int WideStrCmp(const WCHAR *wz1, const WCHAR *wz2)
-{
-   while (*wz1 != L'\0')
-   {
-      if (*wz1 != *wz2)
-      {
-         if (*wz1 > *wz2)
-            return 1; // If *wz2 == 0, then wz1 will return as higher, which is correct
-         else if (*wz1 < *wz2)
-            return -1;
-      }
-      wz1++;
-      wz2++;
-   }
-   if (*wz2 != L'\0')
-      return -1; // wz2 is longer - and therefore higher
-   return 0;
-}
-
-int WzSzStrCmp(const WCHAR *wz1, const char *sz2)
+bool WzSzEqual(const WCHAR *wz1, const char *sz2)
 {
    while (*wz1 != L'\0')
       if (*wz1++ != *sz2++)
-         return 1;
-   if (*sz2 != L'\0')
-      return 1;
-   return 0;
-}
-
-int WzSzStrNCmp(const WCHAR* wz1, const char* sz2, const size_t maxComparisonLen)
-{
-   DWORD i = 0;
-
-   while (*wz1 != L'\0' && i < maxComparisonLen)
-   {
-      if (*wz1++ != *sz2++)
-         return 1;
-      i++;
-   }
-   if (*sz2 != L'\0')
-      return 1;
-   return 0;
+         return false;
+   return (*sz2 == '\0');
 }
 
 LocalString::LocalString(const int resid)
@@ -264,7 +234,19 @@ wstring MakeWString(const string &sz)
    return result;
 }
 
-char *MakeChar(const WCHAR *const wz)
+wstring MakeWString(const char * const sz)
+{
+   // Somewhat overkill since we copy the string twice, once in the temp buffer for conversion, then in the string constructor
+   const int len = (int)lstrlen(sz);
+   WCHAR *const wzT = new WCHAR[len + 1];
+   MultiByteToWideCharNull(CP_ACP, 0, sz, -1, wzT, len + 1);
+   /*const*/ wstring result(wzT); // const removed for auto-move
+   delete [] wzT;
+
+   return result;
+}
+
+char *MakeChar(const WCHAR* const wz)
 {
    const int len = lstrlenW(wz);
    char * const szT = new char[len + 1];
@@ -273,7 +255,7 @@ char *MakeChar(const WCHAR *const wz)
    return szT;
 }
 
-string MakeString(const WCHAR * const wz)
+string MakeString(const WCHAR* const wz)
 {
    char* szT = MakeChar(wz);
    string sz = szT;
@@ -392,6 +374,35 @@ bool IsWindowsVistaOr7()
 #endif
 }
 
+vector<uint8_t> read_file(const string& filename, const bool binary)
+{
+   vector<uint8_t> data;
+   std::ifstream file(filename, binary ? (std::ios::binary | std::ios::ate) : std::ios::ate);
+   if (!file)
+   {
+      const string text = "The file \"" + filename + "\" could not be opened.";
+      ShowError(text);
+      return data;
+   }
+   data.resize(file.tellg());
+   file.seekg(0, std::ios::beg);
+   file.read(reinterpret_cast<char*>(data.data()), data.size());
+   file.close();
+   return data;
+}
+
+void write_file(const string& filename, const vector<uint8_t>& data, const bool binary)
+{
+   std::ofstream file(filename, binary ? (std::ios::binary | std::ios::trunc) : std::ios::trunc);
+   if (!file)
+   {
+      const string text = "The file \"" + filename + "\" could not be opened for writing.";
+      ShowError(text);
+      return;
+   }
+   file.write(reinterpret_cast<const char*>(data.data()), data.size());
+   file.close();
+}
 
 void copy_folder(const string& srcPath, const string& dstPath)
 {
@@ -404,7 +415,8 @@ void copy_folder(const string& srcPath, const string& dstPath)
    }
 
    if (!std::filesystem::exists(dst)) {
-      if (!std::filesystem::create_directory(dst)) {
+      std::error_code ec;
+      if (!std::filesystem::create_directory(dst, ec)) {
          PLOGE.printf("failed to create destination path: %s", dstPath.c_str());
          return;
       }
@@ -449,73 +461,94 @@ string normalize_path_separators(const string& szPath)
 
 string find_case_insensitive_file_path(const string& szPath)
 {
-   string path = normalize_path_separators(szPath);
-   std::filesystem::path p = std::filesystem::path(path).lexically_normal();
-   std::error_code ec;
+   auto fn = [&](auto& self, const string& s) -> string {
+      string path = normalize_path_separators(s);
+      std::filesystem::path p = std::filesystem::path(path).lexically_normal();
+      std::error_code ec;
 
-   if (std::filesystem::exists(p, ec))
-      return path;
+      if (std::filesystem::exists(p, ec))
+         return p.string();
 
-   auto parent = p.parent_path();
-   string base;
-   if (parent.empty() || parent == p)
-      base = '.';
-   else {
-      base = find_case_insensitive_file_path(parent.string());
-      if (base.empty())
-         return string();
-   }
-
-   for (auto& ent : std::filesystem::directory_iterator(base, ec)) {
-      if (!ec && StrCompareNoCase(ent.path().filename().string(), p.filename().string())) {
-         auto found = ent.path().string();
-         if (found != path) {
-            PLOGI.printf("case insensitive file match: requested \"%s\", actual \"%s\"", path.c_str(), found.c_str());
-         }
-         return found;
+      auto parent = p.parent_path();
+      string base;
+      if (parent.empty() || parent == p) {
+         base = ".";
+      } else {
+         base = self(self, parent.string());
+         if (base.empty())
+            return string();
       }
-   }
 
+      for (auto& ent : std::filesystem::directory_iterator(base, ec)) {
+         if (!ec && StrCompareNoCase(ent.path().filename().string(), p.filename().string())) {
+            auto found = ent.path().string();
+            if (found != path) {
+               PLOGI.printf("case insensitive file match: requested \"%s\", actual \"%s\"", path.c_str(), found.c_str());
+            }
+            return found;
+         }
+      }
+
+      return string();
+   };
+
+   string result = fn(fn, szPath);
+   if (!result.empty()) {
+      std::filesystem::path p = std::filesystem::absolute(result);
+      return p.string();
+   }
    return string();
 }
 
 string find_case_insensitive_directory_path(const string& szPath)
 {
-   string path = normalize_path_separators(szPath);
-   std::filesystem::path p = std::filesystem::path(path).lexically_normal();
-   std::error_code ec;
+   auto fn = [&](auto& self, const string& s) -> string {
+      string path = normalize_path_separators(s);
+      std::filesystem::path p = std::filesystem::path(path).lexically_normal();
+      std::error_code ec;
 
-   if (std::filesystem::exists(p, ec) && std::filesystem::is_directory(p, ec)) {
+      if (std::filesystem::exists(p, ec) && std::filesystem::is_directory(p, ec)) {
+         string exact = p.string();
+         if (!exact.empty() && exact.back() != PATH_SEPARATOR_CHAR)
+            exact.push_back(PATH_SEPARATOR_CHAR);
+         return exact;
+      }
+
+      auto parent = p.parent_path();
+      string base;
+      if (parent.empty() || parent == p) {
+         base = ".";
+      } else {
+         base = self(self, parent.string());
+         if (base.empty())
+            return string();
+      }
+
+      for (auto& ent : std::filesystem::directory_iterator(base, ec)) {
+         if (ec || !ent.is_directory(ec))
+            continue;
+         if (StrCompareNoCase(ent.path().filename().string(), p.filename().string())) {
+            string found = ent.path().string();
+            if (!found.empty() && found.back() != PATH_SEPARATOR_CHAR)
+               found.push_back(PATH_SEPARATOR_CHAR);
+            if (found != path) {
+               PLOGI.printf("case insensitive directory match: requested \"%s\", actual \"%s\"", path.c_str(), found.c_str());
+            }
+            return found;
+         }
+      }
+
+      return string();
+   };
+
+   string result = fn(fn, szPath);
+   if (!result.empty()) {
+      std::filesystem::path p = std::filesystem::absolute(result);
       string exact = p.string();
       if (!exact.empty() && exact.back() != PATH_SEPARATOR_CHAR)
          exact.push_back(PATH_SEPARATOR_CHAR);
       return exact;
    }
-
-   auto parent = p.parent_path();
-   string base;
-   if (parent.empty() || parent == p)
-      base = '.';
-   else {
-      base = find_case_insensitive_directory_path(parent.string());
-      if (base.empty())
-         return string();
-   }
-
-   for (auto& ent : std::filesystem::directory_iterator(base, ec)) {
-      if (ec || !ent.is_directory(ec))
-         continue;
-      if (StrCompareNoCase(ent.path().filename().string(), p.filename().string())) {
-         string found = ent.path().string();
-         if (!found.empty() && found.back() != PATH_SEPARATOR_CHAR)
-            found.push_back(PATH_SEPARATOR_CHAR);
-         if (found != path) {
-            PLOGI.printf("case insensitive directory match: requested \"%s\", actual \"%s\"", path.c_str(), found.c_str());
-         }
-         return found;
-      }
-   }
-
    return string();
 }
 
@@ -531,16 +564,17 @@ bool path_has_extension(const string& path, const string& ext)
    return extension_from_path(path) == lowerCase(ext);
 }
 
-bool try_parse_int(const string& str, int& value)
-{
-   std::stringstream sstr(trim_string(str));
-   return ((sstr >> value) && sstr.eof());
-}
-
 bool try_parse_float(const string& str, float& value)
 {
-    std::stringstream sstr(trim_string(str));
-    return ((sstr >> value) && sstr.eof());
+   const string tmp = trim_string(str);
+#if defined(__clang__)
+   const char* const p = tmp.c_str();
+   char* e;
+   value = std::strtof(p, &e);
+   return (p != e);
+#else
+   return (std::from_chars(tmp.c_str(), tmp.c_str() + tmp.length(), value).ec == std::errc{});
+#endif
 }
 
 bool try_parse_color(const string& str, OLE_COLOR& value)
@@ -563,9 +597,9 @@ bool try_parse_color(const string& str, OLE_COLOR& value)
    if (!(ss >> rgba))
       return false;
 
-   UINT8 r = (rgba >> 24) & 0xFF;
-   UINT8 g = (rgba >> 16) & 0xFF;
-   UINT8 b = (rgba >> 8) & 0xFF;
+   const UINT8 r = (rgba >> 24) & 0xFF;
+   const UINT8 g = (rgba >> 16) & 0xFF;
+   const UINT8 b = (rgba >> 8) & 0xFF;
 
    value = RGB(r, g, b);
 
@@ -580,31 +614,13 @@ bool is_string_numeric(const string& str)
 int string_to_int(const string& str, int default_value)
 {
    int value;
-   if (try_parse_int(str, value))
-      return value;
-
-   return default_value;
+   return try_parse_int(str, value) ? value : default_value;
 }
 
 float string_to_float(const string& str, float default_value)
 {
    float value;
-   if (try_parse_float(str, value))
-      return value;
-
-   return default_value;
-}
-
-string trim_string(const string& str)
-{
-   string s;
-   try {
-      s = str.substr(str.find_first_not_of(" \t\r\n"), str.find_last_not_of(" \t\r\n") - str.find_first_not_of(" \t\r\n") + 1);
-   }
-   catch (...) {
-      //s.clear();
-   }
-   return s;
+   return try_parse_float(str, value) ? value : default_value;
 }
 
 vector<string> parse_csv_line(const string& line)

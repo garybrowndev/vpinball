@@ -31,7 +31,8 @@
 // perform all needed synchronization and data copies. The 'RunOnMainThread' method
 // is the only one that may be called from any thread to request a callback to be
 // ran on the main thread, either as a blocking call if delay is negative, or as an
-// async call if delay is zero or positive.
+// async call if delay is zero or positive. Plugins may define and handle functions
+// with relaxed threading constraints, as long as this is clearly advertised.
 //
 // To avoid message collision, each message is defined by a unique name in a 'namespace'
 // which is expected to be unique for each host/plugin. MsgId are allocated/retrieved
@@ -46,8 +47,9 @@
 // A basic setting mechanism is also provided to allow easier integration.
 //
 // Plugins must implement and export the load/unload functions to be valid.
-// MSGPI_EXPORT void PluginLoad(const uint32_t endpointId, MsgPluginAPI* api);
-// MSGPI_EXPORT void PluginUnload();
+// MSGPI_EXPORT void xxxPluginLoad(const uint32_t endpointId, MsgPluginAPI* api);
+// MSGPI_EXPORT void xxxPluginUnload();
+// Where xxx is the plugin id (to avoid name conflict when using static linking)
 //
 // Plugins can be statically linked to host application on platforms requiring it or loaded
 // dynamically. For dynamic loading, plugins are expected to define a 'plugin.cfg' file that
@@ -93,17 +95,30 @@
 #endif
 
 // Callbacks
-typedef void (*msgpi_msg_callback)(const unsigned int msgId, void* userData, void* msgData);
+typedef void (*msgpi_msg_callback)(const unsigned int msgId, void* context, void* msgData);
 typedef void (*msgpi_timer_callback)(void* userData);
+
+typedef struct MsgEndpointInfo
+{
+   const char* id;          // Unique ID of the plugin, used to identify it
+   const char* name;        // Human-readable name of the plugin
+   const char* description; // Human-readable description of the plugin intent
+   const char* author;      // Human-readable author name
+   const char* version;     // Human-readable version
+   const char* link;        // Web link to online information
+} MsgEndpointInfo;
 
 typedef struct MsgPluginAPI
 {
    // Messaging
-   unsigned int (MSGPIAPI *GetMsgID)(const char* name_space, const char* name);
+   unsigned int(MSGPIAPI* GetPluginEndpoint)(const char* id);
+   void(MSGPIAPI* GetEndpointInfo)(const uint32_t endpointId, MsgEndpointInfo* info);
+   unsigned int (MSGPIAPI* GetMsgID)(const char* name_space, const char* name);
    void (MSGPIAPI *SubscribeMsg)(const uint32_t endpointId, const unsigned int msgId, const msgpi_msg_callback callback, void* userData);
    void (MSGPIAPI *UnsubscribeMsg)(const unsigned int msgId, const msgpi_msg_callback callback);
-   void (MSGPIAPI *BroadcastMsg)(const uint32_t endpointId, const unsigned int msgId, void* data);
-   void (MSGPIAPI *ReleaseMsgID)(const unsigned int msgId);
+   void (MSGPIAPI* BroadcastMsg)(const uint32_t endpointId, const unsigned int msgId, void* data);
+   void (MSGPIAPI* SendMsg)(const uint32_t endpointId, const unsigned int msgId, const uint32_t targetEndpointId, void* data);
+   void (MSGPIAPI* ReleaseMsgID)(const unsigned int msgId);
    // Setting
    void (MSGPIAPI *GetSetting)(const char* name_space, const char* name, char* valueBuf, unsigned int valueBufSize);
    // Threading

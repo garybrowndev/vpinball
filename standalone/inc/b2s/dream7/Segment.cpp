@@ -4,6 +4,7 @@
 
 Segment::Segment(const string& szName, float x, float y, float width, float height, float angle)
 {
+   m_on = false;
    m_glow = -1.0f;
    m_radius = 0.0f;
    m_pStyle = NULL;
@@ -17,6 +18,7 @@ Segment::Segment(const string& szName, float x, float y, float width, float heig
 
 Segment::Segment(const string& szName, float x, float y, float width, float height, float angle, SegmentCap topcap, SegmentCap bottomcap)
 {
+   m_on = false;
    m_glow = -1.0f;
    m_radius = 0.0f;
    m_pStyle = NULL;
@@ -30,6 +32,7 @@ Segment::Segment(const string& szName, float x, float y, float width, float heig
 
 Segment::Segment(const string& szName, float x, float y, float width, float height, float angle, SegmentCap topcap, SegmentCap bottomcap, float capangle)
 {
+   m_on = false;
    m_glow = -1.0f;
    m_radius = 0.0f;
    m_pStyle = NULL;
@@ -43,6 +46,7 @@ Segment::Segment(const string& szName, float x, float y, float width, float heig
 
 Segment::Segment(float x, float y, float radius)
 {
+   m_on = false;
    m_glow = -1.0f;
    m_pStyle = NULL;
    m_pGlassPath = NULL;
@@ -55,7 +59,6 @@ Segment::Segment(float x, float y, float radius)
 
 Segment::~Segment()
 {
-   delete m_pStyle;
    delete m_pGlassPath;
    delete m_pLightPath;
    delete m_pExternMatrix;
@@ -269,5 +272,7 @@ void Segment::SetTransform(VP::RendererGraphics* pGraphics)
 
 void Segment::Transform(VP::Matrix* pMatrix)
 {
+   if (m_pExternMatrix)
+      delete m_pExternMatrix;
    m_pExternMatrix = pMatrix->Clone();
 }

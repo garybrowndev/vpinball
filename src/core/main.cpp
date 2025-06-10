@@ -325,7 +325,7 @@ enum option_names
 void showDisplayIDs()
 {
    TTF_Init();
-   string path = g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "LiberationSans-Regular.ttf";
+   string path = g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "LiberationSans-Regular.ttf";
    TTF_Font* pFont = TTF_OpenFont(path.c_str(), 200);
    if (!pFont) {
       PLOGI << "Failed to load font: " << SDL_GetError();
@@ -425,15 +425,15 @@ private:
    bool m_bgles = false;
    float m_fgles = 0.f;
 #ifdef __STANDALONE__
-   string m_szPrefPath;
+   string m_prefPath;
    bool m_listRes;
    bool m_listSnd;
    bool m_displayId;
 #endif
-   string m_szTableFileName;
-   string m_szTableIniFileName;
-   string m_szIniFileName;
-   string m_szTournamentName;
+   string m_tableFileName;
+   string m_tableIniFileName;
+   string m_iniFileName;
+   string m_tournamentName;
    VPinball m_vpinball;
 
 public:
@@ -558,10 +558,10 @@ public:
       m_listRes = false;
       m_listSnd = false;
       m_displayId = false;
-      m_szPrefPath.clear();
+      m_prefPath.clear();
 #endif
 
-      m_szTableFileName.clear();
+      m_tableFileName.clear();
 
 #ifndef __STANDALONE__
       int nArgs;
@@ -832,11 +832,11 @@ public:
             }
             if (tournament)
             {
-               m_szTournamentName = GetPathFromArg(szArglist[i + 2], false);
+               m_tournamentName = GetPathFromArg(szArglist[i + 2], false);
                i++; // three params processed
-               if (!FileExists(m_szTournamentName))
+               if (!FileExists(m_tournamentName))
                {
-                  ::MessageBox(NULL, ("File '" + m_szTournamentName + "' was not found").c_str(), "Command Line Error", MB_ICONERROR);
+                  ::MessageBox(NULL, ("File '" + m_tournamentName + "' was not found").c_str(), "Command Line Error", MB_ICONERROR);
                   exit(1);
                }
             }
@@ -844,13 +844,13 @@ public:
 
 #ifdef __STANDALONE__
             if (prefPath)
-               m_szPrefPath = path;
+               m_prefPath = path;
             else
 #endif
             if (ini)
-               m_szIniFileName = path;
+               m_iniFileName = path;
             else if (tableIni)
-               m_szTableIniFileName = path;
+               m_tableIniFileName = path;
             else // editfile || playfile || povEdit || extractpov || extractscript || audit || tournament
             {
                allowLoadOnStart = false; // Don't face the user with a load dialog since the file is provided on the command line
@@ -885,7 +885,7 @@ public:
                m_audit = audit;
                m_vpinball.m_povEdit = povEdit;
                m_tournament = tournament;
-               m_szTableFileName = path;
+               m_tableFileName = path;
             }
          }
 
@@ -906,24 +906,22 @@ public:
 #endif
 
 #ifdef __STANDALONE__
-   if (!m_szPrefPath.empty()) {
-      if (!m_szPrefPath.ends_with(PATH_SEPARATOR_CHAR))
-         m_szPrefPath += PATH_SEPARATOR_CHAR;
+   if (!m_prefPath.empty()) {
+      if (!m_prefPath.ends_with(PATH_SEPARATOR_CHAR))
+         m_prefPath += PATH_SEPARATOR_CHAR;
 
-      if (!DirExists(m_szPrefPath)) {
-         try {
-            std::filesystem::create_directory(m_szPrefPath);
-         }
-         catch(...) {
+      if (!DirExists(m_prefPath)) {
+         std::error_code ec;
+         if (!std::filesystem::create_directory(m_prefPath, ec)) {
             std::cout
                << "Visual Pinball Error"
                << "\n\n"
-               << "Could not create preferences path: " << m_szPrefPath
+               << "Could not create preferences path: " << m_prefPath
                << "\n\n";
             exit(1);
          }
       }
-      m_vpinball.m_szMyPrefPath = m_szPrefPath;
+      m_vpinball.m_myPrefPath = m_prefPath;
    }
 #endif
 
@@ -933,39 +931,57 @@ public:
 
 #ifdef __STANDALONE__
 #if (defined(__APPLE__) && ((defined(TARGET_OS_IOS) && TARGET_OS_IOS) || (defined(TARGET_OS_TV) && TARGET_OS_TV)))
-      copy_folder("assets", m_vpinball.m_szMyPrefPath);
+      copy_folder("assets", m_vpinball.m_myPrefPath);
 #endif
 #endif
 
-      // Default ini path (can be overriden from command line via m_szIniFileName)
-      if (m_szIniFileName.empty())
+      // Default ini path (can be overriden from command line via m_iniFileName)
+      if (m_iniFileName.empty())
       {
          FILE *f;
          // first check if there is a .ini next to the .exe, otherwise use the default location
-         if ((fopen_s(&f, (m_vpinball.m_szMyPath + "VPinballX.ini").c_str(), "r") == 0) && f)
+         if ((fopen_s(&f, (m_vpinball.m_myPath + "VPinballX.ini").c_str(), "r") == 0) && f)
          {
-            m_vpinball.m_szMyPrefPath = m_vpinball.m_szMyPath;
+            m_vpinball.m_myPrefPath = m_vpinball.m_myPath;
             fclose(f);
          }
-         m_szIniFileName = m_vpinball.m_szMyPrefPath + "VPinballX.ini";
+         m_iniFileName = m_vpinball.m_myPrefPath + "VPinballX.ini";
       }
 
-      m_vpinball.m_settings.LoadFromFile(m_szIniFileName, true);
+      m_vpinball.m_settings.LoadFromFile(m_iniFileName, true);
       m_vpinball.m_settings.SaveValue(Settings::Version, "VPinball"s, string(VP_VERSION_STRING_DIGITS));
 
       Logger::GetInstance()->SetupLogger(m_vpinball.m_settings.LoadValueBool(Settings::Editor, "EnableLog"s));
 
       PLOGI << "Starting VPX - " << VP_VERSION_STRING_FULL_LITERAL;
-      PLOGI << "Setting file is: " << m_szIniFileName;
+      PLOGI << "Settings file was loaded from " << m_iniFileName;
+
+#ifdef ENABLE_SDL_VIDEO
+      SDL_SetHint(SDL_HINT_WINDOW_ALLOW_TOPMOST, "0");
+      if (!SDL_InitSubSystem(SDL_INIT_VIDEO)) {
+         PLOGE << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+         exit(1);
+      }
+#endif
 
 #ifdef __STANDALONE__
-      PLOGI << "Settings file was loaded from " << m_szIniFileName;
-      PLOGI << "m_logicalNumberOfProcessors=" << m_vpinball.GetLogicalNumberOfProcessors();
-      PLOGI << "m_szMyPath=" << m_vpinball.m_szMyPath;
-      PLOGI << "m_szMyPrefPath=" << m_vpinball.m_szMyPrefPath;
+      PLOGI << "SDL video driver: " << SDL_GetCurrentVideoDriver();
 
-      if (!DirExists(PATH_USER))
-         std::filesystem::create_directory(PATH_USER);
+      TTF_Init();
+
+      PLOGI << "m_logicalNumberOfProcessors=" << m_vpinball.GetLogicalNumberOfProcessors();
+      PLOGI << "m_myPath=" << m_vpinball.m_myPath;
+      PLOGI << "m_myPrefPath=" << m_vpinball.m_myPrefPath;
+
+      if (!DirExists(PATH_USER)) {
+         std::error_code ec;
+         if (std::filesystem::create_directory(PATH_USER, ec)) {
+            PLOGI.printf("User path created: %s", PATH_USER.c_str());
+         }
+         else {
+            PLOGE.printf("Unable to create user path: %s", PATH_USER.c_str());
+         }
+      }
 
       if (m_listRes) {
          PLOGI << "Available fullscreen resolutions:";
@@ -985,7 +1001,7 @@ public:
          for (int display = 0; display < displays.size(); display++) {
             const SDL_DisplayMode* displayMode = SDL_GetDesktopDisplayMode(displays.at(display).adapter);
             PLOGI << "display " << displays.at(display).adapter << ": " << displayMode->w << 'x' << displayMode->h
-                  << " (refreshRate=" << displayMode->refresh_rate << ')';
+                  << " (refreshRate=" << displayMode->refresh_rate << ", pixelDensity=" << displayMode->pixel_density << ')';
          }
 
          PLOGI << "Available external window renderers:";
@@ -995,12 +1011,12 @@ public:
       }
 
       if (m_listSnd) {
-         PLOGI << "Available sound devices:";
          vector<AudioDevice> allAudioDevices;
          PinSound::EnumerateAudioDevices(allAudioDevices);
+         PLOGI << "Available sound devices:";
          for (size_t i = 0; i < allAudioDevices.size(); ++i) {
             AudioDevice audioDevice = allAudioDevices.at(i);
-            PLOGI << "id " << audioDevice.id << ": name=" << audioDevice.name << ", channels=" << audioDevice.channels;
+            PLOGI << "  id " << audioDevice.id << ": name=" << audioDevice.name << ", channels=" << audioDevice.channels;
          }
       }
 
@@ -1027,15 +1043,15 @@ public:
       if (GetModuleFileName(m_vpinball.theInstance, szFileName, MAXSTRING))
       {
          ITypeLib *ptl = nullptr;
-         MAKE_WIDEPTR_FROMANSI(wszFileName, szFileName, lstrlen(szFileName));
-         if (SUCCEEDED(LoadTypeLib(wszFileName, &ptl)))
+         const wstring wFileName = MakeWString(szFileName);
+         if (SUCCEEDED(LoadTypeLib(wFileName.c_str(), &ptl)))
          {
             // first try to register system-wide (if running as admin)
-            HRESULT hr = RegisterTypeLib(ptl, wszFileName, nullptr);
+            HRESULT hr = RegisterTypeLib(ptl, wFileName.c_str(), nullptr);
             if (!SUCCEEDED(hr))
             {
                // if failed, register only for current user
-               hr = RegisterTypeLibForUser(ptl, wszFileName, nullptr);
+               hr = RegisterTypeLibForUser(ptl, (OLECHAR*)wFileName.c_str(), nullptr);
                if (!SUCCEEDED(hr))
                   m_vpinball.MessageBox("Could not register type library. Try running Visual Pinball as administrator.", "Error", MB_ICONERROR);
             }
@@ -1095,14 +1111,14 @@ public:
 
       if (m_file)
       {
-         if (!m_szTableFileName.empty())
+         if (!m_tableFileName.empty())
          {
-            PLOGI << "Loading table from command line option: " << m_szTableFileName;
-            m_vpinball.LoadFileName(m_szTableFileName, !m_play);
+            PLOGI << "Loading table from command line option: " << m_tableFileName;
+            m_vpinball.LoadFileName(m_tableFileName, !m_play);
             m_vpinball.m_table_played_via_command_line = m_play;
             m_loadFileResult = m_vpinball.m_ptableActive != nullptr;
-            if (m_vpinball.m_ptableActive && !m_szTableIniFileName.empty())
-               m_vpinball.m_ptableActive->SetSettingsFileName(m_szTableIniFileName);
+            if (m_vpinball.m_ptableActive && !m_tableIniFileName.empty())
+               m_vpinball.m_ptableActive->SetSettingsFileName(m_tableIniFileName);
             if (!m_loadFileResult && m_vpinball.m_open_minimized)
                m_vpinball.QuitPlayer(Player::CloseState::CS_CLOSE_APP);
          }
@@ -1114,9 +1130,9 @@ public:
 
          if (m_extractScript && m_loadFileResult)
          {
-            string szScriptFilename = m_szTableFileName;
-            if(ReplaceExtensionFromFilename(szScriptFilename, "vbs"s))
-               m_vpinball.m_ptableActive->m_pcv->SaveToFile(szScriptFilename);
+            string scriptFilename = m_tableFileName;
+            if(ReplaceExtensionFromFilename(scriptFilename, "vbs"s))
+               m_vpinball.m_ptableActive->m_pcv->SaveToFile(scriptFilename);
             m_vpinball.QuitPlayer(Player::CloseState::CS_CLOSE_APP);
          }
          if (m_audit && m_loadFileResult)
@@ -1134,7 +1150,7 @@ public:
          }
          if (m_tournament && m_loadFileResult)
          {
-            m_vpinball.GenerateImageFromTournamentFile(m_szTableFileName, m_szTournamentName);
+            m_vpinball.GenerateImageFromTournamentFile(m_tableFileName, m_tournamentName);
             m_vpinball.QuitPlayer(Player::CloseState::CS_CLOSE_APP);
          }
       }
@@ -1311,25 +1327,10 @@ extern "C" int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, 
          SetNVIDIAThreadOptimization(NV_THREAD_OPTIMIZATION_DISABLE);
       }
       #endif
-
-      #ifdef ENABLE_SDL_VIDEO
-         SDL_SetHint(SDL_HINT_WINDOW_ALLOW_TOPMOST, "0");
-         if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-         {
-            PLOGE << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-            exit(1);
-         }
-         PLOGI << "Using video driver " << SDL_GetCurrentVideoDriver();
-      #endif
-
-      #ifdef __STANDALONE__
-         TTF_Init();
-      #endif
-
       // Start Win32++
       VPApp theApp(hInstance);
       theApp.InitInstance();
-      MsgPluginManager::GetInstance().ScanPluginFolder(g_pvp->m_szMyPath + "plugins", [](MsgPlugin& plugin) {
+      MsgPluginManager::GetInstance().ScanPluginFolder(g_pvp->m_myPath + "plugins", [](MsgPlugin& plugin) {
          const char *enableDisable[] = { "Disabled", "Enabled" };
          int enabled = (int)VPXPluginAPIImpl::GetInstance().getAPI().GetOption(plugin.m_id.c_str(), 
             "Enable", VPX_OPT_SHOW_UI, "Enable plugin", 0.f, 1.f, 1.f, 0.f, VPXPluginAPI::NONE, enableDisable);

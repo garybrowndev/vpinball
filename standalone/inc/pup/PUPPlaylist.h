@@ -13,13 +13,15 @@ typedef enum
 
 const char* PUP_PLAYLIST_FUNCTION_TO_STRING(PUP_PLAYLIST_FUNCTION value);
 
-class PUPPlaylist
+class PUPManager;
+
+class PUPPlaylist final
 {
 public:
-   PUPPlaylist(const string& szFolder, const string& szDescription, bool randomize, int restSeconds, float volume, int priority);
+   PUPPlaylist(PUPManager* pManager, const string& szFolder, const string& szDescription, bool randomize, int restSeconds, float volume, int priority);
    ~PUPPlaylist();
 
-   static PUPPlaylist* CreateFromCSV(const string& line);
+   static PUPPlaylist* CreateFromCSV(PUPManager* pManager, const string& line);
    const string& GetFolder() const { return m_szFolder; }
    const string& GetDescription() const { return m_szDescription; }
    bool IsRandomize() const { return m_randomize; }
@@ -33,6 +35,7 @@ public:
    string ToString() const;
 
 private:
+   PUPManager* m_pManager;
    string m_szFolder;
    string m_szDescription;
    bool m_randomize;
@@ -42,6 +45,6 @@ private:
    PUP_PLAYLIST_FUNCTION m_function;
    int m_lastIndex;
    vector<string> m_files;
-   std::map<string, string> m_fileMap;
+   ankerl::unordered_dense::map<string, string> m_fileMap;
    string m_szBasePath;
 };

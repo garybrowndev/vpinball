@@ -6,6 +6,8 @@
 #include "resources/AssetManager.h"
 #include "actors/Group.h"
 
+namespace Flex {
+
 class Frame;
 class Image;
 class Label;
@@ -36,7 +38,7 @@ typedef enum
 class FlexDMD final
 {
 public:
-   FlexDMD();
+   FlexDMD(VPXPluginAPI* vpxApi);
    ~FlexDMD();
 
    PSC_IMPLEMENT_REFCOUNT()
@@ -101,7 +103,7 @@ public:
    void SetOnDMDChangedHandler(void (*handler)(FlexDMD*)) { m_onDMDChangedHandler = handler; }
    void SetOnDestroyHandler(void (*handler)(FlexDMD*)) { m_onDestroyHandler = handler; }
 
-   VP::SurfaceGraphics* GetGraphics() const { return m_pSurface; }
+   SurfaceGraphics* GetGraphics() const { return m_pSurface; }
 
    uint8_t* UpdateRGBFrame();
    uint8_t* UpdateLum8Frame();
@@ -125,6 +127,8 @@ private:
       m_rgbaFrame.clear();
       m_lumFrame.clear();
    }
+
+   VPXPluginAPI* m_vpxApi = nullptr;
 
    uint8_t* m_rgbFrame = nullptr;
    bool m_rgbFrameDirty = true;
@@ -156,8 +160,10 @@ private:
    bool m_show = true;
    bool m_run = false;
    uint32_t m_id = 0;
-   VP::SurfaceGraphics* m_pSurface = nullptr;
+   SurfaceGraphics* m_pSurface = nullptr;
 
    //std::thread* m_pThread;
    //void RenderLoop();
 };
+
+}

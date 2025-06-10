@@ -360,7 +360,7 @@ void Light::UpdateAnimation(const float diff_time_msec)
          if (m_d.m_intensity != 0.f && m_d.m_intensity_scale != 0.f)
          {
             const float inv_fadeSpeed = (m_currentIntensity < targetIntensity ? m_d.m_fadeSpeedUp : m_d.m_fadeSpeedDown) / (m_d.m_intensity * m_d.m_intensity_scale); // 1.0 / (Fade speed in ms)
-            const float remaining_time = diff_time_msec * (float)(0.001 * 40.0) * inv_fadeSpeed; // Apply a speed factor (a bulb with this characteristics reaches full power between 30 and 40ms so we modulate around this)
+            const float remaining_time = min(0.5f, diff_time_msec * static_cast<float>(0.001 * 40.0) * inv_fadeSpeed); // Apply a speed factor (a bulb with this characteristics reaches full power between 30 and 40ms so we modulate around this). We clamp at 500ms since it may cause precision issue and the bulb will reach a stable state anyway
             if (lightState != 0.f)
             {
                const float U = 6.3f * sqrtf(sqrtf(lightState)); //=powf(lightState, 0.25f); // Modulating by Emission^0.25 is not fully correct (ignoring visible/non visible wavelengths) but an acceptable approximation
@@ -821,14 +821,14 @@ void Light::Render(const unsigned int renderMask)
          #if defined(ENABLE_BGFX)
          const int eyes = m_rd->GetCurrentRenderTarget()->m_nLayers;
          if (eyes > 1)
-            memcpy(&matWorldViewProj[1].m[0][0], &matWorldViewProj[0].m[0][0], 4 * 4 * sizeof(float));
+            matWorldViewProj[1] = matWorldViewProj[0];
          shader->SetMatrix(SHADER_matWorldViewProj, &matWorldViewProj[0], eyes);
          #elif defined(ENABLE_OPENGL)
          if (shader == m_rd->m_lightShader)
          {
             const int eyes = m_rd->GetCurrentRenderTarget()->m_nLayers;
             if (eyes > 1)
-               memcpy(&matWorldViewProj[1].m[0][0], &matWorldViewProj[0].m[0][0], 4 * 4 * sizeof(float));
+               matWorldViewProj[1] = matWorldViewProj[0];
             shader->SetMatrix(SHADER_matWorldViewProj, &matWorldViewProj[0], eyes);
          }
          else
@@ -964,7 +964,7 @@ bool Light::LoadToken(const int id, BiffReader * const pbr)
 {
    switch(id)
    {
-   case FID(PIID): pbr->GetInt((int *)pbr->m_pdata); break;
+   case FID(PIID): pbr->GetInt(pbr->m_pdata); break;
    case FID(VCEN): pbr->GetVector2(m_d.m_vCenter); break;
    case FID(HGHT): pbr->GetFloat(m_d.m_height); break;
    case FID(RADI): pbr->GetFloat(m_d.m_falloff); break;

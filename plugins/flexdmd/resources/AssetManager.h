@@ -1,10 +1,12 @@
 #pragma once
 
+#include <unordered_dense.h>
+
 #include "AssetSrc.h"
 #include "Bitmap.h"
 
-#include <unordered_map>
 
+namespace Flex {
 
 class Font;
 class VPXFile;
@@ -12,7 +14,7 @@ class VPXFile;
 class AssetManager final
 {
 public:
-   AssetManager();
+   AssetManager(VPXPluginAPI* vpxApi);
    ~AssetManager();
 
    const string& GetBasePath() { return m_szBasePath; }
@@ -27,10 +29,14 @@ public:
    void ClearAll();
 
 private:
-   std::unordered_map<string, Bitmap*> m_cachedBitmaps;
-   std::unordered_map<string, Font*> m_cachedFonts;
+   VPXPluginAPI* m_vpxApi = nullptr;
+
+   ankerl::unordered_dense::map<string, Bitmap*> m_cachedBitmaps;
+   ankerl::unordered_dense::map<string, Font*> m_cachedFonts;
 
    string m_szBasePath;
    string m_szTableFile;
    VPXFile* m_vpxFile = nullptr;
 };
+
+}

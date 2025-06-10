@@ -25,37 +25,6 @@ find_package(BISON 3.7.5 REQUIRED)
 bison_target(vbsparser ${CMAKE_SOURCE_DIR}/standalone/inc/wine/dlls/vbscript/parser.y ${CMAKE_SOURCE_DIR}/standalone/inc/wine/dlls/vbscript/parser.tab.c 
 	     DEFINES_FILE ${CMAKE_SOURCE_DIR}/standalone/inc/wine/dlls/vbscript/parser.tab.h)
 
-add_compile_definitions(
-   __STANDALONE__
-
-   ENABLE_BGFX
-   ENABLE_SDL_VIDEO
-   ENABLE_SDL_INPUT
-
-   __WINESRC__
-   WINE_UNICODE_NATIVE
-
-   WINE_NO_TRACE_MSGS
-   WINE_NO_DEBUG_MSGS
-
-   $<$<CONFIG:DEBUG>:BX_CONFIG_DEBUG=1>
-   $<$<CONFIG:RELEASE>:BX_CONFIG_DEBUG=0>
-)
-
-if(BUILD_RPI)
-   add_compile_definitions(
-      __RPI__
-   )
-elseif(BUILD_RK3588)
-   add_compile_definitions(
-      __RK3588__
-   )
-endif()
-
-add_definitions( 
-   "-D__forceinline=__attribute__((always_inline)) inline" 
-)
-
 add_executable(vpinball
    src/parts/dragpoint.cpp
    src/utils/eventproxy.h
@@ -89,8 +58,6 @@ add_executable(vpinball
    src/core/player.h
    src/core/ResURIResolver.h
    src/core/ResURIResolver.cpp
-   src/core/ScoreView.h
-   src/core/ScoreView.cpp
    src/core/Settings.cpp
    src/core/Settings.h
    src/core/TableDB.cpp
@@ -221,7 +188,7 @@ add_executable(vpinball
    src/plugins/MsgPluginManager.h
    src/plugins/MsgPluginManager.cpp
    src/plugins/VPXPlugin.h
-   src/plugins/CorePlugin.h
+   src/plugins/ControllerPlugin.h
    src/plugins/ScriptablePlugin.h
 
    src/renderer/trace.h
@@ -598,6 +565,8 @@ add_executable(vpinball
    standalone/inc/pup/PUPPlaylist.h
    standalone/inc/pup/PUPTrigger.cpp
    standalone/inc/pup/PUPTrigger.h
+   standalone/inc/pup/PUPTriggerCondition.cpp
+   standalone/inc/pup/PUPTriggerCondition.h
    standalone/inc/pup/PUPScreen.cpp
    standalone/inc/pup/PUPScreen.h
    standalone/inc/pup/PUPLabel.cpp
@@ -616,10 +585,6 @@ add_executable(vpinball
    standalone/inc/pup/pup_i.c
    standalone/inc/pup/pup_i.h
 
-   standalone/inc/common/WindowManager.cpp
-   standalone/inc/common/WindowManager.h
-   standalone/inc/common/Window.cpp
-   standalone/inc/common/Window.h
    standalone/inc/common/DMDWindow.cpp
    standalone/inc/common/DMDWindow.h
    standalone/inc/common/RendererGraphics.cpp
@@ -673,10 +638,40 @@ target_include_directories(vpinball PUBLIC
    media
    pin
    src
+   src/plugins
 )
 
 target_precompile_headers(vpinball PUBLIC
 )
+
+target_compile_definitions(vpinball PRIVATE
+   __STANDALONE__
+
+   ENABLE_BGFX
+   ENABLE_SDL_VIDEO
+   ENABLE_SDL_INPUT
+
+   __WINESRC__
+   WINE_UNICODE_NATIVE
+
+   WINE_NO_TRACE_MSGS
+   WINE_NO_DEBUG_MSGS
+
+   $<$<CONFIG:DEBUG>:BX_CONFIG_DEBUG=1>
+   $<$<CONFIG:RELEASE>:BX_CONFIG_DEBUG=0>
+
+   "__forceinline=__attribute__((always_inline)) inline"
+)
+
+if(BUILD_RPI)
+   target_compile_definitions(vpinball PRIVATE
+      __RPI__
+   )
+elseif(BUILD_RK3588)
+   target_compile_definitions(vpinball PRIVATE
+      __RK3588__
+   )
+endif()
 
 target_compile_options(vpinball PUBLIC
    -fvisibility=hidden
@@ -717,6 +712,7 @@ target_link_libraries(vpinball PUBLIC
    avutil
    swresample
    swscale
+   zip
 )
 
 set_target_properties(vpinball PROPERTIES

@@ -6,8 +6,8 @@
 #include <cstdio>
 #include <filesystem>
 
-static const string regKey[Settings::Plugin00] = { "Controller"s, "Editor"s, "Standalone"s, "Player"s, "DMD"s, "Alpha"s, "Backglass"s,
-      "PlayerVR"s, "RecentDir"s, "Version"s, "CVEdit"s, "TableOverride"s, "TableOption"s, "ControllerDevices"s,
+static const string regKey[Settings::Plugin00] = { "Controller"s, "Editor"s, "Standalone"s, "Player"s, "DMD"s, "Alpha"s, 
+      "Backglass"s, "ScoreView"s, "Topper"s, "PlayerVR"s, "RecentDir"s, "Version"s, "CVEdit"s, "TableOverride"s, "TableOption"s, "ControllerDevices"s,
       "DefaultProps\\Ball"s, "DefaultProps\\Bumper"s, "DefaultProps\\Decal"s, "DefaultProps\\EMReel"s, "DefaultProps\\Flasher"s, "DefaultProps\\Flipper"s,
       "DefaultProps\\Gate"s, "DefaultProps\\HitTarget"s, "DefaultProps\\Kicker"s, "DefaultProps\\Light"s, "DefaultProps\\LightSequence"s,
       "DefaultProps\\Plunger"s, "DefaultProps\\Primitive"s, "DefaultProps\\Ramp"s, "DefaultProps\\Rubber"s, "DefaultProps\\Spinner"s,
@@ -43,7 +43,6 @@ Settings::Settings(const Settings* parent)
 void Settings::RegisterStringSetting(const Section section, const string &key, const string &defVal, const bool addDefaults, const string &comments)
 {
    #ifdef DEBUG
-      assert(m_validatedKeys[section].find(key) == m_validatedKeys[section].end());
       m_validatedKeys[section].insert(key);
    #endif
    string val;
@@ -55,7 +54,6 @@ void Settings::RegisterStringSetting(const Section section, const string &key, c
 void Settings::RegisterBoolSetting(const Section section, const string &key, const bool defVal, const bool addDefaults, const string &comments)
 {
    #ifdef DEBUG
-      assert(m_validatedKeys[section].find(key) == m_validatedKeys[section].end());
       m_validatedKeys[section].insert(key);
    #endif
    int val;
@@ -73,7 +71,6 @@ void Settings::RegisterIntSetting(const Section section, const string &key, cons
 {
    assert((minVal <= defVal) && (defVal <= maxVal));
    #ifdef DEBUG
-      assert(m_validatedKeys[section].find(key) == m_validatedKeys[section].end());
       m_validatedKeys[section].insert(key);
    #endif
    int val;
@@ -91,7 +88,6 @@ void Settings::RegisterFloatSetting(const Section section, const string &key, co
 {
    assert((minVal <= defVal) && (defVal <= maxVal));
    #ifdef DEBUG
-      assert(m_validatedKeys[section].find(key) == m_validatedKeys[section].end());
       m_validatedKeys[section].insert(key);
    #endif
    float val;
@@ -224,13 +220,44 @@ void Settings::Validate(const bool addDefaults)
    SettingInt(Settings::Player, "JoyTweakKey"s, 0, 0x00, 0xFFFF, ""s);
 #endif
 
+   //////////////////////////////////////////////////////////////////////////
+   // GfxBackend section
+
+#ifdef __ANDROID__
+   SettingString(Section::Player, "GfxBackend"s, "OpenGLES"s, ""s);
+#endif
+
+   //////////////////////////////////////////////////////////////////////////
+   // Ball Rendering section
+
+#ifdef __STANDALONE__
+   SettingBool(Section::Player, "BallTrail"s, false, ""s);
+#endif
 
    //////////////////////////////////////////////////////////////////////////
    // Rendering section
 
    SettingFloat(Section::Player, "EmissionScale"s, 0.5f, 0.f, 1.f, ""s);
-   SettingInt(Section::Player, "MaxTexDimension"s, 0, 0, 16384, "Maximum texture dimension. Images sized above this limit will be automatically scaled down on load."s);
 
+#ifndef __LIBVPINBALL__
+   SettingInt(Section::Player, "MaxTexDimension"s, 0, 0, 16384, "Maximum texture dimension. Images sized above this limit will be automatically scaled down on load."s);
+#else
+   SettingInt(Section::Player, "MaxTexDimension"s, 1536, 0, 16384, "Maximum texture dimension. Images sized above this limit will be automatically scaled down on load."s);
+#endif
+
+   //////////////////////////////////////////////////////////////////////////
+   // Plugin.ScoreView
+
+#ifdef __LIBVPINBALL__
+   SettingBool(GetSection("Plugin.ScoreView"), "Enable"s, true, ""s);
+#endif
+
+   //////////////////////////////////////////////////////////////////////////
+   // Standalone section
+
+#ifdef __LIBVPINBALL__
+   SettingInt(Section::Standalone, "RenderingModeOverride"s, 2, 0, 2, ""s);
+#endif
 
    //////////////////////////////////////////////////////////////////////////
    // VR Player section
@@ -238,7 +265,6 @@ void Settings::Validate(const bool addDefaults)
    SettingFloat(Settings::PlayerVR, "TableX"s, 0.f, -300.f, 300.f, "VR scene horizontal X offset (cm)."s);
    SettingFloat(Settings::PlayerVR, "TableY"s, 0.f, -300.f, 300.f, "VR scene horizontal Y offset (cm)."s);
    SettingFloat(Settings::PlayerVR, "TableZ"s, 0.f, -300.f, 300.f, "VR scene vertical offset (cm)s"s);
-
 
    //////////////////////////////////////////////////////////////////////////
    // Cabinet section
@@ -252,17 +278,33 @@ void Settings::Validate(const bool addDefaults)
    SettingFloat(Section::Player, "LockbarWidth"s, 70.f, 10.f, 150.f, "Lockbar width in centimeters (measured on the cabinet)."s);
    SettingFloat(Section::Player, "LockbarHeight"s, 85.f, 0.f, 250.f, "Lockbar height in centimeters (measured on the cabinet, from ground to top of lockbar)."s);
 
+   //////////////////////////////////////////////////////////////////////////
+   // Backglass section
+
+#ifdef __LIBVPINBALL__
+   SettingInt(Section::Backglass, "BackglassOutput"s, 1, 1, 1, ""s);
+   SettingInt(Section::Backglass, "BackglassWndX"s, 0, 0, 3000, ""s);
+   SettingInt(Section::Backglass, "BackglassWndY"s, 160, 0, 3000, ""s);
+   SettingInt(Section::Backglass, "BackglassWidth"s, 640, 0, 3000, ""s);
+   SettingInt(Section::Backglass, "BackglassHeight"s, 480, 0, 3000, ""s);
+#endif
 
    //////////////////////////////////////////////////////////////////////////
    // ScoreView section
 
+#ifdef __LIBVPINBALL__
+   SettingInt(Section::ScoreView, "ScoreViewOutput"s, 1, 1, 1, ""s);
+   SettingInt(Section::ScoreView, "ScoreViewWndX"s, 0, 0, 3000, ""s);
+   SettingInt(Section::ScoreView, "ScoreViewWndY"s, 0, 0, 3000, ""s);
+   SettingInt(Section::ScoreView, "ScoreViewWidth"s, 640, 0, 3000, ""s);
+   SettingInt(Section::ScoreView, "ScoreViewHeight"s, 160, 0, 3000, ""s);
+#endif
 
    //////////////////////////////////////////////////////////////////////////
    // Playfield view section
 
    SettingFloat(Section::Player, "MaxFramerate"s, -1.f, -1.f, 1000.f, "Maximum FPS of playfield view (minimum: 24FPS), 0 is unlimited, < 0 is limited to the display refresh rate."s);
    SettingInt(Section::Player, "SyncMode"s, VSM_NONE, VSM_NONE, VSM_FRAME_PACING, "Hardware video sync mode to use: None / Vertical Sync / Adaptative Sync / Frame Pacing."s);
-
 
    //////////////////////////////////////////////////////////////////////////
    // DMD section
@@ -328,8 +370,15 @@ void Settings::Validate(const bool addDefaults)
 
 
    //////////////////////////////////////////////////////////////////////////
+   // Player misc. section
+
+   SettingBool(Settings::Player, "EnableCameraModeFlyAround"s, false, "Enable moving camera when using Tweak menu (legacy, replaced by LiveUI fly mode)."s);
+
+
+   //////////////////////////////////////////////////////////////////////////
    // Editor section
 
+   SettingBool(Settings::Editor, "DisableHash"s, false, "Disable file integrity validation."s);
    SettingBool(Settings::Editor, "EnableLog"s, true, "Enable general logging to the vinball.log file."s);
 
    #undef SettingString
@@ -369,7 +418,7 @@ bool Settings::LoadFromFile(const string& path, const bool createDefault)
       // Load failed: initialize from the default setting file
       try
       {
-         std::filesystem::copy(g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "Default_VPinballX.ini", path);
+         std::filesystem::copy(g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "Default_VPinballX.ini", path);
       }
       catch (const std::exception&)
       {
@@ -595,14 +644,11 @@ bool Settings::LoadValue(const Section section, const string &key, unsigned int 
    const string value = m_ini.get(m_settingKeys[section]).get(key);
    if (!value.empty())
    {
-      const char *const szp = value.c_str();
-      char *sze;
-      const unsigned int tmp = (unsigned int)std::strtoll(szp, &sze, 10);
-
-      if (szp == sze)
+      unsigned int result;
+      if (std::from_chars(value.c_str(), value.c_str()+value.length(), result).ec != std::errc{})
          return false;
 
-      val = tmp;
+      val = result;
       return true;
    }
 

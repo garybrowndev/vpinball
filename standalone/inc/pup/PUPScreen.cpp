@@ -22,7 +22,7 @@ const char* PUP_SCREEN_MODE_STRINGS[] = {
 
 const char* PUP_SCREEN_MODE_TO_STRING(PUP_SCREEN_MODE value)
 {
-   if ((int)value < 0 || (size_t)value >= sizeof(PUP_SCREEN_MODE_STRINGS) / sizeof(PUP_SCREEN_MODE_STRINGS[0]))
+   if ((int)value < 0 || (size_t)value >= std::size(PUP_SCREEN_MODE_STRINGS))
       return "UNKNOWN";
    return PUP_SCREEN_MODE_STRINGS[value];
 }
@@ -36,7 +36,7 @@ const char* PUP_PINDISPLAY_REQUEST_TYPE_STRINGS[] = {
 
 const char* PUP_PINDISPLAY_REQUEST_TYPE_TO_STRING(PUP_PINDISPLAY_REQUEST_TYPE value)
 {
-   if ((int)value < 0 || (size_t)value >= sizeof(PUP_PINDISPLAY_REQUEST_TYPE_STRINGS) / sizeof(PUP_PINDISPLAY_REQUEST_TYPE_STRINGS[0]))
+   if ((int)value < 0 || (size_t)value >= std::size(PUP_PINDISPLAY_REQUEST_TYPE_STRINGS))
       return "UNKNOWN";
    return PUP_PINDISPLAY_REQUEST_TYPE_STRINGS[value];
 }
@@ -57,9 +57,9 @@ const char* PUP_PINDISPLAY_REQUEST_TYPE_TO_STRING(PUP_PINDISPLAY_REQUEST_TYPE va
      CustomPos = CustomPos
 */
 
-PUPScreen::PUPScreen(PUP_SCREEN_MODE mode, int screenNum, const string& szScreenDes, const string& szBackgroundPlaylist, const string& szBackgroundFilename, bool transparent, float volume, PUPCustomPos* pCustomPos, const std::vector<PUPPlaylist*>& playlists)
+PUPScreen::PUPScreen(PUPManager* pManager, PUP_SCREEN_MODE mode, int screenNum, const string& szScreenDes, const string& szBackgroundPlaylist, const string& szBackgroundFilename, bool transparent, float volume, PUPCustomPos* pCustomPos, const vector<PUPPlaylist*>& playlists)
 {
-   m_pManager = PUPManager::GetInstance();
+   m_pManager = pManager;
 
    m_mode = mode;
    m_screenNum = screenNum;
@@ -88,8 +88,6 @@ PUPScreen::PUPScreen(PUP_SCREEN_MODE mode, int screenNum, const string& szScreen
 
    LoadTriggers();
 
-   QueueTrigger('D', 0, 1);
-
    if (!m_backgroundPlaylist.empty()) {
       QueuePlay(m_backgroundPlaylist, m_backgroundFilename, m_volume, -1);
       QueueBG(true);
@@ -115,10 +113,8 @@ PUPScreen::~PUPScreen()
    for (auto& [key, pPlaylist] : m_playlistMap)
       delete pPlaylist;
 
-   for (auto& [key, pTriggers] : m_triggerMap) {
-      for (PUPTrigger* pTrigger : pTriggers)
-         delete pTrigger;
-   }
+   for (PUPTrigger* pTrigger : m_triggers)
+      delete pTrigger;
 
    for (PUPLabel* pLabel : m_labels)
       delete pLabel;
@@ -127,28 +123,28 @@ PUPScreen::~PUPScreen()
       pChildren->clear();
 }
 
-PUPScreen* PUPScreen::CreateFromCSV(const string& line, const std::vector<PUPPlaylist*>& playlists)
+PUPScreen* PUPScreen::CreateFromCSV(PUPManager* pManager, const string& line, const vector<PUPPlaylist*>& playlists)
 {
    vector<string> parts = parse_csv_line(line);
    if (parts.size() != 8) {
-      PLOGD.printf("Invalid screen: %s", line.c_str());
+      PLOGE.printf("Failed to parse screen line, expected 8 columns but got %d: %s", parts.size(), line.c_str());
       return nullptr;
    }
 
    PUP_SCREEN_MODE mode;
-   if (StrCompareNoCase(parts[5], "Show"))
+   if (StrCompareNoCase(parts[5], "Show"s))
       mode = PUP_SCREEN_MODE_SHOW;
-   else if (StrCompareNoCase(parts[5], "ForceON"))
+   else if (StrCompareNoCase(parts[5], "ForceON"s))
       mode = PUP_SCREEN_MODE_FORCE_ON;
-   else if (StrCompareNoCase(parts[5], "ForcePoP"))
+   else if (StrCompareNoCase(parts[5], "ForcePoP"s))
       mode = PUP_SCREEN_MODE_FORCE_POP;
-   else if (StrCompareNoCase(parts[5], "ForceBack"))
+   else if (StrCompareNoCase(parts[5], "ForceBack"s))
       mode = PUP_SCREEN_MODE_FORCE_BACK;
-   else if (StrCompareNoCase(parts[5], "ForcePopBack"))
+   else if (StrCompareNoCase(parts[5], "ForcePopBack"s))
       mode = PUP_SCREEN_MODE_FORCE_POP_BACK;
-   else if (StrCompareNoCase(parts[5], "MusicOnly"))
+   else if (StrCompareNoCase(parts[5], "MusicOnly"s))
       mode = PUP_SCREEN_MODE_MUSIC_ONLY;
-   else if (StrCompareNoCase(parts[5], "Off"))
+   else if (StrCompareNoCase(parts[5], "Off"s))
       mode = PUP_SCREEN_MODE_OFF;
    else {
       PLOGW.printf("Invalid screen mode: %s", parts[5].c_str());
@@ -156,6 +152,7 @@ PUPScreen* PUPScreen::CreateFromCSV(const string& line, const std::vector<PUPPla
    }
 
    return new PUPScreen(
+      pManager,
       mode,
       string_to_int(parts[0], 0), // screenNum
       parts[1], // screenDes
@@ -166,9 +163,9 @@ PUPScreen* PUPScreen::CreateFromCSV(const string& line, const std::vector<PUPPla
       PUPCustomPos::CreateFromCSV(parts[7]), playlists);
 }
 
-PUPScreen* PUPScreen::CreateDefault(int screenNum, const std::vector<PUPPlaylist*>& playlists)
+PUPScreen* PUPScreen::CreateDefault(PUPManager* pManager, int screenNum, const vector<PUPPlaylist*>& playlists)
 {
-   if (PUPManager::GetInstance()->HasScreen(screenNum)) {
+   if (pManager->HasScreen(screenNum)) {
       PLOGW.printf("Screen already exists: screenNum=%d", screenNum);
       return nullptr;
    }
@@ -176,15 +173,15 @@ PUPScreen* PUPScreen::CreateDefault(int screenNum, const std::vector<PUPPlaylist
    PUPScreen* pScreen = nullptr;
    switch(screenNum) {
       case PUP_SCREEN_TOPPER:
-         pScreen = new PUPScreen(PUP_SCREEN_MODE_SHOW, PUP_SCREEN_TOPPER, "Topper"s, "", "", false, 100.0f, nullptr, playlists);
+         pScreen = new PUPScreen(pManager, PUP_SCREEN_MODE_SHOW, PUP_SCREEN_TOPPER, "Topper"s, ""s, ""s, false, 100.0f, nullptr, playlists);
       case PUP_SCREEN_DMD:
-         pScreen = new PUPScreen(PUP_SCREEN_MODE_SHOW, PUP_SCREEN_DMD, "DMD"s, "", "", false, 100.0f, nullptr, playlists);
+         pScreen = new PUPScreen(pManager, PUP_SCREEN_MODE_SHOW, PUP_SCREEN_DMD, "DMD"s, ""s, ""s, false, 100.0f, nullptr, playlists);
       case PUP_SCREEN_BACKGLASS:
-         pScreen = new PUPScreen(PUP_SCREEN_MODE_SHOW, PUP_SCREEN_BACKGLASS, "Backglass"s, "", "", false, 100.0f, nullptr, playlists);
+         pScreen = new PUPScreen(pManager, PUP_SCREEN_MODE_SHOW, PUP_SCREEN_BACKGLASS, "Backglass"s, ""s, ""s, false, 100.0f, nullptr, playlists);
       case PUP_SCREEN_PLAYFIELD:
-         pScreen = new PUPScreen(PUP_SCREEN_MODE_SHOW, PUP_SCREEN_PLAYFIELD, "Playfield"s, "", "", false, 100.0f, nullptr, playlists);
+         pScreen = new PUPScreen(pManager, PUP_SCREEN_MODE_SHOW, PUP_SCREEN_PLAYFIELD, "Playfield"s, ""s, ""s, false, 100.0f, nullptr, playlists);
       default:
-         pScreen = new PUPScreen(PUP_SCREEN_MODE_SHOW, screenNum, "Unknown"s, "", "", false, 100.0f, nullptr, playlists);
+         pScreen = new PUPScreen(pManager, PUP_SCREEN_MODE_SHOW, screenNum, "Unknown"s, ""s, ""s, false, 100.0f, nullptr, playlists);
    }
    return pScreen;
 }
@@ -194,10 +191,12 @@ void PUPScreen::LoadTriggers()
    string szPlaylistsPath = find_case_insensitive_file_path(m_pManager->GetPath() + "triggers.pup");
    std::ifstream triggersFile;
    triggersFile.open(szPlaylistsPath, std::ifstream::in);
-   if (triggersFile.is_open()) {
+   if (triggersFile.is_open())
+   {
       string line;
       int i = 0;
-      while (std::getline(triggersFile, line)) {
+      while (std::getline(triggersFile, line))
+      {
          if (++i == 1)
             continue;
          AddTrigger(PUPTrigger::CreateFromCSV(this, line));
@@ -248,7 +247,7 @@ void PUPScreen::AddPlaylist(PUPPlaylist* pPlaylist)
 
 PUPPlaylist* PUPScreen::GetPlaylist(const string& szFolder)
 {
-   std::map<string, PUPPlaylist*>::iterator it = m_playlistMap.find(lowerCase(szFolder));
+   ankerl::unordered_dense::map<string, PUPPlaylist*>::const_iterator it = m_playlistMap.find(lowerCase(szFolder));
    return it != m_playlistMap.end() ? it->second : nullptr;
 }
 
@@ -257,13 +256,7 @@ void PUPScreen::AddTrigger(PUPTrigger* pTrigger)
    if (!pTrigger)
       return;
 
-   m_triggerMap[pTrigger->GetTrigger()].push_back(pTrigger);
-}
-
-vector<PUPTrigger*>* PUPScreen::GetTriggers(const string& szTrigger)
-{
-   std::map<string, vector<PUPTrigger*>>::iterator it = m_triggerMap.find(szTrigger);
-   return it != m_triggerMap.end() ? &it->second : nullptr;
+   m_triggers.push_back(pTrigger);
 }
 
 void PUPScreen::AddLabel(PUPLabel* pLabel)
@@ -333,7 +326,7 @@ void PUPScreen::SetSize(int w, int h)
    }
 }
 
-void PUPScreen::SetBackground(PUPPlaylist* pPlaylist, const std::string& szPlayFile)
+void PUPScreen::SetBackground(PUPPlaylist* pPlaylist, const string& szPlayFile)
 {
    std::lock_guard<std::mutex> lock(m_renderMutex);
    LoadRenderable(&m_background, pPlaylist->GetPlayFilePath(szPlayFile));
@@ -346,16 +339,16 @@ void PUPScreen::SetCustomPos(const string& szCustomPos)
    m_pCustomPos = PUPCustomPos::CreateFromCSV(szCustomPos);
 }
 
-void PUPScreen::SetOverlay(PUPPlaylist* pPlaylist, const std::string& szPlayFile)
+void PUPScreen::SetOverlay(PUPPlaylist* pPlaylist, const string& szPlayFile)
 {
    std::lock_guard<std::mutex> lock(m_renderMutex);
    LoadRenderable(&m_overlay, pPlaylist->GetPlayFilePath(szPlayFile));
 }
 
-void PUPScreen::SetMedia(PUPPlaylist* pPlaylist, const std::string& szPlayFile, float volume, int priority, bool skipSamePriority)
+void PUPScreen::SetMedia(PUPPlaylist* pPlaylist, const string& szPlayFile, float volume, int priority, bool skipSamePriority, int length)
 {
    std::lock_guard<std::mutex> lock(m_renderMutex);
-   m_pMediaPlayerManager->Play(pPlaylist, szPlayFile, m_pParent ? (volume / 100.0f) * m_pParent->GetVolume() : volume, priority, skipSamePriority);
+   m_pMediaPlayerManager->Play(pPlaylist, szPlayFile, m_pParent ? (volume / 100.0f) * m_pParent->GetVolume() : volume, priority, skipSamePriority, length);
 }
 
 void PUPScreen::StopMedia()
@@ -370,7 +363,7 @@ void PUPScreen::StopMedia(int priority)
    m_pMediaPlayerManager->Stop(priority);
 }
 
-void PUPScreen::StopMedia(PUPPlaylist* pPlaylist, const std::string& szPlayFile)
+void PUPScreen::StopMedia(PUPPlaylist* pPlaylist, const string& szPlayFile)
 {
    std::lock_guard<std::mutex> lock(m_renderMutex);
    m_pMediaPlayerManager->Stop(pPlaylist, szPlayFile);
@@ -457,25 +450,18 @@ void PUPScreen::QueueBG(int mode)
    m_queueCondVar.notify_one();
 }
 
-void PUPScreen::QueueTrigger(char type, int number, int value)
+void PUPScreen::QueueTrigger(const PUPTriggerData& data)
 {
-   if (value == 0)
-      return;
-
-   vector<PUPTrigger*>* pTriggers = GetTriggers(type + std::to_string(number));
-   if (!pTriggers)
-      return;
-
-   for (PUPTrigger* pTrigger : *pTriggers) {
-      PUPTriggerRequest* pRequest = new PUPTriggerRequest();
-      pRequest->pTrigger = pTrigger;
-      pRequest->value = value;
-
-      {
-         std::lock_guard<std::mutex> lock(m_queueMutex);
-         m_queue.push(pRequest);
+   for (PUPTrigger* pTrigger : m_triggers) {
+      if (pTrigger->Evaluate(m_pManager, data)) {
+         PUPTriggerRequest* pRequest = new PUPTriggerRequest();
+         pRequest->pTrigger = pTrigger;
+         {
+            std::lock_guard<std::mutex> lock(m_queueMutex);
+            m_queue.push(pRequest);
+         }
+         m_queueCondVar.notify_one();
       }
-      m_queueCondVar.notify_one();
    }
 }
 
@@ -487,18 +473,18 @@ void PUPScreen::Start()
    m_thread = std::thread(&PUPScreen::ProcessQueue, this);
 }
 
-void PUPScreen::Init(SDL_Renderer* pRenderer)
+void PUPScreen::Init(VPXPluginAPI* pVpxApi)
 {
    PLOGD.printf("Initializing: screen={%s}", ToString(false).c_str());
 
-   m_pRenderer = pRenderer;
+   m_pVpxApi = pVpxApi;
 
    for (auto pChildren : { &m_defaultChildren, &m_backChildren, &m_topChildren }) {
       for (PUPScreen* pScreen : *pChildren)
-         pScreen->Init(pRenderer);
+         pScreen->Init(pVpxApi);
    }
 
-   m_pMediaPlayerManager->SetRenderer(pRenderer);
+   m_pMediaPlayerManager->SetVpxApi(m_pVpxApi);
 }
 
 void PUPScreen::ProcessQueue()
@@ -507,7 +493,7 @@ void PUPScreen::ProcessQueue()
       std::unique_lock<std::mutex> lock(m_queueMutex);
       m_queueCondVar.wait(lock, [this] { return !m_queue.empty() || !m_isRunning; });
 
-      if (!m_isRunning) {
+      if (!m_isRunning || m_mode == PUP_SCREEN_MODE_OFF) {
          while (!m_queue.empty()) {
             PUPScreenRequest* pRequest = m_queue.front();
             m_queue.pop();
@@ -544,7 +530,7 @@ void PUPScreen::ProcessPinDisplayRequest(PUPPinDisplayRequest* pRequest)
       case PUP_PINDISPLAY_REQUEST_TYPE_NORMAL:
          switch (pRequest->pPlaylist->GetFunction()) {
             case PUP_PLAYLIST_FUNCTION_DEFAULT:
-               SetMedia(pRequest->pPlaylist, pRequest->szPlayFile, pRequest->volume, pRequest->priority, false);
+               SetMedia(pRequest->pPlaylist, pRequest->szPlayFile, pRequest->volume, pRequest->priority, false, 0);
                break;
             case PUP_PLAYLIST_FUNCTION_FRAMES:
                StopMedia();
@@ -578,19 +564,12 @@ void PUPScreen::ProcessPinDisplayRequest(PUPPinDisplayRequest* pRequest)
 void PUPScreen::ProcessTriggerRequest(PUPTriggerRequest* pRequest)
 {
    PUPTrigger* pTrigger = pRequest->pTrigger;
-   if (pTrigger->IsResting()) {
-      PLOGW.printf("skipping resting trigger: trigger={%s}", pTrigger->ToString().c_str());
-      return;
-   }
-   pTrigger->SetTriggered();
-
-   PLOGD.printf("processing trigger: trigger={%s}", pTrigger->ToString().c_str());
 
    switch(pTrigger->GetPlayAction()) {
       case PUP_TRIGGER_PLAY_ACTION_NORMAL:
          switch (pTrigger->GetPlaylist()->GetFunction()) {
             case PUP_PLAYLIST_FUNCTION_DEFAULT:
-               SetMedia(pTrigger->GetPlaylist(), pTrigger->GetPlayFile(), pTrigger->GetVolume(), pTrigger->GetPriority(), false);
+               SetMedia(pTrigger->GetPlaylist(), pTrigger->GetPlayFile(), pTrigger->GetVolume(), pTrigger->GetPriority(), false, pTrigger->GetLength());
                break;
             case PUP_PLAYLIST_FUNCTION_FRAMES:
                StopMedia();
@@ -607,15 +586,15 @@ void PUPScreen::ProcessTriggerRequest(PUPTriggerRequest* pRequest)
          }
          break;
       case PUP_TRIGGER_PLAY_ACTION_LOOP:
-         SetMedia(pTrigger->GetPlaylist(), pTrigger->GetPlayFile(), pTrigger->GetVolume(), pTrigger->GetPriority(), false);
+         SetMedia(pTrigger->GetPlaylist(), pTrigger->GetPlayFile(), pTrigger->GetVolume(), pTrigger->GetPriority(), false, pTrigger->GetLength());
          SetLoop(1);
          break;
       case PUP_TRIGGER_PLAY_ACTION_SET_BG:
-         SetMedia(pTrigger->GetPlaylist(), pTrigger->GetPlayFile(), pTrigger->GetVolume(), pTrigger->GetPriority(), false);
+         SetMedia(pTrigger->GetPlaylist(), pTrigger->GetPlayFile(), pTrigger->GetVolume(), pTrigger->GetPriority(), false, pTrigger->GetLength());
          SetBG(1);
          break;
       case PUP_TRIGGER_PLAY_ACTION_SKIP_SAME_PRTY:
-         SetMedia(pTrigger->GetPlaylist(), pTrigger->GetPlayFile(), pTrigger->GetVolume(), pTrigger->GetPriority(), true);
+         SetMedia(pTrigger->GetPlaylist(), pTrigger->GetPlayFile(), pTrigger->GetVolume(), pTrigger->GetPriority(), true, pTrigger->GetLength());
          break;
       case PUP_TRIGGER_PLAY_ACTION_STOP_PLAYER:
          StopMedia(pTrigger->GetPriority());
@@ -629,60 +608,77 @@ void PUPScreen::ProcessTriggerRequest(PUPTriggerRequest* pRequest)
    }
 }
 
-void PUPScreen::Render()
+void PUPScreen::Render(VPXRenderContext2D* const ctx)
 {
    std::lock_guard<std::mutex> lock(m_renderMutex);
 
-   Render(&m_background);
+   Render(ctx, &m_background);
 
-   m_pMediaPlayerManager->Render(m_rect);
+   m_pMediaPlayerManager->Render(ctx, m_rect);
 
    for (auto pChildren : { &m_defaultChildren, &m_backChildren, &m_topChildren }) {
       for (PUPScreen* pScreen : *pChildren)
-         pScreen->Render();
+         pScreen->Render(ctx);
    }
 
-   Render(&m_overlay);
+   Render(ctx, &m_overlay);
 
-   SDL_SetRenderClipRect(m_pRenderer, &m_rect);
+   // FIXME
+   //SDL_SetRenderClipRect(m_pRenderer, &m_rect);
 
-   for (PUPLabel* pLabel : m_labels)
-      pLabel->Render(m_pRenderer, m_rect, m_pagenum);
+   for (PUPLabel* pLabel : m_labels) {
+      pLabel->SetVpxApi(m_pVpxApi);
+      pLabel->Render(ctx, m_rect, m_pagenum);
+   }
 
-   SDL_SetRenderClipRect(m_pRenderer, NULL);
+   // FIXME
+   //SDL_SetRenderClipRect(m_pRenderer, NULL);
 }
 
 void PUPScreen::LoadRenderable(PUPScreenRenderable* pRenderable, const string& szFile)
 {
-   if (pRenderable->pSurface)
+   if (pRenderable->pSurface) {
       SDL_DestroySurface(pRenderable->pSurface);
+      pRenderable->pSurface = nullptr;
+   }
 
-   pRenderable->pSurface = IMG_Load(szFile.c_str());
+   SDL_Surface* pSurface = IMG_Load(szFile.c_str());
+   if (pSurface) {
+      if (pSurface->format == SDL_PIXELFORMAT_RGBA32)
+         pRenderable->pSurface = pSurface;
+      else {
+         pRenderable->pSurface = SDL_ConvertSurface(pSurface, SDL_PIXELFORMAT_RGBA32);
+         SDL_DestroySurface(pSurface);
+      }
+   }
    pRenderable->dirty = true;
 }
 
-void PUPScreen::Render(PUPScreenRenderable* pRenderable)
+void PUPScreen::Render(VPXRenderContext2D* const ctx, PUPScreenRenderable* pRenderable)
 {
    if (pRenderable->dirty) {
-      if (pRenderable->pTexture) {
-         SDL_DestroyTexture(pRenderable->pTexture);
-         pRenderable->pTexture = NULL;
+      if (pRenderable->vpxTexture) {
+         m_pVpxApi->DeleteTexture(pRenderable->vpxTexture);
+         pRenderable->vpxTexture = NULL;
       }
       if (pRenderable->pSurface) {
-         pRenderable->pTexture = SDL_CreateTextureFromSurface(m_pRenderer, pRenderable->pSurface);
+         SDL_LockSurface(pRenderable->pSurface);
+         m_pVpxApi->UpdateTexture(&pRenderable->vpxTexture, pRenderable->pSurface->w, pRenderable->pSurface->h,
+            VPXTextureFormat::VPXTEXFMT_sRGBA8, static_cast<uint8_t*>(pRenderable->pSurface->pixels));
+         SDL_UnlockSurface(pRenderable->pSurface);
          SDL_DestroySurface(pRenderable->pSurface);
          pRenderable->pSurface = NULL;
       }
       pRenderable->dirty = false;
    }
 
-   if (pRenderable->pTexture) {
-      SDL_FRect fRect;
-      fRect.x = static_cast<float>(m_rect.x);
-      fRect.y = static_cast<float>(m_rect.y);
-      fRect.w = static_cast<float>(m_rect.w);
-      fRect.h = static_cast<float>(m_rect.h);
-      SDL_RenderTexture(m_pRenderer,  pRenderable->pTexture, NULL, &fRect);
+   if (pRenderable->vpxTexture)
+   {
+      int texWidth, texHeight;
+      m_pVpxApi->GetTextureInfo(pRenderable->vpxTexture, &texWidth, &texHeight);
+      ctx->DrawImage(ctx, pRenderable->vpxTexture, 1.f, 1.f, 1.f, 1.f,
+         0.f, 0.f, static_cast<float>(texWidth), static_cast<float>(texHeight),
+         static_cast<float>(m_rect.x), static_cast<float>(m_rect.y), static_cast<float>(m_rect.w), static_cast<float>(m_rect.h));
    }
 }
 
@@ -691,8 +687,10 @@ void PUPScreen::FreeRenderable(PUPScreenRenderable* pRenderable)
    if (pRenderable->pSurface)
       SDL_DestroySurface(pRenderable->pSurface);
 
-   if (pRenderable->pTexture)
-      SDL_DestroyTexture(pRenderable->pTexture);
+   if (pRenderable->vpxTexture) {
+      m_pVpxApi->DeleteTexture(pRenderable->vpxTexture);
+      pRenderable->vpxTexture = NULL;
+   }
 }
 
 string PUPScreen::ToString(bool full) const
@@ -705,7 +703,7 @@ string PUPScreen::ToString(bool full) const
          ", backgroundFilename=" + m_backgroundFilename +
          ", transparent=" + (m_transparent ? "true" : "false") +
          ", volume=" + std::to_string(m_volume) +
-         ", m_customPos={" + (m_pCustomPos ? m_pCustomPos->ToString() : "") + '}';
+         ", m_customPos={" + (m_pCustomPos ? m_pCustomPos->ToString() : ""s) + '}';
    }
 
    return "screenNum=" + std::to_string(m_screenNum) +

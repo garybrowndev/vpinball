@@ -21,22 +21,26 @@ public:
       UnloadAll();
    }
 
-   Sampler* LoadTexture(BaseTexture* const memtex, const SamplerFilter filter, const SamplerAddressMode clampU, const SamplerAddressMode clampV, const bool force_linear_rgb);
-   void SetDirty(BaseTexture* memtex);
-   void UnloadTexture(BaseTexture* memtex);
+   void AddPlaceHolder(ITexManCacheable* memtex);
+   void AddPendingUpload(ITexManCacheable* memtex);
+   Sampler* LoadTexture(ITexManCacheable* const memtex, const SamplerFilter filter, const SamplerAddressMode clampU, const SamplerAddressMode clampV, const bool force_linear_rgb);
+   void SetDirty(ITexManCacheable* memtex);
+   void UnloadTexture(ITexManCacheable* memtex);
    void UnloadAll();
 
-   vector<BaseTexture*> GetLoadedTextures() const;
-   bool IsLinearRGB(BaseTexture* memtex) const;
+   vector<ITexManCacheable*> GetLoadedTextures() const;
+   bool IsLinearRGB(ITexManCacheable* memtex) const;
 
 private:
    struct MapEntry
    {
-      string name;
-      Sampler* sampler;
-      bool forceLinearRGB;
+      Sampler* sampler = nullptr;
+      bool forceLinearRGB = false;
+      ITexManCacheable* tex = nullptr;
+      bool isPlaceHolder = false;
+      std::shared_ptr<class BaseTexture> pendingUpload;
    };
    RenderDevice& m_rd;
-   ankerl::unordered_dense::map<BaseTexture*, MapEntry> m_map;
-   typedef ankerl::unordered_dense::map<BaseTexture*, MapEntry>::iterator Iter;
+   ankerl::unordered_dense::map<unsigned long long, MapEntry> m_map;
+   typedef ankerl::unordered_dense::map<unsigned long long, MapEntry>::iterator Iter;
 };

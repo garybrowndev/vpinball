@@ -1,11 +1,5 @@
 // license:GPLv3+
 
-// TODO this is defined for VPX compilation, but should be moved to build script
-#if !defined(ENABLE_BGFX) || !defined(_DEBUG)
-#define _SECURE_SCL 0
-#define _HAS_ITERATOR_DEBUGGING 0
-#endif
-
 #include "MsgPluginManager.h"
 
 #include <cassert>
@@ -59,10 +53,12 @@ MsgPluginManager& MsgPluginManager::GetInstance()
 
 MsgPluginManager::MsgPluginManager()
 {
+   m_api.GetEndpointInfo = GetEndpointInfo;
    m_api.GetMsgID = GetMsgID;
    m_api.SubscribeMsg = SubscribeMsg;
    m_api.UnsubscribeMsg = UnsubscribeMsg;
    m_api.BroadcastMsg = BroadcastMsg;
+   m_api.SendMsg = SendMsg;
    m_api.ReleaseMsgID = ReleaseMsgID;
    m_api.GetSetting = GetSetting; 
    m_api.RunOnMainThread = RunOnMainThread;
@@ -78,6 +74,32 @@ MsgPluginManager::~MsgPluginManager()
 
 ///////////////////////////////////////////////////////////////////////////////
 // Message API
+
+unsigned int MsgPluginManager::GetPluginEndpoint(const char* id)
+{
+   MsgPluginManager& pm = GetInstance();
+   auto item = std::ranges::find_if(pm.m_plugins, [id](std::shared_ptr<MsgPlugin>& plg) { return plg->IsLoaded() && strcmp(plg->m_id.c_str(), id) == 0; });
+   if (item == pm.m_plugins.end())
+      return 0;
+   return item->get()->m_endpointId;
+}
+
+void MsgPluginManager::GetEndpointInfo(const uint32_t endpointId, MsgEndpointInfo* info)
+{
+   MsgPluginManager& pm = GetInstance();
+#ifndef __LIBVPINBALL__
+   assert(std::this_thread::get_id() == pm.m_apiThread);
+#endif
+   auto item = std::ranges::find_if(pm.m_plugins, [endpointId](std::shared_ptr<MsgPlugin>& plg) { return plg->IsLoaded() && plg->m_endpointId == endpointId; });
+   if (item == pm.m_plugins.end())
+      return;
+   info->id = (*item)->m_id.c_str();
+   info->name = (*item)->m_name.c_str();
+   info->description = (*item)->m_description.c_str();
+   info->author = (*item)->m_author.c_str();
+   info->version = (*item)->m_version.c_str();
+   info->link = (*item)->m_link.c_str();
+}
 
 unsigned int MsgPluginManager::GetMsgID(const char* name_space, const char* name)
 {
@@ -107,7 +129,7 @@ unsigned int MsgPluginManager::GetMsgID(const char* name_space, const char* name
    return freeMsg->id;
 }
 
-void MsgPluginManager::SubscribeMsg(const unsigned int endpointId, const unsigned int msgId, const msgpi_msg_callback callback, void* userData)
+void MsgPluginManager::SubscribeMsg(const uint32_t endpointId, const unsigned int msgId, const msgpi_msg_callback callback, void* userData)
 {
    MsgPluginManager& pm = GetInstance();
 #ifndef __LIBVPINBALL__
@@ -146,7 +168,7 @@ void MsgPluginManager::UnsubscribeMsg(const unsigned int msgId, const msgpi_msg_
    assert(false);
 }
 
-void MsgPluginManager::BroadcastMsg(const unsigned int endpointId, const unsigned int msgId, void* data)
+void MsgPluginManager::BroadcastMsg(const uint32_t endpointId, const unsigned int msgId, void* data)
 {
    MsgPluginManager& pm = GetInstance();
 #ifndef __LIBVPINBALL__
@@ -157,7 +179,24 @@ void MsgPluginManager::BroadcastMsg(const unsigned int endpointId, const unsigne
    assert(1 <= endpointId && endpointId < pm.m_nextEndpointId);
    for (const CallbackEntry entry : pm.m_msgs[msgId].callbacks)
       if (entry.endpointId != endpointId) // Don't broadcast to sender's endpoint
-         entry.callback(msgId, entry.userData, data);
+         entry.callback(msgId, entry.context, data);
+}
+
+void MsgPluginManager::SendMsg(const uint32_t endpointId, const unsigned int msgId, const uint32_t targetEndpointId, void* data)
+{
+   MsgPluginManager& pm = GetInstance();
+#ifndef __LIBVPINBALL__
+   assert(std::this_thread::get_id() == pm.m_apiThread);
+#endif
+   assert(msgId < pm.m_msgs.size());
+   assert(pm.m_msgs[msgId].refCount > 0);
+   assert(1 <= endpointId && endpointId < pm.m_nextEndpointId);
+   for (const CallbackEntry entry : pm.m_msgs[msgId].callbacks)
+      if (entry.endpointId == targetEndpointId)
+      {
+         entry.callback(msgId, entry.context, data);
+         break;
+      }
 }
 
 void MsgPluginManager::ReleaseMsgID(const unsigned int msgId)
@@ -239,7 +278,7 @@ static std::string unquote(const std::string& str)
    return str;
 }
 
-std::shared_ptr<MsgPlugin> MsgPluginManager::RegisterPlugin(const std::string& id, const std::string& name, const std::string& description, const std::string& author, const std::string& version, const std::string& link, const msgpi_load_plugin& loadPlugin, const msgpi_unload_plugin& unloadPlugin)
+std::shared_ptr<MsgPlugin> MsgPluginManager::RegisterPlugin(const std::string& id, const std::string& name, const std::string& description, const std::string& author, const std::string& version, const std::string& link, msgpi_load_plugin loadPlugin, msgpi_unload_plugin unloadPlugin)
 {
    assert(loadPlugin != nullptr);
    assert(unloadPlugin != nullptr);
@@ -383,6 +422,8 @@ void MsgPlugin::Load(const MsgPluginAPI* msgAPI)
    {
       if (m_module == nullptr)
       {
+         const std::string load = std::string(m_id) + "PluginLoad";
+         const std::string unload = std::string(m_id) + "PluginUnload";
          #if defined(_WIN32) || defined(_WIN64)
             SetDllDirectory(m_directory.c_str());
          #endif
@@ -393,15 +434,15 @@ void MsgPlugin::Load(const MsgPluginAPI* msgAPI)
                PLOGE << "Plugin " << m_id << " failed to load library " << m_library << ": " << SDL_GetError();
                return;
             }
-            m_loadPlugin = (msgpi_load_plugin)SDL_LoadFunction(static_cast<SDL_SharedObject*>(m_module), "PluginLoad");
-            m_unloadPlugin = (msgpi_unload_plugin)SDL_LoadFunction(static_cast<SDL_SharedObject*>(m_module), "PluginUnload");
+            m_loadPlugin = (msgpi_load_plugin)SDL_LoadFunction(static_cast<SDL_SharedObject*>(m_module), load.c_str());
+            m_unloadPlugin = (msgpi_unload_plugin)SDL_LoadFunction(static_cast<SDL_SharedObject*>(m_module), unload.c_str());
             if (m_loadPlugin == nullptr || m_unloadPlugin == nullptr)
             {
                SDL_UnloadObject(static_cast<SDL_SharedObject*>(m_module));
                m_loadPlugin = nullptr;
                m_unloadPlugin = nullptr;
                m_module = nullptr;
-               PLOGE << "Plugin " << m_id << " invalid library " << m_library << ": required PluginLoad/PluginUnload functions are not correct.";
+               PLOGE << "Plugin " << m_id << " invalid library " << m_library << ": required " << load << "/" << unload << " functions are not correct.";
                return;
             }
          #elif defined(_WIN32) || defined(_WIN64)
@@ -413,15 +454,15 @@ void MsgPlugin::Load(const MsgPluginAPI* msgAPI)
                PLOGE << "Last error was: " << GetLastErrorAsString();
                return;
             }
-            m_loadPlugin = (msgpi_load_plugin)GetProcAddress(static_cast<HMODULE>(m_module), "PluginLoad");
-            m_unloadPlugin = (msgpi_unload_plugin)GetProcAddress(static_cast<HMODULE>(m_module), "PluginUnload");
+            m_loadPlugin = (msgpi_load_plugin)GetProcAddress(static_cast<HMODULE>(m_module), load.c_str());
+            m_unloadPlugin = (msgpi_unload_plugin)GetProcAddress(static_cast<HMODULE>(m_module), unload.c_str());
             if (m_loadPlugin == nullptr || m_unloadPlugin == nullptr)
             {
                FreeLibrary(static_cast<HMODULE>(m_module));
                m_loadPlugin = nullptr;
                m_unloadPlugin = nullptr;
                m_module = nullptr;
-               PLOGE << "Plugin " << m_id << " invalid library " << m_library << ": required load/unload functions are not correct.";
+               PLOGE << "Plugin " << m_id << " invalid library " << m_library << ": required " << load << "/" << unload << " functions are not correct.";
                return;
             }
          #else

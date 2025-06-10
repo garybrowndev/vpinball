@@ -3,6 +3,8 @@
 #include "Actor.h"
 #include "resources/Font.h"
 
+namespace Flex {
+
 class Label final : public Actor
 {
 public:
@@ -15,22 +17,24 @@ public:
    void SetAlignment(Alignment alignment) { m_alignment = alignment; }
    Font* GetFont() const { m_pFont->AddRef(); return m_pFont; }
    void SetFont(Font* pFont) { m_pFont->Release(); m_pFont = pFont; m_pFont->AddRef(); UpdateBounds(); }
-   const string& GetText() const { return m_szText; }
+   const string& GetText() const { return m_text; }
    void SetText(const string& szText);
    bool GetAutoPack() const { return m_autopack; }
    void SetAutoPack(bool autopack) { m_autopack = autopack; }
    float GetPrefWidth() const override { return m_textWidth; }
    float GetPrefHeight() const override { return m_textHeight; }
-   void Draw(VP::SurfaceGraphics* pGraphics) override;
+   void Draw(Flex::SurfaceGraphics* pGraphics) override;
 
 private:
    void UpdateBounds();
 
    Font* m_pFont;
-   string m_szText;
+   string m_text;
    bool m_autopack;
    float m_textWidth;
    float m_textHeight;
    Alignment m_alignment;
    vector<string> m_lines;
 };
+
+}

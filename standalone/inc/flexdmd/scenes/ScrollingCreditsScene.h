@@ -3,10 +3,10 @@
 #include "Scene.h"
 #include "BackgroundScene.h"
 
-class ScrollingCreditsScene : public BackgroundScene
+class ScrollingCreditsScene final : public BackgroundScene
 {
 public:
-   ScrollingCreditsScene(FlexDMD* pFlexDMD, Actor* pBackground, vector<string> text, Font* pFont, AnimationType animateIn, float pauseS, AnimationType animateOut, const string& id);
+   ScrollingCreditsScene(FlexDMD* pFlexDMD, Actor* pBackground, const vector<string>& text, Font* pFont, AnimationType animateIn, float pauseS, AnimationType animateOut, const string& id);
    ~ScrollingCreditsScene();
 
    void Begin() override;

@@ -14,11 +14,14 @@
 
 #include <SDL3/SDL_timer.h>
 
-FlexDMD::FlexDMD()
+namespace Flex {
+
+FlexDMD::FlexDMD(VPXPluginAPI* vpxApi) :
+   m_vpxApi(vpxApi)
 {
    m_pStage = new Group(this, "Stage"s);
    m_pStage->SetSize(static_cast<float>(m_width), static_cast<float>(m_height));
-   m_pAssetManager = new AssetManager();
+   m_pAssetManager = new AssetManager(m_vpxApi);
 }
 
 FlexDMD::~FlexDMD()
@@ -67,7 +70,7 @@ void FlexDMD::Render()
       if (m_pSurface == nullptr)
       {
          SDL_Surface* pSurface = SDL_CreateSurface(m_width, m_height, SDL_PIXELFORMAT_RGB24);
-         m_pSurface = new VP::SurfaceGraphics(pSurface);
+         m_pSurface = new Flex::SurfaceGraphics(pSurface);
       }
       if (m_clear)
       {
@@ -231,4 +234,6 @@ AnimatedActor* FlexDMD::NewVideo(const string& name, const string& video)
          return (AnimatedActor*)ImageSequence::Create(this, m_pAssetManager, video, name, 30, true);
    }
    return nullptr;
+}
+
 }

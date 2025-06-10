@@ -44,6 +44,7 @@
 #pragma comment(lib, "Psapi")
 #endif
 #include "tinyxml2/tinyxml2.h"
+#include "ThreadPool.h"
 
 #include "plugins/MsgPlugin.h"
 #include "plugins/VPXPlugin.h"
@@ -118,9 +119,11 @@ LRESULT CALLBACK PlayerWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
    case WM_POINTERUP:
    {
 #ifndef TEST_TOUCH_WITH_MOUSE
+#if (WINVER < 0x0602)
       if (!GetPointerInfo)
          GetPointerInfo = (pGPI)GetProcAddress(GetModuleHandle(TEXT("user32.dll")), "GetPointerInfo");
       if (GetPointerInfo)
+#endif
 #endif
       {
          POINTER_INFO pointerInfo;
@@ -153,12 +156,14 @@ LRESULT CALLBACK PlayerWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
 Player::Player(PinTable *const editor_table, PinTable *const live_table, const int playMode)
    : m_pEditorTable(editor_table)
    , m_ptable(live_table)
-   , m_scoreviewOutput("Visual Pinball - Score"s, live_table->m_settings, Settings::DMD, "DMD")
-   , m_backglassOutput("Visual Pinball - Backglass"s, live_table->m_settings, Settings::Backglass, "Backglass")
+   , m_scoreviewOutput("Visual Pinball - Score"s, live_table->m_settings, Settings::ScoreView, "ScoreView"s)
+   , m_backglassOutput("Visual Pinball - Backglass"s, live_table->m_settings, Settings::Backglass, "Backglass"s)
+   , m_topperOutput("Visual Pinball - Topper"s, live_table->m_settings, Settings::Topper, "Topper"s)
+   , m_resURIResolver(MsgPluginManager::GetInstance().GetMsgAPI(), VPXPluginAPIImpl::GetInstance().GetVPXEndPointId(), true, true, true, true)
 {
    // For the time being, lots of access are made through the global singleton, so ensure we are unique, and define it as soon as needed
    assert(g_pplayer == nullptr);
-   g_pplayer = this; 
+   g_pplayer = this;
 
    m_logicProfiler.NewFrame(0);
    m_renderProfiler = new FrameProfiler();
@@ -228,7 +233,7 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
                   useVR = m_vrDevice->IsOpenXRHMDReady();
                }
             }
-            else if (vrDetectionMode == 0) // 0 is VR on, tell the user that his choice will not be fullfilled
+            else if (vrDetectionMode == 0) // 0 is VR on, tell the user that the choice will not be fullfilled
                ShowError("VR mode activated but OpenXR initialization failed.");
             if (!useVR)
             {
@@ -296,7 +301,8 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
          #endif
       #endif
       
-      m_playfieldWnd = new VPX::Window(WIN32_WND_TITLE, stereo3D == STEREO_VR ? Settings::PlayerVR : Settings::Player, stereo3D == STEREO_VR ? "Preview" : "Playfield");
+      const Settings* settings = &(g_pvp->m_settings); // Always use main application settings (not overridable per table)
+      m_playfieldWnd = new VPX::Window(WIN32_WND_TITLE, settings, stereo3D == STEREO_VR ? Settings::PlayerVR : Settings::Player, stereo3D == STEREO_VR ? "Preview" : "Playfield");
 
       float pfRefreshRate = m_playfieldWnd->GetRefreshRate(); 
       m_maxFramerate = m_ptable->m_settings.LoadValueFloat(Settings::Player, "MaxFramerate"s);
@@ -344,9 +350,11 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
         && (GetSystemMetrics(SM_MAXIMUMTOUCHES) != 0);
 
    #if 1 // we do not want to handle WM_TOUCH
+   #if (WINVER < 0x0602)
        if (!UnregisterTouchWindow)
            UnregisterTouchWindow = (pUnregisterTouchWindow)GetProcAddress(GetModuleHandle(TEXT("user32.dll")), "UnregisterTouchWindow");
        if (UnregisterTouchWindow)
+   #endif
            UnregisterTouchWindow(m_playfieldWnd->GetCore());
    #else // would be useful if handling WM_TOUCH instead of WM_POINTERDOWN
        // Disable palm detection
@@ -386,9 +394,11 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    #endif
 
     // Disable visual feedback for touch, this saves one frame of latency on touch displays
+    #if (WINVER < 0x0602)
     if (!SetWindowFeedbackSetting)
         SetWindowFeedbackSetting = (pSWFS)GetProcAddress(GetModuleHandle(TEXT("user32.dll")), "SetWindowFeedbackSetting");
     if (SetWindowFeedbackSetting)
+    #endif
     {
         constexpr BOOL enabled = FALSE;
 
@@ -462,13 +472,12 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    #if defined(ENABLE_BGFX)
    if (m_vrDevice == nullptr) // Anciliary windows are not yet supported while in VR mode
    {
-      m_scoreView.Load(PathFromFilename(m_ptable->m_szFileName));
-      if (!m_scoreView.HasLayouts())
-         m_scoreView.Load(g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR);
       if (m_scoreviewOutput.GetMode() == VPX::RenderOutput::OM_WINDOW)
          m_renderer->m_renderDevice->AddWindow(m_scoreviewOutput.GetWindow());
       if (m_backglassOutput.GetMode() == VPX::RenderOutput::OM_WINDOW)
          m_renderer->m_renderDevice->AddWindow(m_backglassOutput.GetWindow());
+      if (m_topperOutput.GetMode() == VPX::RenderOutput::OM_WINDOW)
+         m_renderer->m_renderDevice->AddWindow(m_topperOutput.GetWindow());
    }
    #endif
 
@@ -601,46 +610,144 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
 
    //----------------------------------------------------------------------------------
 
+   // We need to initialize the perf counter before creating the UI which uses it
+   wintimer_init();
+   m_liveUI = new LiveUI(m_renderer->m_renderDevice);
+
    m_progressDialog.SetProgress("Loading Textures..."s, 50);
 
-   if ((m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "CacheMode"s, 1) > 0) && FileExists(m_ptable->m_szFileName))
    {
-      try {
-         string dir = g_pvp->m_szMyPrefPath + "Cache" + PATH_SEPARATOR_CHAR + m_ptable->m_szTitle + PATH_SEPARATOR_CHAR;
-         std::filesystem::create_directories(std::filesystem::path(dir));
-         string path = dir + "used_textures.xml";
-         if (FileExists(path))
+      tinyxml2::XMLDocument xmlDoc;
+      tinyxml2::XMLElement *preloadCache = nullptr;
+      if ((m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "CacheMode"s, 1) > 0) && FileExists(m_ptable->m_filename))
+      {
+         try
          {
-            PLOGI.printf("Texture cache found at %s", path.c_str());
-            std::stringstream buffer;
-            std::ifstream myFile(path);
-            buffer << myFile.rdbuf();
-            myFile.close();
-            const string xml = buffer.str();
-            tinyxml2::XMLDocument xmlDoc;
-            if (xmlDoc.Parse(xml.c_str()) == tinyxml2::XML_SUCCESS)
+            string dir = g_pvp->m_myPrefPath + "Cache" + PATH_SEPARATOR_CHAR + m_ptable->m_title + PATH_SEPARATOR_CHAR;
+            std::filesystem::create_directories(std::filesystem::path(dir));
+            string path = dir + "used_textures.xml";
+            if (FileExists(path))
             {
-               auto root = xmlDoc.FirstChildElement("textures");
-               for (auto node = root->FirstChildElement("texture"); node != nullptr; node = node->NextSiblingElement())
+               PLOGI.printf("Texture cache found at %s", path.c_str());
+               std::stringstream buffer;
+               std::ifstream myFile(path);
+               buffer << myFile.rdbuf();
+               myFile.close();
+               const string xml = buffer.str();
+               if (xmlDoc.Parse(xml.c_str()) == tinyxml2::XML_SUCCESS)
+                  preloadCache = xmlDoc.FirstChildElement("textures");
+            }
+         }
+         catch (...) // something failed while trying to preload images
+         {
+            PLOGE << "Failed to load texture preload cache";
+         }
+      }
+
+      std::mutex mutex;
+      int nLoadInProgress = 0;
+      vector<Texture *> failedPreloads;
+      unsigned int maxTexDim = static_cast<unsigned int>(m_ptable->m_settings.LoadValueInt(Settings::Player, "MaxTexDimension"s));
+      auto loadImage = [maxTexDim, &mutex, &nLoadInProgress, preloadCache, this, &failedPreloads](Texture *image, bool resizeOnLowMem)
+      {
+         bool readyToLoad = false;
+         while (!readyToLoad)
+         {
+            {
+               const std::lock_guard<std::mutex> lock(mutex);
+               if (nLoadInProgress == 0)
+                  readyToLoad = true;
+               else
                {
-                  bool linearRGB = false;
-                  const char *name = node->GetText();
-                  if (name == nullptr)
-                     continue;
-                  Texture *tex = m_ptable->GetImage(name);
-                  if (tex != nullptr && node->QueryBoolAttribute("linear", &linearRGB) == tinyxml2::XML_SUCCESS)
+                  size_t neededMem= image->GetEstimatedGPUSize() * 3; // 3x the estimated size is one for the image loader, one for the BaseTexture instance and one for the rendering API copy
+                  #ifdef _MSC_VER
+                     MEMORYSTATUSEX statex;
+                     statex.dwLength = sizeof(statex);
+                     GlobalMemoryStatusEx(&statex);
+                     readyToLoad = statex.ullAvailPhys > neededMem;
+                  #else
+                     // TODO implement for other platforms
+                     // struct sysinfo memInfo;
+                     // sysinfo(&memInfo);
+                     // readyToLoad = memInfo.freeram > neededMem;
+                     readyToLoad = true;
+                  #endif
+               }
+               if (readyToLoad)
+                  nLoadInProgress++;
+            }
+            if (!readyToLoad)
+               std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            else
+            {
+               auto buffer = image->GetRawBitmap(resizeOnLowMem, maxTexDim);
+               const std::lock_guard<std::mutex> lock(mutex);
+               if (buffer)
+               {
+                  image->IsOpaque();
+                  bool uploaded = false;
+                  if (preloadCache)
+                     for (auto node = preloadCache->FirstChildElement("texture"); node != nullptr; node = node->NextSiblingElement())
+                     {
+                        bool linearRGB = false;
+                        const char *name = node->GetText();
+                        if (name != nullptr && image->m_name == name && node->QueryBoolAttribute("linear", &linearRGB) == tinyxml2::XML_SUCCESS)
+                        {
+                           m_renderer->m_renderDevice->UploadTexture(image, linearRGB);
+                           uploaded = true;
+                           break;
+                        }
+                     }
+                  if (!uploaded)
                   {
-                     PLOGI << "Texture preloading: '" << name << '\'';
-                     m_renderer->m_renderDevice->UploadTexture(tex->m_pdsBuffer, linearRGB);
+                     // We could upload all images, but this would need support for dynamic change of 'force linear' and would lead to load all VR textures on lower end systems
+                     // Instead we register it to the texture manager that will hold a strong reference and upload when needed
+                     m_renderer->m_renderDevice->m_texMan.AddPendingUpload(image);
                   }
+                  if ((image->m_width > buffer->width()) || (image->m_height > buffer->height()))
+                  {
+                     const bool isError = (buffer->width() < maxTexDim) || (buffer->height() < maxTexDim);
+                     PLOG(isError ? plog::Severity::error : plog::Severity::warning) << "Image '" << image->m_name << "' was downsized from "
+                           << image->m_width<< 'x'<< image->m_height << " to " << buffer->width() << 'x' << buffer->height() << (isError ? " due to low memory " : " due to user settings");
+                     if (isError)
+                        m_liveUI->PushNotification("Image '"s + image->m_name + "' was downsized due to low memory"s, 5000);
+                  }
+                  PLOGI << "Image '" << image->m_name << "' loaded to " << (uploaded ? "GPU" : "RAM");
+               }
+               else if (resizeOnLowMem)
+               {
+                  PLOGE << "Image '" << image->m_name << "' could not be loaded, skipping it";
+                  m_liveUI->PushNotification("Image '"s + image->m_name + "' could not be loaded"s, 5000);
+                  m_renderer->m_renderDevice->m_texMan.AddPlaceHolder(image);
+               }
+               else
+               {
+                  failedPreloads.push_back(image);
                }
             }
          }
-      }
-      catch (...) // something failed while trying to preload images
-      {
-         PLOGE << "Texture preloading failed";
-      }
+         {
+            const std::lock_guard<std::mutex> lock(mutex);
+            nLoadInProgress--;
+         }
+      };
+
+      // Try to load all image concurrently. Note that this dramatically increases the amount of temporary memory needed, especially if Max Texture Dimension is set (as then all the additional conversion/rescale mem is also needed 'in parallel')
+      #ifdef ENABLE_BGFX
+      m_renderer->m_renderDevice->m_frameMutex.unlock();
+      #endif
+      ThreadPool pool(g_pvp->GetLogicalNumberOfProcessors());
+      for (auto image : m_ptable->m_vimage)
+         pool.enqueue(loadImage, image, false);
+      pool.wait_until_empty();
+      pool.wait_until_nothing_in_flight();
+      #ifdef ENABLE_BGFX
+      m_renderer->m_renderDevice->m_frameMutex.lock();
+      #endif
+
+      // Due to multithreaded loading and pre-allocation, check if some images could not be loaded, and perform a retry since more memory is available now
+      for (auto image : failedPreloads)
+         loadImage(image, true);
    }
 
    //----------------------------------------------------------------------------------
@@ -713,26 +820,20 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
       m_fplaylog = fopen("c:\\badlog.txt", "r");
 #endif
 
-   // We need to initialize the perf counter before creating the UI which uses it
-   wintimer_init();
-   m_liveUI = new LiveUI(m_renderer->m_renderDevice);
+   const MsgPluginAPI *msgApi = &MsgPluginManager::GetInstance().GetMsgAPI();
+
+   m_onGameStartMsgId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_GAME_START);
+   m_onPrepareFrameMsgId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_PREPARE_FRAME);
+   m_onAudioUpdatedMsgId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_AUDIO_ON_UPDATE_MSG);
+   msgApi->SubscribeMsg(VPXPluginAPIImpl::GetInstance().GetVPXEndPointId(), m_onAudioUpdatedMsgId, OnAudioUpdated, this);
+
+   m_getAuxRendererId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_AUX_RENDERER);
+   m_onAuxRendererChgId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_AUX_RENDERER_CHG);
+   msgApi->SubscribeMsg(VPXPluginAPIImpl::GetInstance().GetVPXEndPointId(), m_onAuxRendererChgId, OnAuxRendererChanged, this);
+   OnAuxRendererChanged(m_onAuxRendererChgId, this, nullptr);
 
    // Signal plugins before performing static prerendering. The only thing not fully initialized is the physics (is this ok ?)
-   m_getDmdSrcMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_GETDMD_SRC_MSG);
-   m_getDmdMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_GETDMD_RENDER_MSG);
-   m_onDmdChangedMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_ONDMD_SRC_CHG_MSG);
-   MsgPluginManager::GetInstance().GetMsgAPI().SubscribeMsg(VPXPluginAPIImpl::GetInstance().GetVPXEndPointId(), m_onDmdChangedMsgId, OnDmdChanged, this);
-   m_getSegSrcMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_GETSEG_SRC_MSG);
-   m_getSegMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_GETSEG_MSG);
-   m_onSegChangedMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_ONSEG_SRC_CHG_MSG);
-   MsgPluginManager::GetInstance().GetMsgAPI().SubscribeMsg(VPXPluginAPIImpl::GetInstance().GetVPXEndPointId(), m_onSegChangedMsgId, OnSegChanged, this);
-   m_onAudioUpdatedMsgId = VPXPluginAPIImpl::GetMsgID(CTLPI_NAMESPACE, CTLPI_ONAUDIO_UPDATE_MSG);
-   MsgPluginManager::GetInstance().GetMsgAPI().SubscribeMsg(VPXPluginAPIImpl::GetInstance().GetVPXEndPointId(), m_onAudioUpdatedMsgId, OnAudioUpdated, this);
-   m_onGameStartMsgId = VPXPluginAPIImpl::GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_GAME_START);
    VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(m_onGameStartMsgId, nullptr);
-   m_onPrepareFrameMsgId = VPXPluginAPIImpl::GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_PREPARE_FRAME);
-
-   m_scoreView.Select(m_scoreviewOutput);
 
    // Open UI if requested (this also disables static prerendering, so must be done before performing it)
    if (playMode == 1)
@@ -743,13 +844,7 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    // Pre-render all non-changing elements such as static walls, rails, backdrops, etc. and also static playfield reflections
    // This is done after starting the script and firing the Init event to allow script to adjust static parts on startup
    PLOGI << "Prerendering static parts"; // For profiling
-   #if defined(ENABLE_BGFX)
-   m_renderer->m_renderDevice->m_frameMutex.lock();
-   #endif
    m_renderer->RenderFrame();
-   #if defined(ENABLE_BGFX)
-   m_renderer->m_renderDevice->m_frameMutex.unlock();
-   #endif
 
    // Reset the perf counter to start time when physics starts
    wintimer_init();
@@ -849,24 +944,20 @@ Player::~Player()
    }
 
    // Release plugin message Ids
-   MsgPluginManager::GetInstance().GetMsgAPI().UnsubscribeMsg(m_onSegChangedMsgId, OnSegChanged);
-   VPXPluginAPIImpl::ReleaseMsgID(m_onSegChangedMsgId);
-   VPXPluginAPIImpl::ReleaseMsgID(m_getSegSrcMsgId);
-   VPXPluginAPIImpl::ReleaseMsgID(m_getSegMsgId);
-   MsgPluginManager::GetInstance().GetMsgAPI().UnsubscribeMsg(m_onDmdChangedMsgId, OnDmdChanged);
-   VPXPluginAPIImpl::ReleaseMsgID(m_onDmdChangedMsgId);
-   VPXPluginAPIImpl::ReleaseMsgID(m_getDmdSrcMsgId);
-   VPXPluginAPIImpl::ReleaseMsgID(m_getDmdMsgId);
-   MsgPluginManager::GetInstance().GetMsgAPI().UnsubscribeMsg(m_onAudioUpdatedMsgId, OnAudioUpdated);
-   VPXPluginAPIImpl::ReleaseMsgID(m_onAudioUpdatedMsgId);
-   VPXPluginAPIImpl::ReleaseMsgID(m_onGameStartMsgId);
-   VPXPluginAPIImpl::ReleaseMsgID(onGameEndMsgId);
-   VPXPluginAPIImpl::ReleaseMsgID(m_onPrepareFrameMsgId);
+   const MsgPluginAPI *msgApi = &MsgPluginManager::GetInstance().GetMsgAPI();
+   msgApi->UnsubscribeMsg(m_onAudioUpdatedMsgId, OnAudioUpdated);
+   msgApi->ReleaseMsgID(m_onAudioUpdatedMsgId);
+   msgApi->ReleaseMsgID(m_onGameStartMsgId);
+   msgApi->ReleaseMsgID(onGameEndMsgId);
+   msgApi->ReleaseMsgID(m_onPrepareFrameMsgId);
+   msgApi->UnsubscribeMsg(m_onAuxRendererChgId, OnAuxRendererChanged);
+   msgApi->ReleaseMsgID(m_getAuxRendererId);
+   msgApi->ReleaseMsgID(m_onAuxRendererChgId);
 
    // Save list of used textures to avoid stuttering in next play
-   if ((m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "CacheMode"s, 1) > 0) && FileExists(m_ptable->m_szFileName))
+   if ((m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "CacheMode"s, 1) > 0) && FileExists(m_ptable->m_filename))
    {
-      string dir = g_pvp->m_szMyPrefPath + "Cache" + PATH_SEPARATOR_CHAR + m_ptable->m_szTitle + PATH_SEPARATOR_CHAR;
+      string dir = g_pvp->m_myPrefPath + "Cache" + PATH_SEPARATOR_CHAR + m_ptable->m_title + PATH_SEPARATOR_CHAR;
       std::filesystem::create_directories(std::filesystem::path(dir));
 
       tinyxml2::XMLDocument xmlDoc;
@@ -929,17 +1020,17 @@ Player::~Player()
          xmlDoc.InsertEndChild(root);
       }
 
-      vector<BaseTexture *> textures = m_renderer->m_renderDevice->m_texMan.GetLoadedTextures();
-      for (BaseTexture *memtex : textures)
+      vector<ITexManCacheable *> textures = m_renderer->m_renderDevice->m_texMan.GetLoadedTextures();
+      for (ITexManCacheable *memtex : textures)
       {
-         auto tex = std::ranges::find_if(m_ptable->m_vimage.begin(), m_ptable->m_vimage.end(), [&memtex](Texture *&x) { return (!x->m_szName.empty()) && (x->m_pdsBuffer == memtex); });
+         auto tex = std::ranges::find_if(m_ptable->m_vimage.begin(), m_ptable->m_vimage.end(), [&memtex](Texture *&x) { return (!x->m_name.empty()) && x == memtex; });
          if (tex != m_ptable->m_vimage.end())
          {
-            tinyxml2::XMLElement *node = textureAge[(*tex)->m_szName];
+            tinyxml2::XMLElement *node = textureAge[(*tex)->m_name];
             if (node == nullptr)
             {
                node = xmlDoc.NewElement("texture");
-               node->SetText((*tex)->m_szName.c_str());
+               node->SetText((*tex)->m_name.c_str());
                root->InsertEndChild(node);
             }
             node->DeleteAttribute("clampu");
@@ -962,7 +1053,11 @@ Player::~Player()
    if (m_renderer->m_stereo3D == STEREO_VR)
       m_vrDevice->SaveVRSettings(g_pvp->m_settings);
 
-   m_ptable->StopAllSounds();
+   for (auto &sound : m_ptable->m_vsound)
+   {
+      sound->Stop();
+      sound->ReInitialize();
+   }
 
    // Stop all played musics, including ones streamed from plugins
    if (m_audio)
@@ -996,6 +1091,8 @@ Player::~Player()
       renderable->GetIHitable()->RenderRelease();
    for (auto hitable : m_vhitables)
       hitable->GetIHitable()->TimerRelease();
+   for (int window = 0; window <= VPXAnciliaryWindow::VPXWINDOW_Topper; window++)
+      delete m_anciliaryWndHdrRT[window];
    assert(m_vballDelete.empty());
    m_vball.clear();
 
@@ -1013,23 +1110,6 @@ Player::~Player()
       m_renderer->m_renderDevice->m_texMan.UnloadTexture(m_dmdFrame);
       delete m_dmdFrame;
       m_dmdFrame = nullptr;
-   }
-   for (ControllerDisplay &display : m_controllerDisplays)
-   {
-      if (display.frame)
-      {
-         m_renderer->m_renderDevice->m_texMan.UnloadTexture(display.frame);
-         delete display.frame;
-         display.frame = nullptr;
-      }
-   }
-   for (ControllerSegDisplay &display : m_controllerSegDisplays)
-   {
-      if (display.frame)
-      {
-         delete[] display.frame;
-         display.frame = nullptr;
-      }
    }
 
 #ifdef PLAYBACK
@@ -1108,6 +1188,10 @@ Player::~Player()
    #ifdef ENABLE_SDL_VIDEO
    SDL_UnregisterApp();
    #endif
+#endif
+
+#ifdef __STANDALONE__
+   g_pStandalone->Shutdown();
 #endif
 
    PLOGI << "Player closed.";
@@ -1604,6 +1688,7 @@ void Player::GameLoop(std::function<void()> ProcessOSMessages)
       {
          m_pininput.ProcessInput(); // Trigger key events to sync with controller
          m_physics->UpdatePhysics(); // Update physics (also triggering events, syncing with controller)
+         // TODO These updates should also be done directly in the physics engine after collision events
          FireSyncController(); // Trigger script sync event (to sync solenoids back)
       }
       MsgPluginManager::GetInstance().ProcessAsyncCallbacks();
@@ -1641,6 +1726,7 @@ void Player::GameLoop(std::function<void()> ProcessOSMessages)
 void Player::MultithreadedGameLoop(const std::function<void()>& sync)
 {
 #ifdef ENABLE_BGFX
+   m_renderer->m_renderDevice->m_frameMutex.unlock();
    m_logicProfiler.SetThreadLock();
    while (GetCloseState() == CS_PLAYING || GetCloseState() == CS_USER_INPUT)
    {
@@ -1835,6 +1921,8 @@ void Player::FramePacingGameLoop(const std::function<void()>& sync)
    }
 }
 
+extern void PrecompSplineTonemap(const float displayMaxLum, float out[6]);
+
 void Player::PrepareFrame(const std::function<void()>& sync)
 {
    // Rendering outputs to m_renderDevice->GetBackBufferTexture(). If MSAA is used, it is resolved as part of the rendering (i.e. this surface is NOT the MSAA rneder surface but its resolved copy)
@@ -1933,24 +2021,36 @@ void Player::PrepareFrame(const std::function<void()>& sync)
    if (GetProfilingMode() == PF_ENABLED)
       m_renderer->m_gpu_profiler.BeginFrame(m_renderer->m_renderDevice->GetCoreDevice());
    #endif
-
-   #ifdef MSVC_CONCURRENCY_VIEWER
-   delete tagSpan;
-   #endif
+   
    #if defined(ENABLE_BGFX)
    // Since the script can be somewhat lengthy, we do an additional sync here
    sync();
    #endif
+
+   #ifdef MSVC_CONCURRENCY_VIEWER
+   delete tagSpan;
+   #endif
+
    #ifdef MSVC_CONCURRENCY_VIEWER
    tagSpan = new span(series, 1, _T("Build.RF"));
    #endif
 
-   m_renderer->RenderFrame();
+   RenderDevice *const rd = m_renderer->m_renderDevice;
 
-   if ((m_vrDevice == nullptr) && (m_scoreviewOutput.GetMode() != VPX::RenderOutput::OM_DISABLED))
-      m_scoreView.Render(m_scoreviewOutput);
+   // Prepare main 3D scene frame
+   m_renderer->RenderFrame();
+   RenderTarget *playfieldRT = rd->GetCurrentRenderTarget();
+
+   // Prepare anciliary windows (for the time being always embedded in playfield anciliary windows)
+   RenderTarget *scoreViewRT = RenderAnciliaryWindow(VPXAnciliaryWindow::VPXWINDOW_ScoreView, playfieldRT);
+   RenderTarget *backglassRT = RenderAnciliaryWindow(VPXAnciliaryWindow::VPXWINDOW_Backglass, playfieldRT);
+   RenderTarget *topperRT = RenderAnciliaryWindow(VPXAnciliaryWindow::VPXWINDOW_Topper, playfieldRT);
+   
+   // Apply screenspace transforms (MSAA, AO, AA, stereo, ball motion blur, tonemapping, dithering, bloom,...)
+   m_renderer->PrepareVideoBuffers(m_renderer->m_renderDevice->GetOutputBackBuffer());
 
    m_logicProfiler.ExitProfileSection();
+
    #ifdef MSVC_CONCURRENCY_VIEWER
    delete tagSpan;
    #endif
@@ -2043,10 +2143,6 @@ void Player::FinishFrame()
       }
    }
 
-#ifdef __STANDALONE__
-   g_pStandalone->Render();
-#endif
-
    // Brute force stop: blast into space
    if (m_closing == CS_FORCE_STOP)
       exit(-9999); 
@@ -2090,6 +2186,336 @@ void Player::FinishFrame()
 #endif
 }
 
+void Player::OnAuxRendererChanged(const unsigned int msgId, void* userData, void* msgData)
+{
+   Player * const me = static_cast<Player *>(userData);
+   const MsgPluginAPI *m_msgApi = &MsgPluginManager::GetInstance().GetMsgAPI();
+   for (int i = 0; i <= VPXAnciliaryWindow::VPXWINDOW_Topper; i++)
+   {
+      const VPXAnciliaryWindow window = (VPXAnciliaryWindow) i;
+      const Settings::Section section = window == VPXAnciliaryWindow::VPXWINDOW_Backglass ? Settings::Backglass
+                                      : window == VPXAnciliaryWindow::VPXWINDOW_ScoreView ? Settings::ScoreView
+                                                                                          : Settings::Topper;
+      GetAnciliaryRendererMsg getAuxRendererMsg { window, 0, 0, nullptr };
+      m_msgApi->BroadcastMsg(VPXPluginAPIImpl::GetInstance().GetVPXEndPointId(), me->m_getAuxRendererId, &getAuxRendererMsg);
+      me->m_anciliaryWndRenderers[window].resize(getAuxRendererMsg.count);
+      getAuxRendererMsg = { window, getAuxRendererMsg.count, 0, me->m_anciliaryWndRenderers[window].data() };
+      m_msgApi->BroadcastMsg(VPXPluginAPIImpl::GetInstance().GetVPXEndPointId(), me->m_getAuxRendererId, &getAuxRendererMsg);
+      std::ranges::sort(me->m_anciliaryWndRenderers[window],
+         [&](const AnciliaryRendererDef &a, const AnciliaryRendererDef &b)
+         {
+            int pa = me->m_ptable->m_settings.LoadValueWithDefault(section, "Priority."s.append(a.id), 0);
+            int pb = me->m_ptable->m_settings.LoadValueWithDefault(section, "Priority."s.append(b.id), 0);
+            return pa > pb; // Sort in descending order (first is the most wanted)
+         });
+      std::erase_if(me->m_anciliaryWndRenderers[window], [section, me](const AnciliaryRendererDef &a) { return me->m_ptable->m_settings.LoadValueWithDefault(section, "Priority."s.append(a.id), 0) < 0; });
+   }
+}
+
+RenderTarget *Player::RenderAnciliaryWindow(VPXAnciliaryWindow window, RenderTarget *embedRT)
+{
+   RenderDevice *const rd = m_renderer->m_renderDevice;
+   int m_outputX, m_outputY, m_outputW, m_outputH;
+
+   VPX::RenderOutput &output = window == VPXAnciliaryWindow::VPXWINDOW_Backglass ? m_backglassOutput :
+                               window == VPXAnciliaryWindow::VPXWINDOW_ScoreView ? m_scoreviewOutput :
+                               /*window == VPXAnciliaryWindow::VPXWINDOW_Topper ? */ m_topperOutput;
+   const string renderPassName = window == VPXAnciliaryWindow::VPXWINDOW_Backglass ? "Backglass Render"s :
+                                 window == VPXAnciliaryWindow::VPXWINDOW_ScoreView ? "ScoreView Render"s :
+                                /*window == VPXAnciliaryWindow::VPXWINDOW_Topper ? */ "Topper Render"s;
+   const string tonemapPassName = window == VPXAnciliaryWindow::VPXWINDOW_Backglass ? "Backglass Tonemap"s :
+                                  window == VPXAnciliaryWindow::VPXWINDOW_ScoreView ? "ScoreView Tonemap"s :
+                                /*window == VPXAnciliaryWindow::VPXWINDOW_Topper ? */ "Topper Tonemap"s;
+   const string hdrRTName = window == VPXAnciliaryWindow::VPXWINDOW_Backglass ? "BackglassBackBuffer"s :
+                            window == VPXAnciliaryWindow::VPXWINDOW_ScoreView ? "ScoreViewBackBuffer"s :
+                          /*window == VPXAnciliaryWindow::VPXWINDOW_Topper ? */ "TopperBackBuffer"s;
+
+   // TODO implement rendering for VR (on a flasher)
+   if (m_vrDevice != nullptr)
+      return nullptr;
+
+   RenderTarget *outputRT;
+   if (output.GetMode() == VPX::RenderOutput::OM_EMBEDDED)
+   {
+      outputRT = embedRT;
+      m_outputW = output.GetEmbeddedWindow()->GetWidth();
+      m_outputH = output.GetEmbeddedWindow()->GetHeight();
+      output.GetEmbeddedWindow()->GetPos(m_outputX, m_outputY);
+      m_outputY = outputRT->GetHeight() - m_outputY - m_outputH;
+   }
+   #ifdef ENABLE_BGFX
+   else if (output.GetMode() == VPX::RenderOutput::OM_WINDOW)
+   {
+      outputRT = output.GetWindow()->GetBackBuffer();
+      m_outputW = outputRT->GetWidth();
+      m_outputH = outputRT->GetHeight();
+      m_outputX = m_outputY = 0;
+   }
+   #endif
+   else
+   {
+      return nullptr;
+   }
+      
+   Matrix3D matWorldViewProj[2];
+   matWorldViewProj[0] = Matrix3D::MatrixIdentity();
+   matWorldViewProj[0]._11 = 2.f * static_cast<float>(m_outputW) / static_cast<float>(outputRT->GetWidth());
+   matWorldViewProj[0]._41 = -1.f + 2.f * m_outputX / static_cast<float>(outputRT->GetWidth());
+   matWorldViewProj[0]._22 = -2.f * static_cast<float>(m_outputH) / static_cast<float>(outputRT->GetHeight());
+   matWorldViewProj[0]._42 = 1.f - 2.f * m_outputY / static_cast<float>(outputRT->GetHeight());
+   const int eyes = rd->GetCurrentRenderTarget()->m_nLayers;
+   if (eyes > 1)
+      matWorldViewProj[1] = matWorldViewProj[0];
+   rd->m_basicShader->SetMatrix(SHADER_matWorldViewProj, &matWorldViewProj[0], eyes);
+   rd->m_basicShader->SetFloat(SHADER_alphaTestValue, -1.0f);
+   rd->m_basicShader->SetTechnique(SHADER_TECHNIQUE_bg_decal_with_texture);
+   rd->m_DMDShader->SetMatrix(SHADER_matWorldViewProj, &matWorldViewProj[0], eyes);
+   rd->m_DMDShader->SetFloat(SHADER_alphaTestValue, -1.0f);
+
+   // Performing linear rendering + tonemapping is overkill when used for LDR rendering (Pup pack, B2S,...)
+   // TODO we should allow plugins to decide if they want linear colorspace + tonemapping or simple sRGB composition
+   constexpr bool enableHDR = false;
+
+   if (output.GetMode() == VPX::RenderOutput::OM_WINDOW)
+   {
+      if (enableHDR)
+      {
+         if (m_anciliaryWndHdrRT[window] == nullptr)
+            m_anciliaryWndHdrRT[window] = new RenderTarget(rd, SurfaceType::RT_DEFAULT, hdrRTName, m_outputW, m_outputH, colorFormat::RGBA16F, false, 1, "Fatal Error: unable to create anciliary window back buffer");
+         rd->SetRenderTarget(renderPassName, m_anciliaryWndHdrRT[window], false, true);
+      }
+      else
+      {
+         rd->SetRenderTarget(renderPassName, outputRT, false, true);
+      }
+   }
+   else
+   {
+      rd->SetRenderTarget(renderPassName, outputRT, true, true);
+   }
+
+   // TODO Also handle clear for embedded window and 3D render
+   if (output.GetMode() == VPX::RenderOutput::OM_WINDOW)
+   {
+      rd->ResetRenderState();
+      rd->Clear(clearType::TARGET | clearType::ZBUFFER, 0x00000000);
+   }
+
+   struct PlayerRenderContext2D
+   {
+      VPXRenderContext2D ctx;
+      bool isLinearOutput;
+   };
+
+   PlayerRenderContext2D context
+   {
+      {
+         window,
+         static_cast<float>(m_outputW), static_cast<float>(m_outputH),
+         static_cast<float>(m_outputW), static_cast<float>(m_outputH),
+         // Draw an image
+         [](VPXRenderContext2D *ctx, VPXTexture texture,
+            const float tintR, const float tintG, const float tintB, const float alpha,
+            const float texX, const float texY, const float texW, const float texH,
+            const float srcX, const float srcY, const float srcW, const float srcH)
+            {
+               if (alpha <= 0.f) // Alpha blended, so alpha = 0 means not visible
+                  return;
+               PlayerRenderContext2D *context = reinterpret_cast<PlayerRenderContext2D *>(ctx);
+               BaseTexture *const tex = static_cast<BaseTexture *>(texture);
+               RenderDevice * const rd = g_pplayer->m_renderer->m_renderDevice;
+               rd->ResetRenderState();
+               rd->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
+               rd->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
+               rd->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
+               rd->SetRenderState(RenderState::SRCBLEND, RenderState::SRC_ALPHA);
+               rd->SetRenderState(RenderState::DESTBLEND, RenderState::INVSRC_ALPHA);
+               rd->SetRenderState(RenderState::BLENDOP, RenderState::BLENDOP_ADD);
+               rd->SetRenderState(RenderState::ALPHABLENDENABLE, (alpha != 1.f || !tex->IsOpaque()) ? RenderState::RS_TRUE : RenderState::RS_FALSE);
+               rd->m_basicShader->SetVector(SHADER_cBase_Alpha, tintR, tintG, tintB, alpha);
+               // We force to linear (no sRGB decoding) when rendering in sRGB colorspace, this suppose that the texture is in sRGB colorspace to get correct gamma (other situations would need dedicated shaders to handle them efficiently)
+               assert(tex->m_format == BaseTexture::SRGB || tex->m_format == BaseTexture::SRGBA || tex->m_format == BaseTexture::SRGB565);
+               rd->m_basicShader->SetTexture(SHADER_tex_base_color, tex, 
+                  SamplerFilter::SF_UNDEFINED, SamplerAddressMode::SA_UNDEFINED, SamplerAddressMode::SA_UNDEFINED,
+                  !context->isLinearOutput);
+               const float vx1 = srcX / ctx->srcWidth;
+               const float vy1 = srcY / ctx->srcHeight;
+               const float vx2 = vx1 + srcW / ctx->srcWidth;
+               const float vy2 = vy1 + srcH / ctx->srcHeight;
+               const float tx1 = texX / tex->width();
+               const float ty1 = 1.f - texY / tex->height();
+               const float tx2 = (texX + texW) / tex->width();
+               const float ty2 = 1.f - (texY + texH) / tex->height();
+               const Vertex3D_NoTex2 vertices[4] = {
+                  { vx2, vy1, 0.f, 0.f, 0.f, 1.f, tx2, ty2 },
+                  { vx1, vy1, 0.f, 0.f, 0.f, 1.f, tx1, ty2 },
+                  { vx2, vy2, 0.f, 0.f, 0.f, 1.f, tx2, ty1 },
+                  { vx1, vy2, 0.f, 0.f, 0.f, 1.f, tx1, ty1 } };
+               rd->DrawTexturedQuad(rd->m_basicShader, vertices, true, 0.f);
+            },
+         // Draw a display (DMD, CRT, ...)
+         [](VPXRenderContext2D* ctx, VPXDisplayRenderStyle style,
+            VPXTexture glassTex, const float glassTintR, const float glassTintG, const float glassTintB, const float glassRoughness,
+            const float glassAreaX, const float glassAreaY, const float glassAreaW, const float glassAreaH,
+            const float glassAmbientR, const float glassAmbientG, const float glassAmbientB,
+            VPXTexture dispTex, const float dispTintR, const float dispTintG, const float dispTintB, const float brightness, const float alpha,
+            const float dispPadL, const float dispPadT, const float dispPadR, const float dispPadB,
+            const float srcX, const float srcY, const float srcW, const float srcH)
+            {
+               PlayerRenderContext2D *context = reinterpret_cast<PlayerRenderContext2D *>(ctx);
+               BaseTexture *const gTex = static_cast<BaseTexture *>(glassTex);
+               BaseTexture *const dTex = static_cast<BaseTexture *>(dispTex);
+               RenderDevice *const rd = g_pplayer->m_renderer->m_renderDevice;
+               rd->ResetRenderState();
+               rd->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
+               rd->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
+               rd->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
+               rd->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
+               g_pplayer->m_renderer->SetupDMDRender(style, false, 
+                  vec3(dispTintR, dispTintG, dispTintB), brightness, dTex, alpha,
+                  context->isLinearOutput ? Renderer::ColorSpace::Reinhard_sRGB : Renderer::ColorSpace::Reinhard_sRGB,
+                  nullptr, // No parallax
+                  vec4(dispPadL, dispPadT, dispPadR, dispPadB),
+                  vec3(glassTintR, glassTintG, glassTintB), glassRoughness, gTex,
+                  vec4(glassAreaX, glassAreaY, glassAreaW, glassAreaH),
+                  vec3(glassAmbientR, glassAmbientG, glassAmbientB));
+               const float vx1 = srcX / ctx->srcWidth;
+               const float vy1 = 1.f - srcY / ctx->srcHeight;
+               const float vx2 = (srcX + srcW) / ctx->srcWidth;
+               const float vy2 = 1.f - (srcY + srcH) / ctx->srcHeight;
+               const Vertex3D_NoTex2 vertices[4] = {
+                  { vx2, vy1, 0.f, 0.f, 0.f, 1.f, 1.f, 1.f },
+                  { vx1, vy1, 0.f, 0.f, 0.f, 1.f, 0.f, 1.f },
+                  { vx2, vy2, 0.f, 0.f, 0.f, 1.f, 1.f, 0.f },
+                  { vx1, vy2, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f } };
+               rd->DrawTexturedQuad(rd->m_DMDShader, vertices, true, 0.f);
+            },
+         // Draw a segment display element (just one digit, using max blending to allow building a complete display)
+         [](VPXRenderContext2D* ctx, VPXSegDisplayRenderStyle style, VPXSegDisplayHint shapeHint,
+            VPXTexture glassTex, const float glassTintR, const float glassTintG, const float glassTintB, const float glassRoughness,
+            const float glassAreaX, const float glassAreaY, const float glassAreaW, const float glassAreaH,
+            const float glassAmbientR, const float glassAmbientG, const float glassAmbientB,
+            SegElementType type, const float *state, const float dispTintR, const float dispTintG, const float dispTintB, const float brightness, const float alpha,
+            const float dispPadL, const float dispPadT, const float dispPadR, const float dispPadB,
+            const float srcX, const float srcY, const float srcW, const float srcH)
+            {
+               PlayerRenderContext2D *context = reinterpret_cast<PlayerRenderContext2D *>(ctx);
+               BaseTexture *const gTex = static_cast<BaseTexture *>(glassTex);
+               RenderDevice *const rd = g_pplayer->m_renderer->m_renderDevice;
+               // Use max blending as segment may overlap in the glass diffuse: we retain the most lighted one which is wrong but looks ok (otherwise we would have to deal with colorspace conversions and layering between glass and emitter)
+               rd->ResetRenderState();
+               rd->SetRenderState(RenderState::BLENDOP, RenderState::BLENDOP_MAX);
+               rd->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_TRUE);
+               rd->SetRenderState(RenderState::SRCBLEND, RenderState::SRC_ALPHA);
+               rd->SetRenderState(RenderState::DESTBLEND, RenderState::ONE);
+               rd->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
+               rd->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
+               rd->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
+               g_pplayer->m_renderer->SetupSegmentRenderer(style, false,
+                  vec3(dispTintR, dispTintG, dispTintB), brightness, (Renderer::SegmentFamily)shapeHint,
+                  type, state,
+                  context->isLinearOutput ? Renderer::ColorSpace::Reinhard_sRGB : Renderer::ColorSpace::Reinhard_sRGB, 
+                  nullptr, // No parallax
+                  vec4(dispPadL, dispPadT, dispPadR, dispPadB),
+                  vec3(glassTintR, glassTintG, glassTintB), glassRoughness, gTex,
+                  vec4(glassAreaX, glassAreaY, glassAreaW, glassAreaH),
+                  vec3(glassAmbientR, glassAmbientG, glassAmbientB));
+               const float vx1 = srcX / ctx->srcWidth;
+               const float vy1 = 1.f - srcY / ctx->srcHeight;
+               const float vx2 = (srcX + srcW) / ctx->srcWidth;
+               const float vy2 = 1.f - (srcY + srcH) / ctx->srcHeight;
+               const Vertex3D_NoTex2 vertices[4] = {
+                  { vx2, vy1, 0.f, 0.f, 0.f, 1.f, 1.f, 1.f },
+                  { vx1, vy1, 0.f, 0.f, 0.f, 1.f, 0.f, 1.f },
+                  { vx2, vy2, 0.f, 0.f, 0.f, 1.f, 1.f, 0.f },
+                  { vx1, vy2, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f } };
+               rd->DrawTexturedQuad(rd->m_DMDShader, vertices, true, 0.f);
+            }
+      },
+      enableHDR
+   };
+
+   bool rendered = false;
+   for (auto& renderer : m_anciliaryWndRenderers[window])
+   {
+      rendered = renderer.Render(&context.ctx, renderer.context);
+      if (rendered)
+         break;
+   }
+
+   m_renderer->UpdateBasicShaderMatrix();
+
+   if (!rendered)
+   {
+      rd->SetRenderTarget("PostProcess"s, m_renderer->GetBackBufferTexture(), true);
+      return nullptr;
+   }
+
+   if (enableHDR && (output.GetMode() == VPX::RenderOutput::OM_WINDOW))
+   {
+      const float jitter = (float)((msec() & 2047) / 1000.0);
+      rd->ResetRenderState();
+      rd->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
+      rd->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
+      rd->SetRenderTarget(tonemapPassName, outputRT, true, true);
+      rd->AddRenderTargetDependency(m_anciliaryWndHdrRT[window], false);
+      rd->m_FBShader->SetTextureNull(SHADER_tex_depth);
+      rd->m_FBShader->SetTexture(SHADER_tex_fb_unfiltered, m_anciliaryWndHdrRT[window]->GetColorSampler());
+      rd->m_FBShader->SetTexture(SHADER_tex_fb_filtered, m_anciliaryWndHdrRT[window]->GetColorSampler());
+      rd->m_FBShader->SetVector(SHADER_bloom_dither_colorgrade,
+         0.f, // Bloom
+         output.GetWindow()->IsWCGBackBuffer() ? 0.f : 1.f, // Dither
+         0.f, // LUT colorgrade
+         0.f);
+      rd->m_FBShader->SetVector(SHADER_w_h_height, 
+         static_cast<float>(1.0 / static_cast<double>(m_outputW)),
+         static_cast<float>(1.0 / static_cast<double>(m_outputH)),
+         jitter, // radical_inverse(jittertime) * 11.0f,
+         jitter); // sobol(jittertime) * 13.0f); // jitter for dither pattern}
+      ShaderTechniques tonemapTechnique; // FIXME use a tonemapping corresponding to the output, handling situations where playfield is on a HDR display but backglass is not
+      switch (m_renderer->m_toneMapper)
+      {
+      case TM_REINHARD: tonemapTechnique = SHADER_TECHNIQUE_fb_rhtonemap_no_filter; break;
+      case TM_FILMIC: tonemapTechnique = SHADER_TECHNIQUE_fb_fmtonemap_no_filter; break;
+      case TM_NEUTRAL: tonemapTechnique = SHADER_TECHNIQUE_fb_nttonemap_no_filter; break;
+      case TM_AGX: tonemapTechnique = SHADER_TECHNIQUE_fb_agxtonemap_no_filter; break;
+      case TM_AGX_PUNCHY: tonemapTechnique = SHADER_TECHNIQUE_fb_agxptonemap_no_filter; break;
+      default: assert(!"unknown tonemapper"); break;
+      }
+      rd->m_FBShader->SetTechnique(tonemapTechnique);
+      const float m_exposure = 1.f; // TODO implement exposure
+      if (output.GetWindow()->IsWCGBackBuffer())
+      {
+         const float maxDisplayLuminance = output.GetWindow()->GetHDRHeadRoom() * (output.GetWindow()->GetSDRWhitePoint() * 80.f); // Maximum luminance of display in nits, note that GetSDRWhitePoint()*80 should usually be in the 200 nits range
+         rd->m_FBShader->SetVector(SHADER_exposure_wcg,
+            m_exposure,
+            (output.GetWindow()->GetSDRWhitePoint() * 80.f) / maxDisplayLuminance, // Apply SDR whitepoint (1.0 -> white point in nits), then scale down by maximum luminance (in nits) of display to get a relative value before before tonemapping, equal to 1/GetHDRHeadRoom()
+            maxDisplayLuminance / 10000.f, // Apply back maximum luminance in nits of display after tonemapping, scaled down to PQ limits (1.0 is 10000 nits)
+            1.f);
+         float spline_params[6];
+         PrecompSplineTonemap(maxDisplayLuminance, spline_params);
+         rd->m_FBShader->SetVector(SHADER_spline1, spline_params[0],spline_params[1],spline_params[2],spline_params[3]);
+         rd->m_FBShader->SetVector(SHADER_spline2, spline_params[4],spline_params[5], 0.f,0.f);
+      }
+      else
+      {
+         rd->m_FBShader->SetVector(SHADER_exposure_wcg, 
+            m_exposure,
+            1.f, 
+            0.f,  // Unused for SDR
+            0.f); // Tonemapping mode: 0 = SDR
+      }
+      rd->DrawFullscreenTexturedQuad(rd->m_FBShader);
+   }
+
+   #ifdef ENABLE_BGFX
+   if (output.GetMode() == VPX::RenderOutput::OM_WINDOW)
+      output.GetWindow()->Show();
+   #endif
+
+   return rd->GetCurrentRenderTarget();
+}
+
 void Player::UpdateVolume()
 {
    if (m_audio)
@@ -2120,7 +2546,18 @@ void Player::OnAudioUpdated(const unsigned int msgId, void* userData, void* msgD
    {
       if (msg.buffer != nullptr)
       {
-         entry->second->StreamUpdate(msg.buffer, msg.bufferSize);
+         int pending = SDL_GetAudioStreamQueued(entry->second->m_pstream);
+         if (pending >= 0 && static_cast<unsigned int>(pending) >= msg.bufferSize)
+         {
+            double delay = 1000.0 * msg.bufferSize / (msg.sampleRate * ((msg.type == CTLPI_AUDIO_SRC_BACKGLASS_MONO) ? 1 : 2));
+            PLOGI << "Dropping 1 sound frame (" << delay << "ms) as lag is exceeding 1 frame (" << msg.bufferSize << "bytes of " << ((msg.type == CTLPI_AUDIO_SRC_BACKGLASS_MONO)
+               ? "mono" : "stereo") << " data at " << msg.sampleRate << "Hz)";
+         }
+         else
+         {
+            // PLOGD << "Pending: " << pending << " queuing: " << msg.bufferSize;
+            entry->second->StreamUpdate(msg.buffer, msg.bufferSize);
+         }
       }
       else
       {
@@ -2129,256 +2566,6 @@ void Player::OnAudioUpdated(const unsigned int msgId, void* userData, void* msgD
          me->m_externalAudioPlayers.erase(entry);
       }
    }
-}
-
-void Player::OnSegChanged(const unsigned int msgId, void *userData, void *msgData)
-{
-   static_cast<Player *>(userData)->m_defaultSegSelected = false;
-   static_cast<Player *>(userData)->m_resURIResolver.ClearCache();
-   static_cast<Player *>(userData)->m_scoreView.Select(static_cast<Player *>(userData)->m_scoreviewOutput);
-}
-
-Player::ControllerSegDisplay Player::GetControllerSegDisplay(CtlResId id)
-{
-   ControllerSegDisplay* display = nullptr;
-   if (id.id == 0)
-   {
-      if (m_defaultSegSelected)
-      {
-         auto pCD = std::ranges::find_if(m_controllerSegDisplays.begin(), m_controllerSegDisplays.end(), [&](const ControllerSegDisplay &cd) { return cd.segId.id == m_defaultSegId.id; });
-         if (pCD == m_controllerSegDisplays.end())
-         {
-            assert(false); // This is not supposed to happen (we identify default by storing m_defaultSefId instead of the controller display only to manage vector resize operation)
-            m_defaultSegSelected = false;
-         }
-         else
-            display = &(*pCD);
-      }
-
-      // Search for the default seg display
-      if (!m_defaultSegSelected)
-      {
-         m_defaultSegId = { 0 };
-         GetSegSrcMsg getSrcMsg = { 1024, 0, new SegSrcId[1024] };
-         VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(m_getSegSrcMsgId, &getSrcMsg);
-         if (getSrcMsg.count == 0)
-         {
-            delete[] getSrcMsg.entries;
-            return { { 0 }, 0, nullptr };
-         }
-
-         // Update seg display list
-         m_defaultSegId = getSrcMsg.entries[0].id;
-         auto pCD = std::ranges::find_if(m_controllerSegDisplays.begin(), m_controllerSegDisplays.end(), [&](const ControllerSegDisplay &cd) { return cd.segId.id == m_defaultSegId.id; });
-         if (pCD == m_controllerSegDisplays.end())
-         {
-            m_controllerSegDisplays.push_back({m_defaultSegId, 0, nullptr});
-            display = &m_controllerSegDisplays.back();
-            for (unsigned int i = 0; i < getSrcMsg.count; i++)
-            {
-               if (getSrcMsg.entries[0].id.id == m_defaultSegId.id)
-               {
-                  display->displays.emplace_back(&getSrcMsg.entries[i].elementType[0], &getSrcMsg.entries[i].elementType[getSrcMsg.entries[i].nElements]);
-                  display->nElements += getSrcMsg.entries[i].nElements;
-               }
-            }
-            display->frame = new float[16 * display->nElements];
-         }
-         else
-            display = &(*pCD);
-         delete[] getSrcMsg.entries;
-         m_defaultSegSelected = true;
-      }
-   }
-   else
-   {
-      auto pCD = std::ranges::find_if(m_controllerSegDisplays.begin(), m_controllerSegDisplays.end(), [id](const ControllerSegDisplay &cd) { return cd.segId.id == id.id; });
-      if (pCD == m_controllerSegDisplays.end())
-      {
-         // Search for the requested display
-         GetSegSrcMsg getSrcMsg = { 1024, 0, new SegSrcId[1024] };
-         VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(m_getSegSrcMsgId, &getSrcMsg);
-         m_controllerSegDisplays.push_back({id, 0, nullptr});
-         display = &m_controllerSegDisplays.back();
-         for (unsigned int i = 0; i < getSrcMsg.count; i++)
-         {
-            if (getSrcMsg.entries[0].id.id == m_defaultSegId.id)
-            {
-               display->displays.emplace_back(&getSrcMsg.entries[i].elementType[0], &getSrcMsg.entries[i].elementType[getSrcMsg.entries[i].nElements - 1]);
-               display->nElements += getSrcMsg.entries[i].nElements;
-            }
-         }
-         display->frame = new float[16 * display->nElements];
-         delete[] getSrcMsg.entries;
-      }
-      else
-      {
-         display = &(*pCD);
-      }
-   }
-
-   // Obtain frame from controller plugin
-   GetSegMsg getMsg = { display->segId, 0, nullptr };
-   VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(m_getSegMsgId, &getMsg);
-   if (getMsg.frame == nullptr)
-      return { display->segId, 0, nullptr };
-   memcpy(display->frame, getMsg.frame, display->nElements * 16 * sizeof(float));
-   return *display;
-}
-
-void Player::OnDmdChanged(const unsigned int msgId, void* userData, void* msgData)
-{
-   static_cast<Player *>(userData)->m_defaultDmdSelected = false;
-   static_cast<Player *>(userData)->m_resURIResolver.ClearCache();
-   static_cast<Player *>(userData)->m_scoreView.Select(static_cast<Player *>(userData)->m_scoreviewOutput);
-}
-
-Player::ControllerDisplay Player::GetControllerDisplay(CtlResId id)
-{
-   ControllerDisplay* display = nullptr;
-   if (id.id == 0)
-   {
-      // FIXME script should be declared as other DMD and priorized during selection
-      // Script DMD takes precedence over plugin DMD
-      if (m_dmdFrame)
-         return { { 0 }, m_dmdFrameId, m_dmdFrame }; // FIXME 0 id is wrong here
-
-      // Use previously selected DMD
-      if (m_defaultDmdSelected)
-      {
-         auto pCD = std::ranges::find_if(m_controllerDisplays.begin(), m_controllerDisplays.end(), [&](const ControllerDisplay &cd) { return memcmp(&cd.dmdId, &m_defaultDmdId, sizeof(DmdSrcId)) == 0; });
-         if (pCD == m_controllerDisplays.end())
-         {
-            assert(false); // This is not supposed to happen (we identify default by storing m_defaultDmdId instead ot the controller display only to manage vector resize operation)
-            m_defaultDmdSelected = false;
-         }
-         else
-         {
-            display = &(*pCD);
-         }
-      }
-
-      // Search for the default DMD
-      if (!m_defaultDmdSelected)
-      {
-         m_defaultDmdId = {0};
-         bool dmdFound = false;
-         unsigned int largest = 128;
-         GetDmdSrcMsg getSrcMsg = { 1024, 0, new DmdSrcId[1024] };
-         VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(m_getDmdSrcMsgId, &getSrcMsg);
-         for (unsigned int i = 0; i < getSrcMsg.count; i++)
-         {
-            if ((getSrcMsg.entries[i].width >= largest) // Select a large DMD
-               && (m_defaultDmdId.format == 0 || getSrcMsg.entries[i].format != CTLPI_GETDMD_FORMAT_LUM8)) // Prefer color over monochrome
-            {
-               m_defaultDmdId = getSrcMsg.entries[i];
-               largest = getSrcMsg.entries[i].width;
-               dmdFound = true;
-            }
-         }
-         delete[] getSrcMsg.entries;
-         if (!dmdFound)
-            return { { 0 }, -1, nullptr };
-
-         // Update in display list
-         auto pCD = std::ranges::find_if(m_controllerDisplays.begin(), m_controllerDisplays.end(), [&](const ControllerDisplay &cd) { return memcmp(&cd.dmdId, &m_defaultDmdId, sizeof(DmdSrcId)) == 0; });
-         if (pCD == m_controllerDisplays.end())
-         {
-            m_controllerDisplays.push_back({m_defaultDmdId, -1, nullptr});
-            display = &m_controllerDisplays.back();
-         }
-         else
-         {
-            display = &(*pCD);
-         }
-         m_defaultDmdSelected = true;
-      }
-   }
-   else
-   {
-      // FIXME this only match on the frame source id, not on the other properties (size/format)
-      auto pCD = std::ranges::find_if(m_controllerDisplays.begin(), m_controllerDisplays.end(), [id](const ControllerDisplay &cd) { return cd.dmdId.id.id == id.id; });
-      if (pCD == m_controllerDisplays.end())
-      {
-         // Search for the requested DMD
-         bool dmdFound = false;
-         DmdSrcId dmdId = { 0 };
-         GetDmdSrcMsg getSrcMsg = { 1024, 0, new DmdSrcId[1024] };
-         VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(m_getDmdSrcMsgId, &getSrcMsg);
-         for (unsigned int i = 0; i < getSrcMsg.count; i++)
-         {
-            if ((getSrcMsg.entries[i].id.id == id.id) && (dmdId.format == 0 || getSrcMsg.entries[i].format != CTLPI_GETDMD_FORMAT_LUM8)) // Prefer color over monochrome
-            {
-               dmdId = getSrcMsg.entries[i];
-               dmdFound = true;
-            }
-         }
-         delete[] getSrcMsg.entries;
-         if (!dmdFound)
-            return { { 0 }, -1, nullptr };
-         m_controllerDisplays.push_back({dmdId, -1, nullptr});
-         display = &m_controllerDisplays.back();
-      }
-      else
-      {
-         display = &(*pCD);
-      }
-   }
-
-   // Obtain DMD frame from controller plugin
-   GetDmdMsg getMsg = { display->dmdId, 0, nullptr };
-   VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(m_getDmdMsgId, &getMsg);
-   if (getMsg.frame == nullptr)
-      return { display->dmdId, -1, nullptr };
-
-   // Requesting the DMD may have triggered colorization and display list to be modified, so the display pointer may be bad at this point
-   auto pCD = std::ranges::find_if(m_controllerDisplays.begin(), m_controllerDisplays.end(), [&](const ControllerDisplay &cd) { return memcmp(&cd.dmdId, &getMsg.dmdId, sizeof(DmdSrcId)) == 0; });
-   if (pCD == m_controllerDisplays.end())
-      return { display->dmdId, -1, nullptr };
-   else
-      display = &(*pCD);
-
-   // (re) Create DMD texture
-   const BaseTexture::Format format = display->dmdId.format == CTLPI_GETDMD_FORMAT_LUM8 ? BaseTexture::BW : BaseTexture::SRGBA;
-   if (display->frame == nullptr || display->frame->width() != display->dmdId.width || display->frame->height() != display->dmdId.height || display->frame->m_format != format)
-   {
-      // Delay texture deletion since it may be used by the render frame which is processed asynchronously. If so, deleting would cause a deadlock & invalid access
-      BaseTexture *tex = display->frame;
-      m_renderer->m_renderDevice->AddEndOfFrameCmd([tex] { delete tex; });
-      display->frame = new BaseTexture(display->dmdId.width, display->dmdId.height, format);
-      display->frame->SetIsOpaque(true);
-      display->frameId = -1;
-   }
-
-   // Copy DMD frame, eventually converting it
-   if (display->frameId != getMsg.frameId)
-   {
-      display->frameId = getMsg.frameId;
-      const int size = display->dmdId.width * display->dmdId.height;
-      if (display->dmdId.format == CTLPI_GETDMD_FORMAT_LUM8)
-         memcpy(display->frame->data(), getMsg.frame, size);
-      else if (display->dmdId.format == CTLPI_GETDMD_FORMAT_SRGB565)
-      {
-         static constexpr UINT8 lum32[] = { 0, 8, 16, 25, 33, 41, 49, 58, 66, 74, 82, 90, 99, 107, 115, 123, 132, 140, 148, 156, 165, 173, 181, 189, 197, 206, 214, 222, 230, 239, 247, 255 };
-         static constexpr UINT8 lum64[] = { 0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 45, 49, 53, 57, 61, 65, 69, 73, 77, 81, 85, 89, 93, 97, 101, 105, 109, 113, 117, 121, 125, 130, 134, 138, 142, 146, 150, 154, 158, 162, 166, 170, 174, 178, 182, 186, 190, 194, 198, 202, 206, 210, 215, 219, 223, 227, 231, 235, 239, 243, 247, 251, 255 };
-         DWORD *const data = reinterpret_cast<DWORD *>(display->frame->data());
-         const uint16_t * const frame = reinterpret_cast<uint16_t *>(getMsg.frame);
-         for (int ofs = 0; ofs < size; ofs++)
-         {
-            const uint16_t rgb565 = frame[ofs];
-            data[ofs] = 0xFF000000 | (lum32[rgb565 & 0x1F] << 16) | (lum64[(rgb565 >> 5) & 0x3F] << 8) | lum32[(rgb565 >> 11) & 0x1F];
-         }
-      }
-      else if (display->dmdId.format == CTLPI_GETDMD_FORMAT_SRGB888)
-      {
-         DWORD *const data = reinterpret_cast<DWORD *>(display->frame->data());
-         for (int ofs = 0; ofs < size; ofs++)
-            data[ofs] = 0xFF000000 | (getMsg.frame[ofs * 3 + 2] << 16) | (getMsg.frame[ofs * 3 + 1] << 8) | getMsg.frame[ofs * 3];
-      }
-      m_renderer->m_renderDevice->m_texMan.SetDirty(display->frame);
-   }
-
-   return *display;
 }
 
 void Player::PauseMusic()

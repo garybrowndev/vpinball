@@ -4,6 +4,20 @@
 #include <cstdarg>
 #include <cstdio>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#include <tchar.h>
+#include <locale>
+#include <codecvt>
+#endif
+
+#ifndef _WIN32
+#include <dlfcn.h>
+#include <climits>
+#include <unistd.h>
+#endif
+
 #include <string>
 using namespace std::string_literals;
 using std::string;
@@ -13,20 +27,29 @@ using std::vector;
 
 // Shared logging
 #include "LoggingPlugin.h"
-LPI_USE();
-#define LOGD LPI_LOGD
-#define LOGI LPI_LOGI
-#define LOGE LPI_LOGE
 
 // Scriptable API
 #include "ScriptablePlugin.h"
+
+namespace Flex
+{
+
 PSC_USE_ERROR();
 
+LPI_USE();
+#define LOGD Flex::LPI_LOGD
+#define LOGI Flex::LPI_LOGI
+#define LOGE Flex::LPI_LOGE
+
 typedef uint32_t ColorRGBA32;
-#define RGB(r, g, b) static_cast<ColorRGBA32>(static_cast<uint8_t>(r) | (static_cast<uint8_t>(g) << 8) | (static_cast<uint8_t>(b) << 16))
+#ifndef RGB
+#define RGB(r, g, b) (static_cast<ColorRGBA32>(r) | (static_cast<ColorRGBA32>(g) << 8) | (static_cast<ColorRGBA32>(b) << 16))
+#endif
+#ifndef GetRValue
 #define GetRValue(rgba32) static_cast<uint8_t>(rgba32)
 #define GetGValue(rgba32) static_cast<uint8_t>((rgba32) >> 8)
 #define GetBValue(rgba32) static_cast<uint8_t>((rgba32) >> 16)
+#endif
 
 #ifdef _MSC_VER
 #define PATH_SEPARATOR_CHAR '\\'
@@ -51,3 +74,6 @@ bool try_parse_color(const string& str, ColorRGBA32& value);
 string normalize_path_separators(const string& szPath);
 string extension_from_path(const string& path);
 string find_case_insensitive_file_path(const string& szPath);
+string GetPluginPath();
+
+}

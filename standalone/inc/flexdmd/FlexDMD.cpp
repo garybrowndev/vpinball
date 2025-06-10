@@ -5,22 +5,14 @@
 #include "FlexDMD.h"
 #include "UltraDMD.h"
 #include "actors/Group.h"
-#include "actors/Image.h"
-#include "actors/Frame.h"
 #include "actors/Label.h"
+#include "actors/Frame.h"
+#include "actors/Image.h"
 #include "actors/ImageSequence.h"
 #include "actors/GIFImage.h"
 #include "actors/Video.h"
 
 #include "AssetManager.h"
-
-#include "../common/WindowManager.h"
-
-#define FLEXDMD_SETTINGS_WINDOW_X      15
-#define FLEXDMD_SETTINGS_WINDOW_Y      30 + 218 + 5 + 75 + 5
-#define FLEXDMD_SETTINGS_WINDOW_WIDTH  290
-#define FLEXDMD_SETTINGS_WINDOW_HEIGHT 75
-#define FLEXDMD_ZORDER                 350
 
 FlexDMD::FlexDMD()
 {
@@ -39,22 +31,7 @@ FlexDMD::FlexDMD()
    m_dmdColor = RGB(255, 88, 32);
    m_pAssetManager = new AssetManager();
 
-   m_pDMDWindow = nullptr;
-
-   Settings* const pSettings = &g_pplayer->m_ptable->m_settings;
-
-   if (pSettings->LoadValueWithDefault(Settings::Standalone, "FlexDMDWindow"s, true)) {
-      m_pDMDWindow = new VP::DMDWindow("FlexDMD",
-         pSettings->LoadValueWithDefault(Settings::Standalone, "FlexDMDWindowX"s, FLEXDMD_SETTINGS_WINDOW_X),
-         pSettings->LoadValueWithDefault(Settings::Standalone, "FlexDMDWindowY"s, FLEXDMD_SETTINGS_WINDOW_Y),
-         pSettings->LoadValueWithDefault(Settings::Standalone, "FlexDMDWindowWidth"s, FLEXDMD_SETTINGS_WINDOW_WIDTH),
-         pSettings->LoadValueWithDefault(Settings::Standalone, "FlexDMDWindowHeight"s, FLEXDMD_SETTINGS_WINDOW_HEIGHT),
-         FLEXDMD_ZORDER,
-         pSettings->LoadValueWithDefault(Settings::Standalone, "FlexDMDWindowRotation"s, 0));
-   }
-   else {
-      PLOGI.printf("FlexDMD window disabled");
-   }
+   m_pDMDWindow = new VP::DMDWindow("FlexDMD"s);
 
    m_show = true;
 
@@ -289,7 +266,7 @@ STDMETHODIMP FlexDMD::get_DmdColoredPixels(VARIANT* pRetVal)
       return S_FALSE;
    }
 
-   const UINT8* pRGB24Data = m_pRGB24DMD->GetData();
+   const UINT8* const __restrict pRGB24Data = m_pRGB24DMD->GetData();
 
    if (!pRGB24Data)
       return S_FALSE;
@@ -329,7 +306,7 @@ STDMETHODIMP FlexDMD::get_DmdPixels(VARIANT* pRetVal)
       return S_FALSE;
    }
 
-   const UINT8* pRGB24Data = m_pRGB24DMD->GetData();
+   const UINT8* const __restrict pRGB24Data = m_pRGB24DMD->GetData();
 
    if (!pRGB24Data)
       return S_FALSE;
@@ -467,7 +444,7 @@ STDMETHODIMP FlexDMD::NewLabel(BSTR Name, IUnknown *Font_,BSTR Text, ILabelActor
 
 STDMETHODIMP FlexDMD::NewVideo(BSTR Name, BSTR video, IVideoActor **pRetVal)
 {
-   AnimatedActor* obj = NewVideo(MakeString(video), MakeString(Name));
+   AnimatedActor* obj = NewVideo(MakeString(Name), MakeString(video));
    if (obj)
       return obj->QueryInterface(IID_IVideoActor, (void**)pRetVal);
 
@@ -515,8 +492,11 @@ void FlexDMD::RenderLoop()
    if (m_pDMDWindow)
       m_pDMDWindow->AttachDMD(m_pDMD, m_width, m_height);
 
-   if (g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Standalone, "FindDisplays"s, true))
-      m_pDMD->FindDisplays();
+   Settings* const pSettings = &g_pplayer->m_ptable->m_settings;
+   if (!pSettings->LoadValueWithDefault(pSettings->GetSection("Plugin.DMDUtil"), "Enable"s, false)) {
+      if (g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Standalone, "FindDisplays"s, true))
+         m_pDMD->FindDisplays();
+   }
 
    PLOGI.printf("Starting render thread");
 
@@ -619,22 +599,21 @@ Font* FlexDMD::NewFont(const string& font, OLE_COLOR tint, OLE_COLOR borderTint,
    return pFont;
 }
 
-AnimatedActor* FlexDMD::NewVideo(const string& szVideo, const string& szName)
+AnimatedActor* FlexDMD::NewVideo(const string& name, const string& video)
 {
-   if (szVideo.find('|') != string::npos)
-      return (AnimatedActor*)ImageSequence::Create(this, m_pAssetManager, szVideo, szName, 30, true);
+   if (video.find('|') != string::npos)
+      return (AnimatedActor*)ImageSequence::Create(this, m_pAssetManager, video, name, 30, true);
    else {
-      AssetSrc* pAssetSrc = m_pAssetManager->ResolveSrc(szVideo, NULL);
+      AssetSrc* pAssetSrc = m_pAssetManager->ResolveSrc(video, nullptr);
       AssetType assetType = pAssetSrc->GetAssetType();
       delete pAssetSrc;
 
       if (assetType == AssetType_Video)
-         return (AnimatedActor*)Video::Create(this, szVideo, szName, true);
+         return (AnimatedActor*)Video::Create(this, video, name, true);
       else if (assetType == AssetType_GIF)
-         return (AnimatedActor*)GIFImage::Create(this, m_pAssetManager, szVideo, szName);
+         return (AnimatedActor*)GIFImage::Create(this, m_pAssetManager, video, name);
       else if (assetType == AssetType_Image)
-         return (AnimatedActor*)ImageSequence::Create(this, m_pAssetManager, szVideo, szName, 30, true);
+         return (AnimatedActor*)ImageSequence::Create(this, m_pAssetManager, video, name, 30, true);
    }
-
-   return NULL;
+   return nullptr;
 }

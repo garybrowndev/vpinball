@@ -4,6 +4,13 @@ set -e
 
 source ./platforms/config.sh
 
+if [ -z "${MSYS2_PATH}" ]; then
+   MSYS2_PATH="/c/msys64"
+fi
+
+echo "MSYS2_PATH: ${MSYS2_PATH}"
+echo ""
+
 echo "Building external libraries..."
 echo "  SDL_SHA: ${SDL_SHA}"
 echo "  SDL_IMAGE_SHA: ${SDL_IMAGE_SHA}"
@@ -15,6 +22,8 @@ echo "  BGFX_PATCH_SHA: ${BGFX_PATCH_SHA}"
 echo "  PINMAME_SHA: ${PINMAME_SHA}"
 echo "  OPENXR_SHA: ${OPENXR_SHA}"
 echo "  LIBDMDUTIL_SHA: ${LIBDMDUTIL_SHA}"
+echo "  FFMPEG_SHA: ${FFMPEG_SHA}"
+echo "  LIBZIP_SHA: ${LIBZIP_SHA}"
 echo ""
 
 mkdir -p "external/windows-x64/${BUILD_TYPE}"
@@ -288,6 +297,83 @@ if [ "${LIBDMDUTIL_EXPECTED_SHA}" != "${LIBDMDUTIL_FOUND_SHA}" ]; then
 fi
 
 #
+# build ffmpeg
+#
+
+FFMPEG_EXPECTED_SHA="${FFMPEG_SHA}"
+FFMPEG_FOUND_SHA="$([ -f ffmpeg/cache.txt ] && cat ffmpeg/cache.txt || echo "")"
+
+if [ "${FFMPEG_EXPECTED_SHA}" != "${FFMPEG_FOUND_SHA}" ]; then
+   echo "Building ffmpeg. Expected: ${FFMPEG_EXPECTED_SHA}, Found: ${FFMPEG_FOUND_SHA}"
+
+   rm -rf ffmpeg
+   mkdir ffmpeg
+   cd ffmpeg
+
+   curl -sL https://github.com/FFmpeg/FFmpeg/archive/${FFMPEG_SHA}.tar.gz -o FFmpeg-${FFMPEG_SHA}.tar.gz
+   tar xzf FFmpeg-${FFMPEG_SHA}.tar.gz
+   mv FFmpeg-${FFMPEG_SHA} ffmpeg
+   cd ffmpeg
+   CURRENT_DIR="$(pwd)"
+   "${MSYS2_PATH}/usr/bin/bash.exe" -l -c "
+      cd \"${CURRENT_DIR}\" &&
+      ./configure \
+         --enable-shared \
+         --disable-static \
+         --disable-programs \
+         --disable-doc \
+         --arch=\"x86_64\" \
+         --build-suffix=64 &&
+      make -j$(nproc)
+   "
+   cd ..
+
+   echo "$FFMPEG_EXPECTED_SHA" > cache.txt
+
+   cd ..
+fi
+
+#
+# build libzip
+#
+
+LIBZIP_EXPECTED_SHA="${LIBZIP_SHA}"
+LIBZIP_FOUND_SHA="$([ -f libzip/cache.txt ] && cat libzip/cache.txt || echo "")"
+
+if [ "${LIBZIP_EXPECTED_SHA}" != "${LIBZIP_FOUND_SHA}" ]; then
+   echo "Building libzip. Expected: ${LIBZIP_EXPECTED_SHA}, Found: ${LIBZIP_FOUND_SHA}"
+
+   rm -rf libzip
+   mkdir libzip
+   cd libzip
+
+   curl -sL https://github.com/nih-at/libzip/archive/${LIBZIP_SHA}.tar.gz -o libzip-${LIBZIP_SHA}.tar.gz
+   tar xzf libzip-${LIBZIP_SHA}.tar.gz
+   mv libzip-${LIBZIP_SHA} libzip
+   cd libzip
+   sed -i.bak 's/\(set_target_properties(zip PROPERTIES\)/\1 OUTPUT_NAME "zip64"/' lib/CMakeLists.txt
+   CURRENT_DIR="$(pwd)"
+   "${MSYS2_PATH}/usr/bin/bash.exe" -l -c "
+      cd \"${CURRENT_DIR}\" &&
+      cmake \
+         -DBUILD_SHARED_LIBS=ON \
+         -DBUILD_TOOLS=OFF \
+         -DBUILD_REGRESS=OFF \
+         -DBUILD_OSSFUZZ=OFF \
+         -DBUILD_EXAMPLES=OFF \
+         -DBUILD_DOC=OFF \
+         -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
+         -B build &&
+      cmake --build build -- -j$(nproc)
+   "
+   cd ..
+
+   echo "$LIBZIP_EXPECTED_SHA" > cache.txt
+
+   cd ..
+fi
+
+#
 # copy libraries
 #
 
@@ -323,7 +409,6 @@ cp -r bgfx/bgfx.cmake/bx/include/bx ../../../third-party/include/
 cp pinmame/pinmame/build/${BUILD_TYPE}/pinmame64.lib ../../../third-party/build-libs/windows-x64
 cp pinmame/pinmame/build/${BUILD_TYPE}/pinmame64.dll ../../../third-party/runtime-libs/windows-x64
 cp pinmame/pinmame/src/libpinmame/libpinmame.h ../../../third-party/include
-cp pinmame/pinmame/src/libpinmame/pinmamedef.h ../../../third-party/include
 
 cp openxr/openxr/build/src/loader/${BUILD_TYPE}/openxr_loader64.lib ../../../third-party/build-libs/windows-x64
 cp openxr/openxr/build/src/loader/${BUILD_TYPE}/openxr_loader64.dll ../../../third-party/runtime-libs/windows-x64
@@ -348,3 +433,21 @@ cp libdmdutil/libdmdutil/third-party/build-libs/win/x64/sockpp64.lib ../../../th
 cp libdmdutil/libdmdutil/third-party/runtime-libs/win/x64/sockpp64.dll ../../../third-party/runtime-libs/windows-x64
 cp libdmdutil/libdmdutil/third-party/build-libs/win/x64/cargs64.lib ../../../third-party/build-libs/windows-x64
 cp libdmdutil/libdmdutil/third-party/runtime-libs/win/x64/cargs64.dll ../../../third-party/runtime-libs/windows-x64
+
+for LIB in avcodec avdevice avfilter avformat avutil swresample swscale; do
+   DIR="lib${LIB}"
+   cp ffmpeg/ffmpeg/${DIR}/${LIB}64.lib ../../../third-party/build-libs/windows-x64
+   cp ffmpeg/ffmpeg/${DIR}/${LIB}64.dll ../../../third-party/runtime-libs/windows-x64
+   mkdir -p ../../../third-party/include/${DIR}
+   cp ffmpeg/ffmpeg/${DIR}/*.h ../../../third-party/include/${DIR}
+done
+
+cp "${MSYS2_PATH}/mingw64/bin/zlib1.dll" ../../../third-party/runtime-libs/windows-x64
+cp "${MSYS2_PATH}/mingw64/bin/libiconv-2.dll" ../../../third-party/runtime-libs/windows-x64
+cp "${MSYS2_PATH}/mingw64/bin/libwinpthread-1.dll" ../../../third-party/runtime-libs/windows-x64
+cp "${MSYS2_PATH}/mingw64/bin/liblzma-5.dll" ../../../third-party/runtime-libs/windows-x64
+cp "${MSYS2_PATH}/mingw64/bin/libbz2-1.dll" ../../../third-party/runtime-libs/windows-x64
+
+cp libzip/libzip/build/lib/libzip64.dll ../../../third-party/runtime-libs/windows-x64
+cp libzip/libzip/build/zipconf.h ../../../third-party/include
+cp libzip/libzip/lib/zip.h ../../../third-party/include

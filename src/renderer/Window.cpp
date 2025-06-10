@@ -23,9 +23,10 @@ Window::Window(const int width, const int height)
    , m_settingsPrefix("Headset"s)
    , m_isVR(true)
 {
-   m_hidpiScale = 1.f;
    m_width = width;
    m_height = height;
+   m_pixelWidth = 0; // ?
+   m_pixelHeight = 0; // ?
    m_display = -1;
    m_adapter = -1;
    m_screenwidth = width;
@@ -40,13 +41,12 @@ Window::Window(const int width, const int height)
    m_backBuffer = nullptr;
 }
 
-Window::Window(const string &title, const Settings::Section section, const string &settingsPrefix)
+Window::Window(const string &title, const Settings& settings, const Settings::Section section, const string &settingsPrefix)
    : m_settingsSection(section)
    , m_settingsPrefix(settingsPrefix)
    , m_isVR(false)
 {
-   const Settings* settings = &(g_pvp->m_settings); // Always use main application settings (not overridable per table)
-   m_fullscreen = settings->LoadValueWithDefault(m_settingsSection, m_settingsPrefix + "FullScreen", IsWindows10_1803orAbove());
+   m_fullscreen = settings.LoadValueWithDefault(m_settingsSection, m_settingsPrefix + "FullScreen", IsWindows10_1803orAbove());
    // FIXME remove command line override => this is hacky and not needed anymore (use INI override instead)
    if (m_settingsSection == Settings::Player)
    {
@@ -55,11 +55,11 @@ Window::Window(const string &title, const Settings::Section section, const strin
       else if (g_pvp->m_disEnableTrueFullscreen == 1)
          m_fullscreen = true;
    }
-   int w = settings->LoadValueWithDefault(m_settingsSection, m_settingsPrefix + "Width", m_fullscreen ? -1 : DEFAULT_PLAYER_WIDTH);
-   int h = settings->LoadValueWithDefault(m_settingsSection, m_settingsPrefix + "Height", w * 9 / 16);
-   const int display = g_pvp->m_primaryDisplay ? -1 : settings->LoadValueWithDefault(m_settingsSection, m_settingsPrefix + "Display", -1);
-   const bool video10bit = settings->LoadValueWithDefault(m_settingsSection, m_settingsPrefix + "Render10Bit", false);
-   const float fsRefreshRate = settings->LoadValueWithDefault(m_settingsSection, m_settingsPrefix + "RefreshRate", 0.f);
+   int w = settings.LoadValueWithDefault(m_settingsSection, m_settingsPrefix + "Width", m_fullscreen ? -1 : 1024);
+   int h = settings.LoadValueWithDefault(m_settingsSection, m_settingsPrefix + "Height", w * 9 / 16);
+   const int display = g_pvp->m_primaryDisplay ? -1 : settings.LoadValueWithDefault(m_settingsSection, m_settingsPrefix + "Display", -1);
+   const bool video10bit = settings.LoadValueWithDefault(m_settingsSection, m_settingsPrefix + "Render10Bit", false);
+   const float fsRefreshRate = settings.LoadValueWithDefault(m_settingsSection, m_settingsPrefix + "RefreshRate", 0.f);
    // FIXME FIXME FIXME
    const int fsBitDeth = (video10bit && m_fullscreen /* && stereo3D != STEREO_VR */) ? 30 : 32;
    if (video10bit && !m_fullscreen)
@@ -78,9 +78,10 @@ Window::Window(const string &title, const Settings::Section section, const strin
          break;
       }
    }
+   const int configuredDisplay = m_display;
    for (const DisplayConfig& dispConf : displays)
    {
-      if (dispConf.isPrimary || dispConf.display == m_display)
+      if (dispConf.isPrimary || dispConf.display == configuredDisplay)
       {
          wnd_x = dispConf.left;
          wnd_y = dispConf.top;
@@ -161,8 +162,8 @@ Window::Window(const string &title, const Settings::Section section, const strin
       // Restore saved position of non fullscreen windows
       if ((m_height != m_screenheight) || (m_width != m_screenwidth))
       {
-         const int xn = settings->LoadValueWithDefault(m_settingsSection, m_settingsPrefix + "WndX", wnd_x);
-         const int yn = settings->LoadValueWithDefault(m_settingsSection, m_settingsPrefix + "WndY", wnd_y);
+         const int xn = settings.LoadValueWithDefault(m_settingsSection, m_settingsPrefix + "WndX", wnd_x);
+         const int yn = settings.LoadValueWithDefault(m_settingsSection, m_settingsPrefix + "WndY", wnd_y);
          // Only apply saved position if they fit inside a display
          #ifdef ENABLE_SDL_VIDEO // SDL Windowing
             int displayCount = 0;
@@ -214,7 +215,13 @@ Window::Window(const string &title, const Settings::Section section, const strin
       #endif
       if (m_fullscreen)
          wnd_flags |= SDL_WINDOW_FULLSCREEN;
-         
+
+      #if !defined(_MSC_VER) // Win32 (we use _MSC_VER since standalone also defines WIN32 for non Win32 builds)
+      // On Windows, always on top is not always respected and if using SDL_WINDOW_UTILITY windows may end up being hidden with no way to select and move them
+      if (m_settingsSection != Settings::Player)
+         wnd_flags |= SDL_WINDOW_UTILITY | SDL_WINDOW_ALWAYS_ON_TOP;
+      #endif
+
       // Prevent full screen window from minimizing when re-arranging external windows
       SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");
       SDL_PropertiesID props = SDL_CreateProperties();
@@ -277,22 +284,10 @@ Window::Window(const string &title, const Settings::Section section, const strin
          PLOGI << "SDL display mode for window '" << m_settingsPrefix << "': " << mode->w << 'x' << mode->h << ' ' << mode->refresh_rate << "Hz " << SDL_GetPixelFormatName(mode->format);
       }
 
-      #if defined(__APPLE__)
-         // FIXME remove when porting to SDL3: horrible hack to handle the (strange) way Apple apply DPI: user DPI is applied as other OS but HiDPI of Retina display is applied internally
-         // FIXME this only solves the window size, not its position which is in HiDPI units while it should be in pixel units
-         // JSM174 SDL_GLContext sdl_context = SDL_GL_CreateContext(m_nwnd);
-         // JSM174 SDL_GL_MakeCurrent(m_nwnd, sdl_context);
-         int drawableWidth, drawableHeight;
-         SDL_GetWindowSizeInPixels(m_nwnd, &drawableWidth, &drawableHeight); // Size in pixels
-         // JSM174 SDL_GL_DestroyContext(sdl_context);
-         m_hidpiScale = (float)drawableWidth / (float)m_width;
-         PLOGI << "SDL HiDPI defined to " << m_hidpiScale;
-         m_width = drawableWidth;
-         m_height = drawableHeight;
-      #endif
+      SDL_GetWindowSizeInPixels(m_nwnd, &m_pixelWidth, &m_pixelHeight);
 
       #ifdef __STANDALONE__
-         const string iconPath = g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "vpinball.png";
+         const string iconPath = g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "vpinball.png";
          SDL_Surface* pIcon = IMG_Load(iconPath.c_str());
          if (pIcon) {
             SDL_SetWindowIcon(m_nwnd, pIcon);
@@ -327,6 +322,9 @@ Window::Window(const string &title, const Settings::Section section, const strin
          m_refreshrate = (float)mode.RefreshRate;
          SAFE_RELEASE(d3d);
       }
+
+      m_pixelWidth = m_width;
+      m_pixelHeight = m_height;
 
    #endif
 
@@ -417,7 +415,7 @@ void Window::SetPos(const int x, const int y)
       rect.top = y;
       SetWindowPos(m_nwnd, nullptr, x, y, m_width, m_height, SWP_NOOWNERZORDER | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
    #endif
-   Settings* settings = &(g_pvp->m_settings); // Always use main application settings (not overridable per table)
+   Settings* settings = (m_settingsSection == Settings::Player) ? &(g_pvp->m_settings) : &(g_pvp->m_ptableActive->m_settings);
    settings->SaveValue(m_settingsSection, m_settingsPrefix + "WndX", x);
    settings->SaveValue(m_settingsSection, m_settingsPrefix + "WndY", y);
 }
@@ -427,7 +425,7 @@ void Window::SetPos(const int x, const int y)
 #if defined(_WIN32) || !defined(ENABLE_SDL_VIDEO)
 BOOL CALLBACK MonitorEnumList(__in  HMONITOR hMonitor, __in  HDC hdcMonitor, __in  LPRECT lprcMonitor, __in  LPARAM dwData)
 {
-   std::map<string, VPX::Window::DisplayConfig>* data = reinterpret_cast<std::map<string, VPX::Window::DisplayConfig>*>(dwData);
+   ankerl::unordered_dense::map<string, VPX::Window::DisplayConfig>* data = reinterpret_cast<ankerl::unordered_dense::map<string, VPX::Window::DisplayConfig>*>(dwData);
    MONITORINFOEX info;
    info.cbSize = sizeof(MONITORINFOEX);
    GetMonitorInfo(hMonitor, &info);
@@ -455,7 +453,7 @@ int Window::GetDisplays(vector<DisplayConfig>& displays)
    // SDL2 display identifier do not match the id of the native Windows settings
    // SDL2 does not offer a way to get the adapter (i.e. Graphics Card) associated with a display (i.e. Monitor) so we use the monitor name for both
    // Get the resolution of all enabled displays as they appear in the Windows settings UI.
-   std::map<string, DisplayConfig> displayMap;
+   ankerl::unordered_dense::map<string, DisplayConfig> displayMap;
    EnumDisplayMonitors(nullptr, nullptr, MonitorEnumList, reinterpret_cast<LPARAM>(&displayMap));
    int displayCount = 0;
    SDL_DisplayID* displayIDs = SDL_GetDisplays(&displayCount);
@@ -464,14 +462,14 @@ int Window::GetDisplays(vector<DisplayConfig>& displays)
       SDL_Rect displayBounds;
       if (SDL_GetDisplayBounds(displayIDs[i], &displayBounds))
       {
-         for (std::map<string, DisplayConfig>::iterator display = displayMap.begin(); display != displayMap.end(); ++display)
+         for (auto& display : displayMap)
          {
-            if (display->second.left == displayBounds.x && display->second.top == displayBounds.y && display->second.width == displayBounds.w && display->second.height == displayBounds.h)
+            if (display.second.left == displayBounds.x && display.second.top == displayBounds.y && display.second.width == displayBounds.w && display.second.height == displayBounds.h)
             {
-               display->second.adapter = i;
-               const char* displayName = SDL_GetDisplayName(display->second.adapter);
+               display.second.adapter = i;
+               const char* displayName = SDL_GetDisplayName(display.second.adapter);
                if (displayName)
-                  strncpy_s(display->second.GPU_Name, displayName, sizeof(display->second.GPU_Name) - 1);
+                  strncpy_s(display.second.GPU_Name, displayName, sizeof(display.second.GPU_Name) - 1);
             }
          }
       }
@@ -480,12 +478,12 @@ int Window::GetDisplays(vector<DisplayConfig>& displays)
 
    // Apply the same numbering as windows
    int i = 0;
-   for (std::map<string, DisplayConfig>::iterator display = displayMap.begin(); display != displayMap.end(); ++display)
+   for (auto& display : displayMap)
    {
-      if (display->second.adapter >= 0)
+      if (display.second.adapter >= 0)
       {
-         display->second.display = i;
-         displays.push_back(display->second);
+         display.second.display = i;
+         displays.push_back(display.second);
       }
       i++;
    }
@@ -516,7 +514,7 @@ int Window::GetDisplays(vector<DisplayConfig>& displays)
    SDL_free(displayIDs);
 #else
    // Get the resolution of all enabled displays as they appear in the Windows settings UI.
-   std::map<string, DisplayConfig> displayMap;
+   ankerl::unordered_dense::map<string, DisplayConfig> displayMap;
    EnumDisplayMonitors(nullptr, nullptr, MonitorEnumList, reinterpret_cast<LPARAM>(&displayMap));
 
    IDirect3D9* pD3D = Direct3DCreate9(D3D_SDK_VERSION);
@@ -525,13 +523,13 @@ int Window::GetDisplays(vector<DisplayConfig>& displays)
       ShowError("Could not create D3D9 object.");
       return -1;
    }
-   // Map the displays to the DX9 adapter. Otherwise this leads to an performance impact on systems with multiple GPUs
+   // Map the displays to the DX9 adapter. Otherwise, this leads to a performance impact on systems with multiple GPUs
    const int adapterCount = pD3D->GetAdapterCount();
    for (int i = 0; i < adapterCount; ++i)
    {
       D3DADAPTER_IDENTIFIER9 adapter;
       pD3D->GetAdapterIdentifier(i, 0, &adapter);
-      std::map<string, DisplayConfig>::iterator display = displayMap.find(adapter.DeviceName);
+      ankerl::unordered_dense::map<string, DisplayConfig>::iterator display = displayMap.find(adapter.DeviceName);
       if (display != displayMap.end())
       {
          display->second.adapter = i;
@@ -542,11 +540,11 @@ int Window::GetDisplays(vector<DisplayConfig>& displays)
 
    // Apply the same numbering as windows
    int i = 0;
-   for (std::map<string, DisplayConfig>::iterator display = displayMap.begin(); display != displayMap.end(); ++display)
+   for (auto& display : displayMap)
    {
-      if (display->second.adapter >= 0) {
-         display->second.display = i;
-         displays.push_back(display->second);
+      if (display.second.adapter >= 0) {
+         display.second.display = i;
+         displays.push_back(display.second);
       }
       i++;
    }

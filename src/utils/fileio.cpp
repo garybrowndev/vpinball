@@ -42,14 +42,14 @@ bool FileExists(const string& filePath)
 #endif
 }
 
-string ExtensionFromFilename(const string& szfilename)
+string ExtensionFromFilename(const string& filename)
 {
-   const int len = (int)szfilename.length();
+   const int len = (int)filename.length();
 
    int begin;
    for (begin = len; begin >= 0; begin--)
    {
-      if (szfilename[begin] == '.')
+      if (filename[begin] == '.')
       {
          begin++;
          break;
@@ -59,17 +59,17 @@ string ExtensionFromFilename(const string& szfilename)
    if (begin <= 0)
       return string();
    else
-      return szfilename.c_str()+begin;
+      return filename.c_str()+begin;
 }
 
-string TitleFromFilename(const string& szfilename)
+string TitleFromFilename(const string& filename)
 {
-   const int len = (int)szfilename.length();
+   const int len = (int)filename.length();
 
    int begin;
    for (begin = len; begin >= 0; begin--)
    {
-      if (szfilename[begin] == PATH_SEPARATOR_CHAR)
+      if (filename[begin] == PATH_SEPARATOR_CHAR)
       {
          begin++;
          break;
@@ -79,14 +79,14 @@ string TitleFromFilename(const string& szfilename)
    int end;
    for (end = len; end >= 0; end--)
    {
-      if (szfilename[end] == '.')
+      if (filename[end] == '.')
          break;
    }
 
    if (end == 0)
       end = len - 1;
 
-   const char *szT = szfilename.c_str()+begin;
+   const char *szT = filename.c_str()+begin;
    int count = end - begin;
 
    string sztitle;
@@ -94,14 +94,14 @@ string TitleFromFilename(const string& szfilename)
    return sztitle;
 }
 
-string PathFromFilename(const string &szfilename)
+string PathFromFilename(const string &filename)
 {
-   const int len = (int)szfilename.length();
+   const int len = (int)filename.length();
    // find the last '\' in the filename
    int end;
    for (end = len; end >= 0; end--)
    {
-      if (szfilename[end] == PATH_SEPARATOR_CHAR)
+      if (filename[end] == PATH_SEPARATOR_CHAR)
          break;
    }
 
@@ -109,7 +109,7 @@ string PathFromFilename(const string &szfilename)
       end = len - 1;
 
    // copy from the start of the string to the end (or last '\')
-   const char *szT = szfilename.c_str();
+   const char *szT = filename.c_str();
    int count = end + 1;
 
    string szpath;
@@ -117,40 +117,23 @@ string PathFromFilename(const string &szfilename)
    return szpath;
 }
 
-string TitleAndPathFromFilename(const char * const szfilename)
+// same as removing the file extension
+string TitleAndPathFromFilename(const string &filename)
 {
-   const int len = lstrlen(szfilename);
-   // find the last '.' in the filename
-   int end;
-   for (end = len; end >= 0; end--)
-   {
-      if (szfilename[end] == '.')
-         break;
-   }
-
-   if (end == 0)
-      end = len;
-
-   // copy from the start of the string to the end (or last '\')
-   const char *szT = szfilename;
-   int count = end;
-
-   string szpath;
-   while (count-- > 0) { szpath.push_back(*szT++); }
-   return szpath;
+   return filename.substr(0, filename.find_last_of('.')); // in case no '.' is found, will then copy full filename
 }
 
-bool ReplaceExtensionFromFilename(string& szfilename, const string& newextension)
+bool ReplaceExtensionFromFilename(string& filename, const string& newextension)
 {
-   const size_t i = szfilename.find_last_of('.');
+   const size_t i = filename.find_last_of('.');
 
    if (i != string::npos)
    {
-       szfilename.replace(i + 1, newextension.length(), newextension);
-       return true;
+      filename.replace(i + 1, newextension.length(), newextension);
+      return true;
    }
-   else
-       return false;
+
+   return false;
 }
 
 BiffWriter::BiffWriter(IStream *pistream, const HCRYPTHASH hcrypthash)
@@ -568,7 +551,7 @@ HRESULT BiffReader::GetVector3Padded(Vertex3Ds& vec)
    return hr;
 }
 
-HRESULT BiffReader::Load()
+HRESULT BiffReader::Load(std::function<bool(const int id, BiffReader *const pbr)> processToken)
 {
    int tag = 0;
    while (tag != FID(ENDB))
@@ -582,7 +565,7 @@ HRESULT BiffReader::Load()
 
       bool cont = false;
       if (hr == S_OK)
-         cont = m_piloadable->LoadToken(tag, this);
+         cont = processToken ? processToken(tag, this) : m_piloadable->LoadToken(tag, this);
 
       if (!cont)
          return E_FAIL;
@@ -651,7 +634,7 @@ HRESULT __stdcall FastIStorage::CreateStream(const WCHAR *wzName, ULONG, ULONG, 
    pfs->AddRef(); // AddRef once for us, and once for the caller
    pfs->AddRef();
    pfs->m_wzName = new WCHAR[wzNameLen];
-   WideStrNCopy((WCHAR *)wzName, pfs->m_wzName, wzNameLen);
+   WideStrNCopy(wzName, pfs->m_wzName, wzNameLen);
 
    *ppstm = pfs;
 
@@ -672,7 +655,7 @@ HRESULT __stdcall FastIStorage::CreateStorage(const WCHAR *wzName, ULONG, ULONG,
    pfs->AddRef(); // AddRef once for us, and once for the caller
    pfs->AddRef();
    pfs->m_wzName = new WCHAR[wzNameLen];
-   WideStrNCopy((WCHAR *)wzName, pfs->m_wzName, wzNameLen);
+   WideStrNCopy(wzName, pfs->m_wzName, wzNameLen);
 
    *ppstg = pfs;
 

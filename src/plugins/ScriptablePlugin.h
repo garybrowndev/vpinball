@@ -134,6 +134,10 @@ typedef struct ScriptablePluginAPI
 
    // Allows to request a COM object to be overriden by our own implementation
    void (MSGPIAPI *SetCOMObjectOverride)(const char* className, const ScriptClassDef* classDef);
+   
+   // Allow to use declared type library by other plugin
+   ScriptClassDef* (MSGPIAPI *GetClassDef)(const char* typeName);
+
 } ScriptablePluginAPI;
 
 
@@ -141,11 +145,12 @@ typedef struct ScriptablePluginAPI
 
 ///////////////////////////////////////////////////////////////////////////////
 // 
-// The following helper macros are designed to easily bridge C++ objects,
-// they use assert and std::vector. A simple ref counted pointer is also
-// provided for easy integration.
+// The following helper macros are designed to easily expose C++ objects.
 //
 #ifdef __cplusplus
+
+#include <cassert>
+#include <vector>
 
 #define PSC_USE_ERROR() extern void PSCOnError(unsigned int type, const char* format, ...)
 #define PSC_FAIL(...) PSCOnError(PSC_ERR_FAIL, __VA_ARGS__)
@@ -372,12 +377,12 @@ typedef struct ScriptablePluginAPI
 #define PSC_FUNCTION5(className, type, name, arg1, arg2, arg3, arg4, arg5) \
    members.push_back( { { #name }, { #type }, 5, { { #arg1 }, { #arg2 }, { #arg3 }, { #arg4 }, { #arg5 } }, \
       [](void* me, int, ScriptVariant* pArgs, ScriptVariant* pRet) { \
-         PSC_VAR_SET_##type(*pRet, static_cast<className *>(me)->name( PSC_VAR_##arg1(pArgs[0]), PSC_VAR_##arg2(pArgs[1]), PSC_VAR_##arg3(pArgs[2]), PSC_VAR_##arg4(pArgs[3]), PSC_VAR_##arg4(pArgs[4]))); } } );
+         PSC_VAR_SET_##type(*pRet, static_cast<className *>(me)->name( PSC_VAR_##arg1(pArgs[0]), PSC_VAR_##arg2(pArgs[1]), PSC_VAR_##arg3(pArgs[2]), PSC_VAR_##arg4(pArgs[3]), PSC_VAR_##arg5(pArgs[4]))); } } );
 
 #define PSC_FUNCTION6(className, type, name, arg1, arg2, arg3, arg4, arg5, arg6) \
    members.push_back( { { #name }, { #type }, 6, { { #arg1 }, { #arg2 }, { #arg3 }, { #arg4 }, { #arg5 }, { #arg6 } }, \
       [](void* me, int, ScriptVariant* pArgs, ScriptVariant* pRet) { \
-         PSC_VAR_SET_##type(*pRet, static_cast<className *>(me)->name( PSC_VAR_##arg1(pArgs[0]), PSC_VAR_##arg2(pArgs[1]), PSC_VAR_##arg3(pArgs[2]), PSC_VAR_##arg4(pArgs[3]), PSC_VAR_##arg4(pArgs[4]), PSC_VAR_##arg4(pArgs[5]))); } } );
+         PSC_VAR_SET_##type(*pRet, static_cast<className *>(me)->name( PSC_VAR_##arg1(pArgs[0]), PSC_VAR_##arg2(pArgs[1]), PSC_VAR_##arg3(pArgs[2]), PSC_VAR_##arg4(pArgs[3]), PSC_VAR_##arg5(pArgs[4]), PSC_VAR_##arg6(pArgs[5]))); } } );
 
 #define PSC_FUNCTION7(className, type, name, arg1, arg2, arg3, arg4, arg5, arg6, arg7) \
    members.push_back( { { #name }, { #type }, 7, { { #arg1 }, { #arg2 }, { #arg3 }, { #arg4 }, { #arg5 }, { #arg6 }, { #arg7 } }, \

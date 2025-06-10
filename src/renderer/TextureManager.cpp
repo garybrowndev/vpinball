@@ -7,47 +7,36 @@
 #include "Texture.h"
 #include "typedefs3D.h"
 
-Sampler* TextureManager::LoadTexture(BaseTexture* const memtex, const SamplerFilter filter, const SamplerAddressMode clampU, const SamplerAddressMode clampV, const bool force_linear_rgb)
+Sampler* TextureManager::LoadTexture(ITexManCacheable* const memtex, const SamplerFilter filter, const SamplerAddressMode clampU, const SamplerAddressMode clampV, const bool force_linear_rgb)
 {
-   const Iter it = m_map.find(memtex);
+   const Iter it = m_map.find(memtex->GetLiveHash());
    // During static part prerendering, trilinear/anisotropic filtering is disabled to get sharper results
    const bool isPreRender = g_pplayer->m_renderer && g_pplayer->m_renderer->IsRenderPass(Renderer::STATIC_ONLY);
    const SamplerFilter filter2 = (isPreRender && (filter == SamplerFilter::SF_ANISOTROPIC || filter == SamplerFilter::SF_TRILINEAR)) ? SamplerFilter::SF_BILINEAR : filter;
    if (it == m_map.end())
    {
       MapEntry entry;
-      entry.sampler = new Sampler(&m_rd, memtex, force_linear_rgb, clampU, clampV, filter2);
-      #ifdef DEBUG
-      if (g_pplayer->m_renderer && g_pplayer->m_renderer->m_envTexture != nullptr && g_pplayer->m_renderer->m_envTexture->m_pdsBuffer == memtex)
-         entry.sampler->SetName("Env"s);
-      else if (g_pplayer->m_renderer && g_pplayer->m_renderer->m_pinballEnvTexture.m_pdsBuffer == memtex)
-         entry.sampler->SetName("Default Ball Env"s);
-      else if (g_pplayer->m_dmdFrame == memtex)
-         entry.sampler->SetName("Script DMD"s);
-      else
-      {
-         for (Texture* image : g_pplayer->m_ptable->m_vimage)
-         {
-            if (image->m_pdsBuffer == memtex)
-            {
-               entry.name = image->m_szName;
-               entry.sampler->SetName(image->m_szName);
-               break;
-            }
-         }
-      }
-      #endif
+      entry.sampler = new Sampler(&m_rd, memtex->GetRawBitmap(), force_linear_rgb, clampU, clampV, filter2);
+      entry.sampler->SetName(memtex->GetName());
       entry.sampler->m_dirty = false;
       entry.forceLinearRGB = force_linear_rgb;
-      m_map[memtex] = entry;
+      entry.tex = memtex;
+      m_map[memtex->GetLiveHash()] = entry;
       return entry.sampler;
    }
    else
    {
       MapEntry& entry = it->second;
+      if (entry.pendingUpload)
+      {
+         entry.sampler = new Sampler(&m_rd, entry.pendingUpload, force_linear_rgb, clampU, clampV, filter2);
+         entry.sampler->SetName(memtex->GetName());
+         entry.sampler->m_dirty = false;
+         entry.pendingUpload = nullptr;
+      }
       if (entry.sampler->m_dirty)
       {
-         entry.sampler->UpdateTexture(memtex, force_linear_rgb);
+         entry.sampler->UpdateTexture(memtex->GetRawBitmap(), force_linear_rgb);
          entry.sampler->m_dirty = false;
       }
       entry.sampler->SetClamp(clampU, clampV);
@@ -57,30 +46,63 @@ Sampler* TextureManager::LoadTexture(BaseTexture* const memtex, const SamplerFil
    }
 }
 
-vector<BaseTexture*> TextureManager::GetLoadedTextures() const
+void TextureManager::AddPendingUpload(ITexManCacheable* memtex)
 {
-   std::vector<BaseTexture*> keys;
+   const Iter it = m_map.find(memtex->GetLiveHash());
+   if (it == m_map.end())
+   {
+      MapEntry entry;
+      entry.pendingUpload = memtex->GetRawBitmap();
+      entry.forceLinearRGB = false;
+      entry.isPlaceHolder = false;
+      entry.tex = memtex;
+      m_map[memtex->GetLiveHash()] = entry;
+   }
+}
+
+void TextureManager::AddPlaceHolder(ITexManCacheable* memtex)
+{
+   const Iter it = m_map.find(memtex->GetLiveHash());
+   if (it == m_map.end())
+   {
+      std::shared_ptr<BaseTexture> placeHolder = std::make_shared<BaseTexture>(1, 1, BaseTexture::SRGBA);
+      *reinterpret_cast<uint32_t*>(placeHolder->data()) = 0xFFFF00FF;
+      MapEntry entry;
+      entry.sampler = new Sampler(&m_rd, placeHolder, false, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, SamplerFilter::SF_POINT);
+      entry.sampler->SetName(memtex->GetName());
+      entry.sampler->m_dirty = true;
+      entry.forceLinearRGB = false;
+      entry.isPlaceHolder = true;
+      entry.tex = memtex;
+      m_map[memtex->GetLiveHash()] = entry;
+   }
+}
+
+vector<ITexManCacheable*> TextureManager::GetLoadedTextures() const
+{
+   std::vector<ITexManCacheable*> keys;
    for (auto it = m_map.begin(); it != m_map.end(); ++it)
-      keys.push_back(it->first);
+      if (!it->second.isPlaceHolder && !it->second.pendingUpload)
+         keys.push_back(it->second.tex);
    return keys;
 }
 
-bool TextureManager::IsLinearRGB(BaseTexture* memtex) const
+bool TextureManager::IsLinearRGB(ITexManCacheable* memtex) const
 {
-   const auto it = m_map.find(memtex);
+   const auto it = m_map.find(memtex->GetLiveHash());
    return it == m_map.end() ? false : it->second.forceLinearRGB;
 }
 
-void TextureManager::SetDirty(BaseTexture* memtex)
+void TextureManager::SetDirty(ITexManCacheable* memtex)
 {
-   const Iter it = m_map.find(memtex);
+   const Iter it = m_map.find(memtex->GetLiveHash());
    if (it != m_map.end())
       it->second.sampler->m_dirty = true;
 }
 
-void TextureManager::UnloadTexture(BaseTexture* memtex)
+void TextureManager::UnloadTexture(ITexManCacheable* memtex)
 {
-   const Iter it = m_map.find(memtex);
+   const Iter it = m_map.find(memtex->GetLiveHash());
    if (it != m_map.end())
    {
       delete it->second.sampler;

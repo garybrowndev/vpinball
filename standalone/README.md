@@ -80,6 +80,7 @@ To make a successful port, we would need tackle several tasks:
 >   - ~~[Bug 57563](https://bugs.winehq.org/show_bug.cgi?id=57563) - vbscript: mid() throws when passed VT_EMPTY instead of returning empty string~~
 >   - [Bug 58051](https://bugs.winehq.org/show_bug.cgi?id=58051) - vbscript: Dictionary direct Keys/Items access causes parse error
 >   - [Bug 58056](https://bugs.winehq.org/show_bug.cgi?id=58056) - vbscript: Directly indexing a Split returns Empty
+>   - [Bug 58248](https://bugs.winehq.org/show_bug.cgi?id=58248) - vbscript: Me(Idx) fails to compile
 
 > - Add support for `Scripting.FileSystemObject` and `Scripting.Dictionary` leveraging Wine's `scrrun` code.
 > - Add support for `E_NOTIMPL` commands to Wine's VBScript engine:
@@ -612,44 +613,6 @@ or convert to use:
 ```
 Const BallSize = 50
 Const BallMass = 1
-```
-
-## Miscellaneous
-
-To generate the COM proxy files, we need IDL files. Visual Pinball and Visual PinMAME have IDL files in their repositories. FlexDMD, B2SServer, and PuP do not supply IDL files as they are either C#, VB, or closed source.
-
-To generate an IDL file from a DLL or EXE:
-
-- Open `Windows Developer Command Prompt`
-
-```
-tlbexp C:\Users\jsm17\OneDrive\Desktop\B2SBackglassServer.dll 
-```
-
-- Open `oleview` (x64) in `"C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\oleview.exe"`
-
-- `File` > `View TypeLib...` > Select `B2SBackglassServer.tlb`
-
-- `File` > `Save As...` > Enter `B2S.idl`
-
-- The saved IDL file will be encoded in UTF-16. On MacOS or Linux convert the file to UTF-8:
-
-```
-iconv -f utf-16 -t utf-8 B2S.idl > B2S.idl_tmp
-mv B2S.idl_tmp B2S.idl
-```
-
-To build header file for VPinMAME.idl: (Thanks to @bshanks and @gcenx83)
-
-```
-brew install llvm lld
-git clone https://gitlab.winehq.org/wine/wine.git
-git clone git@github.com:vpinball/pinmame.git
-cd wine
-export PATH="/opt/homebrew/opt/llvm/bin:/opt/homebrew/opt/bison/bin:$PATH"
-./configure --without-freetype
-make -j10
-tools/widl/widl -o ../vpinmame_i.h --nostdinc -Ldlls/\* -Iinclude -D__WINESRC__ -D_UCRT ../pinmame/src/win32com/VPinMAME.idl
 ```
 
 ## VBScript Issues

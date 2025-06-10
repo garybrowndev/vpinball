@@ -7,16 +7,6 @@
 
 #include <filesystem>
 
-PUPManager* PUPManager::m_pInstance = NULL;
-
-PUPManager* PUPManager::GetInstance()
-{
-   if (!m_pInstance)
-      m_pInstance = new PUPManager();
-
-   return m_pInstance;
-}
-
 PUPManager::PUPManager()
 {
    m_init = false;
@@ -26,11 +16,14 @@ PUPManager::PUPManager()
 
 PUPManager::~PUPManager()
 {
+   Stop();
+   Unload();
 }
 
 void PUPManager::LoadConfig(const string& szRomName)
 {
-   if (m_init) {
+   if (m_init)
+   {
       PLOGW.printf("PUP already initialized");
       return;
    }
@@ -63,7 +56,9 @@ void PUPManager::LoadConfig(const string& szRomName)
          while (std::getline(screensFile, line)) {
             if (++i == 1)
                continue;
-            AddScreen(PUPScreen::CreateFromCSV(line, m_playlists));
+            PUPScreen* pScreen = PUPScreen::CreateFromCSV(this, line, m_playlists);
+            if (pScreen)
+               AddScreen(pScreen);
          }
       }
       else {
@@ -79,7 +74,7 @@ void PUPManager::LoadConfig(const string& szRomName)
    for (auto& [key, pScreen] : m_screenMap) {
       PUPCustomPos* pCustomPos = pScreen->GetCustomPos();
       if (pCustomPos) {
-         std::map<int, PUPScreen*>::iterator it = m_screenMap.find(pCustomPos->GetSourceScreen());
+         ankerl::unordered_dense::map<int, PUPScreen*>::const_iterator it = m_screenMap.find(pCustomPos->GetSourceScreen());
          PUPScreen* pParentScreen = it != m_screenMap.end() ? it->second : nullptr;
          if (pParentScreen && pScreen != pParentScreen)
             pParentScreen->AddChild(pScreen);
@@ -96,9 +91,8 @@ void PUPManager::LoadConfig(const string& szRomName)
             if (extension_from_path(szFontPath) == "ttf")
             {
                if (TTF_Font* pFont = TTF_OpenFont(szFontPath.c_str(), 8))
-               {
                   AddFont(pFont, entry.path().filename());
-               }else{
+               else {
                   PLOGE.printf("Failed to load font: %s %s", szFontPath.c_str(), SDL_GetError());
                }
             }
@@ -111,7 +105,34 @@ void PUPManager::LoadConfig(const string& szRomName)
 
    m_init = true;
 
-   return;
+   QueueTriggerData({ 'D', 0, 1 });
+}
+
+void PUPManager::Unload()
+{
+   if (!m_init)
+      return;
+
+   for (auto pWindow : m_windows)
+      delete pWindow;
+   m_windows.clear();
+
+   for (auto& [key, pScreen] : m_screenMap)
+      delete pScreen;
+   m_screenMap.clear();
+
+   for (auto& pPlaylist : m_playlists)
+      delete pPlaylist;
+   m_playlists.clear();
+
+   for (auto& pFont : m_fonts)
+      TTF_CloseFont(pFont);
+   m_fonts.clear();
+   m_fontMap.clear();
+   m_fontFilenameMap.clear();
+
+   m_szPath.clear();
+   m_init = false;
 }
 
 void PUPManager::LoadPlaylists()
@@ -126,7 +147,8 @@ void PUPManager::LoadPlaylists()
       while (std::getline(playlistsFile, line)) {
          if (++i == 1)
             continue;
-         if (PUPPlaylist* pPlaylist = PUPPlaylist::CreateFromCSV(line)) {
+         PUPPlaylist* pPlaylist = PUPPlaylist::CreateFromCSV(this, line);
+         if (pPlaylist) {
             string folderNameLower = lowerCase(pPlaylist->GetFolder());
             if (lowerPlaylistNames.find(folderNameLower) == lowerPlaylistNames.end()) {
                m_playlists.push_back(pPlaylist);
@@ -134,24 +156,15 @@ void PUPManager::LoadPlaylists()
             }
             else {
                PLOGW.printf("Duplicate playlist: playlist=%s", pPlaylist->ToString().c_str());
+               delete pPlaylist;
             }
          }
       }
    }
 }
 
-const string& PUPManager::GetRootPath()
-{
-   return m_szRootPath;
-}
-
 bool PUPManager::AddScreen(PUPScreen* pScreen)
 {
-   if (!pScreen) {
-      PLOGE.printf("Null screen argument");
-      return false;
-   }
-
    if (HasScreen(pScreen->GetScreenNum())) {
       PLOGW.printf("Duplicate screen: screen={%s}", pScreen->ToString(false).c_str());
       delete pScreen;
@@ -165,24 +178,28 @@ bool PUPManager::AddScreen(PUPScreen* pScreen)
    return true;
 }
 
-bool PUPManager::AddScreen(LONG lScreenNum)
+bool PUPManager::AddScreen(int screenNum)
 {
-   return AddScreen(PUPScreen::CreateDefault(lScreenNum, m_playlists));
+   PUPScreen* pScreen = PUPScreen::CreateDefault(this, screenNum, m_playlists);
+   if (!pScreen)
+      return false;
+
+   return AddScreen(pScreen);
 }
 
 bool PUPManager::HasScreen(int screenNum)
 {
-   std::map<int, PUPScreen*>::iterator it = m_screenMap.find(screenNum);
+   ankerl::unordered_dense::map<int, PUPScreen*>::const_iterator it = m_screenMap.find(screenNum);
    return it != m_screenMap.end();
 }
 
-PUPScreen* PUPManager::GetScreen(int screenNum)
+PUPScreen* PUPManager::GetScreen(int screenNum) const
 {
    if (!m_init) {
       PLOGW.printf("Getting screen before initialization");
    }
 
-   std::map<int, PUPScreen*>::iterator it = m_screenMap.find(screenNum);
+   ankerl::unordered_dense::map<int, PUPScreen*>::const_iterator it = m_screenMap.find(screenNum);
    return it != m_screenMap.end() ? it->second : nullptr;
 }
 
@@ -195,14 +212,14 @@ bool PUPManager::AddFont(TTF_Font* pFont, const string& szFilename)
 
    const string szFamilyName = string(TTF_GetFontFamilyName(pFont));
 
-   const string szNormalizedFamilyName = lowerCase(string_replace_all(szFamilyName, "  ", " "));
+   const string szNormalizedFamilyName = lowerCase(string_replace_all(szFamilyName, "  "s, " "s));
    m_fontMap[szNormalizedFamilyName] = pFont;
 
    string szStyleName = string(TTF_GetFontStyleName(pFont));
    if (szStyleName != "Regular")
    {
       const string szFullName = szFamilyName + ' ' + szStyleName;
-      const string szNormalizedFullName = lowerCase(string_replace_all(szFullName, "  ", " "));
+      const string szNormalizedFullName = lowerCase(string_replace_all(szFullName, "  "s, " "s));
       m_fontMap[szNormalizedFullName] = pFont;
    }
 
@@ -216,9 +233,9 @@ bool PUPManager::AddFont(TTF_Font* pFont, const string& szFilename)
 
 TTF_Font* PUPManager::GetFont(const string& szFont)
 {
-   string szNormalizedFamilyName = lowerCase(string_replace_all(szFont, "  ", " "));
+   string szNormalizedFamilyName = lowerCase(string_replace_all(szFont, "  "s, " "s));
 
-   std::map<string, TTF_Font*>::iterator it = m_fontMap.find(szNormalizedFamilyName);
+   ankerl::unordered_dense::map<string, TTF_Font*>::const_iterator it = m_fontMap.find(szNormalizedFamilyName);
    if (it != m_fontMap.end())
       return it->second;
    it = m_fontFilenameMap.find(lowerCase(szFont));
@@ -228,81 +245,52 @@ TTF_Font* PUPManager::GetFont(const string& szFont)
    return nullptr;
 }
 
-void PUPManager::QueueTriggerData(PUPTriggerData data)
+void PUPManager::QueueTriggerData(const PUPTriggerData& data)
 {
-   if (data.value == 0)
-      return;
+   const string triggerId = data.type + std::to_string(data.number);
 
    {
       std::lock_guard<std::mutex> lock(m_queueMutex);
-      m_triggerDataQueue.push({ data.type, data.number, data.value });
-   }
 
+      m_triggerMap.insert_or_assign(triggerId, data.value);
+      m_triggerDataQueue.push(data);
+   }
    m_queueCondVar.notify_one();
 }
 
-void PUPManager::Start()
+void PUPManager::ProcessQueue()
 {
-   if (!m_init)
-      return;
+   while (true) {
+      std::unique_lock<std::mutex> lock(m_queueMutex);
+      m_queueCondVar.wait(lock, [this] { return !m_triggerDataQueue.empty() || !m_isRunning; });
 
-   PLOGI.printf("PUP start");
+      if (!m_isRunning) {
+         while (!m_triggerDataQueue.empty())
+            m_triggerDataQueue.pop();
+         break;
+      }
 
-   Settings* const pSettings = &g_pplayer->m_ptable->m_settings;
+      PUPTriggerData triggerData = m_triggerDataQueue.front();
+      m_triggerDataQueue.pop();
+      lock.unlock();
 
-   if (pSettings->LoadValueWithDefault(Settings::Standalone, "PUPWindows"s, true)) {
-      AddWindow("Topper",
-         PUP_SCREEN_TOPPER,
-         PUP_SETTINGS_TOPPERX,
-         PUP_SETTINGS_TOPPERY,
-         PUP_SETTINGS_TOPPERWIDTH,
-         PUP_SETTINGS_TOPPERHEIGHT,
-         PUP_ZORDER_TOPPER);
-
-      AddWindow("Backglass",
-         PUP_SCREEN_BACKGLASS,
-         PUP_SETTINGS_BACKGLASSX,
-         PUP_SETTINGS_BACKGLASSY,
-         PUP_SETTINGS_BACKGLASSWIDTH,
-         PUP_SETTINGS_BACKGLASSHEIGHT,
-         PUP_ZORDER_BACKGLASS);
-
-      AddWindow("DMD",
-         PUP_SCREEN_DMD,
-         PUP_SETTINGS_DMDX,
-         PUP_SETTINGS_DMDY,
-         PUP_SETTINGS_DMDWIDTH,
-         PUP_SETTINGS_DMDHEIGHT,
-         PUP_ZORDER_DMD);
-
-      AddWindow("Playfield",
-         PUP_SCREEN_PLAYFIELD,
-         PUP_SETTINGS_PLAYFIELDX,
-         PUP_SETTINGS_PLAYFIELDY,
-         PUP_SETTINGS_PLAYFIELDWIDTH,
-         PUP_SETTINGS_PLAYFIELDHEIGHT,
-         PUP_ZORDER_PLAYFIELD);
-
-      AddWindow("FullDMD",
-         PUP_SCREEN_FULLDMD,
-         PUP_SETTINGS_FULLDMDX,
-         PUP_SETTINGS_FULLDMDY,
-         PUP_SETTINGS_FULLDMDWIDTH,
-         PUP_SETTINGS_FULLDMDHEIGHT,
-         PUP_ZORDER_FULLDMD);
+      for (auto& [key, pScreen] : m_screenMap)
+         pScreen->QueueTrigger(triggerData);
    }
-   else {
-      PLOGI.printf("PUP windows disabled");
-   }
-
-   m_isRunning = true;
-   m_thread = std::thread(&PUPManager::ProcessQueue, this);
-
-   for (auto& [key, pScreen] : m_screenMap)
-      pScreen->Start();
 }
 
-void PUPManager::AddWindow(const string& szWindowName, int screen, int x, int y, int width, int height, int zOrder)
+int PUPManager::GetTriggerValue(const string& triggerId)
+{
+   std::lock_guard<std::mutex> lock(m_queueMutex);
+
+   auto it = m_triggerMap.find(triggerId);
+   if (it != m_triggerMap.end())
+      return it->second;
+
+   return 0;
+}
+
+void PUPManager::AddWindow(const string& szWindowName, int screen, VPXAnciliaryWindow anciliaryWindow)
 {
    Settings* const pSettings = &g_pplayer->m_ptable->m_settings;
 
@@ -324,13 +312,7 @@ void PUPManager::AddWindow(const string& szWindowName, int screen, int x, int y,
       return;
    }
 
-   PUPWindow* pWindow = new PUPWindow(pScreen, szPrefix,
-      pSettings->LoadValueWithDefault(Settings::Standalone, szPrefix + "WindowX"s, x),
-      pSettings->LoadValueWithDefault(Settings::Standalone, szPrefix + "WindowY"s, y),
-      pSettings->LoadValueWithDefault(Settings::Standalone, szPrefix + "WindowWidth"s, width),
-      pSettings->LoadValueWithDefault(Settings::Standalone, szPrefix + "WindowHeight"s, height),
-      zOrder,
-      pSettings->LoadValueWithDefault(Settings::Standalone, szPrefix + "WindowRotation"s, 0));
+   PUPWindow* pWindow = new PUPWindow(szPrefix, pScreen, anciliaryWindow);
 
    if (pScreen->GetMode() != PUP_SCREEN_MODE_OFF)
       pWindow->Show();
@@ -338,29 +320,37 @@ void PUPManager::AddWindow(const string& szWindowName, int screen, int x, int y,
    m_windows.push_back(pWindow);
 }
 
-void PUPManager::ProcessQueue()
+void PUPManager::Start()
 {
-   while (true) {
-      std::unique_lock<std::mutex> lock(m_queueMutex);
-      m_queueCondVar.wait(lock, [this] { return !m_triggerDataQueue.empty() || !m_isRunning; });
+   if (!m_init || m_isRunning)
+      return;
 
-      if (!m_isRunning) {
-         while (!m_triggerDataQueue.empty())
-            m_triggerDataQueue.pop();
-         break;
-      }
+   PLOGI.printf("PUP start");
 
-      PUPTriggerData triggerData = m_triggerDataQueue.front();
-      m_triggerDataQueue.pop();
-      lock.unlock();
+   Settings* const pSettings = &g_pplayer->m_ptable->m_settings;
 
-      for (auto& [key, pScreen] : m_screenMap)
-         pScreen->QueueTrigger(triggerData.type, triggerData.number, triggerData.value);
+   if (pSettings->LoadValueWithDefault(Settings::Standalone, "PUPWindows"s, true)) {
+      AddWindow("Topper", PUP_SCREEN_TOPPER, VPXAnciliaryWindow::VPXWINDOW_Topper);
+      AddWindow("DMD", PUP_SCREEN_DMD, VPXAnciliaryWindow::VPXWINDOW_ScoreView);
+      AddWindow("Backglass", PUP_SCREEN_BACKGLASS, VPXAnciliaryWindow::VPXWINDOW_Backglass);
+      AddWindow("FullDMD", PUP_SCREEN_FULLDMD, VPXAnciliaryWindow::VPXWINDOW_ScoreView);
    }
+   else {
+      PLOGI.printf("PUP windows disabled");
+   }
+
+   m_isRunning = true;
+   m_thread = std::thread(&PUPManager::ProcessQueue, this);
+
+   for (auto& [key, pScreen] : m_screenMap)
+      pScreen->Start();
 }
 
 void PUPManager::Stop()
 {
+   if (!m_isRunning)
+      return;
+
    {
       std::lock_guard<std::mutex> lock(m_queueMutex);
       m_isRunning = false;
@@ -369,24 +359,4 @@ void PUPManager::Stop()
    m_queueCondVar.notify_all();
    if (m_thread.joinable())
       m_thread.join();
-
-   for (auto pWindow : m_windows)
-      delete pWindow;
-
-   m_windows.clear();
-
-   for (auto& [key, pScreen] : m_screenMap)
-      delete pScreen;
-
-   m_screenMap.clear();
-
-   for (auto& pFont : m_fonts)
-      TTF_CloseFont(pFont);
-
-   m_fonts.clear();
-   m_fontMap.clear();
-   m_fontFilenameMap.clear();
-
-   m_szPath.clear();
-   m_init = false;
 }

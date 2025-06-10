@@ -665,11 +665,16 @@ RenderDevice::RenderDevice(VPX::Window* const wnd, const bool isVR, const int nE
     DwmIsCompositionEnabled(&dwm);
     m_dwm_enabled = m_dwm_was_enabled = !!dwm;
 
+    #ifdef ENABLE_BGFX
+    m_dwm_enabled = false; // Prefer using BGFX for VSync synchronization
+    #else
     if (m_dwm_was_enabled && disableDWM && IsWindowsVistaOr7()) // windows 8 and above will not allow do disable it, but will still return S_OK
     {
         DwmEnableComposition(DWM_EC_DISABLECOMPOSITION);
         m_dwm_enabled = false;
     }
+    #endif
+    
 #else
     m_dwm_was_enabled = false;
     m_dwm_enabled = false;
@@ -702,7 +707,7 @@ RenderDevice::RenderDevice(VPX::Window* const wnd, const bool isVR, const int nE
    string gfxBackend = g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "GfxBackend"s, bgfxRendererNames[bgfx::RendererType::Vulkan]);
 #endif
    bgfx::RendererType::Enum supportedRenderers[bgfx::RendererType::Count];
-   int nRendererSupported = bgfx::getSupportedRenderers(bgfx::RendererType::Count, supportedRenderers);
+   const int nRendererSupported = bgfx::getSupportedRenderers(bgfx::RendererType::Count, supportedRenderers);
    string supportedRendererLog;
    for (int i = 0; i < nRendererSupported; ++i)
    {
@@ -743,8 +748,8 @@ RenderDevice::RenderDevice(VPX::Window* const wnd, const bool isVR, const int nE
    if (m_outputWnd[0]->IsFullScreen())
       init.resolution.reset |= BGFX_RESET_FULLSCREEN;
 
-   init.resolution.width = wnd->GetWidth();
-   init.resolution.height = wnd->GetHeight();
+   init.resolution.width = wnd->GetPixelWidth();
+   init.resolution.height = wnd->GetPixelHeight();
    switch (wnd->GetBitDepth())
    {
    case 32: init.resolution.format = bgfx::TextureFormat::RGBA8; break;
@@ -761,6 +766,7 @@ RenderDevice::RenderDevice(VPX::Window* const wnd, const bool isVR, const int nE
       init.platformData.nwh = (void*)SDL_GetNumberProperty(SDL_GetWindowProperties(m_outputWnd[0]->GetCore()), SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
    }
    else if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "wayland") == 0) {
+      init.platformData.type = bgfx::NativeWindowHandleType::Wayland;
       init.platformData.ndt = SDL_GetPointerProperty(SDL_GetWindowProperties(m_outputWnd[0]->GetCore()), SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, NULL);
       init.platformData.nwh = SDL_GetPointerProperty(SDL_GetWindowProperties(m_outputWnd[0]->GetCore()), SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, NULL);
    }
@@ -783,6 +789,7 @@ RenderDevice::RenderDevice(VPX::Window* const wnd, const bool isVR, const int nE
    m_renderDeviceAlive = true;
    m_renderThread = std::thread(&RenderThread, this, init);
    m_frameReadySem.wait();
+   m_frameMutex.lock();
    PLOGI << "BGFX initialized using " << bgfxRendererNames[bgfx::getRendererType()] << " backend";
 
 #elif defined(ENABLE_OPENGL)
@@ -808,7 +815,7 @@ RenderDevice::RenderDevice(VPX::Window* const wnd, const bool isVR, const int nE
    #endif
    default:
    {
-      ShowError("Invalid Output format: "s.append(std::to_string(mode->format)));
+      ShowError("Invalid Output format: " + std::to_string(mode->format));
       exit(-1);
    }
    }
@@ -1142,11 +1149,11 @@ RenderDevice::RenderDevice(VPX::Window* const wnd, const bool isVR, const int nE
 #endif
 
    // Create default texture
-   BaseTexture* surf = new BaseTexture(1, 1, BaseTexture::Format::RGBA);
+   std::shared_ptr<BaseTexture> surf = std::make_shared<BaseTexture>(1, 1, BaseTexture::Format::RGBA);
    memset(surf->data(), 0, 4);
    m_nullTexture = new Sampler(this, surf, false);
    m_nullTexture->SetName("Null"s);
-   delete surf;
+   surf.reset();
 
    // alloc float buffer for rendering
    #if defined(ENABLE_OPENGL)
@@ -1450,10 +1457,10 @@ void RenderDevice::AddWindow(VPX::Window* wnd)
 #else
    return nullptr;
 #endif // BX_PLATFORM_
-   bgfx::FrameBufferHandle fbh = bgfx::createFrameBuffer(nwh, uint16_t(wnd->GetWidth()), uint16_t(wnd->GetHeight()));
+   bgfx::FrameBufferHandle fbh = bgfx::createFrameBuffer(nwh, uint16_t(wnd->GetPixelWidth()), uint16_t(wnd->GetPixelHeight()));
    m_outputWnd[m_nOutputWnd] = wnd;
    m_nOutputWnd++;
-   wnd->SetBackBuffer(new RenderTarget(this, SurfaceType::RT_DEFAULT, fbh, BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE, "BackBuffer #" + std::to_string(m_nOutputWnd), wnd->GetWidth(), wnd->GetHeight(), fmt));
+   wnd->SetBackBuffer(new RenderTarget(this, SurfaceType::RT_DEFAULT, fbh, BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE, "BackBuffer #" + std::to_string(m_nOutputWnd), wnd->GetPixelWidth(), wnd->GetPixelHeight(), fmt));
 #endif
 }
 
@@ -1692,12 +1699,16 @@ void RenderDevice::UploadAndSetSMAATextures()
    m_FBShader->SetTexture(SHADER_searchTex, m_SMAAsearchTexture);
 }
 
-void RenderDevice::UploadTexture(BaseTexture* texture, const bool linearRGB)
+void RenderDevice::UploadTexture(ITexManCacheable* texture, const bool linearRGB)
 {
    Sampler* sampler = m_texMan.LoadTexture(texture, SamplerFilter::SF_UNDEFINED, SamplerAddressMode::SA_UNDEFINED, SamplerAddressMode::SA_UNDEFINED, linearRGB);
    #if defined(ENABLE_BGFX)
    // BGFX dispatch operations to the render thread, so the texture manager does not actually loads data to the GPU nor perform mipmap generation
+   m_frameMutex.lock();
    m_pendingTextureUploads.push_back(sampler);
+   SubmitRenderFrame(); // Submit texture upload to render thread
+   SubmitRenderFrame(); // Block until render thread has processed the pending texture uploads and mipmap generations
+   m_frameMutex.unlock();
    #endif
 }
 
@@ -1880,7 +1891,7 @@ void RenderDevice::SetClipPlane(const vec4 &plane)
    // FIXME GLES implement (or use BGFX OpenGL ES implementation)
    return;
 #elif defined(ENABLE_BGFX)
-   m_DMDShader->SetVector(SHADER_clip_plane, &plane);
+   //m_DMDShader->SetVector(SHADER_clip_plane, &plane); // FIXME
    m_basicShader->SetVector(SHADER_clip_plane, &plane);
    m_lightShader->SetVector(SHADER_clip_plane, &plane);
    m_flasherShader->SetVector(SHADER_clip_plane, &plane);

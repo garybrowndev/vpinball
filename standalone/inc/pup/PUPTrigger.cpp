@@ -1,6 +1,7 @@
 #include "core/stdafx.h"
 
 #include "PUPTrigger.h"
+#include "PUPTriggerCondition.h"
 #include "PUPScreen.h"
 #include "PUPPlaylist.h"
 
@@ -53,14 +54,15 @@ const char* PUP_TRIGGER_PLAY_ACTION_TO_STRING(PUP_TRIGGER_PLAY_ACTION value)
      G = GIs
      E = DOFs
      M = Mechs
-     D = PupCap DMD Match
+     D = PupCap DMD Match or B2S LED
 */
 
-PUPTrigger::PUPTrigger(bool active, const string& szDescript, const string& szTrigger, PUPScreen* pScreen, PUPPlaylist* pPlaylist, const string& szPlayFile, float volume, int priority, int length, int counter, int restSeconds, PUP_TRIGGER_PLAY_ACTION playAction)
+PUPTrigger::PUPTrigger(bool active, const string& szDescript, const vector<PUPTriggerCondition*>& conditions, PUPScreen* pScreen, PUPPlaylist* pPlaylist, const string& szPlayFile, float volume,
+   int priority, int length, int counter, int restMs, PUP_TRIGGER_PLAY_ACTION playAction)
 {
    m_active = active;
    m_szDescript = szDescript;
-   m_szTrigger = szTrigger;
+   m_conditions = conditions;
    m_pScreen = pScreen;
    m_pPlaylist = pPlaylist;
    m_szPlayFile = szPlayFile;
@@ -68,12 +70,18 @@ PUPTrigger::PUPTrigger(bool active, const string& szDescript, const string& szTr
    m_priority = priority;
    m_length = length;
    m_counter = counter;
-   m_restSeconds = restSeconds;
+   m_restMs = restMs;
    m_playAction = playAction;
    m_lastTriggered = 0;
 }
 
-PUPTrigger* PUPTrigger::CreateFromCSV(PUPScreen* pScreen, string line)
+PUPTrigger::~PUPTrigger()
+{
+   for (auto* pCondition : m_conditions)
+      delete pCondition;
+}
+
+PUPTrigger* PUPTrigger::CreateFromCSV(PUPScreen* pScreen, const string& line)
 {
    vector<string> parts = parse_csv_line(line);
    if (parts.size() != 14) {
@@ -121,71 +129,106 @@ PUPTrigger* PUPTrigger::CreateFromCSV(PUPScreen* pScreen, string line)
       }
    }
 
+   vector<PUPTriggerCondition*> conditions = PUPTriggerCondition::CreateFromCSV(parts[3]);
+   if (conditions.empty()) {
+      PLOGD.printf("No conditions: %s", line.c_str());
+      return nullptr;
+   }
+
    PUP_TRIGGER_PLAY_ACTION playAction;
-   if (StrCompareNoCase(triggerPlayAction, "Loop"))
+   if (StrCompareNoCase(triggerPlayAction, "Loop"s))
       playAction = PUP_TRIGGER_PLAY_ACTION_LOOP;
-   else if (StrCompareNoCase(triggerPlayAction, "SplashReset"))
+   else if (StrCompareNoCase(triggerPlayAction, "SplashReset"s))
       playAction = PUP_TRIGGER_PLAY_ACTION_SPLASH_RESET;
-   else if (StrCompareNoCase(triggerPlayAction, "SplashReturn"))
-      playAction = PUP_TRIGGER_PLAY_ACTION_SPLASH_RESET;
-   else if (StrCompareNoCase(triggerPlayAction, "StopPlayer"))
+   else if (StrCompareNoCase(triggerPlayAction, "SplashReturn"s))
+      playAction = PUP_TRIGGER_PLAY_ACTION_SPLASH_RETURN;
+   else if (StrCompareNoCase(triggerPlayAction, "StopPlayer"s))
       playAction = PUP_TRIGGER_PLAY_ACTION_STOP_PLAYER;
-   else if (StrCompareNoCase(triggerPlayAction, "StopFile"))
+   else if (StrCompareNoCase(triggerPlayAction, "StopFile"s))
       playAction = PUP_TRIGGER_PLAY_ACTION_STOP_FILE;
-   else if (StrCompareNoCase(triggerPlayAction, "SetBG"))
+   else if (StrCompareNoCase(triggerPlayAction, "SetBG"s))
       playAction = PUP_TRIGGER_PLAY_ACTION_SET_BG;
-   else if (StrCompareNoCase(triggerPlayAction, "PlaySSF"))
+   else if (StrCompareNoCase(triggerPlayAction, "PlaySSF"s))
       playAction = PUP_TRIGGER_PLAY_ACTION_PLAY_SSF;
-   else if (StrCompareNoCase(triggerPlayAction, "SkipSamePrty"))
+   else if (StrCompareNoCase(triggerPlayAction, "SkipSamePrty"s))
       playAction = PUP_TRIGGER_PLAY_ACTION_SKIP_SAME_PRTY;
-   else if (StrCompareNoCase(triggerPlayAction, "CustomFunc"))
+   else if (StrCompareNoCase(triggerPlayAction, "CustomFunc"s))
       playAction = PUP_TRIGGER_PLAY_ACTION_CUSTOM_FUNC;
    else
       playAction = PUP_TRIGGER_PLAY_ACTION_NORMAL;
 
-   return new PUPTrigger(
-      active,
+   int restMs = string_to_int(parts[11], pPlaylist->GetRestSeconds());
+   if (abs(restMs) <= 99)
+      restMs *= 1000;
+
+   return new PUPTrigger(active,
       parts[2], // descript
-      parts[3], // trigger
-      pScreen,
-      pPlaylist,
-      szPlayFile,
-      parts[7].empty() ? pPlaylist->GetVolume() : string_to_int(parts[7], 0), // volume
+      conditions,
+      pScreen, pPlaylist, szPlayFile, parts[7].empty() ? pPlaylist->GetVolume() : string_to_int(parts[7], 0), // volume
       parts[8].empty() ? pPlaylist->GetPriority() : string_to_int(parts[8], 0), // priority
       string_to_int(parts[9], 0), // length
       string_to_int(parts[10], 0), // counter
-      parts[11].empty() ? pPlaylist->GetRestSeconds() : string_to_int(parts[11], 0), // rest seconds
-      playAction
-   );
+      restMs,
+      playAction);
 }
 
-bool PUPTrigger::IsResting()
+bool PUPTrigger::IsResting() const
 {
-   if (m_restSeconds <= 0)
+   if (m_restMs <= 0)
       return false;
 
    if (m_lastTriggered == 0)
       return false;
 
-   return (SDL_GetTicks() - m_lastTriggered) < (m_restSeconds * 1000);
+   return (SDL_GetTicks() - m_lastTriggered) < m_restMs;
 }
 
-void PUPTrigger::SetTriggered()
+bool PUPTrigger::Evaluate(PUPManager* pManager, const PUPTriggerData& data)
 {
+   if (IsResting())
+      return false;
+
+   // Make sure all conditions match, and at least one condition id matches the trigger id
+
+   bool foundId = false;
+   bool idMatch;
+
+   for (auto& pCondition : m_conditions) {
+      if (!pCondition->Evaluate(pManager, data, idMatch))
+         return false;
+
+      if (!foundId && idMatch)
+         foundId = true;
+   }
+
+   if (!foundId)
+      return false;
+
    m_lastTriggered = SDL_GetTicks();
+
+   return true;
 }
 
-string PUPTrigger::ToString() const {
+string PUPTrigger::ToString() const
+{
    return string("active=") + ((m_active == true) ? "true" : "false") +
       ", descript=" + m_szDescript +
-      ", trigger=" + m_szTrigger +
-      ", screen={" + m_pScreen->ToString().c_str() + "}" +
-      ", playlist={" + m_pPlaylist->ToString().c_str() + "}" +
+      ", conditions=[" + [&]() {
+            string result;
+            for (const auto& pCondition : m_conditions) {
+               if (!result.empty())
+                  result += ", ";
+               result += pCondition->ToString();
+            }
+            return result;
+      }() + "]" +
+      ", screen={" + m_pScreen->ToString() + '}' +
+      ", playlist={" + m_pPlaylist->ToString() + '}' +
       ", playFile=" + m_szPlayFile +
       ", volume=" + std::to_string(m_volume) +
       ", priority=" + std::to_string(m_priority) +
       ", length=" + std::to_string(m_length) +
       ", count=" + std::to_string(m_counter) +
-      ", restSeconds=" + std::to_string(m_restSeconds) +
+      ", restMs=" + std::to_string(m_restMs) +
       ", playAction=" + string(PUP_TRIGGER_PLAY_ACTION_TO_STRING(m_playAction));
 }

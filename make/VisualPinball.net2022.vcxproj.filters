@@ -687,9 +687,6 @@
     <ClCompile Include="../../src/core/DynamicScript.cpp">
       <Filter>core</Filter>
     </ClCompile>
-    <ClCompile Include="../../src/core/ScoreView.cpp">
-      <Filter>core</Filter>
-    </ClCompile>
     <ClCompile Include="../../src/core/ResURIResolver.cpp">
       <Filter>core</Filter>
     </ClCompile>
@@ -989,10 +986,10 @@
     <ClInclude Include="../../src/plugins/MsgPlugin.h">
       <Filter>plugin</Filter>
     </ClInclude>
-    <ClInclude Include="../../src/plugins/CorePlugin.h">
+    <ClInclude Include="../../src/plugins/ControllerPlugin.h">
       <Filter>plugin</Filter>
     </ClInclude>
-    <ClInclude Include="../../src/plugins/PinMamePlugin.h">
+    <ClInclude Include="../../src/plugins/PinMAMEPlugin.h">
       <Filter>plugin</Filter>
     </ClInclude>
     <ClInclude Include="../../src/renderer/Anaglyph.h">
@@ -1812,9 +1809,6 @@
       <Filter>plugin</Filter>
     </ClInclude>
     <ClInclude Include="../../src/core/DynamicScript.h">
-      <Filter>core</Filter>
-    </ClInclude>
-    <ClInclude Include="../../src\core\ScoreView.h">
       <Filter>core</Filter>
     </ClInclude>
     <ClInclude Include="../../src\core\ResURIResolver.h">

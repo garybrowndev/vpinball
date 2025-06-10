@@ -31,12 +31,6 @@
 #include <d3dx9.h>
 #endif
 
-// Attempt to speed up STL which is very CPU costly, maybe we should look into using EASTL instead? http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2007/n2271.html https://github.com/electronicarts/EASTL
-#ifndef ENABLE_BGFX
-#define _SECURE_SCL 0
-#define _HAS_ITERATOR_DEBUGGING 0
-#endif
-
 #if defined(ENABLE_BGFX) || defined(__OPENGLES__)
 #define FLT_MIN_VALUE 0.00006103515625f
 #else
@@ -515,12 +509,8 @@ public:
    void SetFloat4v(const ShaderUniforms uniformName, const vec4* const pData, const unsigned int count) { m_state->SetVector(uniformName, pData, count); }
    void SetTexture(const ShaderUniforms uniformName, const Sampler* const sampler) { m_state->SetTexture(uniformName, sampler); }
    void SetTextureNull(const ShaderUniforms uniformName);
-   void SetTexture(const ShaderUniforms uniformName, Texture* const texel, const SamplerFilter filter = SF_UNDEFINED, const SamplerAddressMode clampU = SA_UNDEFINED, const SamplerAddressMode clampV = SA_UNDEFINED, const bool force_linear_rgb = false)
-   {
-      SetTexture(uniformName, texel->m_pdsBuffer, filter, clampU, clampV, force_linear_rgb);
-   }
-   void SetTexture(const ShaderUniforms uniformName, BaseTexture* const texel, const SamplerFilter filter = SF_UNDEFINED, const SamplerAddressMode clampU = SA_UNDEFINED, const SamplerAddressMode clampV = SA_UNDEFINED, const bool force_linear_rgb = false);
-
+   void SetTexture(const ShaderUniforms uniformName, ITexManCacheable* const texel, const SamplerFilter filter = SF_UNDEFINED, const SamplerAddressMode clampU = SA_UNDEFINED, const SamplerAddressMode clampV = SA_UNDEFINED, const bool force_linear_rgb = false);
+   
    class ShaderState
    {
    public:
@@ -803,7 +793,7 @@ public:
    string m_shaderPath;
 
    bool UseGeometryShader() const;
-   bool parseFile(const string& fileNameRoot, const string& fileName, int level, ankerl::unordered_dense::map<string, string>& values, const string& parentMode);
+   bool parseFile(const string& fileNameRoot, const string& filename, int level, ankerl::unordered_dense::map<string, string>& values, const string& parentMode);
    string analyzeFunction(const string& shaderCodeName, const string& technique, const string& functionName, const ankerl::unordered_dense::map<string, string>& values);
    ShaderTechnique* compileGLShader(const ShaderTechniques technique, const string& fileNameRoot, const string& shaderCodeName, const string& vertex, const string& geometry, const string& fragment);
    string PreprocessGLShader(const string& shaderCode);

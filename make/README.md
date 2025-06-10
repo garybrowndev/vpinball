@@ -23,6 +23,7 @@ Depending on the platform you are on you will need to install additional build t
 * install Bash (e.g. [git-bash](https://gitforwindows.org/))
 * install [CMake](https://cmake.org/)
 * install [build tools v143 for Visual Studio](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022) or the full Visual Studio 2022 package ([Express/Community](https://visualstudio.microsoft.com/de/vs/express/) is enough)
+* install [MSYS2](https://www.msys2.org/)
 * install the Microsoft DirectX SDK from 2021 (currently at [DX SDK](https://www.microsoft.com/en-us/download/details.aspx?id=6812)) for DirectX9 rendering / compilation support.
 
 ## External dependencies
@@ -53,6 +54,7 @@ cp make/CMakeLists_[target]_[platform].txt CMakeLists.txt
 <summary>windows-x64</summary>
 
 ```
+pacman -S --noconfirm make diffutils yasm mingw-w64-x86_64-gcc mingw-w64-x86_64-zlib mingw-w64-x86_64-libwinpthread mingw-w64-x86_64-libiconv mingw-w64-x86_64-cmake
 platforms/windows-x64/external.sh
 cp make/CMakeLists_bgfx-windows-x64.txt CMakeLists.txt
 cmake -G "Visual Studio 17 2022" -A x64 -B build
@@ -61,9 +63,10 @@ cmake --build build --config Release
 </details>
 
 <details open>
-<summary> windows-x86</summary>
+<summary>windows-x86</summary>
 
 ```
+pacman -S --noconfirm make diffutils yasm mingw-w64-i686-gcc mingw-w64-i686-zlib mingw-w64-i686-libwinpthread mingw-w64-i686-libiconv mingw-w64-i686-cmake
 platforms/windows-x86/external.sh
 cp make/CMakeLists_bgfx-windows-x86.txt CMakeLists.txt
 cmake -G "Visual Studio 17 2022" -A Win32 -B build
@@ -145,8 +148,8 @@ brew install cmake bison curl
 export PATH="$(brew --prefix bison)/bin:$PATH"
 export JAVA_HOME=$(/usr/libexec/java_home -v 17.0.11)
 export ANDROID_HOME=/Users/jmillard/Library/Android/sdk
-export ANDROID_NDK=/Users/jmillard/Library/Android/sdk/ndk/27.0.12077973
-export ANDROID_NDK_HOME=/Users/jmillard/Library/Android/sdk/ndk/27.0.12077973
+export ANDROID_NDK=/Users/jmillard/Library/Android/sdk/ndk/27.2.12479018
+export ANDROID_NDK_HOME=/Users/jmillard/Library/Android/sdk/ndk/27.2.12479018
 platforms/android-arm64-v8a/external.sh
 cp make/CMakeLists_bgfx_lib.txt CMakeLists.txt
 cmake -DPLATFORM=android -DARCH=arm64-v8a -DCMAKE_BUILD_TYPE=Release -B build/android-arm64-v8a
@@ -163,9 +166,9 @@ cd standalone/android
 
 ```
 sudo dnf install @development-tools
-sudo dnf install gcc-c++ pkg-config autoconf automake libtool cmake nasm bison curl systemd-devel libX11-devel mesa-libGL-devel libXext-devel zlib-ng-compat-static zlib-ng-compat-devel wayland-devel libxkbcommon-devel
+sudo dnf install gcc-c++ pkg-config autoconf automake libtool cmake nasm bison curl systemd-devel libX11-devel mesa-libGL-devel libXext-devel libXrandr-devel zlib-ng-compat-static zlib-ng-compat-devel wayland-devel libxkbcommon-devel alsa-lib-devel pipewire-devel
 platforms/linux-x64/external.sh
-cp make/CMakeLists_bgfx-linux-aarch64.txt CMakeLists.txt
+cp make/CMakeLists_bgfx-linux-x64.txt CMakeLists.txt
 cmake -DCMAKE_BUILD_TYPE=Release -B build
 cmake --build build -- -j$(nproc)
 
@@ -180,7 +183,7 @@ build/VPinballX_BGFX -play src/assets/exampleTable.vpx -disabletruefullscreen
 ```
 sudo dnf install @development-tools
 sudo dnf install gcc-c++ pkg-config autoconf automake libtool cmake nasm bison curl systemd-devel libX11-devel mesa-libGL-devel libXext-devel zlib-ng-compat-static zlib-ng-compat-devel wayland-devel libxkbcommon-devel
-platforms/linux-x64/external.sh
+platforms/linux-aarch64/external.sh
 cp make/CMakeLists_bgfx-linux-aarch64.txt CMakeLists.txt
 cmake -DBUILD_RK3588=ON -DCMAKE_BUILD_TYPE=Release -B build
 cmake --build build -- -j$(nproc)
@@ -194,9 +197,9 @@ build/VPinballX_BGFX -play src/assets/exampleTable.vpx -disabletruefullscreen
 
 ```
 sudo apt-get update
-sudo apt install git pkg-config autoconf automake libtool cmake bison zlib1g-dev libdrm-dev libgbm-dev libgles2-mesa-dev libgles2-mesa libudev-dev libx11-dev libxrandr-dev libasound2-dev libpipewire-0.3-dev
+sudo apt install git pkg-config autoconf automake libtool cmake bison zlib1g-dev libdrm-dev libgbm-dev libgles2-mesa-dev libgles2-mesa libudev-dev libx11-dev libxrandr-dev libasound2-dev libpipewire-0.3-dev libwayland-dev
 platforms/linux-aarch64/external.sh
-cp make/CMakeLists_bgfx-linux-aarch64.txt CMakeLists.txt
+cp make/CMakeLists_gl-linux-aarch64.txt CMakeLists.txt
 cmake -DBUILD_RPI=ON -DCMAKE_BUILD_TYPE=Release -B build
 cmake --build build -- -j$(nproc)
 

@@ -122,8 +122,8 @@ VPinball::VPinball()
 
    m_hbmInPlayMode = nullptr;
 
-   GetMyPath();				//Store path of vpinball.exe in m_szMyPath and m_wzMyPath
-   GetMyPrefPath();			//Store preference path of vpinball.exe in m_szMyPrefPath
+   GetMyPath();				//Store path of vpinball.exe in m_myPath and m_wzMyPath
+   GetMyPrefPath();			//Store preference path of vpinball.exe in m_myPrefPath
 
 #ifndef __STANDALONE__
 #ifdef _WIN64
@@ -164,7 +164,7 @@ VPinball::~VPinball()
 }
 
 //Store path of exe (without the exe's filename) in Class Variable
-//Stores path as string in m_szMyPath (8 bit Ansi)
+//Stores path as string in m_myPath (8 bit Ansi)
 //Stores path as wstring in m_wzMyPath (16 bit Unicode)
 void VPinball::GetMyPath()
 {
@@ -185,26 +185,26 @@ void VPinball::GetMyPath()
    // truncate the filename
    *(szEnd + 1) = '\0'; // Get rid of exe name
 
-   m_szMyPath = szPath;
+   m_myPath = szPath;
 #else
 #ifdef __ANDROID__
-   m_szMyPath = string(SDL_GetAndroidInternalStoragePath()) + PATH_SEPARATOR_CHAR;
+   m_myPath = string(SDL_GetAndroidInternalStoragePath()) + PATH_SEPARATOR_CHAR;
 #elif defined(__APPLE__) && defined(TARGET_OS_IOS) && TARGET_OS_IOS && !defined(__LIBVPINBALL__)
    char *szPath = SDL_GetPrefPath("../..", "Documents");
-   m_szMyPath = szPath;
+   m_myPath = szPath;
    SDL_free(szPath);
 #elif defined(__APPLE__) && defined(TARGET_OS_TV) && TARGET_OS_TV
    char *szPath = SDL_GetPrefPath(NULL, "Documents");
-   m_szMyPath = szPath;
+   m_myPath = szPath;
    SDL_free(szPath);
 #else
    const char* szPath = SDL_GetBasePath();
-   m_szMyPath = szPath;
+   m_myPath = szPath;
 #endif
 #endif
 
    // store 2x
-   m_wzMyPath = MakeWString(m_szMyPath);
+   m_wzMyPath = MakeWString(m_myPath);
 }
 
 void VPinball::GetMyPrefPath()
@@ -212,24 +212,31 @@ void VPinball::GetMyPrefPath()
 #ifdef _WIN32
    // Use standard Windows AppData directory (to avoid requesting write permissions, and behave correctly for Windows restore,...)
    // That would look something like: "C:\Users\bob\AppData\Roaming\VPinballX\"
-   m_szMyPrefPath = string(GetAppDataPath()) + PATH_SEPARATOR_CHAR + "VPinballX" + PATH_SEPARATOR_CHAR;
+   m_myPrefPath = string(GetAppDataPath()) + PATH_SEPARATOR_CHAR + "VPinballX" + PATH_SEPARATOR_CHAR;
 #elif defined(__ANDROID__)
    char *szPrefPath = SDL_GetPrefPath(NULL, NULL);
-   m_szMyPrefPath = szPrefPath;
+   m_myPrefPath = szPrefPath;
    SDL_free(szPrefPath);
 #elif defined(__APPLE__) && defined(TARGET_OS_IOS) && TARGET_OS_IOS
    char *szPrefPath = SDL_GetPrefPath("../..", "Documents");
-   m_szMyPrefPath = szPrefPath;
+   m_myPrefPath = szPrefPath;
    SDL_free(szPrefPath);
 #elif defined(__APPLE__) && defined(TARGET_OS_TV) && TARGET_OS_TV
    char *szPrefPath = SDL_GetPrefPath(NULL, "Documents");
-   m_szMyPrefPath = szPrefPath;
+   m_myPrefPath = szPrefPath;
    SDL_free(szPrefPath);
 #else
-   m_szMyPrefPath = string(getenv("HOME")) + PATH_SEPARATOR_CHAR + ".vpinball" + PATH_SEPARATOR_CHAR;
+   m_myPrefPath = string(getenv("HOME")) + PATH_SEPARATOR_CHAR + ".vpinball" + PATH_SEPARATOR_CHAR;
 #endif
-   if (!DirExists(m_szMyPrefPath))
-      std::filesystem::create_directory(m_szMyPrefPath);
+   if (!DirExists(m_myPrefPath)) {
+      std::error_code ec;
+      if (std::filesystem::create_directory(m_myPrefPath, ec)) {
+         PLOGI.printf("Pref path created: %s", m_myPrefPath.c_str());
+      }
+      else {
+         PLOGE.printf("Unable to create pref path: %s", m_myPrefPath.c_str());
+      }
+   }
 }
 
 //Post Work to the worker Thread
@@ -1056,8 +1063,8 @@ void VPinball::DoPlay(const int playMode)
    if (table == nullptr)
       return;
 
-   PLOGI << "Starting Play mode [table: " << table->m_szTableName << ", play mode: " << playMode << ']';
-
+   PLOGI << "Starting Play mode [table: " << table->m_tableName << ", play mode: " << playMode << ']';
+   ShowWindow(SW_HIDE);
    bool initError = false;
    if (false)
    {
@@ -1134,8 +1141,8 @@ void VPinball::DoPlay(const int playMode)
                if (isPFWnd) {
                   // We scale motion data since SDL expects DPI scaled points coordinates on Apple device, while it uses pixel coordinates on other devices (see SDL_WINDOWS_DPI_SCALING)
                   // For the time being, VPX always uses pixel coordinates, using setup obtained at window creation time.
-                  e.motion.x *= g_pplayer->m_playfieldWnd->GetHiDPIScale();
-                  e.motion.y *= g_pplayer->m_playfieldWnd->GetHiDPIScale();
+                  e.motion.x *= SDL_GetWindowPixelDensity(g_pplayer->m_playfieldWnd->GetCore());
+                  e.motion.y *= SDL_GetWindowPixelDensity(g_pplayer->m_playfieldWnd->GetCore());
                   static float m_lastcursorx = FLT_MAX, m_lastcursory = FLT_MAX;
                   if (m_lastcursorx != e.motion.x || m_lastcursory != e.motion.y)
                   {
@@ -1148,16 +1155,20 @@ void VPinball::DoPlay(const int playMode)
                {
                   // Handle dragging of auxiliary windows
                   SDL_Window *sdlWnd = SDL_GetWindowFromID(e.motion.windowID);
-                  VPX::Window *windows[] = { g_pplayer->m_scoreviewOutput.GetWindow(), g_pplayer->m_backglassOutput.GetWindow() };
-                  for (size_t i = 0; i < sizeof(windows) / sizeof(VPX::Window *); i++)
+                  std::vector<VPX::Window*> windows = {
+                     g_pplayer->m_scoreviewOutput.GetWindow(),
+                     g_pplayer->m_backglassOutput.GetWindow(),
+                     g_pplayer->m_topperOutput.GetWindow(),
+                  };
+                  for (VPX::Window* wnd : windows)
                   {
-                     if (windows[i] && sdlWnd == windows[i]->GetCore())
+                     if (wnd && sdlWnd == wnd->GetCore())
                      {
                         int x, y;
-                        windows[i]->GetPos(x, y);
+                        wnd->GetPos(x, y);
                         Vertex2D click(x + e.motion.x, y + e.motion.y);
                         if (dragging > 1)
-                           windows[i]->SetPos(static_cast<int>(x + click.x - dragStart.x), static_cast<int>(y + click.y - dragStart.y));
+                           wnd->SetPos(static_cast<int>(x + click.x - dragStart.x), static_cast<int>(y + click.y - dragStart.y));
                         dragStart = click;
                         dragging = 2;
                         break;
@@ -1170,10 +1181,6 @@ void VPinball::DoPlay(const int playMode)
             if (isPFWnd)
                ImGui_ImplSDL3_ProcessEvent(&e);
 
-            #ifdef __STANDALONE__
-            g_pStandalone->ProcessEvent(&e);
-            #endif
-
             #ifdef ENABLE_SDL_INPUT
             g_pplayer->m_pininput.HandleSDLEvent(e);
             #endif
@@ -1182,10 +1189,6 @@ void VPinball::DoPlay(const int playMode)
             if ((usec() - startTick) > 1000ull)
                break;
          }
-
-         #ifdef __STANDALONE__
-         g_pStandalone->ProcessUpdates();
-         #endif
       };
 
       #elif !defined(__STANDALONE__)
@@ -1236,6 +1239,8 @@ void VPinball::DoPlay(const int playMode)
       g_pplayer = nullptr;
    }
 
+   ShowWindow(SW_SHOW);
+
    if (initError)
    {
       g_pvp->m_table_played_via_SelectTableOnStart = false;
@@ -1250,21 +1255,21 @@ bool VPinball::LoadFile(const bool updateEditor, VPXFileFeedback* feedback)
 {
    string szInitialDir = g_pvp->m_settings.LoadValueWithDefault(Settings::RecentDir, "LoadDir"s, PATH_TABLES);
 
-   vector<string> szFileName;
-   if (!OpenFileDialog(szInitialDir, szFileName, "Visual Pinball Tables (*.vpx)\0*.vpx\0Old Visual Pinball Tables(*.vpt)\0*.vpt\0", "vpx", 0,
+   vector<string> filename;
+   if (!OpenFileDialog(szInitialDir, filename, "Visual Pinball Tables (*.vpx)\0*.vpx\0Old Visual Pinball Tables(*.vpt)\0*.vpt\0", "vpx", 0,
           !updateEditor ? "Select a Table to Play or press Cancel to enter Editor-Mode"s : string()))
       return false;
 
-   const size_t index = szFileName[0].find_last_of(PATH_SEPARATOR_CHAR);
+   const size_t index = filename[0].find_last_of(PATH_SEPARATOR_CHAR);
    if (index != string::npos)
-      g_pvp->m_settings.SaveValue(Settings::RecentDir, "LoadDir"s, szFileName[0].substr(0, index));
+      g_pvp->m_settings.SaveValue(Settings::RecentDir, "LoadDir"s, filename[0].substr(0, index));
 
-   LoadFileName(szFileName[0], updateEditor, feedback);
+   LoadFileName(filename[0], updateEditor, feedback);
 
    return true;
 }
 
-void VPinball::LoadFileName(const string& szFileName, const bool updateEditor, VPXFileFeedback* feedback)
+void VPinball::LoadFileName(const string& filename, const bool updateEditor, VPXFileFeedback* feedback)
 {
    if (m_vtable.size() == MAX_OPEN_TABLES)
    {
@@ -1272,22 +1277,22 @@ void VPinball::LoadFileName(const string& szFileName, const bool updateEditor, V
       return;
    }
 
-   if (!FileExists(szFileName))
+   if (!FileExists(filename))
    {
-      ShowError("File not found \"" + szFileName + '"');
+      ShowError("File not found \"" + filename + '"');
       return;
    }
 
    if (firstRun)
       OnInitialUpdate();
 
-   m_currentTablePath = PathFromFilename(szFileName);
+   m_currentTablePath = PathFromFilename(filename);
 
    CloseAllDialogs();
 
    PinTableMDI * const mdiTable = new PinTableMDI(this);
    CComObject<PinTable> * const ppt = mdiTable->GetTable();
-   const HRESULT hr = feedback != nullptr ? ppt->LoadGameFromFilename(szFileName, *feedback) : ppt->LoadGameFromFilename(szFileName);
+   const HRESULT hr = feedback != nullptr ? ppt->LoadGameFromFilename(filename, *feedback) : ppt->LoadGameFromFilename(filename);
 
    const bool hashing_error = (hr == APPX_E_BLOCK_HASH_INVALID || hr == APPX_E_CORRUPT_CONTENT);
    if (hashing_error)
@@ -1306,11 +1311,11 @@ void VPinball::LoadFileName(const string& szFileName, const bool updateEditor, V
    {
       m_vtable.push_back(ppt);
 
-      ppt->m_szTitle = TitleFromFilename(szFileName);
+      ppt->m_title = TitleFromFilename(filename);
 #ifndef __STANDALONE__
-      const DWORD attr = GetFileAttributes(szFileName.c_str());
+      const DWORD attr = GetFileAttributes(filename.c_str());
       if ((attr != INVALID_FILE_ATTRIBUTES) && (attr & FILE_ATTRIBUTE_READONLY))
-         ppt->m_szTitle += " [READ ONLY]";
+         ppt->m_title += " [READ ONLY]";
 #endif
 
 #ifdef __STANDALONE__
@@ -1334,39 +1339,39 @@ void VPinball::LoadFileName(const string& szFileName, const bool updateEditor, V
          }
       if (!hasTablePovSettings)
       {
-         string szFileNameAuto = m_currentTablePath + ppt->m_szTitle + ".pov";
-         if (FileExists(szFileNameAuto)) // We check if there is a matching table pov settings file first
+         string filenameAuto = m_currentTablePath + ppt->m_title + ".pov";
+         if (FileExists(filenameAuto)) // We check if there is a matching table pov settings file first
          {
-            ppt->ImportBackdropPOV(szFileNameAuto);
+            ppt->ImportBackdropPOV(filenameAuto);
          }
          else if (!hasAppPovSettings) // Otherwise, we seek for autopov settings (only if we do not already have settings in the app settings)
          {
-            szFileNameAuto = m_currentTablePath + "autopov.pov";
-            if (FileExists(szFileNameAuto))
-               ppt->ImportBackdropPOV(szFileNameAuto);
+            filenameAuto = m_currentTablePath + "autopov.pov";
+            if (FileExists(filenameAuto))
+               ppt->ImportBackdropPOV(filenameAuto);
          }
       }
 
       // auto-import VBS table script, if it exists...
-      string szFileNameAuto = m_currentTablePath + ppt->m_szTitle + ".vbs";
-      if (FileExists(szFileNameAuto)) // We check if there is a matching table vbs first
-         ppt->m_pcv->LoadFromFile(szFileNameAuto);
+      string filenameAuto = m_currentTablePath + ppt->m_title + ".vbs";
+      if (FileExists(filenameAuto)) // We check if there is a matching table vbs first
+         ppt->m_pcv->LoadFromFile(filenameAuto);
       else // Otherwise we seek in the Scripts folder
       {
-         szFileNameAuto = m_szMyPath + "scripts" + PATH_SEPARATOR_CHAR + ppt->m_szTitle + ".vbs";
-         if (FileExists(szFileNameAuto))
-            ppt->m_pcv->LoadFromFile(szFileNameAuto);
+         filenameAuto = m_myPath + "scripts" + PATH_SEPARATOR_CHAR + ppt->m_title + ".vbs";
+         if (FileExists(filenameAuto))
+            ppt->m_pcv->LoadFromFile(filenameAuto);
       }
 
       // auto-import VPP settings, if it exists...
-      szFileNameAuto = m_currentTablePath + ppt->m_szTitle + ".vpp";
-      if (FileExists(szFileNameAuto)) // We check if there is a matching table vpp settings file first
-         ppt->ImportVPP(szFileNameAuto);
+      filenameAuto = m_currentTablePath + ppt->m_title + ".vpp";
+      if (FileExists(filenameAuto)) // We check if there is a matching table vpp settings file first
+         ppt->ImportVPP(filenameAuto);
       else // Otherwise, we seek for autovpp settings
       {
-         szFileNameAuto = m_currentTablePath + "autovpp.vpp";
-         if (FileExists(szFileNameAuto))
-            ppt->ImportVPP(szFileNameAuto);
+         filenameAuto = m_currentTablePath + "autovpp.vpp";
+         if (FileExists(filenameAuto))
+            ppt->ImportVPP(filenameAuto);
       }
 
       // get the load path from the filename
@@ -1374,7 +1379,7 @@ void VPinball::LoadFileName(const string& szFileName, const bool updateEditor, V
 
       // make sure the load directory is the active directory
       SetCurrentDirectory(m_currentTablePath.c_str());
-      UpdateRecentFileList(szFileName);
+      UpdateRecentFileList(filename);
 
       PLOGI << "UI Post Load Start";
 
@@ -1407,7 +1412,7 @@ CComObject<PinTable> *VPinball::GetActiveTable()
 {
    PinTableMDI * const mdiTable = (PinTableMDI *)GetActiveMDIChild();
    if (mdiTable && !m_unloadingTable)
-      return (CComObject<PinTable>*)mdiTable->GetTable();
+      return mdiTable->GetTable();
    return nullptr;
 }
 
@@ -1600,15 +1605,15 @@ void VPinball::SetEnableMenuItems()
 #endif
 }
 
-void VPinball::UpdateRecentFileList(const string& szfilename)
+void VPinball::UpdateRecentFileList(const string& filename)
 {
    const size_t old_count = m_recentTableList.size();
 
    // if the loaded file name is a valid one then add it to the top of the list
-   if (!szfilename.empty())
+   if (!filename.empty())
    {
       vector<string> newList;
-      newList.push_back(szfilename);
+      newList.push_back(filename);
 
       for (const string &tableName : m_recentTableList)
       {
@@ -1762,6 +1767,7 @@ int VPinball::MainMsgLoop()
    for (;;)
    {
       MSG msg;
+      MsgPluginManager::GetInstance().ProcessAsyncCallbacks();
       if (PeekMessageA(&msg, nullptr, 0, 0, PM_REMOVE))
       {
          if (msg.message == WM_QUIT)
@@ -2353,8 +2359,8 @@ int CALLBACK MyCompProc(LPARAM lSortParam1, LPARAM lSortParam2, LPARAM lSortOpti
    const int nItem2 = ListView_FindItem(lpsd->hwndList, -1, &lvf);
 
    ListView_GetItemText(lpsd->hwndList, nItem1, lpsd->subItemIndex, buf1, sizeof(buf1));
-
    ListView_GetItemText(lpsd->hwndList, nItem2, lpsd->subItemIndex, buf2, sizeof(buf2));
+
    if (nItem2 == -1 || nItem1 == -1)
       return 0;
    if (lpsd->sortUpDown == 1)
@@ -2384,8 +2390,8 @@ int CALLBACK MyCompProcIntValues(LPARAM lSortParam1, LPARAM lSortParam2, LPARAM 
    ListView_GetItemText(lpsd->hwndList, nItem2, lpsd->subItemIndex, buf2, sizeof(buf2));
 
    int value1, value2;
-   sscanf_s(buf1, "%i", &value1);
-   sscanf_s(buf2, "%i", &value2);
+   std::from_chars(buf1, buf1 + lstrlen(buf1), value1);
+   std::from_chars(buf2, buf2 + lstrlen(buf2), value2);
 
    if (lpsd->sortUpDown == 1)
       return (value1 - value2);
@@ -2401,8 +2407,8 @@ int CALLBACK MyCompProcMemValues(LPARAM lSortParam1, LPARAM lSortParam2, LPARAM 
    const SORTDATA * const lpsd = (SORTDATA *)lSortOption;
    const Texture * const t1 = (Texture *)lSortParam1;
    const Texture * const t2 = (Texture *)lSortParam2;
-   const unsigned int t1_size = t1->m_pdsBuffer == nullptr ? 0 : t1->m_pdsBuffer->height() * t1->m_pdsBuffer->pitch();
-   const unsigned int t2_size = t2->m_pdsBuffer == nullptr ? 0 : t2->m_pdsBuffer->height() * t2->m_pdsBuffer->pitch();
+   const size_t t1_size = t1->GetEstimatedGPUSize();
+   const size_t t2_size = t2->GetEstimatedGPUSize();
    if (lpsd->sortUpDown == 1)
       return (int)(t1_size - t2_size);
    else
@@ -2537,14 +2543,14 @@ INT_PTR CALLBACK FontManagerProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM 
          {
             string szInitialDir = g_pvp->m_settings.LoadValueWithDefault(Settings::RecentDir, "FontDir"s, PATH_TABLES);
 
-            vector<string> szFileName;
-            if (g_pvp->OpenFileDialog(szInitialDir, szFileName, "Font Files (*.ttf)\0*.ttf\0", "ttf", 0))
+            vector<string> filename;
+            if (g_pvp->OpenFileDialog(szInitialDir, filename, "Font Files (*.ttf)\0*.ttf\0", "ttf", 0))
             {
-               const size_t index = szFileName[0].find_last_of(PATH_SEPARATOR_CHAR);
+               const size_t index = filename[0].find_last_of(PATH_SEPARATOR_CHAR);
                if (index != string::npos)
-                  g_pvp->m_settings.SaveValue(Settings::RecentDir, "FontDir"s, szFileName[0].substr(0, index));
+                  g_pvp->m_settings.SaveValue(Settings::RecentDir, "FontDir"s, filename[0].substr(0, index));
 
-               pt->ImportFont(GetDlgItem(hwndDlg, IDC_SOUNDLIST), szFileName[0]);
+               pt->ImportFont(GetDlgItem(hwndDlg, IDC_SOUNDLIST), filename[0]);
             }
          }
          break;
@@ -2581,73 +2587,6 @@ INT_PTR CALLBACK FontManagerProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM 
             }
          }
          break;
-
-         /*case IDC_REIMPORT:
-         {
-         const int ans = MessageBox(hwndDlg, "Are you sure you want to replace this image with a new one?", "Confirm Reimport", MB_YESNO | MB_DEFBUTTON2);
-         if (ans == IDYES)
-         {
-         const int sel = ListView_GetNextItem(GetDlgItem(hwndDlg, IDC_SOUNDLIST), -1, LVNI_SELECTED);
-         if (sel != -1)
-         {
-         LVITEM lvitem;
-         lvitem.mask = LVIF_PARAM;
-         lvitem.iItem = sel;
-         lvitem.iSubItem = 0;
-         ListView_GetItem(GetDlgItem(hwndDlg, IDC_SOUNDLIST), &lvitem);
-         PinImage * const ppi = (PinImage *)lvitem.lParam;
-
-         ppi->LoadFromFile(ppi->m_szPath, false);
-
-         // Display new image
-         InvalidateRect(GetDlgItem(hwndDlg, IDC_PICTUREPREVIEW), nullptr, fTrue);
-         }
-         }
-         }
-         break;
-
-         case IDC_REIMPORTFROM:
-         {
-         const int sel = ListView_GetNextItem(GetDlgItem(hwndDlg, IDC_SOUNDLIST), -1, LVNI_SELECTED);
-         if (sel != -1)
-         {
-         char szFileName[MAXSTRING];
-
-         const int ans = MessageBox(hwndDlg, "Are you sure you want to replace this image with a new one?", "Confirm Reimport", MB_YESNO | MB_DEFBUTTON2);
-         if (ans == IDYES)
-         {
-         szFileName[0] = '\0';
-
-         OPENFILENAME ofn = {};
-         ofn.lStructSize = sizeof(OPENFILENAME);
-         ofn.hInstance = g_pvp->theInstance;
-         ofn.hwndOwner = g_pvp->m_hwnd;
-         ofn.lpstrFilter = "Font Files (*.ttf)\0*.ttf\0";
-         ofn.lpstrFile = szFileName;
-         ofn.nMaxFile = sizeof(szFileName);
-         ofn.lpstrDefExt = "ttf";
-         ofn.Flags = OFN_OVERWRITEPROMPT | OFN_HIDEREADONLY;
-
-         const int ret = GetOpenFileName(&ofn);
-
-         if (ret)
-         {
-         LVITEM lvitem;
-         lvitem.mask = LVIF_PARAM;
-         lvitem.iItem = sel;
-         lvitem.iSubItem = 0;
-         ListView_GetItem(GetDlgItem(hwndDlg, IDC_SOUNDLIST), &lvitem);
-         PinImage * const ppi = (PinImage *)lvitem.lParam;
-
-         ppi->LoadFromFile(ofn.lpstrFile, false);
-
-         // Display new image
-         InvalidateRect(GetDlgItem(hwndDlg, IDC_PICTUREPREVIEW), nullptr, fTrue);
-         }
-         }
-         }
-         }
-         break;*/
          }
          break;
       }
@@ -2744,7 +2683,7 @@ void VPinball::ShowSearchSelect()
       {
          ptCur->m_searchSelectDlg.Create(GetHwnd());
 
-         const string windowName = "Search/Select Element - " + ptCur->m_szFileName;
+         const string windowName = "Search/Select Element - " + ptCur->m_filename;
          ptCur->m_searchSelectDlg.SetWindowText(windowName.c_str());
 
          ptCur->m_searchSelectDlg.ShowWindow();
@@ -2917,7 +2856,7 @@ void VPinball::SaveTable(const bool saveAs)
          hr = ptCur->TableSave();
 
       if (hr == S_OK)
-         UpdateRecentFileList(ptCur->m_szFileName);
+         UpdateRecentFileList(ptCur->m_filename);
    }
 }
 
@@ -2993,13 +2932,13 @@ void VPinball::CopyPasteElement(const CopyPasteModes mode)
 
 //
 
-static inline string GetTextFileFromDirectory(const string& szfilename, const string& dirname)
+static inline string GetTextFileFromDirectory(const string& filename, const string& dirname)
 {
    string szPath;
    if (!dirname.empty())
-      szPath = g_pvp->m_szMyPath + dirname;
+      szPath = g_pvp->m_myPath + dirname;
    // else: use current directory
-   return szPath + szfilename;
+   return szPath + filename;
 }
 
 static constexpr uint8_t lookupRev[16] = {
@@ -3203,13 +3142,13 @@ void VPinball::GenerateTournamentFile()
    generateMD5(dmd_data, dmd_size, dmd_data + dmd_size);
    dmd_size += 16;
    unsigned int tablefileChecksum, vpxChecksum, scriptsChecksum;
-   const unsigned int res = GenerateTournamentFileInternal(dmd_data, dmd_size, GetActiveTable()->m_szFileName, tablefileChecksum, vpxChecksum, scriptsChecksum);
+   const unsigned int res = GenerateTournamentFileInternal(dmd_data, dmd_size, GetActiveTable()->m_filename, tablefileChecksum, vpxChecksum, scriptsChecksum);
    if (res == ~0u)
       return;
    GenerateTournamentFileInternal2(dmd_data, dmd_size, res);
 
    FILE *f;
-   if (fopen_s(&f, (g_pvp->GetActiveTable()->m_szFileName + ".txt").c_str(), "w") == 0 && f)
+   if (fopen_s(&f, (g_pvp->GetActiveTable()->m_filename + ".txt").c_str(), "w") == 0 && f)
    {
       fprintf(f, "%03X", g_pplayer->m_dmdSize.x);
       fprintf(f, "%03X", g_pplayer->m_dmdSize.y);
@@ -3228,7 +3167,7 @@ void VPinball::GenerateTournamentFile()
          fprintf(f,"%02X",dmd_data[i]);
       fclose(f);
 
-      g_pplayer->m_liveUI->PushNotification("Tournament file saved as " + g_pvp->GetActiveTable()->m_szFileName + ".txt", 4000);
+      g_pplayer->m_liveUI->PushNotification("Tournament file saved as " + g_pvp->GetActiveTable()->m_filename + ".txt", 4000);
    }
    else
       g_pplayer->m_liveUI->PushNotification("Cannot save Tournament file"s, 4000);

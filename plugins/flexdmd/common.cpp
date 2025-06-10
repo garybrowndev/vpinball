@@ -3,6 +3,9 @@
 #include <sstream>
 #include <algorithm>
 #include <filesystem>
+#include <charconv>
+
+namespace Flex {
 
 static inline char cLower(char c)
 {
@@ -29,7 +32,8 @@ string trim_string(const string& str)
    string s;
    try
    {
-      s = str.substr(str.find_first_not_of(" \t\r\n"), str.find_last_not_of(" \t\r\n") - str.find_first_not_of(" \t\r\n") + 1);
+      const size_t pos = str.find_first_not_of(" \t\r\n");
+      s = str.substr(pos, str.find_last_not_of(" \t\r\n") - pos + 1);
    }
    catch (...)
    {
@@ -40,8 +44,8 @@ string trim_string(const string& str)
 
 bool try_parse_int(const string& str, int& value)
 {
-   std::stringstream sstr(trim_string(str));
-   return ((sstr >> value) && sstr.eof());
+   const string tmp = trim_string(str);
+   return (std::from_chars(tmp.c_str(), tmp.c_str() + tmp.length(), value).ec == std::errc{});
 }
 
 bool try_parse_color(const string& str, ColorRGBA32& value)
@@ -76,10 +80,7 @@ bool try_parse_color(const string& str, ColorRGBA32& value)
 int string_to_int(const string& str, int defaultValue)
 {
    int value;
-   if (try_parse_int(str, value))
-      return value;
-
-   return defaultValue;
+   return try_parse_int(str, value) ? value : defaultValue;
 }
 
 string normalize_path_separators(const string& szPath)
@@ -101,37 +102,92 @@ string normalize_path_separators(const string& szPath)
 string extension_from_path(const string& path)
 {
    const size_t pos = path.find_last_of('.');
-   return pos != string::npos ? string_to_lower(path).substr(pos + 1) : string();
+   return pos != string::npos ? string_to_lower(path.substr(pos + 1)) : string();
 }
 
 string find_case_insensitive_file_path(const string& szPath)
 {
-   string path = normalize_path_separators(szPath);
-   std::filesystem::path p = std::filesystem::path(path).lexically_normal();
-   std::error_code ec;
+   auto fn = [&](auto& self, const string& s) -> string {
+      string path = normalize_path_separators(s);
+      std::filesystem::path p = std::filesystem::path(path).lexically_normal();
+      std::error_code ec;
 
-   if (std::filesystem::exists(p, ec))
-      return path;
+      if (std::filesystem::exists(p, ec))
+         return p.string();
 
-   auto parent = p.parent_path();
-   string base;
-   if (parent.empty() || parent == p)
-      base = '.';
-   else {
-      base = find_case_insensitive_file_path(parent.string());
-      if (base.empty())
-         return string();
-   }
-
-   for (auto& ent : std::filesystem::directory_iterator(base, ec)) {
-      if (!ec && StrCompareNoCase(ent.path().filename().string(), p.filename().string())) {
-         auto found = ent.path().string();
-         if (found != path) {
-            LOGI("case insensitive file match: requested \"%s\", actual \"%s\"", path.c_str(), found.c_str());
-         }
-         return found;
+      auto parent = p.parent_path();
+      string base;
+      if (parent.empty() || parent == p) {
+         base = ".";
+      } else {
+         base = self(self, parent.string());
+         if (base.empty())
+            return string();
       }
-   }
 
+      for (auto& ent : std::filesystem::directory_iterator(base, ec)) {
+         if (!ec && StrCompareNoCase(ent.path().filename().string(), p.filename().string())) {
+            auto found = ent.path().string();
+            if (found != path) {
+               LOGI("case insensitive file match: requested \"%s\", actual \"%s\"", path.c_str(), found.c_str());
+            }
+            return found;
+         }
+      }
+
+      return string();
+   };
+
+   string result = fn(fn, szPath);
+   if (!result.empty()) {
+      std::filesystem::path p = std::filesystem::absolute(result);
+      return p.string();
+   }
    return string();
+}
+
+string GetPluginPath()
+{
+    string pathBuf;
+#ifdef _WIN32
+    HMODULE hm = nullptr;
+    if (GetModuleHandleEx(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            _T("FlexDMDPluginLoad"), &hm) == 0)
+        return string();
+
+    TCHAR buf[MAX_PATH];
+    if (GetModuleFileName(hm, buf, MAX_PATH) == 0)
+        return string();
+
+#ifdef _UNICODE
+    int size_needed = WideCharToMultiByte(CP_UTF8, 0, buf, -1, NULL, 0, NULL, NULL);
+    pathBuf.resize(size_needed, 0);
+    WideCharToMultiByte(CP_UTF8, 0, buf, -1, pathBuf.data(), size_needed, NULL, NULL);
+#else
+    pathBuf = string(buf);
+#endif
+#else
+    Dl_info info{};
+    if (dladdr((void*)&GetPluginPath, &info) == 0 || !info.dli_fname)
+        return string();
+
+    char realBuf[PATH_MAX];
+    if (!realpath(info.dli_fname, realBuf))
+        return string();
+
+    pathBuf = string(realBuf);
+#endif
+
+    if (pathBuf.empty())
+        return string();
+
+    size_t lastSep = pathBuf.find_last_of(PATH_SEPARATOR_CHAR);
+    if (lastSep == string::npos)
+        return string();
+
+    return pathBuf.substr(0, lastSep + 1);
+}
+
 }

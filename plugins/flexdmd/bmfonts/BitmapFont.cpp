@@ -3,8 +3,11 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include <unordered_set>
 #include <algorithm>
+
+#include <unordered_dense.h>
+
+namespace Flex {
 
 BitmapFont::BitmapFont()
 {
@@ -15,12 +18,14 @@ BitmapFont::BitmapFont()
 
 BitmapFont::~BitmapFont()
 {
-   std::unordered_set<Character*> characters;
+   {
+   ankerl::unordered_dense::set<Character*> characters;
    for(const auto& pair : m_characters)
       characters.insert(pair.second);
 
    for(Character* character : characters)
       delete character;
+   }
 
    m_characters.clear();
 
@@ -35,47 +40,46 @@ BitmapFont::~BitmapFont()
    m_pages.clear();
 }
 
-BitmapFont* BitmapFont::Create(const string& fileName)
+BitmapFont* BitmapFont::Create(const string& filename)
 {
    BitmapFont* obj = new BitmapFont();
-   obj->Load(fileName);
+   obj->Load(filename);
 
    return obj;
 }
 
 int BitmapFont::GetKerning(char previous, char current)
 {
-    int result = 0;
-
     Kerning key;
     key.SetFirstCharacter(previous);
     key.SetSecondCharacter(current);
 
     const auto it = m_kernings.find(key.GetHash());
     if (it != m_kernings.end())
-       result = it->second->GetAmount();
+       return it->second->GetAmount();
 
-    return result;
+    return 0;
 }
 
-void BitmapFont::Load(const string& fileName)
+void BitmapFont::Load(const string& filename)
 {
    std::ifstream fontFile;
-   fontFile.open(fileName, std::ifstream::in);
+   fontFile.open(filename, std::ifstream::in);
 
    if (!fontFile.is_open()) {
-      // PLOGE.printf("Failed to open bitmap font file: %s", fileName.c_str());
+      // PLOGE.printf("Failed to open bitmap font file: %s", filename.c_str());
       return;
    }
 
    string line;
    while (std::getline(fontFile, line)) {
-      std::unordered_map<string, string> parts = ParseParts(trim_string(line));
+      const ankerl::unordered_dense::map<string, string> parts = ParseParts(trim_string(line));
 
       if (parts.empty())
          continue;
 
-      if (parts["section"s] == "info") {
+      const auto& sec = parts.at("section"s);
+      if (sec == "info") {
          m_szFamilyName = GetNamedString(parts, "face"s);
          m_fontSize = GetNamedInt(parts, "size"s);
          m_bold = GetNamedBool(parts, "bold"s);
@@ -89,7 +93,7 @@ void BitmapFont::Load(const string& fileName)
          m_spacing = ParsePoint(GetNamedString(parts, "spacing"s));
          m_outlineSize = GetNamedInt(parts, "outline"s);
       }
-      else if (parts["section"s] == "common") {
+      else if (sec == "common") {
          m_lineHeight = GetNamedInt(parts, "lineHeight"s);
          m_baseHeight = GetNamedInt(parts, "base"s);
          m_textureSize = { 0, 0, GetNamedInt(parts, "scaleW"s), GetNamedInt(parts, "scaleH"s) };
@@ -99,17 +103,17 @@ void BitmapFont::Load(const string& fileName)
          m_greenChannel = GetNamedInt(parts, "greenChnl"s);
          m_blueChannel = GetNamedInt(parts, "blueChnl"s);
       }
-      else if (parts["section"s] == "page") {
-         Page* pPage = new Page();
+      else if (sec == "page") {
+         Page* const pPage = new Page();
          pPage->SetId(GetNamedInt(parts, "id"s));
          pPage->SetFilename(GetNamedString(parts, "file"s));
 
          m_pages.push_back(pPage);
       }
-      else if (parts["section"s] == "char") {
-         char character = (char)GetNamedInt(parts, "id");
+      else if (sec == "char") {
+         char character = (char)GetNamedInt(parts, "id"s);
 
-         Character* pCharacter = new Character();
+         Character* const pCharacter = new Character();
          pCharacter->SetChar(character);
          pCharacter->SetBounds({ GetNamedInt(parts, "x"s), GetNamedInt(parts, "y"s), GetNamedInt(parts, "width"s), GetNamedInt(parts, "height"s) });
          pCharacter->SetOffset({ GetNamedInt(parts, "xoffset"s), GetNamedInt(parts, "yoffset"s) });
@@ -119,11 +123,11 @@ void BitmapFont::Load(const string& fileName)
 
          m_characters[character] = pCharacter;
       }
-      else if (parts["section"s] == "kerning") {
-         Kerning* pKerning = new Kerning();
+      else if (sec == "kerning") {
+         Kerning* const pKerning = new Kerning();
          pKerning->SetFirstCharacter((char)GetNamedInt(parts, "first"s));
          pKerning->SetSecondCharacter((char)GetNamedInt(parts, "second"s));
-         pKerning->SetAmount(GetNamedInt(parts, "amount"));
+         pKerning->SetAmount(GetNamedInt(parts, "amount"s));
 
          const int h = pKerning->GetHash();
          if (!m_kernings.contains(h))
@@ -197,18 +201,18 @@ SDL_Rect BitmapFont::MeasureFont(const string& text, double maxWidth)
    return { 0, 0, max(currentLineWidth, blockWidth), blockHeight };
 }
 
-string BitmapFont::GetNamedString(const std::unordered_map<string, string>& parts, const string& name)
+string BitmapFont::GetNamedString(const ankerl::unordered_dense::map<string, string>& parts, const string& name)
 {
    const auto it = parts.find(name);
    return (it != parts.end()) ? it->second : string();
 }
 
-int BitmapFont::GetNamedInt(const std::unordered_map<string, string>& parts, const string& name, int defaultValue)
+int BitmapFont::GetNamedInt(const ankerl::unordered_dense::map<string, string>& parts, const string& name, int defaultValue)
 {
    return string_to_int(GetNamedString(parts, name), defaultValue);
 }
 
-bool BitmapFont::GetNamedBool(const std::unordered_map<string, string>& parts, const string& name, bool defaultValue)
+bool BitmapFont::GetNamedBool(const ankerl::unordered_dense::map<string, string>& parts, const string& name, bool defaultValue)
 {
    return string_to_int(GetNamedString(parts, name), defaultValue ? 1 : 0) > 0;
 }
@@ -235,9 +239,9 @@ SDL_Point BitmapFont::ParsePoint(const string& s)
    return { parts[0], parts[1] };
 }
 
-std::unordered_map<string, string> BitmapFont::ParseParts(const string& line)
+ankerl::unordered_dense::map<string, string> BitmapFont::ParseParts(const string& line)
 {
-   std::unordered_map<string, string> result;
+   ankerl::unordered_dense::map<string, string> result;
    std::istringstream iss(line);
 
    string token;
@@ -277,4 +281,6 @@ std::unordered_map<string, string> BitmapFont::ParseParts(const string& line)
       result[key] = value;
 
    return result;
+}
+
 }

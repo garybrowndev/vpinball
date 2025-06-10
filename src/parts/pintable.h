@@ -368,7 +368,7 @@ public:
    void ExportBlueprint();
    void ExportTableMesh();
    void ImportBackdropPOV(const string &filename);
-   void ExportBackdropPOV();
+   void ExportBackdropPOV() const;
    void ImportVPP(const string &filename);
 
    void FireOptionEvent(int event);
@@ -485,8 +485,8 @@ public:
    static HRESULT WriteInfoValue(IStorage *pstg, const WCHAR *const wzName, const string &szValue, HCRYPTHASH hcrypthash);
    static HRESULT ReadInfoValue(IStorage *pstg, const WCHAR *const wzName, string &output, HCRYPTHASH hcrypthash);
    HRESULT SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool saveForUndo) final;
-   HRESULT LoadGameFromFilename(const string &szFileName);
-   HRESULT LoadGameFromFilename(const string &szFileName, VPXFileFeedback& feedback);
+   HRESULT LoadGameFromFilename(const string &filename);
+   HRESULT LoadGameFromFilename(const string &filename, VPXFileFeedback& feedback);
    HRESULT LoadInfo(IStorage *pstg, HCRYPTHASH hcrypthash, int version);
    HRESULT LoadCustomInfo(IStorage *pstg, IStream *pstmTags, HCRYPTHASH hcrypthash, int version);
    HRESULT LoadData(IStream *pstm, int &csubobj, int &csounds, int &ctextures, int &cfonts, int &ccollection, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey);
@@ -591,8 +591,8 @@ public:
 
    void LockElements();
 
-   string m_szFileName;
-   string m_szTitle;
+   string m_filename;
+   string m_title;
 
    // Flag that disables all table edition. Lock toggles are counted to identify version changes in a table (for example to guarantee untouched table for tournament)
    bool IsLocked() const { return (m_tablelocked & 1) != 0; }
@@ -602,21 +602,21 @@ public:
 
    void SetSettingsFileName(const string &path)
    {
-      m_szIniFileName = FileExists(path) ? path : string();
+      m_iniFileName = FileExists(path) ? path : string();
       m_settings.LoadFromFile(GetSettingsFileName(), false);
    }
 
    string GetSettingsFileName() const
    {
-      if (!m_szIniFileName.empty() && FileExists(m_szIniFileName))
-         return m_szIniFileName;
-      string szINIFilename = m_szFileName;
-      if (ReplaceExtensionFromFilename(szINIFilename, "ini"s))
-         return szINIFilename;
+      if (!m_iniFileName.empty() && FileExists(m_iniFileName))
+         return m_iniFileName;
+      string INIFilename = m_filename;
+      if (ReplaceExtensionFromFilename(INIFilename, "ini"s))
+         return INIFilename;
       return string();
    }
 
-   string m_szIniFileName;
+   string m_iniFileName;
    Settings m_settings; // Settings for this table (apply overrides above application settings)
 
    bool m_isLiveInstance = false; // true for live shallow copy of a table
@@ -722,6 +722,7 @@ public:
    const vector<Material *> &GetMaterialList() const { return m_materials; }
 
    vector<PinSound *> m_vsound;
+   ankerl::unordered_dense::set<std::string> m_soundsMissing;
 
    vector<PinFont *> m_vfont;
 
@@ -757,17 +758,17 @@ public:
    SaveDirtyState m_sdsCurrentDirtyState = eSaveClean;
 
    // Table info
-   string m_szTableName;
-   string m_szAuthor;
-   string m_szVersion;
-   string m_szReleaseDate;
-   string m_szAuthorEMail;
-   string m_szWebSite;
-   string m_szBlurb;
-   string m_szDescription;
-   string m_szRules;
-   string m_szScreenShot;
-   string m_szDateSaved;
+   string m_tableName;
+   string m_author;
+   string m_version;
+   string m_releaseDate;
+   string m_authorEMail;
+   string m_webSite;
+   string m_blurb;
+   string m_description;
+   string m_rules;
+   string m_screenShot;
+   string m_dateSaved;
    unsigned int m_numTimesSaved = 0;
 
    vector<string> m_vCustomInfoTag;
@@ -1012,8 +1013,6 @@ public:
 
    STDMETHOD(LoadTexture)(BSTR imageName, BSTR fileName);
 
-   STDMETHOD(put_PinMameStateBlock)(BSTR sharedMemName);
-
    STDMETHOD(CreatePluginObject)(/*[in]*/ BSTR classId, /*[out, retval]*/ IDispatch **pVal);
 
    void Init(VPinball *vpinball, PinTable *pt);
@@ -1031,7 +1030,7 @@ public:
    END_COM_MAP()
 
 private:
-   bool GetTextFileFromDirectory(const string& szfilename, const string& dirname, BSTR *pContents);
+   bool GetTextFileFromDirectory(const string& filename, const string& dirname, BSTR *pContents);
 
    PinTable *m_pt = nullptr;
    VPinball *m_vpinball = nullptr;

@@ -2,7 +2,7 @@
 #include "core/vpversion.h"
 #include "WebServer.h"
 
-#include "miniz/miniz.h"
+#include <zip.h>
 
 #include <ifaddrs.h>
 #include <filesystem>
@@ -40,7 +40,7 @@ void WebServer::EventHandler(struct mg_connection *c, int ev, void *ev_data)
          string uri(hm->uri.buf, hm->uri.len);
          if (!uri.empty() && uri.front() == '/') uri.erase(0, 1);
 
-         std::filesystem::path base = std::filesystem::path(g_pvp->m_szMyPath) / "assets";
+         std::filesystem::path base = std::filesystem::path(g_pvp->m_myPath) / "assets";
          std::filesystem::path asset = uri.empty() ? base / "vpx.html" : base / uri;
 
          if (!uri.empty() && std::filesystem::exists(asset))
@@ -69,41 +69,48 @@ WebServer::~WebServer()
 
 bool WebServer::Unzip(const char* pSource)
 {
-   mz_zip_archive zip_archive;
-   memset(&zip_archive, 0, sizeof(zip_archive));
-
-   mz_bool status = mz_zip_reader_init_file(&zip_archive, pSource, 0);
-   if (!status) {
+   int error = 0;
+   zip_t* zip_archive = zip_open(pSource, ZIP_RDONLY, &error);
+   if (!zip_archive) {
       PLOGE.printf("Unable to unzip file: source=%s", pSource);
       return false;
    }
 
    bool success = true;
+   zip_int64_t file_count = zip_get_num_entries(zip_archive, 0);
 
-   int file_count = (int)mz_zip_reader_get_num_files(&zip_archive);
-
-   for (int i = 0; i < file_count; i++) {
-      mz_zip_archive_file_stat file_stat;
-      if (!mz_zip_reader_file_stat(&zip_archive, i, &file_stat))
+   for (zip_uint64_t i = 0; i < (zip_uint64_t)file_count; ++i) {
+      zip_stat_t file_stat;
+      if (zip_stat_index(zip_archive, i, ZIP_STAT_NAME, &file_stat) != 0) {
          success = false;
+         continue;
+      }
 
-      string filename = file_stat.m_filename;
-      if (filename.starts_with("__MACOSX"))
+      string filename = file_stat.name;
+      if (filename.rfind("__MACOSX", 0) == 0)
          continue;
 
-      string path = std::filesystem::path(string(pSource)).parent_path().append(filename);
-      if (mz_zip_reader_is_file_a_directory(&zip_archive, i))
+      std::filesystem::path path = std::filesystem::path(pSource).parent_path() / filename;
+      if (filename.back() == '/')
          std::filesystem::create_directories(path);
       else {
-         if (!mz_zip_reader_extract_to_file(&zip_archive, i, path.c_str(), 0)) {
-            PLOGE.printf("Unable to extract file: %s", path.c_str());
-            success = false;
+         std::filesystem::create_directories(path.parent_path());
+         zip_file_t* zip_file = zip_fopen_index(zip_archive, i, 0);
+         if (!zip_file) {
+             PLOGE.printf("Unable to extract file: %s", path.string().c_str());
+             success = false;
+             continue;
          }
+         std::ofstream ofs(path, std::ios::binary);
+         char buf[4096];
+         zip_int64_t len;
+         while ((len = zip_fread(zip_file, buf, sizeof(buf))) > 0)
+             ofs.write(buf, len);
+         zip_fclose(zip_file);
       }
    }
 
-   mz_zip_reader_end(&zip_archive);
-
+   zip_close(zip_archive);
    return success;
 }
 
@@ -111,7 +118,7 @@ void WebServer::Status(struct mg_connection *c, struct mg_http_message* hm)
 {
    bool running = g_pplayer != nullptr;
    string currentTable = (running && !g_pvp->m_currentTablePath.empty())
-      ? (std::filesystem::path(g_pvp->m_currentTablePath) / g_pvp->GetActiveTable()->m_szFileName).string()
+      ? (std::filesystem::path(g_pvp->m_currentTablePath) / g_pvp->GetActiveTable()->m_filename).string()
       : "";
    char* currentTableJson = (running && !currentTable.empty())
       ? mg_mprintf("\"%s\"", currentTable.c_str())
@@ -139,7 +146,7 @@ void WebServer::Files(struct mg_connection *c, struct mg_http_message* hm)
 
    PLOGI.printf("Retrieving file list: q=%s", q);
 
-   string path = g_pvp->m_szMyPrefPath + q;
+   string path = g_pvp->m_myPrefPath + q;
 
    if (*q != '\0')
       path += PATH_SEPARATOR_CHAR;
@@ -209,7 +216,7 @@ void WebServer::Download(struct mg_connection *c, struct mg_http_message* hm)
 
    PLOGI.printf("Downloading file: q=%s", q);
 
-   string path = g_pvp->m_szMyPrefPath + q;
+   string path = g_pvp->m_myPrefPath + q;
 
    struct mg_http_serve_opts opts = {};
    mg_http_serve_file(c, hm, path.c_str(), &opts);
@@ -238,11 +245,17 @@ void WebServer::Upload(struct mg_connection *c, struct mg_http_message* hm)
       PLOGI.printf("Uploading file: file=%s", file);
    }
 
-   string path = g_pvp->m_szMyPrefPath + q;
+   char lengthStr[32];
+   mg_http_get_var(&hm->query, "length", lengthStr, sizeof(lengthStr));
+   long length = lengthStr[0] ? strtol(lengthStr, nullptr, 10) : 0;
 
-   if (!mg_http_upload(c, hm, &mg_fs_posix, path.c_str(), 1024 * 1024 * 500)) {
-      if (!strncmp(q, "VPinballX.ini", sizeof(q)))
-         g_pvp->m_settings.LoadFromFile(path, false);
+   string path = g_pvp->m_myPrefPath + q;
+
+   if (mg_http_upload(c, hm, &mg_fs_posix, path.c_str(), 1024 * 1024 * 500) == length) {
+      if (*q == '\0' && !strcmp(file, "VPinballX.ini")) {
+         g_pvp->m_settings.LoadFromFile(path, true);
+         g_pvp->m_settings.Save();
+      }
    }
 }
 
@@ -256,7 +269,7 @@ void WebServer::Delete(struct mg_connection *c, struct mg_http_message* hm)
       return;
    }
 
-   string path = g_pvp->m_szMyPrefPath + q;
+   string path = g_pvp->m_myPrefPath + q;
 
    if (std::filesystem::is_regular_file(path)) {
       if (std::filesystem::remove(path.c_str()))
@@ -284,9 +297,10 @@ void WebServer::Folder(struct mg_connection *c, struct mg_http_message* hm)
       return;
    }
 
-   string path = g_pvp->m_szMyPrefPath + q;
+   string path = g_pvp->m_myPrefPath + q;
 
-   if (std::filesystem::create_directory(path))
+   std::error_code ec;
+   if (std::filesystem::create_directory(path, ec))
       mg_http_reply(c, 200, "", "OK");
    else
       mg_http_reply(c, 500, "", "Server error");
@@ -302,7 +316,7 @@ void WebServer::Extract(struct mg_connection *c, struct mg_http_message* hm)
       return;
    }
 
-   string path = g_pvp->m_szMyPrefPath + q;
+   string path = g_pvp->m_myPrefPath + q;
 
    if (std::filesystem::is_regular_file(path)) {
       if (extension_from_path(path) == "zip") {

@@ -55,6 +55,12 @@ tasks {
         from("${layout.buildDirectory}/../../../../scripts") {
             into("scripts")
         }
+        from("${layout.buildDirectory}/../../../../plugins/scoreview/layouts") {
+           into("plugins/scoreview/layouts")
+        }
+        from("${layout.buildDirectory}/../../../../plugins/flexdmd/assets") {
+           into("plugins/flexdmd/assets")
+        }
         from("${layout.buildDirectory}/../../../../standalone/inc/flexdmd/resources") {
             into("flexdmd")
         }

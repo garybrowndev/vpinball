@@ -274,7 +274,7 @@
 #define IDS_PASTE_AT_ELEMENT            190
 #define IDC_MASS                        190
 #define IDS_DELETE_ELEMENTS             191
-#define IDS_IMAGE_RAW_SIZE              192
+#define IDS_IMAGE_GPU_SIZE              192
 #define IDS_STRING193                   193
 #define IDS_SIZE                        193
 #define IDS_ASSIGN_TO_CURRENT_LAYER     197
@@ -1317,7 +1317,6 @@
 #define IDD_CABINET_OPT                 930
 #define IDC_WHERE_DESCR                 930
 #define IDD_PFVIEW_OPT                  931
-#define IDD_ALPHAVIEW_OPT               932
 #define IDD_SCOREVIEW_OPT               933
 #define IDD_BACKGLASS_OPT               934
 #define IDC_DOT_TINT                    935
@@ -1352,6 +1351,7 @@
 #define IDC_SPACE_REFERENCE             965
 #define IDD_PROPPARTGROUP_VISUALS       966
 #define IDC_LOCKBAR_HEIGHT_FROM_GROUND  967
+#define IDS_IMAGE_FILE_SIZE             968
 #define IDC_LAYBACK_EDIT                1040
 #define IDC_3D_STEREO_SEPARATION_EDIT   1041
 #define IDC_3D_STEREO_ZPD_EDIT          1042
@@ -1549,7 +1549,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        681
 #define _APS_NEXT_COMMAND_VALUE         4030
-#define _APS_NEXT_CONTROL_VALUE         968
+#define _APS_NEXT_CONTROL_VALUE         969
 #define _APS_NEXT_SYMED_VALUE           191
 #endif
 #endif

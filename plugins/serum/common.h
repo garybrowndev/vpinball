@@ -9,6 +9,10 @@ using std::string;
 
 // Shared logging
 #include "LoggingPlugin.h"
+
+// VPX main API
+#include "VPXPlugin.h"
+
 LPI_USE();
 #define LOGD LPI_LOGD
 #define LOGI LPI_LOGI
@@ -20,4 +24,9 @@ LPI_USE();
 #define PATH_SEPARATOR_CHAR '/'
 #endif
 
+namespace Serum {
+
+void SetThreadName(const std::string& name);
 string find_case_insensitive_directory_path(const string& szPath);
+
+}

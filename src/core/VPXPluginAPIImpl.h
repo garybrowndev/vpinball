@@ -39,7 +39,9 @@ private:
    std::shared_ptr<MsgPlugin> m_vpxPlugin;
    static void OnGetVPXPluginAPI(const unsigned int msgId, void* userData, void* msgData);
    VPXPluginAPI m_api;
+   const std::thread::id m_apiThread;
 
+   static void GetVpxInfo(VPXInfo* info);
    static void GetTableInfo(VPXTableInfo* info);
 
    static float GetOption(const char* pageId, const char* optionId, const unsigned int showMask, const char* optionName, const float minValue, const float maxValue, const float step, const float defaultValue, const VPXPluginAPI::OptionUnit unit, const char** values);
@@ -53,6 +55,10 @@ private:
    static void GetInputState(uint64_t* keyState, float* nudgeX, float* nudgeY, float* plunger);
    static void SetInputState(const uint64_t keyState, const float nudgeX, const float nudgeY, const float plunger);
 
+   static VPXTexture CreateTexture(uint8_t* rawData, int size);
+   static void UpdateTexture(VPXTexture* texture, int width, int height, VPXTextureFormat format, const uint8_t* image);
+   static void GetTextureInfo(VPXTexture texture, int* width, int* height);
+   static void DeleteTexture(VPXTexture texture);
 
    // Plugin logging API
    static void OnGetLoggingPluginAPI(const unsigned int msgId, void* userData, void* msgData);
@@ -68,16 +74,13 @@ private:
    static void SubmitTypeLibrary();
    static void OnScriptError(unsigned int type, const char* message);
    static void SetCOMObjectOverride(const char* className, const ScriptClassDef* classDef);
+   static ScriptClassDef* GetClassDef(const char* typeName);
 
    ankerl::unordered_dense::map<string, const ScriptClassDef*> m_scriptCOMObjectOverrides;
    DynamicTypeLibrary m_dynamicTypeLibrary;
    ScriptablePluginAPI m_scriptableApi;
 
    // Contribute VPX API through plugin API
-   unsigned int m_getRenderDmdMsgId;
-   unsigned int m_getIdentifyDmdMsgId;
-
    static void ControllerOnGetDMDSrc(const unsigned int msgId, void* userData, void* msgData);
-   static void ControllerOnGetRenderDMD(const unsigned int msgId, void* userData, void* msgData);
-   static void ControllerOnGetIdentifyDMD(const unsigned int msgId, void* userData, void* msgData);
+   static DisplayFrame ControllerOnGetRenderDMD(const CtlResId id);
 };

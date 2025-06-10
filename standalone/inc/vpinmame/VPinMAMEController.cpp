@@ -5,16 +5,9 @@
 
 #include "mINI/ini.h"
 
-#include "../common/WindowManager.h"
 #include "audio/pinsound.h"
 
 #include <filesystem>
-
-#define PINMAME_SETTINGS_WINDOW_X      15
-#define PINMAME_SETTINGS_WINDOW_Y      30 + 218 + 5 + 75 + 5
-#define PINMAME_SETTINGS_WINDOW_WIDTH  290
-#define PINMAME_SETTINGS_WINDOW_HEIGHT 75
-#define PINMAME_ZORDER                 350
 
 void PINMAMECALLBACK VPinMAMEController::GetGameCallback(PinmameGame* pPinmameGame, void* const pUserData)
 {
@@ -55,13 +48,15 @@ void PINMAMECALLBACK VPinMAMEController::OnDisplayAvailable(int index, int displ
       pDisplay->pDMD = new DMDUtil::DMD();
       pDisplay->pDMD->SetRomName(pController->m_pPinmameGame->name);
 
-      if (g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Standalone, "AltColor"s, true)) {
+      Settings* const pSettings = &g_pplayer->m_ptable->m_settings;
+
+      if (pSettings->LoadValueWithDefault(Settings::Standalone, "AltColor"s, true)) {
          string szAltColorPath = find_case_insensitive_directory_path(pController->m_szPath + "AltColor");
          if (!szAltColorPath.empty())
             pDisplay->pDMD->SetAltColorPath(szAltColorPath.c_str());
       }
 
-      if (g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Standalone, "PUPCapture"s, false)) {
+      if (pSettings->LoadValueWithDefault(Settings::Standalone, "PUPCapture"s, false)) {
          string szPupVideosPath = find_case_insensitive_directory_path(g_pvp->m_currentTablePath + "pupvideos");
          if (!szPupVideosPath.empty())
             pDisplay->pDMD->SetPUPVideosPath(szPupVideosPath.c_str());
@@ -72,14 +67,16 @@ void PINMAMECALLBACK VPinMAMEController::OnDisplayAvailable(int index, int displ
          if (pController->m_pDMDWindow)
             pController->m_pDMDWindow->AttachDMD(pDisplay->pDMD, pDisplay->layout.width, pDisplay->layout.height);
 
-         if (g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Standalone, "FindDisplays"s, true))
-            pDisplay->pDMD->FindDisplays();
+         if (!pSettings->LoadValueWithDefault(pSettings->GetSection("Plugin.DMDUtil"), "Enable"s, false)) {
+            if (pSettings->LoadValueWithDefault(Settings::Standalone, "FindDisplays"s, true))
+               pDisplay->pDMD->FindDisplays();
 
-         if (g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Standalone, "DumpDMDTxt"s, false))
-            pDisplay->pDMD->DumpDMDTxt();
+            if (pSettings->LoadValueWithDefault(Settings::Standalone, "DumpDMDTxt"s, false))
+               pDisplay->pDMD->DumpDMDTxt();
 
-         if (g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Standalone, "DumpDMDRaw"s, false))
-            pDisplay->pDMD->DumpDMDRaw();
+            if (pSettings->LoadValueWithDefault(Settings::Standalone, "DumpDMDRaw"s, false))
+               pDisplay->pDMD->DumpDMDRaw();
+         }
       }
    }
 
@@ -180,7 +177,7 @@ VPinMAMEController::VPinMAMEController()
       }
       else {
 #if (defined(__APPLE__) && ((defined(TARGET_OS_IOS) && TARGET_OS_IOS) || (defined(TARGET_OS_TV) && TARGET_OS_TV))) || defined(__ANDROID__)
-         m_szPath = find_case_insensitive_directory_path(g_pvp->m_szMyPath + "pinmame");
+         m_szPath = find_case_insensitive_directory_path(g_pvp->m_myPath + "pinmame");
 #else
          m_szPath = string(getenv("HOME")) + PATH_SEPARATOR_CHAR + ".pinmame" + PATH_SEPARATOR_CHAR;
 #endif
@@ -194,10 +191,17 @@ VPinMAMEController::VPinMAMEController()
    m_szIniPath = find_case_insensitive_directory_path(m_szPath + "ini");
    if (m_szIniPath.empty()) {
       m_szIniPath = m_szPath + "ini" + PATH_SEPARATOR_CHAR;
-      std::filesystem::create_directories(m_szIniPath);
+      std::error_code ec;
+      if (std::filesystem::create_directory(m_szIniPath.c_str(), ec)) {
+         PLOGI.printf("PinMAME ini path created: %s", m_szIniPath.c_str());
+      }
+      else {
+         PLOGE.printf("Unable to create PinMAME ini path: %s", m_szIniPath.c_str());
+      }
    }
-
-   PLOGI.printf("PinMAME ini path set to: %s", m_szIniPath.c_str());
+   else {
+      PLOGI.printf("PinMAME ini path set to: %s", m_szIniPath.c_str());
+   }
 
    PinmameSetConfig(&config);
    PinmameSetUserData((void*)this);
@@ -222,20 +226,7 @@ VPinMAMEController::VPinMAMEController()
 
    m_pActiveDisplay = nullptr;
 
-   m_pDMDWindow = nullptr;
-
-   if (pSettings->LoadValueWithDefault(Settings::Standalone, "PinMAMEWindow"s, true)) {
-      m_pDMDWindow = new VP::DMDWindow("PinMAME",
-         pSettings->LoadValueWithDefault(Settings::Standalone, "PinMAMEWindowX"s, PINMAME_SETTINGS_WINDOW_X),
-         pSettings->LoadValueWithDefault(Settings::Standalone, "PinMAMEWindowY"s, PINMAME_SETTINGS_WINDOW_Y),
-         pSettings->LoadValueWithDefault(Settings::Standalone, "PinMAMEWindowWidth"s, PINMAME_SETTINGS_WINDOW_WIDTH),
-         pSettings->LoadValueWithDefault(Settings::Standalone, "PinMAMEWindowHeight"s, PINMAME_SETTINGS_WINDOW_HEIGHT),
-         PINMAME_ZORDER,
-         pSettings->LoadValueWithDefault(Settings::Standalone, "PinMAMEWindowRotation"s, 0));
-   }
-   else {
-      PLOGI.printf("PinMAME window disabled");
-   }
+   m_pDMDWindow = new VP::DMDWindow("VPinMAMEController"s);
 
    m_pPinSound = nullptr;
 
@@ -334,7 +325,7 @@ STDMETHODIMP VPinMAMEController::Run(/*[in]*/ LONG_PTR hParentWnd, /*[in,default
          Settings* const pSettings = &g_pplayer->m_ptable->m_settings;
 
          if (pSettings->LoadValueWithDefault(Settings::Standalone, "AltSound"s, true)) {
-             AltsoundSetLogger(g_pvp->m_szMyPrefPath, ALTSOUND_LOG_LEVEL_INFO, false);
+             AltsoundSetLogger(g_pvp->m_myPrefPath, ALTSOUND_LOG_LEVEL_INFO, false);
 
              if (AltsoundInit(m_szPath, string(m_pPinmameGame->name))) {
                 AltsoundSetHardwareGen((ALTSOUND_HARDWARE_GEN)PinmameGetHardwareGen());

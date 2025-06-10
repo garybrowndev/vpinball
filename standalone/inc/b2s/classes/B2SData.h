@@ -20,8 +20,10 @@ class B2SSettings;
 class B2SData
 {
 public:
-   static B2SData* GetInstance();
+   B2SData(B2SSettings* pB2SSettings);
+   ~B2SData();
 
+   B2SSettings* GetB2SSettings() const { return m_pB2SSettings; }
    void Stop();
    VPinMAMEController* GetVPinMAME();
    void FreeVPinMAME();
@@ -46,6 +48,7 @@ public:
    void SetDualBackglass(bool dualBackglass) { m_dualBackglass = dualBackglass; }
    bool IsLaunchBackglass() const { return m_launchBackglass; }
    void SetLaunchBackglass(bool launchBackglass) { m_launchBackglass = launchBackglass; }
+   bool IsBackglassRunning() const { return IsBackglassVisible(); }
    bool IsBackglassVisible() const { return m_backglassVisible; }
    void SetBackglassVisible(bool backglassVisible) { m_backglassVisible = backglassVisible; }
    bool IsUseIlluminationLocks() const { return m_useIlluminationLocks; }
@@ -132,13 +135,9 @@ public:
    bool IsUseLEDs() const;
    bool IsUseLEDDisplays() const;
    bool IsUseReels() const;
-   bool IsValid() const { return m_valid; }
-   void SetValid(bool valid) { m_valid = valid; }
 
 private:
-   B2SData();
-   ~B2SData();
-
+   B2SSettings* m_pB2SSettings;
    VPinMAMEController* m_pVPinMAME;
    string m_szTableName;
    string m_szTableFileName;
@@ -198,16 +197,10 @@ private:
    vector<vector<SDL_FPoint>> m_led14Seg;
    vector<vector<SDL_FPoint>> m_led16Seg;
    int m_ledCoordMax;
-
    AnimationCollection m_usedAnimationLampIDs;
    AnimationCollection m_usedRandomAnimationLampIDs;
    AnimationCollection m_usedAnimationSolenoidIDs;
    AnimationCollection m_usedRandomAnimationSolenoidIDs;
    AnimationCollection m_usedAnimationGIStringIDs;
    AnimationCollection m_usedRandomAnimationGIStringIDs;
-
-   B2SSettings* m_pB2SSettings;
-
-   bool m_valid;
-   static B2SData* m_pInstance;
 };

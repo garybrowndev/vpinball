@@ -96,7 +96,7 @@ AssetSrc* AssetManager::ResolveSrc(const string& src, AssetSrc* pBaseSrc)
 
       Texture* pTexture = NULL;
       for (Texture* texturePtr : g_pvp->m_ptableActive->m_vimage) {
-         if (StrCompareNoCase(texturePtr->m_szName, pAssetSrc->GetPath())) {
+         if (StrCompareNoCase(texturePtr->m_name, pAssetSrc->GetPath())) {
             pTexture = texturePtr;
             break;
          }
@@ -107,7 +107,7 @@ AssetSrc* AssetManager::ResolveSrc(const string& src, AssetSrc* pBaseSrc)
       }
       else {
         pAssetSrc->SetAssetType(AssetType_Image);
-        ext = extension_from_path(pTexture->m_szPath);
+        ext = extension_from_path(pTexture->GetFilePath());
       }
    }
    else {
@@ -229,7 +229,7 @@ void* AssetManager::Open(AssetSrc* pSrc)
       break;
       case AssetSrcType_FlexResource:
       {
-         string path = find_case_insensitive_file_path(g_pvp->m_szMyPath + "flexdmd" + PATH_SEPARATOR_CHAR + pSrc->GetPath());
+         string path = find_case_insensitive_file_path(g_pvp->m_myPath + "flexdmd" + PATH_SEPARATOR_CHAR + pSrc->GetPath());
          if (!path.empty()) {
             if (pSrc->GetAssetType() == AssetType_BMFont)
                pAsset = BitmapFont::Create(path);
@@ -243,8 +243,8 @@ void* AssetManager::Open(AssetSrc* pSrc)
       case AssetSrcType_VPXResource:
       {
          for (Texture* texturePtr : g_pvp->m_ptableActive->m_vimage) {
-            if (StrCompareNoCase(texturePtr->m_szName, pSrc->GetPath())) {
-               SDL_IOStream* rwops = SDL_IOFromConstMem(texturePtr->m_ppb->m_pdata, texturePtr->m_ppb->m_cdata);
+            if (StrCompareNoCase(texturePtr->m_name, pSrc->GetPath())) {
+               SDL_IOStream* rwops = SDL_IOFromConstMem(texturePtr->GetFileRaw(), texturePtr->GetFileSize());
                if (pSrc->GetAssetType() != AssetType_GIF)
                   pAsset = IMG_Load_IO(rwops, 0);
                else

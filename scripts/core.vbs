@@ -57,9 +57,6 @@ Dim HasTimeFence : HasTimeFence = False
 ' Are we using the plugin version of PinMAME
 Dim IsPluginPinMAME : IsPluginPinMAME = False
 
-' Does the controller support state exchange through a global state block
-Dim HasStateBlock : HasStateBlock = 2
-
 ' If UsePdbLeds is not defined, then define and disable it to avoid constantly raising an error
 If IsEmpty(Eval("UsePdbLeds"))=true Then ExecuteGlobal("Dim UsePdbLeds:UsePdbLeds=False")
 
@@ -163,7 +160,7 @@ Class cvpmDictionary
 	Public Sub		RemoveAll	 : mDict.RemoveAll			   : End Sub
 	Public Function Exists(aKey) : Exists = mDict.Exists(aKey) : End Function
 	Public Function Items		 : Items  = mDict.Items		   : End Function
-	Public Function Keys		 : Keys	  = mDict.Keys		   : End Function
+	Public Function Keys		 : Keys   = mDict.Keys		   : End Function
 End Class
 
 '--------------------
@@ -665,18 +662,7 @@ Class cvpmTrough
 			End If
 			NeedUpdate = True
 		End If
-
-	If isObject(aKicker) Then
-		If VP8sound then
-			PlaySound mSounds.Item("add")
-		ElseIf VP9sound then
-			PlaySound mSounds.Item("add"), 1, 1, CoreAudioPan(aKicker.x), 0
-		Else
-			PlaySound mSounds.Item("add"), 1, 1, CoreAudioPan(aKicker.x), 0, 0, False, False, CoreAudioFade(aKicker.y)
-		End If
-	Else
-		PlaySound mSounds.Item("add")
-	End If
+		CorePlaySoundAt mSounds.Item("add"), aKicker
 	End Sub
 
 	' Use solCallback(solNo) on the trough entry kicker solenoid.
@@ -715,31 +701,11 @@ Class cvpmTrough
 			Next
 
 			If ballsEjected > 0 Then
-				If isObject(mExitKicker) Then
-					If VP8sound then
-						PlaySound mSounds.Item("exitBall")
-					ElseIf VP9sound then
-						PlaySound mSounds.Item("exitBall"), 1, 1, CoreAudioPan(mExitKicker.x), 0
-					Else
-						PlaySound mSounds.Item("exitBall"), 1, 1, CoreAudioPan(mExitKicker.x), 0, 0, False, False, CoreAudioFade(mExitKicker.y)
-					End If
-				Else
-					PlaySound mSounds.Item("exitBall")
-				End If
+				CorePlaySoundAt mSounds.Item("exitBall"), mExitKicker
 				UpdateTroughSwitches
 				NeedUpdate = True
 			Else
-				If isObject(mExitKicker) Then
-					If VP8sound then
-						PlaySound mSounds.Item("exit")
-					ElseIf VP9sound then
-						PlaySound mSounds.Item("exit"), 1, 1, CoreAudioPan(mExitKicker.x), 0
-					Else
-						PlaySound mSounds.Item("exit"), 1, 1, CoreAudioPan(mExitKicker.x), 0, 0, False, False, CoreAudioFade(mExitKicker.y)
-					End If
-				Else
-					PlaySound mSounds.Item("exit")
-				End If
+				CorePlaySoundAt mSounds.Item("exit"), mExitKicker
 			End If
 		End If
 	End Sub
@@ -837,17 +803,7 @@ Class cvpmSaucer
 			mSwcopy = mSw
 			Controller.Switch(mSwcopy) = True
 		End If
-		If isObject(mKicker) Then
-			If VP8sound then
-				PlaySound mSounds.Item("add")
-			ElseIf VP9sound then
-				PlaySound mSounds.Item("add"), 1, 1, CoreAudioPan(mKicker.x), 0
-			Else
-				PlaySound mSounds.Item("add"), 1, 1, CoreAudioPan(mKicker.x), 0, 0, False, False, CoreAudioFade(mKicker.y)
-			End If
-		Else
-			PlaySound mSounds.Item("add")
-		End If
+		CorePlaySoundAt mSounds.Item("add"), mKicker
 	End Sub
 
 	Public Property Get HasBall
@@ -890,29 +846,9 @@ Class cvpmSaucer
 				mSwcopy = mSw
 				Controller.Switch(mSwcopy) = False
 			End If
-			If isObject(mKicker) Then
-				If VP8sound then
-					PlaySound mSounds.Item("exitBall")
-				ElseIf VP9sound then
-					PlaySound mSounds.Item("exitBall"), 1, 1, CoreAudioPan(mKicker.x), 0
-				Else
-					PlaySound mSounds.Item("exitBall"), 1, 1, CoreAudioPan(mKicker.x), 0, 0, False, False, CoreAudioFade(mKicker.y)
-				End If
-			Else
-				PlaySound mSounds.Item("exitBall")
-			End If
+			CorePlaySoundAt mSounds.Item("exitBall"), mKicker
 		Else
-			If isObject(mKicker) Then
-				If VP8sound then
-					PlaySound mSounds.Item("exit")
-				ElseIf VP9sound then
-					PlaySound mSounds.Item("exit"), 1, 1, CoreAudioPan(mKicker.x), 0
-				Else
-					PlaySound mSounds.Item("exit"), 1, 1, CoreAudioPan(mKicker.x), 0, 0, False, False, CoreAudioFade(mKicker.y)
-				End If
-			Else
-				PlaySound mSounds.Item("exit")
-			End If
+			CorePlaySoundAt mSounds.Item("exit"), mKicker
 		End If
 	End Sub
 End Class
@@ -939,7 +875,12 @@ Class cvpmBallStack
 		mBallIn = 0 : mBalls = 0 : mExitKicker = 0 : mInitKicker = 0 : mBallsMoving = False
 		KickBalls = 1 : mSaucer = False : mExitDir = 0 : mExitForce = 0
 		mExitDir2 = 0 : mExitForce2 = 0 : KickZ = 0 : KickForceVar = 0 : KickAngleVar = 0
-		mAddSnd = 0 : mEntrySnd = 0 : mEntrySndBall = 0 : mExitSnd = 0 : mExitSndBall = 0 : mSoundKicker = 0
+		mAddSnd = "ball_stack_add_default_snd"
+		mEntrySnd = "ball_stack_entry_default_snd"
+		mEntrySndBall = "ball_stack_entry_ball_default_snd"
+		mExitSnd = "ball_stack_exit_default_snd"
+		mExitSndBall = "ball_stack_exit_ball_default_snd"
+		mSoundKicker = 0
 		vpmTimer.AddResetObj Me
 	End Sub
 
@@ -1013,17 +954,7 @@ Class cvpmBallStack
 		Else
 			mBalls = mBalls + 1 : mBallPos(mBalls) = conStackSw + 1 : NeedUpdate = True
 		End If
-		If isObject(mSoundKicker) Then
-			If VP8sound then
-				PlaySound mAddSnd
-			ElseIf VP9sound then
-				PlaySound mAddSnd, 1, 1, CoreAudioPan(mSoundKicker.x), 0
-			Else
-				PlaySound mAddSnd, 1, 1, CoreAudioPan(mSoundKicker.x), 0, 0, False, False, CoreAudioFade(mSoundKicker.y)
-			End If
-		Else
-			PlaySound mAddSnd
-		End If
+		CorePlaySoundAt mAddSnd, mSoundKicker
 	End Sub
 
 	' A bug in the script engine forces the "End If" at the end
@@ -1047,29 +978,9 @@ Class cvpmBallStack
 	Private Sub KickOut(aAltSol)
 		Dim ii,jj, kForce, kDir, kBaseDir
 		If mBalls Then
-			If isObject(mSoundKicker) Then
-				If VP8sound then
-					PlaySound mExitSndBall
-				ElseIf VP9sound then
-					PlaySound mExitSndBall, 1, 1, CoreAudioPan(mSoundKicker.x), 0
-				Else
-					PlaySound mExitSndBall, 1, 1, CoreAudioPan(mSoundKicker.x), 0, 0, False, False, CoreAudioFade(mSoundKicker.y)
-				End If
-			Else
-				PlaySound mExitSndBall
-			End If
+			CorePlaySoundAt mExitSndBall, mSoundKicker
 		Else
-			If isObject(mSoundKicker) Then
-				If VP8sound then
-					PlaySound mExitSnd
-				ElseIf VP9sound then
-					PlaySound mExitSnd, 1, 1, CoreAudioPan(mSoundKicker.x), 0
-				Else
-					PlaySound mExitSnd, 1, 1, CoreAudioPan(mSoundKicker.x), 0, 0, False, False, CoreAudioFade(mSoundKicker.y)
-				End If
-			Else
-				PlaySound mExitSnd
-			End If
+			CorePlaySoundAt mExitSnd, mSoundKicker
 			Exit Sub
 		End If
 		If aAltSol Then kForce = mExitForce2 : kBaseDir = mExitDir2 Else kForce = mExitForce : kBaseDir = mExitDir
@@ -1156,8 +1067,14 @@ Class cvpmBallStack
 		mExitDir2 = aDir : mExitForce2 = aForce
 	End Sub
 
+	' Set up the sounds for ball entry
+	' To disable the sounds, use InitEntrySnd("", "")
 	Public Sub InitEntrySnd(aBall, aNoBall) : mEntrySndBall = aBall : mEntrySnd = aNoBall : End Sub
+	' Set up the sounds for ball exit
+	' To disable the sounds, use InitExitSnd("", "")
 	Public Sub InitExitSnd(aBall, aNoBall)	: mExitSndBall = aBall	: mExitSnd = aNoBall  : End Sub
+	' Set up the sound for ball addition
+	' To disable the sound, use InitAddSnd("")
 	Public Sub InitAddSnd(aSnd) : mAddSnd = aSnd : End Sub
 
 	Public Property Let Balls(aBalls)
@@ -1258,7 +1175,9 @@ Class cvpmDropTarget
 	Private mDropObj, mDropSw(), mDropSnd, mRaiseSnd, mSwAnyUp, mSwAllDn, mAllDn, mLink
 
 	Private Sub Class_Initialize
-		mDropSnd = 0 : mRaiseSnd = 0 : mSwAnyUp = 0 : mSwAllDn = 0 : mAllDn = False : mLink = Empty
+		mDropSnd = "drop_target_drop_default_snd"
+		mRaiseSnd = "drop_target_raise_default_snd"
+		mSwAnyUp = 0 : mSwAllDn = 0 : mAllDn = False : mLink = Empty
 	End sub
 
 	Private Sub CheckAllDn(ByVal aStatus)
@@ -1347,6 +1266,8 @@ Class cvpmDropTarget
 	End Property
 	Public Property Let AllDownSw(aSwAllDn) : mSwAllDn = aSwAllDn : End Property
 	Public Property Get AllDown : AllDown = mAllDn : End Property
+	' Set up the sounds to use when dropping and raising the target
+	' To disable the sounds, use InitSnd("", "")
 	Public Sub InitSnd(aDrop, aRaise) : mDropSnd = aDrop : mRaiseSnd = aRaise : End Sub
 	Public Property Let LinkedTo(aLink)
 		If IsArray(aLink) Then mLink = aLink Else mLink = Array(aLink)
@@ -1356,18 +1277,7 @@ Class cvpmDropTarget
 		Dim ii, mSwcopy
 
 '		vpmSolWall mDropObj(aNo-1), mDropSnd, True
-
-		If TypeName(mDropObj(aNo-1)) = "HitTarget" Then
-			If VP8sound then
-				PlaySound mDropSnd
-			ElseIf VP9sound then
-				PlaySound mDropSnd, 1, 1, CoreAudioPan(mDropObj(aNo-1).x), 0
-			Else
-				PlaySound mDropSnd, 1, 1, CoreAudioPan(mDropObj(aNo-1).x), 0, 0, False, False, CoreAudioFade(mDropObj(aNo-1).y)
-			End If
-		Else
-			PlaySound mDropSnd
-		End If
+		If TypeName(mDropObj(aNo-1)) = "HitTarget" Then CorePlaySoundAt mDropSnd, mDropObj(aNo-1) Else PlaySound mDropSnd
 		vpmSolWall mDropObj(aNo-1), False, True
 
 		mSwcopy = mDropSw(aNo-1)
@@ -1384,18 +1294,7 @@ Class cvpmDropTarget
 	Public Sub SolUnhit(aNo, aEnabled)
 		Dim mSwcopy
 		Dim ii : If Not aEnabled Then Exit Sub
-		If TypeName(mDropObj(aNo-1)) = "HitTarget" Then
-			If VP8sound then
-				PlaySound mRaiseSnd
-			ElseIf VP9sound then
-				PlaySound mRaiseSnd, 1, 1, CoreAudioPan(mDropObj(aNo-1).x), 0
-			Else
-				PlaySound mRaiseSnd, 1, 1, CoreAudioPan(mDropObj(aNo-1).x), 0, 0, False, False, CoreAudioFade(mDropObj(aNo-1).y): vpmSolWall mDropObj(aNo-1), False, False
-			End If
-		Else
-			PlaySound mRaiseSnd
-		End If
-
+		If TypeName(mDropObj(aNo-1)) = "HitTarget" Then CorePlaySoundAt mRaiseSnd, mDropObj(aNo-1) Else PlaySound mRaiseSnd
 		mSwcopy = mDropSw(aNo-1)
 		Controller.Switch(mSwcopy) = False
 		mAllDn = False : CheckAllDn False
@@ -1404,18 +1303,7 @@ Class cvpmDropTarget
 	Public Sub SolDropDown(aEnabled)
 		Dim mSwcopy
 		Dim ii : If Not aEnabled Then Exit Sub
-		If TypeName(mDropObj(0)) = "HitTarget" Then
-			If VP8sound then
-				PlaySound mDropSnd
-			ElseIf VP9sound then
-				PlaySound mDropSnd, 1, 1, CoreAudioPan(mDropObj(0).x), 0
-			Else
-				PlaySound mDropSnd, 1, 1, CoreAudioPan(mDropObj(0).x), 0, 0, False, False, CoreAudioFade(mDropObj(0).y)
-			End If
-		Else
-			PlaySound mDropSnd
-		End If
-
+		If TypeName(mDropObj(0)) = "HitTarget" Then CorePlaySoundAt mDropSnd, mDropObj(0) Else PlaySound mDropSnd
 		For Each ii In mDropObj : vpmSolWall ii, False, True : Next
 		For Each ii In mDropSw	: mSwcopy = ii : Controller.Switch(mSwcopy) = True : Next
 		mAllDn = True : CheckAllDn True
@@ -1424,18 +1312,7 @@ Class cvpmDropTarget
 	Public Sub SolDropUp(aEnabled)
 		Dim mSwcopy
 		Dim ii : If Not aEnabled Then Exit Sub
-		If TypeName(mDropObj(0)) = "HitTarget" Then
-			If VP8sound then
-				PlaySound mRaiseSnd
-			ElseIf VP9sound then
-				PlaySound mRaiseSnd, 1, 1, CoreAudioPan(mDropObj(0).x), 0
-			Else
-				PlaySound mRaiseSnd, 1, 1, CoreAudioPan(mDropObj(0).x), 0, 0, False, False, CoreAudioFade(mDropObj(0).y)
-			End If
-		Else
-			PlaySound mRaiseSnd
-		End If
-
+		If TypeName(mDropObj(0)) = "HitTarget" Then CorePlaySoundAt mRaiseSnd, mDropObj(0) Else PlaySound mRaiseSnd
 		For Each ii In mDropObj : vpmSolWall ii, False, False : Next
 		For Each ii In mDropSw	: mSwcopy = ii : Controller.Switch(mSwcopy) = False : Next
 		mAllDn = False : CheckAllDn False
@@ -1825,29 +1702,9 @@ Class cvpmVLock
 		mGateOpen = aEnabled
 		If Not aEnabled Then Exit Sub
 		If mBalls > 0 Then
-			If isObject(mKick(0)) Then
-				If VP8sound then
-					PlaySound mBallSnd
-				ElseIf VP9sound then
-					PlaySound mBallSnd, 1, 1, CoreAudioPan(mKick(0).x), 0
-				Else
-					PlaySound mBallSnd, 1, 1, CoreAudioPan(mKick(0).x), 0, 0, False, False, CoreAudioFade(mKick(0).y)
-				End If
-			Else
-				PlaySound mBallSnd
-			End If
+			CorePlaySoundAt mBallSnd, mKick(0)
 		Else
-			If isObject(mKick(0)) Then
-				If VP8sound then
-					PlaySound mNoBallSnd
-				ElseIf VP9sound then
-					PlaySound mNoBallSnd, 1, 1, CoreAudioPan(mKick(0).x), 0
-				Else
-					PlaySound mNoBallSnd, 1, 1, CoreAudioPan(mKick(0).x), 0, 0, False, False, CoreAudioFade(mKick(0).y)
-				End If
-			Else
-				PlaySound mNoBallSnd
-			End If
+			CorePlaySoundAt mNoBallSnd, mKick(0)
 			Exit Sub
 		End If
 		For ii = 0 To mBalls-1
@@ -2546,24 +2403,9 @@ Sub PinMAMETimer_Timer
 		If UpdateVisual Then LastPinMameVisualSync = GameTime
 	End If
 
-	If HasStateBlock = 2 Then
-		On Error Resume Next ' Late initialization since StateBlock is only available when Controller is running
-			Err.Clear
-			PinMameStateBlock = Controller.StateBlock
-			If Err Then HasStateBlock = 0 Else HasStateBlock = 1
-			Err.Clear
-		On Error Goto 0
-	ElseIf HasStateBlock = 1 Then
-		If UpdateVisual Then
-			Controller.UpdateStateBlock 63 ' Update all
-		Else
-			Controller.UpdateStateBlock 2 ' Update general purpose outputs only (Solenoids & GI)
-		End If
-	End If
-
 	On Error Resume Next
 		If UpdateVisual Then
-			If Not IsPluginPinMAME And HasStateBlock = 0 Then
+			If Not IsPluginPinMAME Then
 				If UseDMD Then
 					DMDp = Controller.RawDmdPixels
 					If Not IsEmpty(DMDp) Then
@@ -2866,43 +2708,13 @@ Sub vpmSolDiverter(aDiv, aSound, aEnabled)
 	If VarType(aSound) = vbString Then
 		If aEnabled Then
 			StopSound aSound
-			If isObject(aDiv) Then
-				If VP8sound then
-					PlaySound aSound
-				ElseIf VP9sound then
-					PlaySound aSound, 1, 1, CoreAudioPan(aDiv.x), 0
-				Else
-					PlaySound aSound, 1, 1, CoreAudioPan(aDiv.x), 0, 0, False, False, CoreAudioFade(aDiv.y)
-				End If
-			Else
-				PlaySound aSound
-			End If
+			CorePlaySoundAt aSound, aDiv
 		End If
 	ElseIf aSound Then
 		If aEnabled Then
-			If isObject(aDiv) Then
-				If VP8sound then
-					PlaySound SSolenoidOn
-				ElseIf VP9sound then
-					PlaySound SSolenoidOn, 1, 1, CoreAudioPan(aDiv.x), 0
-				Else
-					PlaySound SSolenoidOn, 1, 1, CoreAudioPan(aDiv.x), 0, 0, False, False, CoreAudioFade(aDiv.y)
-				End If
-			Else
-				PlaySound SSolenoidOn
-			End If
+			CorePlaySoundAt SSolenoidOn, aDiv
 		Else
-			If isObject(aDiv) Then
-				If VP8sound then
-					PlaySound SSolenoidOff
-				ElseIf VP9sound then
-					PlaySound SSolenoidOff, 1, 1, CoreAudioPan(aDiv.x), 0
-				Else
-					PlaySound SSolenoidOff, 1, 1, CoreAudioPan(aDiv.x), 0, 0, False, False, CoreAudioFade(aDiv.y)
-				End If
-			Else
-				PlaySound SSolenoidOff
-			End If
+			CorePlaySoundAt SSolenoidOff, aDiv
 		End If
 	End If
 End sub
@@ -3219,3 +3031,18 @@ Private Function CoreAudioFade(ypar) 'calculates the audio fade of an table obje
 		End If
 	End If
 End Function
+
+Private Sub CorePlaySoundAt(soundName, at)
+	If IsEmpty(soundName) Then Exit Sub
+	If IsObject(at) Then
+		If VP8sound then
+			PlaySound soundName
+		ElseIf VP9sound then
+			PlaySound soundName, 1, 1, CoreAudioPan(at.x), 0
+		Else
+			PlaySound soundName, 1, 1, CoreAudioPan(at.x), 0, 0, False, False, CoreAudioFade(at.y)
+		End If
+	Else
+		PlaySound soundName
+	End If
+End Sub

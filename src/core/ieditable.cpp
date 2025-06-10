@@ -7,6 +7,11 @@ IEditable::IEditable()
    VariantInit(&m_uservalue);
 }
 
+IEditable::~IEditable()
+{
+   SetPartGroup(nullptr);
+}
+
 void IEditable::SetDirtyDraw()
 {
    GetPTable()->SetDirtyDraw();
@@ -14,7 +19,7 @@ void IEditable::SetDirtyDraw()
 
 void IEditable::Delete()
 {
-   RemoveFromVectorSingle(GetPTable()->m_vedit, (IEditable *)this);
+   RemoveFromVectorSingle(GetPTable()->m_vedit, this);
    MarkForDelete();
 
    if (GetScriptable())
@@ -29,7 +34,7 @@ void IEditable::Delete()
 
 void IEditable::Uncreate()
 {
-   RemoveFromVectorSingle(GetPTable()->m_vedit, (IEditable *)this);
+   RemoveFromVectorSingle(GetPTable()->m_vedit, this);
    if (GetScriptable())
       GetPTable()->m_pcv->RemoveItem(GetScriptable());
 }
@@ -194,19 +199,18 @@ void IEditable::SetName(const string& name)
     WideCharToMultiByteNull(CP_ACP, 0, GetScriptable()->m_wzName, -1, oldName, sizeof(oldName), nullptr, nullptr);
 
     WCHAR newName[sizeof(oldName)];
-    const WCHAR* namePtr = newName;
     MultiByteToWideCharNull(CP_ACP, 0, name.c_str(), -1, newName, sizeof(oldName));
     const bool isEqual = (wcscmp(newName, GetScriptable()->m_wzName) == 0);
     if(!isEqual && !pt->IsNameUnique(newName))
     {
        WCHAR uniqueName[sizeof(oldName)];
-       pt->GetUniqueName(newName, uniqueName, std::size(uniqueName));
-       namePtr = uniqueName;
+       pt->GetUniqueName(newName, uniqueName, sizeof(oldName));
+       lstrcpynW(newName, uniqueName, sizeof(oldName));
     }
     STARTUNDO
     // first update name in the codeview before updating it in the element itself
-    pt->m_pcv->ReplaceName(GetScriptable(), namePtr);
-    lstrcpynW(GetScriptable()->m_wzName, namePtr, sizeof(oldName));
+    pt->m_pcv->ReplaceName(GetScriptable(), newName);
+    lstrcpynW(GetScriptable()->m_wzName, newName, sizeof(oldName));
 #ifndef __STANDALONE__
     g_pvp->SetPropSel(GetPTable()->m_vmultisel);
     g_pvp->GetLayersListDialog()->Update();

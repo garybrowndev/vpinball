@@ -3,30 +3,22 @@
 #include "B2SSettings.h"
 #include "B2SData.h"
 
-B2SSettings* B2SSettings::m_pInstance = NULL;
-
-B2SSettings* B2SSettings::GetInstance()
-{
-   if (!m_pInstance)
-      m_pInstance = new B2SSettings();
-
-   return m_pInstance;
-}
-
 B2SSettings::B2SSettings()
 {
    m_gameNameFound = false;
 
-   Settings* const pSettings = &g_pplayer->m_ptable->m_settings;
-
-   m_pluginsOn = pSettings->LoadValueWithDefault(Settings::Standalone, "B2SPlugins"s, false);
-   m_pPluginHost = m_pluginsOn ? PluginHost::GetInstance() : NULL;
+   m_pluginsOn = false;
+   m_pPluginHost = PluginHost::GetInstance();
 
    ClearAll();
+
+    m_pluginsOn = g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Standalone, "B2SPlugins"s, false);
 }
 
 B2SSettings::~B2SSettings()
 {
+   if (ArePluginsOn())
+      GetPluginHost()->UnregisterAllPlugins();
 }
 
 void B2SSettings::Load(bool resetLogs)

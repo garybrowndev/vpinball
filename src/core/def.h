@@ -2,6 +2,21 @@
 
 #pragma once
 
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#include <cstdint>
+#include <algorithm>
+#include <charconv>
+
+#include <vector>
+using std::vector;
+
+#include <string>
+using namespace std::string_literals;
+using std::string;
+using std::wstring;
+
 #ifdef _MSC_VER
 #include <intrin.h>
 #ifdef _M_ARM64
@@ -28,6 +43,14 @@
 #define CONSTEXPR
 #else
 #define CONSTEXPR constexpr
+#endif
+
+#ifdef ENABLE_OPENGL
+#ifndef __OPENGLES__
+ #include <glad/gl.h>
+#else
+ #include <glad/gles2.h>
+#endif
 #endif
 
 template <typename T>
@@ -585,17 +608,17 @@ float sz2f(string sz, const bool force_convert_decimal_point = false);
 string f2sz(const float f, const bool can_convert_decimal_point = true);
 
 void WideStrNCopy(const WCHAR* wzin, WCHAR* wzout, const size_t wzoutMaxLen);
-int WideStrCmp(const WCHAR* wz1, const WCHAR* wz2);
 void WideStrCat(const WCHAR* wzin, WCHAR* wzout, const size_t wzoutMaxLen);
-int WzSzStrCmp(const WCHAR* wz1, const char* sz2);
-int WzSzStrNCmp(const WCHAR* wz1, const char* sz2, const size_t maxComparisonLen);
+bool WzSzEqual(const WCHAR* wz1, const char* sz2);
 
 HRESULT OpenURL(const string& szURL);
 
 WCHAR *MakeWide(const string& sz);
-char *MakeChar(const WCHAR *const wz);
-string MakeString(const wstring &wz);
-wstring MakeWString(const string &sz);
+char *MakeChar(const WCHAR* const wz);
+string MakeString(const wstring& wz);
+string MakeString(const WCHAR* const wz);
+wstring MakeWString(const string& sz);
+wstring MakeWString(const char* const sz);
 
 // in case the incoming string length is >= the maximum char length of the outgoing one, WideCharToMultiByte will not produce a zero terminated string
 // this variant always makes sure that the outgoing string is zero terminated
@@ -632,44 +655,7 @@ inline int MultiByteToWideCharNull(
     return res;
 }
 
-
-//---------------------------------------------------------------------------
-// Allocates a temporary buffer that will disappear when it goes out of scope
-// NOTE: Be careful of that-- make sure you use the string in the same or
-// nested scope in which you created this buffer.  People should not use this
-// class directly; use the macro(s) below.
-//---------------------------------------------------------------------------
-class TempBuffer final
-{
-public:
-   TempBuffer(const size_t cb)
-   {
-      m_alloc = (cb > 256);
-      if (m_alloc)
-         m_pbBuf = new char[cb];
-      else
-         m_pbBuf = m_szBufT;
-   }
-   ~TempBuffer()
-   {
-      if (m_alloc) delete[] m_pbBuf;
-   }
-   char *GetBuffer() const
-   {
-      return m_pbBuf;
-   }
-
-private:
-   char *m_pbBuf;
-   char  m_szBufT[256];  // We'll use this temp buffer for small cases.
-   bool  m_alloc;
-};
-// NOTE: Be careful about scoping when using this macro!
-#define MAKE_WIDEPTR_FROMANSI(ptrname, pszAnsi, pszAnsiLength) \
-    TempBuffer __TempBuffer##ptrname(((pszAnsiLength) + 1) * (int)sizeof(WCHAR)); \
-    MultiByteToWideCharNull(CP_ACP, 0, pszAnsi, -1, (LPWSTR)__TempBuffer##ptrname.GetBuffer(), (int)(pszAnsiLength) + 1); \
-    const LPWSTR ptrname = (LPWSTR)__TempBuffer##ptrname.GetBuffer()
-
+//
 
 constexpr inline char cLower(char c)
 {
@@ -741,23 +727,36 @@ bool IsOnWine();
 bool IsWindowsVistaOr7();
 bool IsWindows10_1803orAbove();
 
-#include "renderer/typedefs3D.h"
-
+vector<uint8_t> read_file(const string& filename, const bool binary = true);
+void write_file(const string& filename, const vector<uint8_t>& data, const bool binary = true);
 void copy_folder(const string& srcPath, const string& dstPath);
 string normalize_path_separators(const string& szPath);
 string find_case_insensitive_file_path(const string& szPath);
 string find_case_insensitive_directory_path(const string& szPath);
 string extension_from_path(const string& path);
 bool path_has_extension(const string& path, const string& extension);
-bool try_parse_int(const string& str, int& value);
+inline string trim_string(const string& str)
+{
+   string s;
+   try {
+      const size_t pos = str.find_first_not_of(" \t\r\n");
+      s = str.substr(pos, str.find_last_not_of(" \t\r\n") - pos + 1);
+   }
+   catch (...) {
+      //s.clear();
+   }
+   return s;
+}
+inline bool try_parse_int(const string& str, int& value)
+{
+   const string tmp = trim_string(str);
+   return (std::from_chars(tmp.c_str(), tmp.c_str() + tmp.length(), value).ec == std::errc{});
+}
 bool try_parse_float(const string& str, float& value);
-bool try_parse_color(const string& str, OLE_COLOR& value);
 bool is_string_numeric(const string& str);
 int string_to_int(const string& str, int default_value = 0);
 float string_to_float(const string& str, float default_value = 0.0f);
-string trim_string(const string& str);
 vector<string> parse_csv_line(const string& line);
-string color_to_hex(OLE_COLOR color);
 bool string_contains_case_insensitive(const string& str1, const string& str2);
 bool string_starts_with_case_insensitive(const string& str, const string& prefix);
 string string_replace_all(const string& szStr, const string& szFrom, const string& szTo, const size_t offs = 0);
@@ -768,10 +767,15 @@ const char* gl_to_string(GLuint value);
 #endif
 vector<string> add_line_numbers(const char* src);
 
+#ifndef MINIMAL_DEF_H
+bool try_parse_color(const string& str, OLE_COLOR& value);
+string color_to_hex(OLE_COLOR color);
+
 #ifdef __STANDALONE__
 extern "C" HRESULT external_open_storage(const OLECHAR* pwcsName, IStorage* pstgPriority, DWORD grfMode, SNB snbExclude, DWORD reserved, IStorage** ppstgOpen);
 extern "C" HRESULT external_create_object(const WCHAR *progid, IClassFactory* cf, IUnknown* obj);
 extern "C" void external_log_info(const char* format, ...);
 extern "C" void external_log_debug(const char* format, ...);
 extern "C" void external_log_error(const char* format, ...);
+#endif
 #endif

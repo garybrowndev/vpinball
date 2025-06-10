@@ -4,69 +4,23 @@
 
 PinBinary::PinBinary()
 {
-   m_pdata = nullptr;
-   m_cdata = 0;
 }
 
 PinBinary::~PinBinary()
 {
-   delete[] m_pdata;
 }
 
-bool PinBinary::ReadFromFile(const string& szFileName)
+bool PinBinary::ReadFromFile(const string& filename)
 {
-#ifndef __STANDALONE__
-   const HANDLE hFile = CreateFile(szFileName.c_str(),
-      GENERIC_READ, FILE_SHARE_READ,
-      nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-
-   if (hFile == INVALID_HANDLE_VALUE)
-   {
-      const string text = "The file \"" + szFileName + "\" could not be opened.";
-      ShowError(text);
-      return false;
-   }
-
-   delete[] m_pdata;
-
-   m_cdata = GetFileSize(hFile, nullptr);
-
-   m_pdata = new char[m_cdata];
-
-   DWORD read;
-   /*BOOL foo =*/ ReadFile(hFile, m_pdata, m_cdata, &read, nullptr);
-
-   /*foo =*/ CloseHandle(hFile);
-
-   m_szPath = szFileName;
-   m_szName = TitleFromFilename(szFileName);
-#endif
-
+   m_buffer = read_file(filename);
+   m_path = filename;
+   m_name = TitleFromFilename(filename);
    return true;
 }
 
-bool PinBinary::WriteToFile(const string& szfilename)
+bool PinBinary::WriteToFile(const string& filename)
 {
-#ifndef __STANDALONE__
-   const HANDLE hFile = CreateFile(szfilename.c_str(),
-      GENERIC_WRITE, FILE_SHARE_READ,
-      nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-
-   if (hFile == INVALID_HANDLE_VALUE)
-   {
-      const string bla = "The temporary file \"" + szfilename + "\" could not be written.";
-      ShowError(bla);
-      return false;
-   }
-
-   DWORD write;
-   /*int foo =*/ WriteFile(hFile, m_pdata, m_cdata, &write, nullptr);
-
-   /*foo =*/ GetLastError();
-
-   CloseHandle(hFile);
-#endif
-
+   write_file(filename, m_buffer);
    return true;
 }
 
@@ -74,10 +28,10 @@ HRESULT PinBinary::SaveToStream(IStream *pstream)
 {
    BiffWriter bw(pstream, 0);
 
-   bw.WriteString(FID(NAME), m_szName);
-   bw.WriteString(FID(PATH), m_szPath);
-   bw.WriteInt(FID(SIZE), m_cdata);
-   bw.WriteStruct(FID(DATA), m_pdata, m_cdata);
+   bw.WriteString(FID(NAME), m_name);
+   bw.WriteString(FID(PATH), m_path);
+   bw.WriteInt(FID(SIZE), static_cast<int>(m_buffer.size()));
+   bw.WriteStruct(FID(DATA), m_buffer.data(), static_cast<int>(m_buffer.size()));
    bw.WriteTag(FID(ENDB));
 
    return S_OK;
@@ -96,16 +50,17 @@ bool PinBinary::LoadToken(const int id, BiffReader * const pbr)
 {
    switch(id)
    {
-   case FID(NAME): pbr->GetString(m_szName); break;
-   case FID(PATH): pbr->GetString(m_szPath); break;
+   case FID(NAME): pbr->GetString(m_name); break;
+   case FID(PATH): pbr->GetString(m_path); break;
    case FID(SIZE):
    {
-      pbr->GetInt(m_cdata);
-      m_pdata = new char[m_cdata];
+      int size;
+      pbr->GetInt(size);
+      m_buffer.resize(size);
       break;
    }
    // Size must come before data, otherwise our structure won't be allocated
-   case FID(DATA): pbr->GetStruct(m_pdata, m_cdata); break;
+   case FID(DATA): pbr->GetStruct(m_buffer.data(), static_cast<int>(m_buffer.size())); break;
    }
    return true;
 }

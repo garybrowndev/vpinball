@@ -1,8 +1,11 @@
 #pragma once
 
+#include <unordered_dense.h>
+
 #include "common.h"
 #include "pole/pole.h"
-#include <unordered_map>
+
+namespace Flex {
 
 class VPXFile final
 {
@@ -23,7 +26,9 @@ private:
       string name;
    };
 
-   std::unordered_map<string, Entry> m_images;
+   ankerl::unordered_dense::map<string, Entry> m_images;
    const string m_path;
    POLE::Storage* m_pStorage;
 };
+
+}

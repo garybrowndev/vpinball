@@ -19,16 +19,6 @@ enum class VPinballStatus {
    Failure
 };
 
-enum class SettingsSection {
-   Standalone = 2,
-   Player = 3,
-   DMD = 4,
-   Alpha = 5,
-   Backglass = 6,
-   TableOverride = 11,
-   TableOption = 12
-};
-
 enum class ScriptErrorType {
    Compile,
    Runtime
@@ -102,7 +92,7 @@ struct TableOptions {
 };
 
 struct CustomTableOption {
-   SettingsSection section;
+   const char* sectionName;
    const char* id;
    const char* name;
    int showMask;
@@ -135,6 +125,8 @@ struct ViewSetup {
 
 class VPinball {
 public:
+   void LoadPlugins();
+   void UnloadPlugins();
    static VPinball& GetInstance() { return s_instance; }
    void SetGameLoop(std::function<void()> gameLoop) { m_gameLoop = gameLoop; }
    static void* SendEvent(Event event, void* data);
@@ -142,12 +134,12 @@ public:
    string GetVersionStringFull();
    void Log(LogLevel level, const string& message);
    void ResetLog();
-   int LoadValueInt(SettingsSection section, const string& key, int defaultValue);
-   float LoadValueFloat(SettingsSection section, const string& key, float defaultValue);
-   string LoadValueString(SettingsSection section, const string& key, const string& defaultValue);
-   void SaveValueInt(SettingsSection section, const string& key, int value);
-   void SaveValueFloat(SettingsSection section, const string& key, float value);
-   void SaveValueString(SettingsSection section, const string& key, const string& value);
+   int LoadValueInt(const string& sectionName, const string& key, int defaultValue);
+   float LoadValueFloat(const string& sectionName, const string& key, float defaultValue);
+   string LoadValueString(const string& sectionName, const string& key, const string& defaultValue);
+   void SaveValueInt(const string& sectionName, const string& key, int value);
+   void SaveValueFloat(const string& sectionName, const string& key, float value);
+   void SaveValueString(const string& sectionName, const string& key, const string& value);
    VPinballStatus Uncompress(const string& source);
    VPinballStatus Compress(const string& source, const string& destination);
    void UpdateWebServer();
@@ -190,6 +182,7 @@ private:
    void ProcessResetViewSetup();
    void Cleanup();
 
+   vector<std::shared_ptr<MsgPlugin>> m_plugins;
    std::queue<std::function<void()>> m_liveUIQueue;
    std::mutex m_liveUIMutex;
    std::function<void*(Event, void*)> m_eventCallback;

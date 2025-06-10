@@ -66,18 +66,10 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
       string imageName;
       bool hr = m_table->m_settings.LoadValue(Settings::Player, "BallImage"s, imageName);
       if (hr)
-      {
-         BaseTexture* const tex = BaseTexture::CreateFromFile(imageName, m_table->m_settings.LoadValueInt(Settings::Player, "MaxTexDimension"s));
-         if (tex != nullptr)
-            m_ballImage = new Texture(tex);
-      }
+         m_ballImage = BaseTexture::CreateFromFile(imageName, m_table->m_settings.LoadValueInt(Settings::Player, "MaxTexDimension"s));
       hr = m_table->m_settings.LoadValue(Settings::Player, "DecalImage"s, imageName);
       if (hr)
-      {
-         BaseTexture* const tex = BaseTexture::CreateFromFile(imageName, m_table->m_settings.LoadValueInt(Settings::Player, "MaxTexDimension"s));
-         if (tex != nullptr)
-            m_decalImage = new Texture(tex);
-      }
+         m_decalImage = BaseTexture::CreateFromFile(imageName, m_table->m_settings.LoadValueInt(Settings::Player, "MaxTexDimension"s));
    }
    m_vrApplyColorKey = m_table->m_settings.LoadValueWithDefault(Settings::PlayerVR, "UsePassthroughColor"s, false);
    m_vrColorKey = convertColor(m_table->m_settings.LoadValueWithDefault(Settings::PlayerVR, "PassthroughColor"s, static_cast<int>(0xFFBB4700)), 1.f);
@@ -161,20 +153,20 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
    else if (m_stereo3D == STEREO_SBS)
    {
       // Side by side fits the 2 views along the output width, so each view is rendered at half the output width
-      m_renderWidth = wnd->GetWidth() / 2;
-      m_renderHeight = wnd->GetHeight();
+      m_renderWidth = wnd->GetPixelWidth() / 2;
+      m_renderHeight = wnd->GetPixelHeight();
    }
    else if (m_stereo3D == STEREO_TB || m_stereo3D == STEREO_INT || m_stereo3D == STEREO_FLIPPED_INT)
    {
       // Top/Bottom (and interlaced) fits the 2 views along the output height, so each view is rendered at half the output height
-      m_renderWidth = wnd->GetWidth();
-      m_renderHeight = wnd->GetHeight() / 2;
+      m_renderWidth = wnd->GetPixelWidth();
+      m_renderHeight = wnd->GetPixelHeight() / 2;
    }
    else
    {
       // Default renders at the output window pixel resolution
-      m_renderWidth = wnd->GetWidth();
-      m_renderHeight = wnd->GetHeight();
+      m_renderWidth = wnd->GetPixelWidth();
+      m_renderHeight = wnd->GetPixelHeight();
    }
    const float AAfactor = m_table->m_settings.LoadValueWithDefault(Settings::Player, "AAFactor"s, m_table->m_settings.LoadValueWithDefault(Settings::Player, "USEAA"s, false) ? 2.0f : 1.0f);
    const int renderWidthAA = (int)((float)m_renderWidth * AAfactor);
@@ -257,37 +249,48 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
       false, 1, "Fatal Error: unable to create bloom buffer!");
    m_pBloomTmpBufferTexture = m_pBloomBufferTexture->Duplicate("BloomBuffer2"s);
 
-   // This used to be a spheremap BMP, upgraded in 10.8 for an equirectangular HDR env map
-   m_pinballEnvTexture.LoadFromFile(g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "BallEnv.exr");
-   m_aoDitherTexture.LoadFromFile(g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "AODither.webp");
-   m_builtinEnvTexture.LoadFromFile(g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "EnvMap.webp");
-   m_envTexture = m_table->GetImage(m_table->m_envImage);
+   std::shared_ptr<BaseTexture> ballTex = std::shared_ptr<BaseTexture>(BaseTexture::CreateFromFile(g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "BallEnv.exr"));
+   m_ballEnvSampler = new Sampler(m_renderDevice, ballTex, false, SA_REPEAT, SA_REPEAT, SF_TRILINEAR);
+   m_ballEnvSampler->SetName("Ball Env");
+   ballTex.reset();
+
+   std::shared_ptr<BaseTexture> aoTex = std::shared_ptr<BaseTexture>(BaseTexture::CreateFromFile(g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "AODither.webp"));
+   m_aoDitherSampler = new Sampler(m_renderDevice, aoTex, true, SA_REPEAT, SA_REPEAT, SF_NONE);
+   m_aoDitherSampler->SetName("AO Dither");
+   aoTex.reset();
+
+   Texture* tableEnv = m_table->GetImage(m_table->m_envImage);
+   std::shared_ptr<BaseTexture> envTex = tableEnv ? tableEnv->GetRawBitmap() : std::shared_ptr<BaseTexture>(BaseTexture::CreateFromFile(g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "EnvMap.webp"));
+   m_envSampler = new Sampler(m_renderDevice, envTex, false, SA_REPEAT, SA_CLAMP, SF_TRILINEAR);
+   m_envSampler->SetName("Table Env");
+
    PLOGI << "Computing environment map radiance"; // For profiling
 
-   #if defined(ENABLE_OPENGL) && !defined(__OPENGLES__) // Compute radiance on the GPU
-   // TODO implement for BGFX
-   Texture* const envTex = m_envTexture ? m_envTexture : &m_builtinEnvTexture;
-   const int envTexHeight = min(envTex->m_pdsBuffer->height(), 256u) / 8;
-   const int envTexWidth = envTexHeight * 2;
-   const colorFormat rad_format = envTex->m_pdsBuffer->m_format == BaseTexture::RGB_FP32 ? colorFormat::RGBA32F : colorFormat::RGBA16F;
-   m_envRadianceTexture = new RenderTarget(m_renderDevice, SurfaceType::RT_DEFAULT, "Irradiance"s, envTexWidth, envTexHeight, rad_format, false, 1, "Failed to create irradiance render target");
-   m_renderDevice->m_FBShader->SetTechnique(SHADER_TECHNIQUE_irradiance);
-   m_renderDevice->m_FBShader->SetTexture(SHADER_tex_env, envTex);
-   m_renderDevice->SetRenderTarget("Env Irradiance PreCalc"s, m_envRadianceTexture);
-   m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
-   m_renderDevice->SubmitRenderFrame(); // Force submission as result users do not explicitly declare the dependency on this pass
-   m_renderDevice->m_basicShader->SetTexture(SHADER_tex_diffuse_env, m_envRadianceTexture->GetColorSampler());
-   m_renderDevice->m_ballShader->SetTexture(SHADER_tex_diffuse_env, m_envRadianceTexture->GetColorSampler());
-
-   #else // DirectX 9 does not support bitwise operation in shader, so radical_inverse is not implemented and therefore we use the slow CPU path instead of GPU
-   const Texture* const envTex = m_envTexture ? m_envTexture : &m_builtinEnvTexture;
-   const unsigned int envTexHeight = min(envTex->m_pdsBuffer->height(), 256u) / 8;
+   const unsigned int envTexHeight = min(envTex->height(), 256u) / 8;
    const unsigned int envTexWidth = envTexHeight * 2;
-   m_envRadianceTexture = EnvmapPrecalc(envTex, envTexWidth, envTexHeight);
-   m_renderDevice->m_texMan.SetDirty(m_envRadianceTexture);
-   m_renderDevice->m_basicShader->SetTexture(SHADER_tex_diffuse_env, m_envRadianceTexture);
-   m_renderDevice->m_ballShader->SetTexture(SHADER_tex_diffuse_env, m_envRadianceTexture);
+   // DirectX 9 does not support bitwise operation in shader, so radical_inverse is not implemented and therefore we use the slow CPU path instead of GPU
+   // OpenGL ES does not support features used in the irradiance shader, so we use the CPU path for it as well
+   // There is a bug when using the Metal shader, so we use the CPU path for it as well
+   #if defined(ENABLE_DX9) || defined(__OPENGLES__) || defined(__APPLE__)
+      m_envRadianceTexture = EnvmapPrecalc(envTex, envTexWidth, envTexHeight);
+      m_renderDevice->m_texMan.SetDirty(m_envRadianceTexture);
+      m_renderDevice->m_basicShader->SetTexture(SHADER_tex_diffuse_env, m_envRadianceTexture);
+      m_renderDevice->m_ballShader->SetTexture(SHADER_tex_diffuse_env, m_envRadianceTexture);
+   #else // Compute radiance on the GPU
+      const colorFormat rad_format = envTex->m_format == BaseTexture::RGB_FP32 ? colorFormat::RGBA32F : colorFormat::RGBA16F;
+      m_envRadianceTexture = new RenderTarget(m_renderDevice, SurfaceType::RT_DEFAULT, "Irradiance"s, envTexWidth, envTexHeight, rad_format, false, 1, "Failed to create irradiance render target");
+      m_renderDevice->ResetRenderState();
+      m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
+      m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
+      m_renderDevice->SetRenderTarget("Env Irradiance PreCalc"s, m_envRadianceTexture);
+      m_renderDevice->m_FBShader->SetTechnique(SHADER_TECHNIQUE_irradiance);
+      m_renderDevice->m_FBShader->SetTexture(SHADER_tex_env, m_envSampler);
+      m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
+      m_renderDevice->SubmitRenderFrame(); // Force submission as result users do not explicitly declare the dependency on this pass
+      m_renderDevice->m_basicShader->SetTexture(SHADER_tex_diffuse_env, m_envRadianceTexture->GetColorSampler());
+      m_renderDevice->m_ballShader->SetTexture(SHADER_tex_diffuse_env, m_envRadianceTexture->GetColorSampler());
    #endif
+   envTex.reset();
    PLOGI << "Environment map radiance computed"; // For profiling
 
    const bool lowDetailBall = (m_table->GetDetailLevel() < 10);
@@ -394,9 +397,9 @@ Renderer::~Renderer()
 {
    delete m_mvp;
    m_gpu_profiler.Shutdown();
-   m_pinballEnvTexture.FreeStuff();
-   m_builtinEnvTexture.FreeStuff();
-   m_aoDitherTexture.FreeStuff();
+   delete m_aoDitherSampler;
+   delete m_envSampler;
+   delete m_ballEnvSampler;
    delete m_ballImage;
    delete m_decalImage;
    delete m_envRadianceTexture;
@@ -509,12 +512,12 @@ void Renderer::SwapAORenderTargets()
    m_pAORenderTarget2 = tmpAO;
 }
 
-BaseTexture* Renderer::EnvmapPrecalc(const Texture* envTex, const unsigned int rad_env_xres, const unsigned int rad_env_yres)
+BaseTexture* Renderer::EnvmapPrecalc(std::shared_ptr<BaseTexture> envTex, const unsigned int rad_env_xres, const unsigned int rad_env_yres)
 {
-   const void* __restrict envmap = envTex->m_pdsBuffer->data();
-   const unsigned int env_xres = envTex->m_pdsBuffer->width();
-   const unsigned int env_yres = envTex->m_pdsBuffer->height();
-   BaseTexture::Format env_format = envTex->m_pdsBuffer->m_format;
+   const void* __restrict envmap = envTex->datac();
+   const unsigned int env_xres = envTex->width();
+   const unsigned int env_yres = envTex->height();
+   BaseTexture::Format env_format = envTex->m_format;
    const BaseTexture::Format rad_format = (env_format == BaseTexture::RGB_FP16 || env_format == BaseTexture::RGB_FP32) ? env_format : BaseTexture::SRGB;
    BaseTexture* radTex = new BaseTexture(rad_env_xres, rad_env_yres, rad_format);
    BYTE* const __restrict rad_envmap = radTex->data();
@@ -601,7 +604,7 @@ BaseTexture* Renderer::EnvmapPrecalc(const Texture* envTex, const unsigned int r
 
       envmap = envmap3;
       env_format = BaseTexture::RGB_FP32;
-      free((void*)envmap2);
+      free(envmap2);
       free(weights);
       free_envmap = true;
    }
@@ -865,7 +868,9 @@ BaseTexture* Renderer::EnvmapPrecalc(const Texture* envTex, const unsigned int r
 
 #ifdef __OPENGLES__
    if (radTex->m_format == BaseTexture::SRGB || radTex->m_format == BaseTexture::RGB_FP16) {
-      radTex->AddAlpha();
+      BaseTexture* tex = radTex->NewWithAlpha();
+      delete radTex;
+      radTex = tex;
    }
 #endif
 
@@ -884,7 +889,7 @@ void Renderer::DrawBackground()
       m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
       m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
       m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
-      g_pplayer->m_renderer->DrawSprite(0.f, 0.f, 1.f, 1.f, 0xFFFFFFFF, m_renderDevice->m_texMan.LoadTexture(pin->m_pdsBuffer, SF_TRILINEAR, SA_CLAMP, SA_CLAMP, false), ptable->m_ImageBackdropNightDay ? sqrtf(m_globalEmissionScale) : 1.0f, true);
+      g_pplayer->m_renderer->DrawSprite(0.f, 0.f, 1.f, 1.f, 0xFFFFFFFF, m_renderDevice->m_texMan.LoadTexture(pin, SF_TRILINEAR, SA_CLAMP, SA_CLAMP, false), ptable->m_ImageBackdropNightDay ? sqrtf(m_globalEmissionScale) : 1.0f, true);
    }
    else
    {
@@ -951,15 +956,13 @@ void Renderer::SetupShaders()
    m_shaderDirty = false;
 
    const vec4 envEmissionScale_TexWidth(m_table->m_envEmissionScale * m_globalEmissionScale,
-      (float) (m_envTexture ? *m_envTexture : m_builtinEnvTexture).m_height /*+m_builtinEnvTexture.m_width)*0.5f*/, 0.f, 0.f); //!! dto.
+      static_cast<float>(m_envSampler->GetHeight()) /*+m_envSampler.m_width)*0.5f*/, 0.f, 0.f); //!! dto.
 
    UpdateBasicShaderMatrix();
-   m_renderDevice->m_basicShader->SetTexture(SHADER_tex_env, m_envTexture ? m_envTexture : &m_builtinEnvTexture);
+   m_renderDevice->m_basicShader->SetTexture(SHADER_tex_env, m_envSampler);
    m_renderDevice->m_basicShader->SetVector(SHADER_fenvEmissionScale_TexWidth, &envEmissionScale_TexWidth);
 
    UpdateBallShaderMatrix();
-   const vec4 st(m_table->m_envEmissionScale * m_globalEmissionScale, m_envTexture ? (float)m_envTexture->m_height/*+m_envTexture->m_width)*0.5f*/ : (float)m_builtinEnvTexture.m_height/*+m_builtinEnvTexture.m_width)*0.5f*/, 0.f, 0.f);
-   m_renderDevice->m_ballShader->SetVector(SHADER_fenvEmissionScale_TexWidth, &st);
    m_renderDevice->m_ballShader->SetVector(SHADER_fenvEmissionScale_TexWidth, &envEmissionScale_TexWidth);
 
    constexpr float Roughness = 0.8f;
@@ -1216,48 +1219,64 @@ void Renderer::RenderFrame()
    if (g_pplayer->GetInfoMode() != IF_STATIC_ONLY)
       RenderDynamics();
 
-   // Apply screenspace transforms (MSAA, AO, AA, stereo, ball motion blur, tonemapping, dithering, bloom,...)
-   PrepareVideoBuffers(m_renderDevice->GetOutputBackBuffer());
-}
-
-static Texture* LoadSegSDF(Texture& tex, const string& path)
-{
-   if (tex.m_pdsBuffer == nullptr)
+   // Resolve MSAA buffer to a normal one (noop if not using MSAA), allowing sampling it for postprocessing
+   if (GetMSAABackBufferTexture() != GetBackBufferTexture())
    {
-      tex.LoadFromFile(path);
-      if (tex.m_pdsBuffer == nullptr)
-         return nullptr;
-      tex.m_pdsBuffer->m_format = BaseTexture::RGBA; // needed as the image is loaded as sRGBA while it contains linear SDF data
-      tex.m_alphaTestValue = (float)(-1.0 / 255.0);
+      RenderPass* const initial_rt = m_renderDevice->GetCurrentPass();
+      m_renderDevice->SetRenderTarget("Resolve MSAA"s, GetBackBufferTexture());
+      m_renderDevice->BlitRenderTarget(GetMSAABackBufferTexture(), GetBackBufferTexture(), true, true);
+      m_renderDevice->SetRenderTarget(initial_rt->m_name, initial_rt->m_rt);
+      initial_rt->m_name += '-';
    }
-   return &tex;
+
+   // Compute bloom (to be applied later)
+   if (IsBloomEnabled())
+   {
+      m_renderDevice->ResetRenderState();
+      m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
+      m_renderDevice->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
+      m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
+      m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
+      Bloom();
+      if (g_pplayer->GetProfilingMode() == PF_ENABLED)
+         m_gpu_profiler.Timestamp(GTS_Bloom);
+      m_renderDevice->SetRenderTarget("Postprocess"s, GetBackBufferTexture(), true, true);
+      m_renderDevice->AddRenderTargetDependency(GetBloomBufferTexture());
+   }
 }
 
-void Renderer::SetupSegmentRenderer(int profile, const bool isBackdrop, const vec3& color, const float brightness, const SegmentFamily family, const SegElementType type, float* segs, const ColorSpace colorSpace, Vertex3D_NoTex2* vertices,
-   const vec4& emitterPad, const vec3& glassTint, const float glassRougness, Texture* const glassTex, const vec4& glassArea, const vec3& glassAmbient)
+static Texture* GetSegSDF(std::unique_ptr<Texture>& tex, const string& path)
+{
+   if (tex == nullptr)
+      tex.reset(Texture::CreateFromFile(path, false));
+   return tex.get();
+}
+
+void Renderer::SetupSegmentRenderer(int profile, const bool isBackdrop, const vec3& color, const float brightness, const SegmentFamily family, const SegElementType type, const float* segs, const ColorSpace colorSpace, Vertex3D_NoTex2* vertices,
+   const vec4& emitterPad, const vec3& glassTint, const float glassRougness, ITexManCacheable* const glassTex, const vec4& glassArea, const vec3& glassAmbient)
 {
    Texture* segSDF = nullptr;
    switch (type)
    {
-   case CTLPI_GETSEG_LAYOUT_7: segSDF = LoadSegSDF(m_segDisplaySDF[family][0], 
-        (family == SegmentFamily::Gottlieb) ? g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "7seg-gts.png"
-      : (family == SegmentFamily::Bally)    ? g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "7seg-bally.png"
-      : (family == SegmentFamily::Atari)    ? g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "7seg-atari.png"
-                                            : g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "7seg-williams.png"); break;
-   case CTLPI_GETSEG_LAYOUT_7C: segSDF = LoadSegSDF(m_segDisplaySDF[family][1],
-        (family == SegmentFamily::Bally)    ? g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "7seg-c-bally.png"
-      : (family == SegmentFamily::Atari)    ? g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "7seg-c-atari.png"
-                                            : g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "7seg-c-williams.png"); break;
+   case CTLPI_SEG_LAYOUT_7: segSDF = GetSegSDF(m_segDisplaySDF[family][0], 
+        (family == SegmentFamily::Gottlieb) ? g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "7seg-gts.png"
+      : (family == SegmentFamily::Bally)    ? g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "7seg-bally.png"
+      : (family == SegmentFamily::Atari)    ? g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "7seg-atari.png"
+                                            : g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "7seg-williams.png"); break;
+   case CTLPI_SEG_LAYOUT_7C: segSDF = GetSegSDF(m_segDisplaySDF[family][1],
+        (family == SegmentFamily::Bally)    ? g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "7seg-c-bally.png"
+      : (family == SegmentFamily::Atari)    ? g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "7seg-c-atari.png"
+                                            : g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "7seg-c-williams.png"); break;
    // TODO I did not found any reference for a dot only 7 segments display, so we use the comma one which is likely wrong
-   case CTLPI_GETSEG_LAYOUT_7D: segSDF = LoadSegSDF(m_segDisplaySDF[family][2], g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "7seg-c-williams.png"); break;
-   case CTLPI_GETSEG_LAYOUT_9: segSDF = LoadSegSDF(m_segDisplaySDF[family][3], g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "9seg-gts.png"); break;
-   case CTLPI_GETSEG_LAYOUT_9C: segSDF = LoadSegSDF(m_segDisplaySDF[family][4], g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "9seg-c-gts.png"); break;
-   case CTLPI_GETSEG_LAYOUT_14: segSDF = LoadSegSDF(m_segDisplaySDF[family][5], g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "14seg-williams.png"); break;
-   case CTLPI_GETSEG_LAYOUT_14D: segSDF = LoadSegSDF(m_segDisplaySDF[family][6], g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "14seg-d-williams.png"); break;
-   case CTLPI_GETSEG_LAYOUT_14DC: segSDF = LoadSegSDF(m_segDisplaySDF[family][7],
-        (family == SegmentFamily::Gottlieb) ? g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "14seg-dc-gts.png"
-                                            : g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "14seg-dc-williams.png"); break;
-   case CTLPI_GETSEG_LAYOUT_16: segSDF = LoadSegSDF(m_segDisplaySDF[family][8], g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "16seg.png"); break;
+   case CTLPI_SEG_LAYOUT_7D: segSDF = GetSegSDF(m_segDisplaySDF[family][2], g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "7seg-c-williams.png"); break;
+   case CTLPI_SEG_LAYOUT_9: segSDF = GetSegSDF(m_segDisplaySDF[family][3], g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "9seg-gts.png"); break;
+   case CTLPI_SEG_LAYOUT_9C: segSDF = GetSegSDF(m_segDisplaySDF[family][4], g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "9seg-c-gts.png"); break;
+   case CTLPI_SEG_LAYOUT_14: segSDF = GetSegSDF(m_segDisplaySDF[family][5], g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "14seg-williams.png"); break;
+   case CTLPI_SEG_LAYOUT_14D: segSDF = GetSegSDF(m_segDisplaySDF[family][6], g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "14seg-d-williams.png"); break;
+   case CTLPI_SEG_LAYOUT_14DC: segSDF = GetSegSDF(m_segDisplaySDF[family][7],
+        (family == SegmentFamily::Gottlieb) ? g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "14seg-dc-gts.png"
+                                            : g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "14seg-dc-williams.png"); break;
+   case CTLPI_SEG_LAYOUT_16: segSDF = GetSegSDF(m_segDisplaySDF[family][8], g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "16seg.png"); break;
    }
    if (segSDF == nullptr)
       return;
@@ -1308,13 +1327,13 @@ void Renderer::SetupSegmentRenderer(int profile, const bool isBackdrop, const ve
    }
    m_renderDevice->m_DMDShader->SetVector(SHADER_glassArea, &glassArea);
    m_renderDevice->m_DMDShader->SetVector(SHADER_glassPad, emitterPad.x - parallaxU, emitterPad.z + parallaxU, emitterPad.y - parallaxV, emitterPad.w + parallaxV);
-   m_renderDevice->m_DMDShader->SetFloat4v(SHADER_alphaSegState, reinterpret_cast<vec4*>(segs), 4);
+   m_renderDevice->m_DMDShader->SetFloat4v(SHADER_alphaSegState, reinterpret_cast<const vec4*>(segs), 4);
    m_renderDevice->m_DMDShader->SetTexture(SHADER_displayTex, segSDF, SF_TRILINEAR, SA_CLAMP, SA_CLAMP, true);
    m_renderDevice->m_DMDShader->SetTechnique(isBackdrop ? SHADER_TECHNIQUE_display_Seg : SHADER_TECHNIQUE_display_Seg_world);
 }
 
 void Renderer::SetupDMDRender(int profile, const bool isBackdrop, const vec3& color, const float brightness, BaseTexture* dmd, const float alpha, const ColorSpace colorSpace, Vertex3D_NoTex2* vertices,
-   const vec4& emitterPad, const vec3& glassTint, const float glassRougness, Texture* const glassTex, const vec4& glassArea, const vec3& glassAmbient)
+   const vec4& emitterPad, const vec3& glassTint, const float glassRougness, ITexManCacheable* const glassTex, const vec4& glassArea, const vec3& glassAmbient)
 {
    // Legacy DMD renderer
    #ifdef ENABLE_BGFX
@@ -1683,7 +1702,7 @@ void Renderer::RenderStaticPrepass()
       m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
 
       m_renderDevice->m_FBShader->SetTexture(SHADER_tex_depth, renderRT->GetDepthSampler());
-      m_renderDevice->m_FBShader->SetTexture(SHADER_tex_ao_dither, &m_aoDitherTexture, SF_NONE, SA_REPEAT, SA_REPEAT, true); // FIXME the force linear RGB is not honored in VR
+      m_renderDevice->m_FBShader->SetTexture(SHADER_tex_ao_dither, m_aoDitherSampler);
       m_renderDevice->m_FBShader->SetVector(SHADER_AO_scale_timeblur, m_table->m_AOScale, 0.1f, 0.f, 0.f);
       m_renderDevice->m_FBShader->SetTechnique(SHADER_TECHNIQUE_AO);
 
@@ -1843,7 +1862,7 @@ void Renderer::SSRefl()
 
    m_renderDevice->m_FBShader->SetTexture(SHADER_tex_fb_filtered, GetBackBufferTexture()->GetColorSampler());
    m_renderDevice->m_FBShader->SetTexture(SHADER_tex_fb_unfiltered, GetBackBufferTexture()->GetColorSampler());
-   m_renderDevice->m_FBShader->SetTexture(SHADER_tex_ao_dither, &m_aoDitherTexture, SF_NONE, SA_REPEAT, SA_REPEAT, true); // FIXME the force linear RGB is not honored in VR
+   m_renderDevice->m_FBShader->SetTexture(SHADER_tex_ao_dither, m_aoDitherSampler);
 
    // FIXME check if size should not be taken from renderdevice to account for VR (double width) or supersampling
    m_renderDevice->m_FBShader->SetVector(SHADER_w_h_height,
@@ -1858,13 +1877,16 @@ void Renderer::SSRefl()
    m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
 }
 
+bool Renderer::IsBloomEnabled() const
+{
+   return !m_bloomOff && (m_table->m_bloom_strength > 0.0f) && (g_pplayer->GetInfoMode() <= IF_DYNAMIC_ONLY);
+}
+
 void Renderer::Bloom()
 {
-   if (m_table->m_bloom_strength <= 0.0f || m_bloomOff || g_pplayer->GetInfoMode() == IF_LIGHT_BUFFER_ONLY)
-      return;
-
-   const double w = (double)GetBackBufferTexture()->GetWidth();
-   const double h = (double)GetBackBufferTexture()->GetHeight();
+   assert(IsBloomEnabled());
+   const double w = static_cast<double>(GetBackBufferTexture()->GetWidth());
+   const double h = static_cast<double>(GetBackBufferTexture()->GetHeight());
    #if !defined(ENABLE_BGFX)
    const
    #endif
@@ -1888,7 +1910,7 @@ void Renderer::Bloom()
       // switch to 'bloom' output buffer to collect clipped framebuffer values
       m_renderDevice->SetRenderTarget("Bloom Cut Off"s, GetBloomBufferTexture(), false);
       m_renderDevice->AddRenderTargetDependency(GetBackBufferTexture());
-
+      
       m_renderDevice->m_FBShader->SetTexture(SHADER_tex_fb_filtered, GetBackBufferTexture()->GetColorSampler());
       m_renderDevice->m_FBShader->SetVector(SHADER_w_h_height, (float) (1.0 / w), (float) (1.0 / h), m_table->m_bloom_strength, 1.0f);
       m_renderDevice->m_FBShader->SetTechnique(SHADER_TECHNIQUE_fb_bloom);
@@ -1942,7 +1964,7 @@ static float pl_hdr_rescale(const bool from, const bool to, float x)
 }
 
 // precompute spline parameters based on all the constants in here and the HDR display range (in nits)
-static void PrecompSplineTonemap(const float displayMaxLum, float out[6])
+void PrecompSplineTonemap(const float displayMaxLum, float out[6])
 {
    const float src_hdr_max = max(1000.f, displayMaxLum); // assumes 1000 nits as scene input max, but adapts to displays with higher nits, as then everything stays perfectly linear //!! use 10000. for max input?
 
@@ -2077,16 +2099,6 @@ void Renderer::PrepareVideoBuffers(RenderTarget* outputBackBuffer)
    //const unsigned int jittertime = (unsigned int)((U64)msec()*90/1000);
    const float jitter = (float)((msec() & 2047) / 1000.0);
 
-   // Resolve MSAA buffer to a normal one (noop if not using MSAA), allowing sampling it for postprocessing
-   if (GetMSAABackBufferTexture() != GetBackBufferTexture())
-   {
-      RenderPass* const initial_rt = m_renderDevice->GetCurrentPass();
-      m_renderDevice->SetRenderTarget("Resolve MSAA"s, GetBackBufferTexture());
-      m_renderDevice->BlitRenderTarget(GetMSAABackBufferTexture(), GetBackBufferTexture(), true, true);
-      m_renderDevice->SetRenderTarget(initial_rt->m_name, initial_rt->m_rt);
-      initial_rt->m_name += '-';
-   }
-
    RenderTarget* renderedRT = GetBackBufferTexture();
    RenderTarget *outputRT = nullptr;
    m_renderDevice->ResetRenderState();
@@ -2097,11 +2109,6 @@ void Renderer::PrepareVideoBuffers(RenderTarget* outputBackBuffer)
 
    // All postprocess that uses depth sample it from the MSAA resolved rendered backbuffer
    m_renderDevice->m_FBShader->SetTexture(SHADER_tex_depth, GetBackBufferTexture()->GetDepthSampler());
-
-   // Compute bloom (to be applied later)
-   Bloom();
-   if (g_pplayer->GetProfilingMode() == PF_ENABLED)
-      m_gpu_profiler.Timestamp(GTS_Bloom);
 
    // Add screen space reflections
    if (ss_refl)
@@ -2128,7 +2135,7 @@ void Renderer::PrepareVideoBuffers(RenderTarget* outputBackBuffer)
       m_renderDevice->AddRenderTargetDependency(GetBackBufferTexture());
       m_renderDevice->m_FBShader->SetTexture(SHADER_tex_fb_filtered, GetAORenderTarget(1)->GetColorSampler());
       //m_renderDevice->m_FBShader->SetTexture(SHADER_Texture1, m_pd3dDevice->GetPostProcessRenderTarget1()); // temporary normals
-      m_renderDevice->m_FBShader->SetTexture(SHADER_tex_ao_dither, &m_aoDitherTexture, SF_NONE, SA_REPEAT, SA_REPEAT, true); // FIXME the force linear RGB is not honored
+      m_renderDevice->m_FBShader->SetTexture(SHADER_tex_ao_dither, m_aoDitherSampler);
       m_renderDevice->m_FBShader->SetVector(SHADER_w_h_height, 
          (float)(1.0 / GetAORenderTarget(1)->GetWidth()),
          (float)(1.0 / GetAORenderTarget(1)->GetHeight()), 
@@ -2230,11 +2237,10 @@ void Renderer::PrepareVideoBuffers(RenderTarget* outputBackBuffer)
          // FIXME ensure that we always honor the linear RGB. Here it can be defeated if texture is used for something else (which is very unlikely)
          m_renderDevice->m_FBShader->SetTexture(SHADER_tex_color_lut, pin, SF_BILINEAR, SA_CLAMP, SA_CLAMP, true);
       m_renderDevice->m_FBShader->SetVector(SHADER_bloom_dither_colorgrade,
-         ((m_table->m_bloom_strength > 0.0f) && !m_bloomOff && (infoMode <= IF_DYNAMIC_ONLY)) ? 1.f : 0.f, /* Bloom */
-         (!isHdr2020 && (outputBackBuffer->GetColorFormat() != colorFormat::RGBA10)) ? 1.f : 0.f, /* Dither */
+         IsBloomEnabled() ? 1.f : 0.f, // Bloom
+         (!isHdr2020 && (outputBackBuffer->GetColorFormat() != colorFormat::RGBA10)) ? 1.f : 0.f, // Dither
          (pin != nullptr) ? 1.f : 0.f, /* LUT colorgrade */
          0.f);
-
       m_renderDevice->m_FBShader->SetVector(SHADER_w_h_height,
          (float)(1.0 / (double)render_w), (float)(1.0 / (double)render_h),
          jitter, // radical_inverse(jittertime) * 11.0f,
@@ -2404,7 +2410,7 @@ void Renderer::PrepareVideoBuffers(RenderTarget* outputBackBuffer)
    // This needs a modification of the shader to use the filtered texture (tex_fb_filtered) instead of unfiltered
    if (false)
    {
-      BaseTexture *tex = new BaseTexture(renderedRT->GetWidth(), renderedRT->GetHeight(), BaseTexture::RGB);
+      std::shared_ptr<BaseTexture> tex = std::make_shared<BaseTexture>(renderedRT->GetWidth(), renderedRT->GetHeight(), BaseTexture::RGB);
       BYTE *const __restrict pdest = tex->data();
       for (size_t i = 0; i < (size_t)renderedRT->GetWidth() * renderedRT->GetHeight(); ++i)
       {
@@ -2423,7 +2429,6 @@ void Renderer::PrepareVideoBuffers(RenderTarget* outputBackBuffer)
       m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
       renderedRT = outputRT;
       delete checker;
-      delete tex;
    }
 
    // Stereo and AA are performed on LDR render buffer after tonemapping (RGB8 or RGB10, but nof RGBF).

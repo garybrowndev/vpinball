@@ -1,6 +1,7 @@
 #include "core/stdafx.h"
 #include "core/vpversion.h"
 #include "core/TableDB.h"
+#include "core/VPXPluginAPIImpl.h"
 
 #include "VPinballLib.h"
 #include "VPXProgress.h"
@@ -8,10 +9,28 @@
 
 #include <SDL3/SDL_main.h>
 #include <SDL3_ttf/SDL_ttf.h>
-
-#include "miniz/miniz.h"
+#include <zip.h>
 
 #include <filesystem>
+
+MSGPI_EXPORT void MSGPIAPI AlphaDMDPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api);
+MSGPI_EXPORT void MSGPIAPI AlphaDMDPluginUnload();
+MSGPI_EXPORT void MSGPIAPI B2SPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api);
+MSGPI_EXPORT void MSGPIAPI B2SPluginUnload();
+MSGPI_EXPORT void MSGPIAPI DMDUtilPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api);
+MSGPI_EXPORT void MSGPIAPI DMDUtilPluginUnload();
+MSGPI_EXPORT void MSGPIAPI FlexDMDPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api);
+MSGPI_EXPORT void MSGPIAPI FlexDMDPluginUnload();
+MSGPI_EXPORT void MSGPIAPI PinMAMEPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api);
+MSGPI_EXPORT void MSGPIAPI PinMAMEPluginUnload();
+MSGPI_EXPORT void MSGPIAPI PUPPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api);
+MSGPI_EXPORT void MSGPIAPI PUPPluginUnload();
+MSGPI_EXPORT void MSGPIAPI RemoteControlPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api);
+MSGPI_EXPORT void MSGPIAPI RemoteControlPluginUnload();
+MSGPI_EXPORT void MSGPIAPI ScoreViewPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api);
+MSGPI_EXPORT void MSGPIAPI ScoreViewPluginUnload();
+MSGPI_EXPORT void MSGPIAPI SerumPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api);
+MSGPI_EXPORT void MSGPIAPI SerumPluginUnload();
 
 namespace VPinballLib {
 
@@ -53,23 +72,74 @@ void VPinball::Init(std::function<void*(Event, void*)> callback)
 
    g_pvp = new ::VPinball();
    g_pvp->SetLogicalNumberOfProcessors(SDL_GetNumLogicalCPUCores());
-   g_pvp->m_settings.LoadFromFile(g_pvp->m_szMyPrefPath + "VPinballX.ini", true);
+   g_pvp->m_settings.LoadFromFile(g_pvp->m_myPrefPath + "VPinballX.ini", true);
+   g_pvp->m_settings.Save();
 
    Logger::GetInstance()->Init();
    Logger::GetInstance()->SetupLogger(true);
 
    PLOGI << "VPX - " << VP_VERSION_STRING_FULL_LITERAL;
    PLOGI << "m_logicalNumberOfProcessors=" << g_pvp->GetLogicalNumberOfProcessors();
-   PLOGI << "m_szMyPath=" << g_pvp->m_szMyPath;
-   PLOGI << "m_szMyPrefPath=" << g_pvp->m_szMyPrefPath;
+   PLOGI << "m_myPath=" << g_pvp->m_myPath;
+   PLOGI << "m_myPrefPath=" << g_pvp->m_myPrefPath;
 
    if (!DirExists(PATH_USER)) {
-      PLOGI << "Creating user path: path=" << PATH_USER;
-      std::filesystem::create_directory(PATH_USER);
+      std::error_code ec;
+      if (std::filesystem::create_directory(PATH_USER, ec)) {
+         PLOGI.printf("User path created: %s", PATH_USER.c_str());
+      }
+      else {
+         PLOGE.printf("Unable to create user path: %s", PATH_USER.c_str());
+      }
    }
 
    m_pWebServer = new WebServer();
    m_eventCallback = callback;
+}
+
+void VPinball::LoadPlugins()
+{
+   static constexpr struct {
+      const char* id;
+      void (*load)(uint32_t, const MsgPluginAPI*);
+      void (*unload)();
+   } plugins[] = {
+      { "AlphaDMD",      &AlphaDMDPluginLoad,      &AlphaDMDPluginUnload      },
+      { "B2S",           &B2SPluginLoad,           &B2SPluginUnload           },
+      { "DMDUtil",       &DMDUtilPluginLoad,       &DMDUtilPluginUnload       },
+      { "FlexDMD",       &FlexDMDPluginLoad,       &FlexDMDPluginUnload       },
+      { "PinMAME",       &PinMAMEPluginLoad,       &PinMAMEPluginUnload       },
+      { "PUP",           &PUPPluginLoad,           &PUPPluginUnload           },
+      { "RemoteControl", &RemoteControlPluginLoad, &RemoteControlPluginUnload },
+      { "ScoreView",     &ScoreViewPluginLoad,     &ScoreViewPluginUnload     },
+      { "Serum",         &SerumPluginLoad,         &SerumPluginUnload         }
+   };
+
+   for (auto& p : plugins) {
+      if (!VPXPluginAPIImpl::GetInstance().getAPI().GetOption(
+             p.id, "Enable",
+             VPX_OPT_SHOW_UI, "Enable plugin",
+             0.f, 1.f, 1.f, 0.f,
+             VPXPluginAPI::NONE,
+             nullptr
+         ))
+         continue;
+
+      auto plugin = MsgPluginManager::GetInstance().RegisterPlugin(
+         p.id, p.id, p.id,
+         "", "", "",
+         p.load, p.unload
+      );
+      plugin->Load(&MsgPluginManager::GetInstance().GetMsgAPI());
+      m_plugins.push_back(plugin);
+   }
+}
+
+void VPinball::UnloadPlugins()
+{
+   for (auto& plugin : m_plugins)
+      plugin->Unload();
+   m_plugins.clear();
 }
 
 string VPinball::GetVersionStringFull()
@@ -118,40 +188,40 @@ void VPinball::ResetLog()
 
    PLOGI << "VPX - " << VP_VERSION_STRING_FULL_LITERAL;
    PLOGI << "m_logicalNumberOfProcessors=" << g_pvp->GetLogicalNumberOfProcessors();
-   PLOGI << "m_szMyPath=" << g_pvp->m_szMyPath;
-   PLOGI << "m_szMyPrefPath=" << g_pvp->m_szMyPrefPath;
+   PLOGI << "m_myPath=" << g_pvp->m_myPath;
+   PLOGI << "m_myPrefPath=" << g_pvp->m_myPrefPath;
 }
 
-int VPinball::LoadValueInt(SettingsSection section, const string& key, int defaultValue)
+int VPinball::LoadValueInt(const string& sectionName, const string& key, int defaultValue)
 {
-   return g_pvp->m_settings.LoadValueWithDefault(static_cast<Settings::Section>(section), key, defaultValue);
+   return g_pvp->m_settings.LoadValueWithDefault(Settings::GetSection(sectionName), key, defaultValue);
 }
 
-float VPinball::LoadValueFloat(SettingsSection section, const string& key, float defaultValue)
+float VPinball::LoadValueFloat(const string& sectionName, const string& key, float defaultValue)
 {
-   return g_pvp->m_settings.LoadValueWithDefault(static_cast<Settings::Section>(section), key, defaultValue);
+   return g_pvp->m_settings.LoadValueWithDefault(Settings::GetSection(sectionName), key, defaultValue);
 }
 
-string VPinball::LoadValueString(SettingsSection section, const string& key, const string& defaultValue)
+string VPinball::LoadValueString(const string& sectionName, const string& key, const string& defaultValue)
 {
-   return g_pvp->m_settings.LoadValueWithDefault(static_cast<Settings::Section>(section), key, defaultValue);
+   return g_pvp->m_settings.LoadValueWithDefault(Settings::GetSection(sectionName), key, defaultValue);
 }
 
-void VPinball::SaveValueInt(SettingsSection section, const string& key, int value)
+void VPinball::SaveValueInt(const string& sectionName, const string& key, int value)
 {
-   g_pvp->m_settings.SaveValue(static_cast<Settings::Section>(section), key, value);
+   g_pvp->m_settings.SaveValue(Settings::GetSection(sectionName), key, value);
    g_pvp->m_settings.Save();
 }
 
-void VPinball::SaveValueFloat(SettingsSection section, const string& key, float value)
+void VPinball::SaveValueFloat(const string& sectionName, const string& key, float value)
 {
-   g_pvp->m_settings.SaveValue(static_cast<Settings::Section>(section), key, value);
+   g_pvp->m_settings.SaveValue(Settings::GetSection(sectionName), key, value);
    g_pvp->m_settings.Save();
 }
 
-void VPinball::SaveValueString(SettingsSection section, const string& key, const string& value)
+void VPinball::SaveValueString(const string& sectionName, const string& key, const string& value)
 {
-   g_pvp->m_settings.SaveValue(static_cast<Settings::Section>(section), key, value);
+   g_pvp->m_settings.SaveValue(Settings::GetSection(sectionName), key, value);
    g_pvp->m_settings.Save();
 }
 
@@ -159,97 +229,89 @@ VPinballStatus VPinball::Uncompress(const string& source)
 {
    PLOGI.printf("Uncompress: pSource=%s", source.c_str());
 
-   mz_zip_archive zip_archive;
-   memset(&zip_archive, 0, sizeof(zip_archive));
-
-   mz_bool status = mz_zip_reader_init_file(&zip_archive, source.c_str(), 0);
-   if (!status)
+   int error = 0;
+   zip_t* zip_archive = zip_open(source.c_str(), ZIP_RDONLY, &error);
+   if (!zip_archive)
       return VPinballStatus::Failure;
 
-   bool success = true;
-   int file_count = static_cast<int>(mz_zip_reader_get_num_files(&zip_archive));
-
-   for (int i = 0; i < file_count && success; i++) {
-      mz_zip_archive_file_stat file_stat;
-      if (!mz_zip_reader_file_stat(&zip_archive, i, &file_stat)) {
-         success = false;
+   zip_int64_t file_count = zip_get_num_entries(zip_archive, 0);
+   for (zip_uint64_t i = 0; i < (zip_uint64_t)file_count; ++i) {
+      zip_stat_t st;
+      if (zip_stat_index(zip_archive, i, ZIP_STAT_NAME, &st) != 0)
          continue;
-      }
 
-      string filename = file_stat.m_filename;
+      string filename = st.name;
       if (filename.starts_with("__MACOSX") || filename.starts_with(".DS_Store"))
          continue;
 
-      string path = std::filesystem::path(source).parent_path().append(filename);
-      if (mz_zip_reader_is_file_a_directory(&zip_archive, i))
-         std::filesystem::create_directories(path);
-      else if (!mz_zip_reader_extract_to_file(&zip_archive, i, path.c_str(), 0)) {
-         success = false;
-         continue;
+      std::filesystem::path out = std::filesystem::path(source).parent_path() / filename;
+      if (filename.back() == '/')
+         std::filesystem::create_directories(out);
+      else {
+         std::filesystem::create_directories(out.parent_path());
+         zip_file_t* zip_file = zip_fopen_index(zip_archive, i, 0);
+         if (!zip_file) {
+            zip_close(zip_archive);
+            return VPinballStatus::Failure;
+         }
+         std::ofstream ofs(out, std::ios::binary);
+         char buf[4096];
+         zip_int64_t len;
+         while ((len = zip_fread(zip_file, buf, sizeof(buf))) > 0)
+            ofs.write(buf, len);
+         zip_fclose(zip_file);
       }
 
-      ProgressData progressData = { (i * 100) / file_count };
+      ProgressData progressData = { int((i * 100) / file_count) };
       SendEvent(Event::ArchiveUncompressing, &progressData);
    }
 
-   mz_zip_reader_end(&zip_archive);
-   return success ? VPinballStatus::Success : VPinballStatus::Failure;
+   zip_close(zip_archive);
+   return VPinballStatus::Success;
 }
 
 VPinballStatus VPinball::Compress(const string& source, const string& destination)
 {
    PLOGI.printf("Compressing: pSource=%s, pDestination=%s", source.c_str(), destination.c_str());
 
-   mz_zip_archive zip_archive;
-   memset(&zip_archive, 0, sizeof(zip_archive));
-
-   mz_bool status = mz_zip_writer_init_file(&zip_archive, destination.c_str(), 0);
-   if (!status)
+   int error = 0;
+   zip_t* zip_archive = zip_open(destination.c_str(), ZIP_CREATE | ZIP_TRUNCATE, &error);
+   if (!zip_archive)
       return VPinballStatus::Failure;
 
-   bool success = true;
-   std::filesystem::path sourcePath(source);
-   auto sourcePathLength = sourcePath.string().length();
+   std::filesystem::path base(source);
+   size_t base_len = base.string().length();
 
-   size_t totalFiles = 0;
-   for (auto& p : std::filesystem::recursive_directory_iterator(source)) {
-      if (!std::filesystem::is_directory(p.path()))
-         totalFiles++;
-   }
+   vector<std::filesystem::path> items;
+   for (auto& item : std::filesystem::recursive_directory_iterator(base))
+      items.push_back(item.path());
 
-   size_t processedFiles = 0;
+   size_t total = items.size();
+   size_t done = 0;
 
-   auto add_to_zip = [this, &zip_archive, &sourcePathLength, &processedFiles, totalFiles](const std::filesystem::path& path) {
-      if (std::filesystem::is_directory(path)) {
-         string dir_in_zip = path.string().substr(sourcePathLength + 1) + '/';
-         if (!mz_zip_writer_add_mem(&zip_archive, dir_in_zip.c_str(), nullptr, 0, MZ_NO_COMPRESSION))
-            return false;
-      }
+   for (auto& item : items) {
+      string rel = item.string().substr(base_len + 1);
+      if (std::filesystem::is_directory(item))
+         zip_dir_add(zip_archive, (rel + '/').c_str(), ZIP_FL_ENC_UTF_8);
       else {
-         std::ifstream input(path, std::ios::binary);
-         vector<char> buffer((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-         string file_in_zip = path.string().substr(sourcePathLength + 1);
-         if (!mz_zip_writer_add_mem(&zip_archive, file_in_zip.c_str(), buffer.data(), buffer.size(), MZ_NO_COMPRESSION))
-            return false;
-         processedFiles++;
-
-         ProgressData progressData = { (int)((processedFiles * 100) / totalFiles) };
-         SendEvent(Event::ArchiveCompressing, &progressData);
+         zip_source_t* zip_source = zip_source_file(zip_archive, item.string().c_str(), 0, 0);
+         if (!zip_source) {
+            zip_close(zip_archive);
+            return VPinballStatus::Failure;
+         }
+         if (zip_file_add(zip_archive, rel.c_str(), zip_source, ZIP_FL_ENC_UTF_8) < 0) {
+            zip_source_free(zip_source);
+            zip_close(zip_archive);
+            return VPinballStatus::Failure;
+         }
       }
-      return true;
-   };
 
-   for (auto& p : std::filesystem::recursive_directory_iterator(source)) {
-      if (!add_to_zip(p.path())) {
-         success = false;
-         break;
-      }
+      ProgressData progressData = { int((++done * 100) / total) };
+      SendEvent(Event::ArchiveCompressing, &progressData);
    }
 
-   mz_zip_writer_finalize_archive(&zip_archive);
-   mz_zip_writer_end(&zip_archive);
-
-   return success ? VPinballStatus::Success : VPinballStatus::Failure;
+   zip_close(zip_archive);
+   return VPinballStatus::Success;
 }
 
 void VPinball::UpdateWebServer()
@@ -263,11 +325,12 @@ void VPinball::UpdateWebServer()
 
 VPinballStatus VPinball::ResetIni()
 {
-   string iniFilePath = g_pvp->m_szMyPrefPath + "VPinballX.ini";
+   string iniFilePath = g_pvp->m_myPrefPath + "VPinballX.ini";
    if (std::remove(iniFilePath.c_str()) != 0)
       return VPinballStatus::Failure;
 
    g_pvp->m_settings.LoadFromFile(iniFilePath, true);
+   g_pvp->m_settings.Save();
    return VPinballStatus::Success;
 }
 
@@ -398,6 +461,7 @@ void VPinball::SaveTableOptions()
    pTable->m_settings.SaveValue(Settings::TableOverride, "Difficulty"s, pLiveTable->m_globalDifficulty);
    pTable->m_settings.SaveValue(Settings::Player, "MusicVolume"s, g_pplayer->m_MusicVolume);
    pTable->m_settings.SaveValue(Settings::Player, "SoundVolume"s, g_pplayer->m_SoundVolume);
+   pTable->m_settings.Save();
 }
 
 int VPinball::GetCustomTableOptionsCount()
@@ -417,7 +481,7 @@ void VPinball::GetCustomTableOption(int index, CustomTableOption& customTableOpt
 
    PinTable* pLiveTable = g_pplayer->m_ptable;
    const Settings::OptionDef& optionDef = pLiveTable->m_settings.GetTableSettings()[index];
-   customTableOption.section = (SettingsSection)optionDef.section;
+   customTableOption.sectionName = Settings::GetSectionName(optionDef.section).c_str();
    customTableOption.id = optionDef.id.c_str();
    customTableOption.name = optionDef.name.c_str();
    customTableOption.showMask = optionDef.showMask;
@@ -469,6 +533,7 @@ void VPinball::SaveCustomTableOptions()
       const Settings::OptionDef& optionDef = pLiveTable->m_settings.GetTableSettings()[index];
       pTable->m_settings.SaveValue(optionDef.section, optionDef.id, pLiveTable->m_settings.LoadValueWithDefault(optionDef.section, optionDef.name, optionDef.defaultValue));
    }
+   pTable->m_settings.Save();
 }
 
 void VPinball::GetViewSetup(ViewSetup& viewSetup)
@@ -545,6 +610,7 @@ void VPinball::SaveViewSetup()
       pTable->m_settings.SaveValue(Settings::Player, "ScreenPlayerY", pLiveTable->m_settings.LoadValueWithDefault(Settings::Player, "ScreenPlayerY"s, 0.0f), true);
       pTable->m_settings.SaveValue(Settings::Player, "ScreenPlayerZ", pLiveTable->m_settings.LoadValueWithDefault(Settings::Player, "ScreenPlayerZ"s, 70.0f), true);
    }
+    pTable->m_settings.Save();
 }
 
 void VPinball::CaptureScreenshot(const string& filename)
@@ -638,8 +704,9 @@ void VPinball::ProcessSetCustomTableOption(const CustomTableOption& customTableO
       return;
 
    PinTable* pLiveTable = g_pplayer->m_ptable;
-   pLiveTable->m_settings.SaveValue((Settings::Section)customTableOption.section, customTableOption.id, customTableOption.value);
-   if (customTableOption.section == SettingsSection::TableOption)
+   Settings::Section section = Settings::GetSection(customTableOption.sectionName);
+   pLiveTable->m_settings.SaveValue(section, customTableOption.id, customTableOption.value);
+   if (section == Settings::Section::TableOption)
       pLiveTable->FireOptionEvent(1);
 }
 
@@ -830,7 +897,8 @@ void VPinball::Cleanup()
 
    delete g_pvp;
    g_pvp = new ::VPinball();
-   g_pvp->m_settings.LoadFromFile(g_pvp->m_szMyPrefPath + "VPinballX.ini", true);
+   g_pvp->m_settings.LoadFromFile(g_pvp->m_myPrefPath + "VPinballX.ini", true);
+   g_pvp->m_settings.Save();
    g_pvp->SetLogicalNumberOfProcessors(SDL_GetNumLogicalCPUCores());
    
    {

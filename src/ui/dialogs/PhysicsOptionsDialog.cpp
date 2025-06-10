@@ -81,7 +81,7 @@ BOOL PhysicsOptionsDialog::OnInitDialog()
     const float TablePhysicsMaxSlope = g_pvp->m_settings.LoadValueWithDefault(Settings::Player, "TablePhysicsMaxSlope" + std::to_string(physicsselection), DEFAULT_TABLE_MAX_SLOPE);
     SetItemText(1104, TablePhysicsMaxSlope);
 
-    SetDlgItemText(1110, (char*)physicsoptions[physicsselection].c_str());
+    SetDlgItemText(1110, physicsoptions[physicsselection].c_str());
 
     return TRUE;
 }
@@ -185,8 +185,8 @@ BOOL PhysicsOptionsDialog::OnCommand(WPARAM wParam, LPARAM lParam)
             /*CComObject<PinTable>* const pt = g_pvp->GetActiveTable();
             if (pt)
             {
-               strncpy_s(szFileName, pt->m_szFileName.c_str(), sizeof(szFileName)-1);
-               const size_t idx = pt->m_szFileName.find_last_of('.');
+               strncpy_s(szFileName, pt->m_filename.c_str(), sizeof(szFileName)-1);
+               const size_t idx = pt->m_filename.find_last_of('.');
                if (idx != string::npos && idx < MAXSTRING)
                   szFileName[idx] = '\0';
             }

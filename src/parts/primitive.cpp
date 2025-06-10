@@ -659,33 +659,29 @@ void Primitive::UIRenderPass2(Sur * const psur)
    if (m_d.m_displayTexture)
    {
       Texture * const ppi = m_ptable->GetImage(m_d.m_szImage);
-      if (ppi)
+      if (ppi && ppi->GetGDIBitmap())
       {
-         ppi->CreateGDIVersion();
-         if (ppi->m_hbmGDIVersion)
+         vector<RenderVertex> vvertex;
+         vvertex.reserve(m_mesh.NumIndices());
+         for (size_t i = 0; i < m_mesh.NumIndices(); i += 3)
          {
-            vector<RenderVertex> vvertex;
-            vvertex.reserve(m_mesh.NumIndices());
-            for (size_t i = 0; i < m_mesh.NumIndices(); i += 3)
-            {
-               const Vertex3Ds * const A = &m_vertices[m_mesh.m_indices[i]];
-               const Vertex3Ds * const B = &m_vertices[m_mesh.m_indices[i + 1]];
-               const Vertex3Ds * const C = &m_vertices[m_mesh.m_indices[i + 2]];
-               RenderVertex rvA;
-               RenderVertex rvB;
-               RenderVertex rvC;
-               rvA.x = A->x;
-               rvA.y = A->y;
-               rvB.x = B->x;
-               rvB.y = B->y;
-               rvC.x = C->x;
-               rvC.y = C->y;
-               vvertex.push_back(rvC);
-               vvertex.push_back(rvB);
-               vvertex.push_back(rvA);
-            }
-            psur->PolygonImage(vvertex, ppi->m_hbmGDIVersion, m_ptable->m_left, m_ptable->m_top, m_ptable->m_right, m_ptable->m_bottom, ppi->m_width, ppi->m_height);
+            const Vertex3Ds * const A = &m_vertices[m_mesh.m_indices[i]];
+            const Vertex3Ds * const B = &m_vertices[m_mesh.m_indices[i + 1]];
+            const Vertex3Ds * const C = &m_vertices[m_mesh.m_indices[i + 2]];
+            RenderVertex rvA;
+            RenderVertex rvB;
+            RenderVertex rvC;
+            rvA.x = A->x;
+            rvA.y = A->y;
+            rvB.x = B->x;
+            rvB.y = B->y;
+            rvC.x = C->x;
+            rvC.y = C->y;
+            vvertex.push_back(rvC);
+            vvertex.push_back(rvB);
+            vvertex.push_back(rvA);
          }
+         psur->PolygonImage(vvertex, ppi->GetGDIBitmap(), m_ptable->m_left, m_ptable->m_top, m_ptable->m_right, m_ptable->m_bottom, ppi->m_width, ppi->m_height);
       }
    }
 }
@@ -1274,27 +1270,20 @@ void Primitive::Render(const unsigned int renderMask)
 
    // Select textures, replacing backglass image by capture if it is available
    Texture * const nMap = m_ptable->GetImage(m_d.m_szNormalMap);
-   BaseTexture *pin = nullptr;
-   float pinAlphaTest = -1.f;
+   ITexManCacheable *pin = nullptr;
+   float pinAlphaTest;
    if (g_pplayer->m_texPUP && m_isBackGlassImage)
    {
       pin = g_pplayer->m_texPUP;
-      m_rd->m_basicShader->SetAlphaTestValue(0.f);
+      pinAlphaTest = 0.f;
    }
    else
    {
       Texture * const img = m_ptable->GetImage(m_d.m_szImage);
-      if (img != nullptr)
-      {
-         pin = img->m_pdsBuffer;
-         pinAlphaTest = img->m_alphaTestValue;
-         m_rd->m_basicShader->SetAlphaTestValue(img->m_alphaTestValue);
-      }
-      else
-      {
-         pin = nullptr;
-      }
+      pin = img;
+      pinAlphaTest = img != nullptr ? img->m_alphaTestValue : -1.f;
    }
+   m_rd->m_basicShader->SetAlphaTestValue(pinAlphaTest);
 
    // accommodate models with UV coords outside of [0,1] by using Repeat address mode
    if (pin && nMap)
@@ -1680,7 +1669,7 @@ bool Primitive::LoadToken(const int id, BiffReader * const pbr)
 {
    switch(id)
    {
-   case FID(PIID): pbr->GetInt((int *)pbr->m_pdata); break;
+   case FID(PIID): pbr->GetInt(pbr->m_pdata); break;
    case FID(VPOS): pbr->GetVector3Padded(m_d.m_vPosition); break;
    case FID(VSIZ): pbr->GetVector3Padded(m_d.m_vSize); break;
    case FID(RTV0): pbr->GetFloat(m_d.m_aRotAndTra[0]); break;
@@ -1949,7 +1938,7 @@ INT_PTR CALLBACK Primitive::ObjImportProc(HWND hwndDlg, UINT uMsg, WPARAM wParam
                      if (pActiveTable)
                          pActiveTable->AddMaterial(mat);
 
-                     prim->m_d.m_szMaterial = mat->m_szName;
+                     prim->m_d.m_szMaterial = mat->m_name;
                   }
                }
                else

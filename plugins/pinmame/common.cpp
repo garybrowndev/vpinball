@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <filesystem>
 
+namespace PinMAME {
+   
 static inline char cLower(char c)
 {
    if (c >= 'A' && c <= 'Z')
@@ -36,40 +38,54 @@ string normalize_path_separators(const string& szPath)
 
 string find_case_insensitive_directory_path(const string& szPath)
 {
-   string path = normalize_path_separators(szPath);
-   std::filesystem::path p = std::filesystem::path(path).lexically_normal();
-   std::error_code ec;
+   auto fn = [&](auto& self, const string& s) -> string {
+      string path = normalize_path_separators(s);
+      std::filesystem::path p = std::filesystem::path(path).lexically_normal();
+      std::error_code ec;
 
-   if (std::filesystem::exists(p, ec) && std::filesystem::is_directory(p, ec)) {
+      if (std::filesystem::exists(p, ec) && std::filesystem::is_directory(p, ec)) {
+         string exact = p.string();
+         if (!exact.empty() && exact.back() != PATH_SEPARATOR_CHAR)
+            exact.push_back(PATH_SEPARATOR_CHAR);
+         return exact;
+      }
+
+      auto parent = p.parent_path();
+      string base;
+      if (parent.empty() || parent == p) {
+         base = ".";
+      } else {
+         base = self(self, parent.string());
+         if (base.empty())
+            return string();
+      }
+
+      for (auto& ent : std::filesystem::directory_iterator(base, ec)) {
+         if (ec || !ent.is_directory(ec))
+            continue;
+         if (StrCompareNoCase(ent.path().filename().string(), p.filename().string())) {
+            string found = ent.path().string();
+            if (!found.empty() && found.back() != PATH_SEPARATOR_CHAR)
+               found.push_back(PATH_SEPARATOR_CHAR);
+            if (found != path) {
+               LOGI("case insensitive directory match: requested \"%s\", actual \"%s\"", path.c_str(), found.c_str());
+            }
+            return found;
+         }
+      }
+
+      return string();
+   };
+
+   string result = fn(fn, szPath);
+   if (!result.empty()) {
+      std::filesystem::path p = std::filesystem::absolute(result);
       string exact = p.string();
       if (!exact.empty() && exact.back() != PATH_SEPARATOR_CHAR)
          exact.push_back(PATH_SEPARATOR_CHAR);
       return exact;
    }
-
-   auto parent = p.parent_path();
-   string base;
-   if (parent.empty() || parent == p)
-      base = '.';
-   else {
-      base = find_case_insensitive_directory_path(parent.string());
-      if (base.empty())
-         return string();
-   }
-
-   for (auto& ent : std::filesystem::directory_iterator(base, ec)) {
-      if (ec || !ent.is_directory(ec))
-         continue;
-      if (StrCompareNoCase(ent.path().filename().string(), p.filename().string())) {
-         string found = ent.path().string();
-         if (!found.empty() && found.back() != PATH_SEPARATOR_CHAR)
-            found.push_back(PATH_SEPARATOR_CHAR);
-         if (found != path) {
-            LOGI("case insensitive directory match: requested \"%s\", actual \"%s\"", path.c_str(), found.c_str());
-         }
-         return found;
-      }
-   }
-
    return string();
+}
+
 }

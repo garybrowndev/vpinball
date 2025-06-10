@@ -2,7 +2,7 @@
 
 #include "B2SPictureBox.h"
 
-B2SPictureBox::B2SPictureBox() : B2SBaseBox()
+B2SPictureBox::B2SPictureBox(B2SData* pB2SData) : B2SBaseBox(pB2SData)
 {
    m_pictureBoxType = ePictureBoxType_StandardImage;
    m_szGroupName.clear();
@@ -16,4 +16,10 @@ B2SPictureBox::B2SPictureBox() : B2SBaseBox()
    m_pOffImage = NULL;
 
    SetVisible(false);
+}
+
+B2SPictureBox::~B2SPictureBox()
+{
+   if (m_pOffImage)
+      SDL_DestroySurface(m_pOffImage);
 }

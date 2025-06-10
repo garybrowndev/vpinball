@@ -26,6 +26,8 @@
 #endif
 
 #elif defined(ENABLE_OPENGL)
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <windows.h>
 #include <iostream>
 #include <fstream>
@@ -718,7 +720,7 @@ void Shader::SetTextureNull(const ShaderUniforms uniformName)
    SetTexture(uniformName, m_renderDevice->m_nullTexture);
 }
 
-void Shader::SetTexture(const ShaderUniforms uniformName, BaseTexture* const texel, const SamplerFilter filter, const SamplerAddressMode clampU, const SamplerAddressMode clampV, const bool force_linear_rgb)
+void Shader::SetTexture(const ShaderUniforms uniformName, ITexManCacheable* const texel, const SamplerFilter filter, const SamplerAddressMode clampU, const SamplerAddressMode clampV, const bool force_linear_rgb)
 {
    SetTexture(uniformName, texel ? m_renderDevice->m_texMan.LoadTexture(texel, filter, clampU, clampV, force_linear_rgb) : m_renderDevice->m_nullTexture);
 }
@@ -934,10 +936,10 @@ void Shader::SetBasic(const Material * const mat, Texture * const pin)
 {
    if (pin)
    {
-      SetTechniqueMaterial(SHADER_TECHNIQUE_basic_with_texture, *mat, pin->m_alphaTestValue >= 0.f && !pin->m_pdsBuffer->IsOpaque());
+      SetTechniqueMaterial(SHADER_TECHNIQUE_basic_with_texture, *mat, pin->m_alphaTestValue >= 0.f && !pin->IsOpaque());
       SetTexture(SHADER_tex_base_color, pin); //, SF_TRILINEAR, SA_REPEAT, SA_REPEAT);
       SetAlphaTestValue(pin->m_alphaTestValue);
-      SetMaterial(mat, !pin->m_pdsBuffer->IsOpaque());
+      SetMaterial(mat, !pin->IsOpaque());
    }
    else
    {
@@ -1730,19 +1732,19 @@ bool Shader::UseGeometryShader() const
 }
 
 //parse a file. Is called recursively for includes
-bool Shader::parseFile(const string& fileNameRoot, const string& fileName, int level, ankerl::unordered_dense::map<string, string> &values, const string& parentMode) {
+bool Shader::parseFile(const string& fileNameRoot, const string& filename, int level, ankerl::unordered_dense::map<string, string> &values, const string& parentMode) {
    if (level > 16) {//Can be increased, but looks very much like an infinite recursion.
-      PLOGE << "Reached more than 16 includes while trying to include " << fileName << " Aborting...";
+      PLOGE << "Reached more than 16 includes while trying to include " << filename << " Aborting...";
       return false;
    }
    if (level > 8) {
-      PLOGW << "Reached include level " << level << " while trying to include " << fileName << " Check for recursion and try to avoid includes with includes.";
+      PLOGW << "Reached include level " << level << " while trying to include " << filename << " Check for recursion and try to avoid includes with includes.";
    }
    string currentMode = parentMode;
    ankerl::unordered_dense::map<string, string>::iterator currentElemIt = values.find(parentMode);
    string currentElement = (currentElemIt != values.end()) ? currentElemIt->second : string();
    std::ifstream glfxFile;
-   glfxFile.open(m_shaderPath + fileName, std::ifstream::in);
+   glfxFile.open(m_shaderPath + filename, std::ifstream::in);
    if (glfxFile.is_open())
    {
       string line;
@@ -1771,7 +1773,7 @@ bool Shader::parseFile(const string& fileNameRoot, const string& fileName, int l
             const size_t end = line.find('"', start + 1);
             values[currentMode] = currentElement;
             if ((start == string::npos) || (end == string::npos) || (end <= start) || !parseFile(fileNameRoot, line.substr(start + 1, end - start - 1), level + 1, values, currentMode)) {
-               PLOGE << fileName << '(' << linenumber << "):" << line << " failed.";
+               PLOGE << filename << '(' << linenumber << "):" << line << " failed.";
             }
             currentElement = values[currentMode];
          }
@@ -1783,7 +1785,7 @@ bool Shader::parseFile(const string& fileNameRoot, const string& fileName, int l
       glfxFile.close();
    }
    else {
-      PLOGE << fileName << " not found.";
+      PLOGE << filename << " not found.";
       return false;
    }
    return true;
@@ -2151,7 +2153,7 @@ void Shader::Load()
 void Shader::Load(const std::string& name)
 {
    m_shaderCodeName = name;
-   m_shaderPath = g_pvp->m_szMyPath
+   m_shaderPath = g_pvp->m_myPath
       + ("shaders-" + std::to_string(VP_VERSION_MAJOR) + '.' + std::to_string(VP_VERSION_MINOR) + '.' + std::to_string(VP_VERSION_REV) + PATH_SEPARATOR_CHAR);
    PLOGI << "Parsing file " << name;
    ankerl::unordered_dense::map<string, string> values;

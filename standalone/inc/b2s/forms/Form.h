@@ -2,16 +2,17 @@
 
 #include "../controls/Control.h"
 #include "../../common/RendererGraphics.h"
-#include "../../common/Window.h"
 
+class B2SData;
 class FormWindow;
 
 class Form : public Control
 {
 public:
-   Form();
+   Form(B2SData* pB2SData);
    ~Form();
 
+   void SetWindow(FormWindow* pWindow) { m_pWindow = pWindow; }
    void Show();
    void Hide();
    void SetTopMost(bool topMost) { m_topMost = topMost; }
@@ -20,9 +21,10 @@ public:
    bool Render();
 
 protected:
-   FormWindow* m_pWindow;
+   B2SData* m_pB2SData = nullptr;
 
 private:
-   bool m_topMost;
-   VP::RendererGraphics* m_pGraphics;
+   FormWindow* m_pWindow = nullptr;
+   bool m_topMost = false;
+   VP::RendererGraphics* m_pGraphics = nullptr;
 };

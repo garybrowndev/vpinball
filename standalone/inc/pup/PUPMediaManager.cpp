@@ -6,16 +6,23 @@
 PUPMediaManager::PUPMediaManager(PUPScreen* pScreen)
 {
    m_pMainPlayer = &m_player1;
-   m_pBackgroundPlayer = nullptr;
    m_pScreen = pScreen;
    m_pop = (pScreen->GetMode() == PUP_SCREEN_MODE_FORCE_POP_BACK || pScreen->GetMode() == PUP_SCREEN_MODE_FORCE_POP);
 }
 
-void PUPMediaManager::Play(PUPPlaylist* pPlaylist, const string& szPlayFile, float volume, int priority, bool skipSamePriority)
+void PUPMediaManager::SetVpxApi(VPXPluginAPI* pVpxApi)
+{
+   m_pVpxApi = pVpxApi;
+
+   m_player1.player.SetVpxApi(m_pVpxApi);
+   m_player2.player.SetVpxApi(m_pVpxApi);
+}
+
+void PUPMediaManager::Play(PUPPlaylist* pPlaylist, const string& szPlayFile, float volume, int priority, bool skipSamePriority, int length)
 {
    if (skipSamePriority && priority == m_pMainPlayer->priority) {
-      PLOGW.printf("skipping same priority, screen={%s}, playlist={%s}, playFile=%s, priority=%d",
-         m_pScreen->ToString(false).c_str(), pPlaylist->ToString().c_str(), szPlayFile.c_str(), priority);
+      PLOGW.printf("skipping same priority, screen={%s}, playlist={%s}, playFile=%s, priority=%d, length=%d",
+         m_pScreen->ToString(false).c_str(), pPlaylist->ToString().c_str(), szPlayFile.c_str(), priority, length);
       return;
    }
 
@@ -26,20 +33,15 @@ void PUPMediaManager::Play(PUPPlaylist* pPlaylist, const string& szPlayFile, flo
       return;
    }
 
-   PLOGD.printf("screen={%s}, playlist={%s}, playFile=%s, path=%s, volume=%.1f, priority=%d",
-      m_pScreen->ToString(false).c_str(), pPlaylist->ToString().c_str(), szPlayFile.c_str(), szPath.c_str(), volume, priority);
+   PLOGD.printf("screen={%s}, playlist={%s}, playFile=%s, path=%s, volume=%.1f, priority=%d, length=%d",
+      m_pScreen->ToString(false).c_str(), pPlaylist->ToString().c_str(), szPlayFile.c_str(), szPath.c_str(), volume, priority, length);
 
    m_pMainPlayer->player.Play(szPath);
    m_pMainPlayer->player.SetVolume(volume);
+   m_pMainPlayer->player.SetLength(length);
    m_pMainPlayer->szPath = szPath;
    m_pMainPlayer->volume = volume;
    m_pMainPlayer->priority = priority;
-}
-
-void PUPMediaManager::SetRenderer(SDL_Renderer* pRenderer)
-{
-   m_player1.player.SetRenderer(pRenderer);
-   m_player2.player.SetRenderer(pRenderer);
 }
 
 void PUPMediaManager::SetBG(bool isBackground)
@@ -95,7 +97,7 @@ void PUPMediaManager::Stop(PUPPlaylist* pPlaylist, const string& szPlayFile)
    }
 }
 
-void PUPMediaManager::Render(const SDL_Rect& destRect)
+void PUPMediaManager::Render(VPXRenderContext2D* const ctx, const SDL_Rect& destRect)
 {
    bool mainPlayerPlaying = m_pMainPlayer->player.IsPlaying();
    bool backgroundPlaying = false;
@@ -103,11 +105,11 @@ void PUPMediaManager::Render(const SDL_Rect& destRect)
    if (m_pBackgroundPlayer) {
       backgroundPlaying = m_pBackgroundPlayer->player.IsPlaying();
       if (backgroundPlaying || (!m_pop && !mainPlayerPlaying))
-          m_pBackgroundPlayer->player.Render(destRect);
+          m_pBackgroundPlayer->player.Render(ctx, destRect);
    }
 
    if (mainPlayerPlaying || (!m_pop && !backgroundPlaying)) {
-      m_pMainPlayer->player.Render(destRect);
+      m_pMainPlayer->player.Render(ctx, destRect);
    }
 
    if (m_pBackgroundPlayer)

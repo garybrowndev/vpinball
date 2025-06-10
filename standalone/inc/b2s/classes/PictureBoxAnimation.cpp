@@ -12,6 +12,7 @@
 #include "B2SAnimation.h"
 
 PictureBoxAnimation::PictureBoxAnimation(
+   B2SData* pB2SData,
    Form* pForm,
    Form* pFormDMD,
    const string& szName,
@@ -27,7 +28,7 @@ PictureBoxAnimation::PictureBoxAnimation(
    bool bringToFront,
    bool randomStart,
    int randomQuality,
-   const vector<PictureBoxAnimationEntry*>& entries) : B2SAnimationBase(dualMode, interval, eType_ImageCollectionAtForm, loops, false,
+   const vector<PictureBoxAnimationEntry*>& entries) : B2SAnimationBase(pB2SData, dualMode, interval, eType_ImageCollectionAtForm, loops, false,
       startTimerAtVPActivate, lightsStateAtAnimationStart, lightsStateAtAnimationEnd, animationStopBehaviour,
       lockInvolvedLamps, hideScoreDisplays, bringToFront, randomStart, randomQuality)
 {
@@ -80,6 +81,8 @@ PictureBoxAnimation::PictureBoxAnimation(
             m_lightsInvolved.push_back(bulb);
       }
    }
+
+   m_selectedLEDType = eLEDTypes_Undefined;
 }
 
 PictureBoxAnimation::~PictureBoxAnimation() {
@@ -92,13 +95,12 @@ void PictureBoxAnimation::Start()
    SetWouldBeStarted(true);
    SetStopMeLater(false);
 
-   B2SSettings* pB2SSettings = B2SSettings::GetInstance();
+   B2SData* pB2SData = GetB2SData();
+   B2SSettings* pB2SSettings = pB2SData->GetB2SSettings();
 
    // maybe get out here because animation is not allowed to start
    if (pB2SSettings->GetAllAnimationSlowDown() == 0 || GetSlowDown() == 0)
       return;
-
-   B2SData* pB2SData = B2SData::GetInstance();
 
    // maybe get out here because of not matching dual mode
    if (pB2SData->IsDualBackglass()) {
@@ -152,12 +154,12 @@ void PictureBoxAnimation::Start()
 
    // maybe hide score displays
    if (IsHideScoreDisplays()) {
-      eLEDTypes selectedLEDType = GetLEDType();
-      if (selectedLEDType == eLEDTypes_Dream7) {
+      m_selectedLEDType = GetLEDType();
+      if (m_selectedLEDType == eLEDTypes_Dream7) {
          for (auto& [key, pLedDisplay] : *pB2SData->GetLEDDisplays())
             pLedDisplay->SetVisible(false);
       }
-      else if (selectedLEDType == eLEDTypes_Rendered) {
+      else if (m_selectedLEDType == eLEDTypes_Rendered) {
          for (auto& [key, pLED] : *pB2SData->GetLEDs())
             pLED->SetVisible(false);
       }
@@ -190,16 +192,15 @@ void PictureBoxAnimation::Stop()
    GetRunningAnimations()->Remove(GetName());
    VP::Timer::Stop();
 
-   B2SData* pB2SData = B2SData::GetInstance();
+   B2SData* pB2SData = GetB2SData();
 
    // maybe show score displays
    if (IsHideScoreDisplays()) {
-      eLEDTypes selectedLEDType = GetLEDType();
-      if (selectedLEDType == eLEDTypes_Dream7) {
+      if (m_selectedLEDType == eLEDTypes_Dream7) {
          for (auto& [key, pLedDisplay] : *pB2SData->GetLEDDisplays())
             pLedDisplay->SetVisible(true);
       }
-      else if (selectedLEDType == eLEDTypes_Rendered) {
+      else if (m_selectedLEDType == eLEDTypes_Rendered) {
          for (auto& [key, pLED] : *pB2SData->GetLEDs())
             pLED->SetVisible(true);
       }
@@ -243,7 +244,7 @@ void PictureBoxAnimation::PictureBoxAnimationTick(VP::Timer* pTimer)
    if (!GetRunningAnimations()->Contains(GetName()))
       return;
 
-   B2SSettings* pB2SSettings = B2SSettings::GetInstance();
+   B2SSettings* pB2SSettings = GetB2SData()->GetB2SSettings();
 
    // show animation stuff
    if (!m_entries.empty()) {
@@ -306,7 +307,7 @@ void PictureBoxAnimation::PictureBoxAnimationTick(VP::Timer* pTimer)
 
 void PictureBoxAnimation::LightGroup(const string& szGroupName, bool visible)
 {
-   B2SData* pB2SData = B2SData::GetInstance();
+   B2SData* pB2SData = GetB2SData();
 
    // only do the lightning stuff if the group has a name
    if (!szGroupName.empty() && pB2SData->GetIlluminationGroups()->contains(szGroupName)) {
@@ -338,7 +339,7 @@ void PictureBoxAnimation::LightBulb(const string& szBulb, bool visible)
 
 eLEDTypes PictureBoxAnimation::GetLEDType()
 {
-   B2SData* pB2SData = B2SData::GetInstance();
+   B2SData* pB2SData = GetB2SData();
 
    eLEDTypes ret = eLEDTypes_Undefined;
    if (pB2SData->GetLEDDisplays()->size() > 0) {

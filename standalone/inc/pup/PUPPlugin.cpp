@@ -5,6 +5,8 @@
 
 #include "DMDUtil/Config.h"
 
+#include "standalone/Standalone.h"
+
 void OnPUPCaptureTrigger(uint16_t id, void* pUserData)
 {
    PUPPlugin* pPlugin = (PUPPlugin*)pUserData;
@@ -13,16 +15,16 @@ void OnPUPCaptureTrigger(uint16_t id, void* pUserData)
 
 PUPPlugin::PUPPlugin() : Plugin()
 {
-   m_pManager = PUPManager::GetInstance();
+   m_pManager = Standalone::GetInstance()->GetPUPManager();
 }
 
 PUPPlugin::~PUPPlugin()
 {
 }
 
-const std::string& PUPPlugin::GetName() const
+const string& PUPPlugin::GetName() const
 {
-   static const std::string name = "PinUpPlugin"s;
+   static const string name = "PinUpPlugin"s;
    return name;
 }
 

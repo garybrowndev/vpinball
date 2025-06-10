@@ -1,6 +1,8 @@
 #include "ImageSequence.h"
 #include <sstream>
 
+namespace Flex {
+
 ImageSequence::ImageSequence(FlexDMD* pFlexDMD, const string& name) : AnimatedActor(pFlexDMD, name)
 {
 }
@@ -26,7 +28,7 @@ ImageSequence* ImageSequence::Create(FlexDMD* pFlexDMD, AssetManager* pAssetMana
    pImageSequence->SetLoop(loop);
    pImageSequence->m_frames = frames;
    pImageSequence->m_frame = 0;
-   pImageSequence->SetFrameDuration(1.0f / fps);
+   pImageSequence->SetFrameDuration((float)(1.0 / fps));
    pImageSequence->Pack();
 
    return pImageSequence;
@@ -60,7 +62,7 @@ void ImageSequence::ReadNextFrame()
     }
 }
 
-void ImageSequence::Draw(VP::SurfaceGraphics* pGraphics)
+void ImageSequence::Draw(Flex::SurfaceGraphics* pGraphics)
 {
    AnimatedActor::Draw(pGraphics);
    if (GetVisible()) {
@@ -69,4 +71,6 @@ void ImageSequence::Draw(VP::SurfaceGraphics* pGraphics)
       m_frames[m_frame]->SetBounds(GetX(), GetY(), GetWidth(), GetHeight());
       m_frames[m_frame]->Draw(pGraphics);
    }
+}
+
 }

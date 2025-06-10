@@ -37,7 +37,7 @@ public:
       , m_loadPlugin(nullptr)
       , m_unloadPlugin(nullptr) { }
    MsgPlugin(const std::string& id, const std::string& name, const std::string& description, const std::string& author, const std::string& version, const std::string& link,
-      const msgpi_load_plugin& loadPlugin, const msgpi_unload_plugin& unloadPlugin, const unsigned int endpointId)
+      msgpi_load_plugin loadPlugin, msgpi_unload_plugin unloadPlugin, const unsigned int endpointId)
       : m_id(id)
       , m_name(name)
       , m_description(description)
@@ -83,7 +83,7 @@ public:
    static MsgPluginManager& GetInstance();
    ~MsgPluginManager();
 
-   std::shared_ptr<MsgPlugin> RegisterPlugin(const std::string& id, const std::string& name, const std::string& description, const std::string& author, const std::string& version, const std::string& link, const msgpi_load_plugin& loadPlugin, const msgpi_unload_plugin& unloadPlugin);
+   std::shared_ptr<MsgPlugin> RegisterPlugin(const std::string& id, const std::string& name, const std::string& description, const std::string& author, const std::string& version, const std::string& link, msgpi_load_plugin loadPlugin, msgpi_unload_plugin unloadPlugin);
    void ScanPluginFolder(const std::string& pluginDir, const std::function<void(MsgPlugin&)>& callback);
    std::shared_ptr<MsgPlugin> GetPlugin(const std::string& pluginId) const;
    const MsgPluginAPI& GetMsgAPI() const { return m_api; }
@@ -95,21 +95,24 @@ private:
    MsgPluginManager();
 
    // API implementation
-   static unsigned int GetMsgID(const char* name_space, const char* name);
-   static void SubscribeMsg(const unsigned int endpointId, const unsigned int msgId, const msgpi_msg_callback callback, void* userData);
-   static void UnsubscribeMsg(const unsigned int msgId, const msgpi_msg_callback callback);
-   static void BroadcastMsg(const unsigned int endpointId, const unsigned int msgId, void* data);
-   static void ReleaseMsgID(const unsigned int msgId);
-   static void GetSetting(const char* name_space, const char* name, char* valueBuf, unsigned int valueBufSize);
-   static void RunOnMainThread(const double delayInS, const msgpi_timer_callback callback, void* userData);
+   static unsigned int MSGPIAPI GetPluginEndpoint(const char* id);
+   static void MSGPIAPI GetEndpointInfo(const uint32_t endpointId, MsgEndpointInfo* info);
+   static unsigned int MSGPIAPI GetMsgID(const char* name_space, const char* name);
+   static void MSGPIAPI SubscribeMsg(const uint32_t endpointId, const unsigned int msgId, const msgpi_msg_callback callback, void* context);
+   static void MSGPIAPI UnsubscribeMsg(const unsigned int msgId, const msgpi_msg_callback callback);
+   static void MSGPIAPI BroadcastMsg(const uint32_t endpointId, const unsigned int msgId, void* data);
+   static void MSGPIAPI SendMsg(const uint32_t endpointId, const unsigned int msgId, const uint32_t targetEndpointId, void* data);
+   static void MSGPIAPI ReleaseMsgID(const unsigned int msgId);
+   static void MSGPIAPI GetSetting(const char* name_space, const char* name, char* valueBuf, unsigned int valueBufSize);
+   static void MSGPIAPI RunOnMainThread(const double delayInS, const msgpi_timer_callback callback, void* userData);
 
    std::vector<std::shared_ptr<MsgPlugin>> m_plugins;
 
    struct CallbackEntry
    {
-      unsigned int endpointId;
+      uint32_t endpointId;
       msgpi_msg_callback callback;
-      void* userData;
+      void* context;
    };
    struct MsgEntry
    {

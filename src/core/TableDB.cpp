@@ -2,6 +2,7 @@
 
 #include "core/stdafx.h"
 #include "TableDB.h"
+#include <charconv>
 #include <iostream>
 #include <fstream>
 
@@ -13,7 +14,7 @@ TableDB::TableDB()
 void TableDB::Load()
 {
    m_data.clear();
-   std::ifstream dbFile(g_pvp->m_szMyPath + "assets" + PATH_SEPARATOR_CHAR + "TableSizes.csv");
+   std::ifstream dbFile(g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "TableSizes.csv");
    while (dbFile.good())
    {
       // Simple CSV parsing
@@ -53,6 +54,7 @@ void TableDB::Load()
       {
          Entry dim;
          dim.name = fields[0];
+#if defined(__clang__)
          try
          {
             dim.width = std::stof(fields[1]);
@@ -85,6 +87,21 @@ void TableDB::Load()
          {
             dim.glassTop = 8.5f;
          }
+#else
+         float result;
+         dim.width = (std::from_chars(fields[1].c_str(), fields[1].c_str() + fields[1].length(), result).ec == std::errc{})
+            ? result
+            : 20.25f; // Default width if parsing fails
+         dim.height = (std::from_chars(fields[2].c_str(), fields[2].c_str() + fields[2].length(), result).ec == std::errc{})
+            ? result
+            : 46.f; // Default height if parsing fails
+         dim.glassBottom = (std::from_chars(fields[3].c_str(), fields[3].c_str() + fields[3].length(), result).ec == std::errc{})
+            ? result
+            : 3.f; // Default glassBottom if parsing fails
+         dim.glassTop = (std::from_chars(fields[4].c_str(), fields[4].c_str() + fields[4].length(), result).ec == std::errc{})
+            ? result
+            : 8.5f; // Default glassTop if parsing fails
+#endif
          dim.comment = fields[5];
          m_data.push_back(dim);
       }

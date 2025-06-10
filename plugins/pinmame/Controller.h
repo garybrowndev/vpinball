@@ -1,13 +1,16 @@
 #pragma once
 
 #include "common.h"
+#include "ControllerPlugin.h"
+
+namespace PinMAME {
 
 class Game;
 
 class Controller final
 {
 public:
-   Controller(PinmameConfig& config);
+   Controller(MsgPluginAPI* api, unsigned int endpointId, PinmameConfig& config);
    ~Controller();
 
    PSC_IMPLEMENT_REFCOUNT()
@@ -60,10 +63,10 @@ public:
    bool GetLamp(int nLamp) const { return PinmameGetLamp(nLamp); }
    int GetGIString(int nString) const { return PinmameGetGI(nString); }
    std::vector<uint8_t> GetNVRAM() const;
-   int GetRawDmdWidth() const;
-   int GetRawDmdHeight() const;
-   std::vector<uint8_t> GetRawDmdPixels() const;
-   std::vector<uint32_t> GetRawDmdColoredPixels() const;
+   int GetRawDmdWidth();
+   int GetRawDmdHeight();
+   std::vector<uint8_t> GetRawDmdPixels();
+   std::vector<uint32_t> GetRawDmdColoredPixels();
    const vector<PinmameNVRAMState>& GetChangedNVRAM();
    const vector<PinmameSoundCommand>& GetNewSoundCommands();
    const vector<PinmameLampState>& GetChangedLamps();
@@ -139,12 +142,6 @@ public:
    //STDMETHOD(ShowOptsDialog)(/*[in]*/ LONG_PTR hParentWnd = 0);
    //STDMETHOD(get_ROMName)(/*[out, retval]*/ BSTR *pVal);
 
-   const pinmame_tMachineOutputState* GetStateBlock(int updateMask) const
-   {
-      PinmameGetStateBlock(updateMask, &m_stateBlock);
-      return m_stateBlock;
-   }
-
    const string& GetVpmPath() const { return m_vpmPath; }
 
 private:
@@ -160,9 +157,16 @@ private:
    string m_splashInfoLine; // Info line shown during startup
    bool m_hidden = true; // Show/Hide PinMame window
 
-   mutable pinmame_tMachineOutputState* m_stateBlock = nullptr;
+   MsgPluginAPI* const m_msgApi;
+   const unsigned int m_endpointId;
+   unsigned int m_getDmdSrcMsgId, m_onDmdChangedMsgId;
+   DisplaySrcId m_defaultDmd { 0 };
+   void UpdateDmdSrc();
+   static void OnDmdSrcChanged(const unsigned int msgId, void* userData, void* msgData);
 
    void (*m_onDestroyHandler)(Controller*) = nullptr;
    void (*m_onGameStartHandler)(Controller*) = nullptr;
    void (*m_onGameEndHandler)(Controller*) = nullptr;
 };
+
+}

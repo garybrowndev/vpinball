@@ -244,15 +244,9 @@ void Surface::UIRenderPass1(Sur * const psur)
    GetRgVertex(vvertex);
 
    Texture *ppi;
-   if (m_ptable->RenderSolid() && m_d.m_displayTexture && (ppi = m_ptable->GetImage(m_d.m_szImage)))
+   if (m_ptable->RenderSolid() && m_d.m_displayTexture && (ppi = m_ptable->GetImage(m_d.m_szImage)) && ppi->GetGDIBitmap())
    {
-      ppi->CreateGDIVersion();
-      if (ppi->m_hbmGDIVersion)
-         psur->PolygonImage(vvertex, ppi->m_hbmGDIVersion, m_ptable->m_left, m_ptable->m_top, m_ptable->m_right, m_ptable->m_bottom, ppi->m_width, ppi->m_height);
-      else
-      {
-         // Do nothing for now to indicate to user that there is a problem
-      }
+      psur->PolygonImage(vvertex, ppi->GetGDIBitmap(), m_ptable->m_left, m_ptable->m_top, m_ptable->m_right, m_ptable->m_bottom, ppi->m_width, ppi->m_height);
    }
    else
       psur->Polygon(vvertex);
@@ -729,7 +723,7 @@ void Surface::ExportMesh(ObjLoader& loader)
       const Material * const mat = m_ptable->GetMaterial(m_d.m_szTopMaterial);
       if (tex)
       {
-         loader.WriteMaterial(m_d.m_szImage, tex->m_szPath, mat);
+         loader.WriteMaterial(m_d.m_szImage, tex->GetFilePath(), mat);
          loader.UseTexture(m_d.m_szImage);
       }
       else
@@ -1264,7 +1258,7 @@ bool Surface::LoadToken(const int id, BiffReader * const pbr)
 {
    switch(id)
    {
-   case FID(PIID): pbr->GetInt((int *)pbr->m_pdata); break;
+   case FID(PIID): pbr->GetInt(pbr->m_pdata); break;
    case FID(HTEV): pbr->GetBool(m_d.m_hitEvent); break;
    case FID(DROP): pbr->GetBool(m_d.m_droppable); break;
    case FID(FLIP): pbr->GetBool(m_d.m_flipbook); break;

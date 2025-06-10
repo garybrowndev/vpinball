@@ -25,13 +25,6 @@ set_target_properties(glad PROPERTIES
    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:DEBUG>:Debug>"
 )
 
-add_compile_definitions(
-   ENABLE_SDL_INPUT
-   ENABLE_SDL_VIDEO
-   ENABLE_OPENGL
-   USE_DINPUT8
-)
-
 set_source_files_properties(
    third-party/include/miniz/miniz.c PROPERTIES LANGUAGE CXX
    third-party/include/hidapi/windows/hid.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON
@@ -101,8 +94,6 @@ add_executable(vpinball WIN32
    src/core/player.h
    src/core/ResURIResolver.h
    src/core/ResURIResolver.cpp
-   src/core/ScoreView.h
-   src/core/ScoreView.cpp
    src/core/Settings.cpp
    src/core/Settings.h
    src/core/TableDB.cpp
@@ -239,7 +230,7 @@ add_executable(vpinball WIN32
    src/plugins/MsgPluginManager.h
    src/plugins/MsgPluginManager.cpp
    src/plugins/VPXPlugin.h
-   src/plugins/CorePlugin.h
+   src/plugins/ControllerPlugin.h
    src/plugins/ScriptablePlugin.h
 
    src/renderer/trace.h
@@ -613,10 +604,18 @@ target_include_directories(vpinball PUBLIC
    third-party/include
    third-party/include/win32xx/include
    src
+   src/plugins
 )
 
 target_precompile_headers(vpinball PUBLIC
    src/core/stdafx.h
+)
+
+target_compile_definitions(vpinball PRIVATE
+   ENABLE_SDL_INPUT
+   ENABLE_SDL_VIDEO
+   ENABLE_OPENGL
+   USE_DINPUT8
 )
 
 set(OPT_COMMON /Ob2 /O2 /Oi /arch:SSE2 /fp:fast /fp:except- /Ot /GF /GS- /Gy /GR /Oy /GT /GL /w44005 /Zc:__cplusplus /std:c++20)
@@ -693,12 +692,12 @@ add_custom_command(TARGET vpinball POST_BUILD
    COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/hlsl_glsl/SSR_GL.fxh" "$<TARGET_FILE_DIR:vpinball>/shaders-${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_REV}"
    COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/hlsl_glsl/Stereo.fxh" "$<TARGET_FILE_DIR:vpinball>/shaders-${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_REV}"
    COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/src/shaders/hlsl_glsl/StereoShader.glfx" "$<TARGET_FILE_DIR:vpinball>/shaders-${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_REV}"
-   
+
+   COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/third-party/runtime-libs/windows-x86/freeimage.dll" "$<TARGET_FILE_DIR:vpinball>"
+   COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/third-party/runtime-libs/windows-x86/openvr_api.dll" "$<TARGET_FILE_DIR:vpinball>"
+   COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/third-party/runtime-libs/windows-x86/SciLexerVP.dll" "$<TARGET_FILE_DIR:vpinball>"
    COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/third-party/runtime-libs/windows-x86/SDL3.dll" "$<TARGET_FILE_DIR:vpinball>"
    COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/third-party/runtime-libs/windows-x86/SDL3_mixer.dll" "$<TARGET_FILE_DIR:vpinball>"
-   COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/third-party/runtime-libs/windows-x86/openvr_api.dll" "$<TARGET_FILE_DIR:vpinball>"
-   COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/third-party/runtime-libs/windows-x86/FreeImage.dll" "$<TARGET_FILE_DIR:vpinball>"
-   COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/third-party/runtime-libs/windows-x86/SciLexerVP.dll" "$<TARGET_FILE_DIR:vpinball>"
 )
 
 set(PluginPlatform "windows")

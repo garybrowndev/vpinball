@@ -7,7 +7,7 @@
 #include "renderer/RenderDevice.h"
 #include "renderer/Texture.h"
 #include "Backglass.h"
-#include "plugins/CorePlugin.h"
+#include "plugins/ControllerPlugin.h"
 #include "parts/PartGroup.h"
 
 class Renderable;
@@ -39,6 +39,7 @@ public:
    unsigned int GetNPrerenderTris() const { return m_statsDrawnStaticTriangles; }
 
    void RenderFrame();
+   void PrepareVideoBuffers(RenderTarget* outputBackBuffer);
 
    enum ColorSpace
    {
@@ -54,10 +55,10 @@ public:
       Bally,
       Atari,
    };
-   void SetupSegmentRenderer(int profile, const bool isBackdrop, const vec3& color, const float brightness, const SegmentFamily family, const SegElementType type, float* segs, const ColorSpace colorSpace, Vertex3D_NoTex2* vertices,
-      const vec4& emitterPad, const vec3& glassTint, const float glassRougness, Texture* const glassTex, const vec4& glassArea, const vec3& glassAmbient);
+   void SetupSegmentRenderer(int profile, const bool isBackdrop, const vec3& color, const float brightness, const SegmentFamily family, const SegElementType type, const float* segs, const ColorSpace colorSpace, Vertex3D_NoTex2* vertices,
+      const vec4& emitterPad, const vec3& glassTint, const float glassRougness, ITexManCacheable* const glassTex, const vec4& glassArea, const vec3& glassAmbient);
    void SetupDMDRender(int profile, const bool isBackdrop, const vec3& color, const float brightness, BaseTexture* dmd, const float alpha, const ColorSpace colorSpace, Vertex3D_NoTex2 *vertices,
-      const vec4& emitterPad, const vec3& glassTint, const float glassRougness, Texture* const glassTex, const vec4& glassArea, const vec3& glassAmbient);
+      const vec4& emitterPad, const vec3& glassTint, const float glassRougness, ITexManCacheable* const glassTex, const vec4& glassArea, const vec3& glassAmbient);
    void DrawStatics();
    void DrawDynamics(bool onlyBalls);
    void DrawSprite(const float posx, const float posy, const float width, const float height, const COLORREF color, Sampler* const tex, const float intensity, const bool backdrop = false);
@@ -81,6 +82,8 @@ public:
       return IsUsingStaticPrepass() ? 1 : 0; // If AO is static prepass only and we are running without it, disable AO
    }
 
+   Sampler* GetBallEnvironment() const { return m_ballEnvSampler; }
+
    BackGlass* m_backGlass = nullptr;
 
    float m_globalEmissionScale;
@@ -95,8 +98,8 @@ public:
    bool m_trailForBalls = false;
    float m_ballTrailStrength = 0.5f;
    bool m_overwriteBallImages = false;
-   Texture* m_ballImage = nullptr;
-   Texture* m_decalImage = nullptr;
+   BaseTexture* m_ballImage = nullptr;
+   BaseTexture* m_decalImage = nullptr;
 
    // Post processing
    void SetScreenOffset(const float x, const float y); // set render offset in screen coordinates, e.g., for the nudge shake
@@ -127,9 +130,6 @@ public:
 
    RenderDevice* m_renderDevice = nullptr;
 
-   Texture* m_envTexture = nullptr;
-   Texture m_pinballEnvTexture; // loaded from assets folder
-
    // free-camera-mode-fly-around parameters
    Vertex3Ds m_cam = Vertex3Ds(0.f, 0.f, 0.f);
    float m_inc = 0.f;
@@ -148,10 +148,10 @@ private:
    void RenderDynamics();
    void DrawBackground();
    void DrawBulbLightBuffer();
-   void PrepareVideoBuffers(RenderTarget* outputBackBuffer);
+   bool IsBloomEnabled() const;
    void Bloom();
    void SSRefl();
-   BaseTexture* EnvmapPrecalc(const Texture* envTex, const unsigned int rad_env_xres, const unsigned int rad_env_yres);
+   BaseTexture* EnvmapPrecalc(std::shared_ptr<BaseTexture> envTex, const unsigned int rad_env_xres, const unsigned int rad_env_yres);
 
    bool m_shaderDirty = true;
    void SetupShaders();
@@ -208,11 +208,12 @@ private:
 
    vector<Renderable*> m_renderableToInit;
 
-   Texture m_builtinEnvTexture; // loaded from assets folder
-
    bool m_dynamicAO;
    bool m_disableAO;
-   Texture m_aoDitherTexture; // loaded from assets folder
+   Sampler* m_aoDitherSampler = nullptr;
+
+   Sampler* m_envSampler = nullptr;
+   Sampler* m_ballEnvSampler = nullptr;
 
    bool m_ss_refl;
 
@@ -226,14 +227,14 @@ private:
 
    Texture* m_tonemapLUT = nullptr;
 
-   #if defined(ENABLE_OPENGL) && !defined(__OPENGLES__)
-   RenderTarget* m_envRadianceTexture = nullptr;
-   #else
+   #if defined(ENABLE_DX9) || defined(__OPENGLES__) || defined(__APPLE__)
    BaseTexture* m_envRadianceTexture = nullptr;
+   #else
+   RenderTarget* m_envRadianceTexture = nullptr;
    #endif
 
    // Segment display rendering
-   Texture m_segDisplaySDF[4][9];
+   std::unique_ptr<Texture> m_segDisplaySDF[4][9];
    vec4 m_segColor[8]; // Base seg color and brightness
    vec4 m_segUnlitColor[8]; // unlit color and back glow
 

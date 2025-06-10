@@ -9,16 +9,10 @@
 #include "ui/Debugger.h"
 #include "ui/LiveUI.h"
 #include "input/pininput.h"
-#include "plugins/CorePlugin.h"
+#include "plugins/ControllerPlugin.h"
+#include "plugins/VPXPlugin.h"
 #include "ResURIResolver.h"
-#include "ScoreView.h"
 #include "audio/pinsound.h"
-
-#define DEFAULT_PLAYER_WIDTH 1024
-#define DEFAULT_PLAYER_FS_WIDTH 1920
-#define DEFAULT_PLAYER_FS_REFRESHRATE 60
-
-constexpr int DBG_SPRITE_SIZE = 1024;
 
 class VRDevice;
 
@@ -271,9 +265,9 @@ public:
 #pragma region Rendering
 public:
    VPX::Window *m_playfieldWnd = nullptr;
-   int m_lastDmdFrameId = -1;
    VPX::RenderOutput m_scoreviewOutput;
    VPX::RenderOutput m_backglassOutput;
+   VPX::RenderOutput m_topperOutput;
    Renderer *m_renderer = nullptr;
    VRDevice *m_vrDevice = nullptr;
    bool m_headTracking = false;
@@ -283,6 +277,12 @@ private:
    void PrepareFrame(const std::function<void()>& sync);
    void SubmitFrame();
    void FinishFrame();
+
+   RenderTarget *RenderAnciliaryWindow(VPXAnciliaryWindow window, RenderTarget *playfieldRT);
+   static void OnAuxRendererChanged(const unsigned int msgId, void *userData, void *msgData);
+   RenderTarget *m_anciliaryWndHdrRT[VPXAnciliaryWindow::VPXWINDOW_Topper + 1] { nullptr };
+   unsigned int m_getAuxRendererId = 0, m_onAuxRendererChgId = 0;
+   vector<AnciliaryRendererDef> m_anciliaryWndRenderers[VPXAnciliaryWindow::VPXWINDOW_Topper + 1];
 #pragma endregion
 
 
@@ -362,41 +362,7 @@ public:
    BaseTexture* m_dmdFrame = nullptr;
    int m_dmdFrameId = 0;
 
-   // DMDs and video displays gathered through plugin API
-   struct ControllerDisplay
-   {
-      DmdSrcId dmdId;
-      int frameId = -1;
-      BaseTexture *frame = nullptr;
-   };
-   ControllerDisplay GetControllerDisplay(CtlResId id);
-
-   // Segment displays gathered through plugin API
-   struct ControllerSegDisplay
-   {
-      CtlResId segId;
-      unsigned int nElements;
-      float *frame = nullptr;
-      vector<vector<SegElementType>> displays;
-   };
-   ControllerSegDisplay GetControllerSegDisplay(CtlResId id);
-
    ResURIResolver m_resURIResolver;
-
-private:
-   static void OnDmdChanged(const unsigned int msgId, void* userData, void* msgData);
-   unsigned int m_getDmdMsgId, m_getDmdSrcMsgId, m_onDmdChangedMsgId;
-   vector<ControllerDisplay> m_controllerDisplays;
-   bool m_defaultDmdSelected = false;
-   DmdSrcId m_defaultDmdId;
-
-   static void OnSegChanged(const unsigned int msgId, void *userData, void *msgData);
-   unsigned int m_getSegMsgId, m_getSegSrcMsgId, m_onSegChangedMsgId;
-   vector<ControllerSegDisplay> m_controllerSegDisplays;
-   bool m_defaultSegSelected = false;
-   CtlResId m_defaultSegId; 
-   
-   ScoreView m_scoreView;
 
 
    // External audio sources
