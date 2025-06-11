@@ -156,9 +156,6 @@
     <ClCompile Include="../../src/core/pinundo.cpp">
       <Filter>core</Filter>
     </ClCompile>
-    <ClCompile Include="../../src/core/player.cpp">
-      <Filter>core</Filter>
-    </ClCompile>
     <ClCompile Include="../../src/core/Settings.cpp">
       <Filter>core</Filter>
     </ClCompile>
@@ -683,6 +680,9 @@
     </ClCompile>
     <ClCompile Include="../../third-party/include/imgui/imgui_impl_sdl3.cpp">
       <Filter>third-party\imgui\sdl3</Filter>
+    </ClCompile>
+    <ClCompile Include="../../src/core/ballhistory.cpp">
+      <Filter>core</Filter>
     </ClCompile>
     <ClCompile Include="../../src/core/DynamicScript.cpp">
       <Filter>core</Filter>
@@ -1807,6 +1807,9 @@
     </ClInclude>
     <ClInclude Include="../../src\plugins\ScriptablePlugin.h">
       <Filter>plugin</Filter>
+    </ClInclude>
+    <ClInclude Include="../../src/core/ballhistory.h">
+      <Filter>core</Filter>
     </ClInclude>
     <ClInclude Include="../../src/core/DynamicScript.h">
       <Filter>core</Filter>

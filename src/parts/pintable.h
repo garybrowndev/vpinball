@@ -385,6 +385,7 @@ public:
    static bool isWav(const string &szPath);
    bool ExportImage(const Texture *const ppi, const char *const filename);
    Texture* ImportImage(const string &filename, const string &imageName);
+   Texture *ImportFreeImage(FIBITMAP *dib, const string &imagename);
    void RemoveImage(Texture *const ppi);
    Texture *GetImage(const string &szName) const;
    bool GetImageLink(const Texture *const ppi) const;

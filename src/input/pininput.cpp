@@ -107,6 +107,9 @@ void PinInput::Init()
    m_joycustom4 = settings.LoadValueWithDefault(Settings::Player, "JoyCustom4"s, m_joycustom4);
    m_joycustom4key = settings.LoadValueWithDefault(Settings::Player, "JoyCustom4Key"s, m_joycustom4key);
 
+   m_ballhistorymenu = settings.LoadValueWithDefault(Settings::Player, "BallHistoryMenu"s, m_ballhistorymenu);
+   m_ballhistoryrecall = settings.LoadValueWithDefault(Settings::Player, "BallHistoryRecall"s, m_ballhistoryrecall);
+
    for (unsigned int i = 0; i < eCKeys; ++i)
       MapActionToKeyboard(static_cast<EnumAssignKeys>(i), g_pvp->m_settings.LoadValueInt(Settings::Player, regkey_string[i]), true);
 
@@ -681,7 +684,11 @@ void PinInput::FireActionEvent(EnumAssignKeys action, bool isPressed)
       m_leftkey_down_frame = g_pplayer->m_overall_frames;
    }
 
-   if (!g_pplayer->m_liveUI->IsTweakMode() && !g_pplayer->m_liveUI->HasKeyboardCapture())
+   if (g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, input, curr_time_msec, false))
+   {
+      // key handled, do nothing
+   }
+   else if (!g_pplayer->m_liveUI->IsTweakMode() && !g_pplayer->m_liveUI->HasKeyboardCapture())
       g_pplayer->m_ptable->FireGenericKeyEvent(isPressed ? DISPID_GameEvents_KeyDown : DISPID_GameEvents_KeyUp, g_pplayer->m_rgKeys[action]);
 }
 
@@ -978,7 +985,7 @@ void PinInput::ProcessInput()
 
 void PinInput::ProcessEvent(const InputEvent& event)
 {
-   if (event.type == InputEvent::Type::Mouse && !g_pplayer->m_liveUI->HasMouseCapture() && !g_pplayer->m_throwBalls && !g_pplayer->m_ballControl)
+   if (event.type == InputEvent::Type::Mouse && !g_pplayer->m_liveUI->HasMouseCapture() && !g_pplayer->m_throwBalls && !g_pplayer->m_ballControl && && !g_pplayer->m_BallHistory.Control())
    {
       const auto& it = std::ranges::find_if(m_actionMappings.begin(), m_actionMappings.end(),
          [&event](const ActionMapping& mapping) { return (mapping.type == ActionMapping::AM_Mouse) && (mapping.buttonId == event.buttonId); });
@@ -1014,6 +1021,10 @@ void PinInput::ProcessEvent(const InputEvent& event)
             FireGenericKeyEvent(event.isPressed ? DISPID_GameEvents_KeyDown : DISPID_GameEvents_KeyUp, m_joycustom3key);
          else if (m_joycustom4 == event.buttonId)
             FireGenericKeyEvent(event.isPressed ? DISPID_GameEvents_KeyDown : DISPID_GameEvents_KeyUp, m_joycustom4key);
+         else if (m_ballhistorymenu == event.buttonId)
+            FireGenericKeyEvent(event.isPressed ? DISPID_GameEvents_KeyDown : DISPID_GameEvents_KeyUp, m_ballhistorymenu);
+         else if (m_ballhistoryrecall == event.buttonId)
+            FireGenericKeyEvent(event.isPressed ? DISPID_GameEvents_KeyDown : DISPID_GameEvents_KeyUp, m_ballhistoryrecall);
          else if (m_joypmbuyin == event.buttonId)
             FireGenericKeyEvent(event.isPressed ? DISPID_GameEvents_KeyDown : DISPID_GameEvents_KeyUp, DIK_2);
          else if (m_joypmcoin3 == event.buttonId)

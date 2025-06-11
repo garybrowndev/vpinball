@@ -591,6 +591,9 @@ void PhysicsEngine::UpdatePhysics()
    if (!g_pplayer) //!! meh, we have a race condition somewhere where we delete g_pplayer while still in use (e.g. if we have a script compile error and cancel the table start)
       return;
 
+   if (g_pplayer->m_BallHistory.Control())
+      return;
+
    g_pplayer->m_logicProfiler.EnterProfileSection(FrameProfiler::PROFILE_PHYSICS);
    U64 initial_time_usec = usec();
 

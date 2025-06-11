@@ -160,6 +160,7 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    , m_backglassOutput("Visual Pinball - Backglass"s, live_table->m_settings, Settings::Backglass, "Backglass"s)
    , m_topperOutput("Visual Pinball - Topper"s, live_table->m_settings, Settings::Topper, "Topper"s)
    , m_resURIResolver(MsgPluginManager::GetInstance().GetMsgAPI(), VPXPluginAPIImpl::GetInstance().GetVPXEndPointId(), true, true, true, true)
+   , m_BallHistory(*m_ptable)
 {
    // For the time being, lots of access are made through the global singleton, so ensure we are unique, and define it as soon as needed
    assert(g_pplayer == nullptr);
@@ -613,6 +614,8 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    // We need to initialize the perf counter before creating the UI which uses it
    wintimer_init();
    m_liveUI = new LiveUI(m_renderer->m_renderDevice);
+
+   m_BallHistory.Init(*this, 0, true);
 
    m_progressDialog.SetProgress("Loading Textures..."s, 50);
 
@@ -1085,6 +1088,8 @@ Player::~Player()
    delete m_physics;
    m_physics = nullptr;
 
+   m_BallHistory.UnInit(*this);
+
    for (auto probe : m_ptable->m_vrenderprobe)
       probe->RenderRelease();
    for (auto renderable : m_vhitables)
@@ -1325,6 +1330,8 @@ void Player::ApplyPlayingState(const bool play)
    }
    else
    {
+      m_BallHistory.ResetTrainerRunStartTime();
+
       PauseMusic();
       PLOGI << "Pausing Game";
       if (!IsEditorMode())

@@ -79,6 +79,8 @@ enum EnumAssignKeys
    eEscape,
    ePause,
    eTweak,
+   eBallHistoryMenu,
+   eBallHistoryRecall,
    eCKeys
 };
 
@@ -110,7 +112,9 @@ static const string regkey_string[eCKeys] = {
    "TableDownKey"s,
    "EscapeKey"s,
    "PauseKey"s,
-   "TweakKey"s
+   "TweakKey"s,
+   "BallHistoryMenu"s,
+   "BallHistoryRecall"s
 };
 
 static constexpr int regkey_idc[eCKeys] = {
@@ -141,8 +145,12 @@ static constexpr int regkey_idc[eCKeys] = {
    IDC_TABLEDOWN_TEXT,
    -1, // Escape
    IDC_PAUSE,
-   IDC_TWEAK
+   IDC_TWEAK,
+   IDC_BALLHISTORYMENU,
+   IDC_BALLHISTORYRECALL
 };
+
+#include "core/ballhistory.h"
 
 // Open Pinball Device context (defined in the OPD implementation module)
 class OpenPinDevContext;
@@ -227,6 +235,8 @@ public:
    // Speed: 0..1
    void PlayRumble(const float lowFrequencySpeed, const float highFrequencySpeed, const int ms_duration);
 
+   HWND GetFocusHWnd() {return m_focusHWnd;}
+
    struct InputState
    {
       uint64_t actionState;
@@ -304,7 +314,10 @@ private:
    int m_joycustom2 = 0;
    int m_joycustom3 = 0;
    int m_joycustom4 = 0;
-   
+
+   int m_ballhistorymenu = 0;
+   int m_ballhistoryrecall = 0;
+
    const unsigned int m_onActionEventMsgId;
 
    struct ActionMapping

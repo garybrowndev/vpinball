@@ -149,6 +149,8 @@ public:
    HitBall *m_pactiveballBC = nullptr; // ball that the ball control UI will use
    Vertex3Ds *m_pBCTarget = nullptr; // if non-null, the target location for the ball to roll towards
 
+   BallHistory m_BallHistory;
+
    void FireSyncController();
 
    // Temporary API used to communicate between VPinMame and VPinballX

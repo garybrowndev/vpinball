@@ -1142,6 +1142,7 @@
     <ClCompile Include="../../src/core/stdafx.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="../../src/core/ballhistory.cpp" />
     <ClCompile Include="../../src/core/DynamicScript.cpp" />
     <ClCompile Include="../../src/core/extern.cpp" />
     <ClCompile Include="../../src/core/ieditable.cpp" />
@@ -1682,6 +1683,7 @@
     <ClInclude Include="../../src/audio/pinsound.h" />
     <ClInclude Include="../../src/core/def.h" />
     <ClInclude Include="../../src/core/dispid.h" />
+    <ClInclude Include="../../src/core/ballhistory.h" />
     <ClInclude Include="../../src/core/DynamicScript.h" />
     <ClInclude Include="../../src/core/editablereg.h" />
     <ClInclude Include="../../src/core/extern.h" />

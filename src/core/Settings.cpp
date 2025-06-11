@@ -163,6 +163,8 @@ void Settings::Validate(const bool addDefaults)
    SettingInt(Section::Player, regkey_string[EnumAssignKeys::eEscape], DIK_ESCAPE, 0x00, 0xFFFF, ""s);
    SettingInt(Section::Player, regkey_string[EnumAssignKeys::ePause], DIK_P, 0x00, 0xFFFF, ""s);
    SettingInt(Section::Player, regkey_string[EnumAssignKeys::eTweak], DIK_F12, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eBallHistoryMenu], DIK_C, 0x00, 0xFFFF, ""s);
+   SettingInt(Section::Player, regkey_string[EnumAssignKeys::eBallHistoryRecall], DIK_R, 0x00, 0xFFFF, ""s);
 
 #ifdef ENABLE_SDL_INPUT
    SettingInt(Settings::Player, "JoyLFlipKey"s, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER + 1, 0x00, 0xFFFF, ""s);

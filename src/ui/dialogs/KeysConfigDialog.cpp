@@ -436,7 +436,7 @@ BOOL KeysConfigDialog::OnInitDialog()
 
     SendDlgItemMessage(IDC_DEVICES_BUTTON, BM_SETSTYLE, BS_PUSHBUTTON, 0);
 
-    for (unsigned int i = 0; i <= 34; ++i)
+    for (unsigned int i = 0; i <= 36; ++i)
     {
         bool hr = true;
         int item,selected;
@@ -477,6 +477,8 @@ BOOL KeysConfigDialog::OnInitDialog()
             case 30:selected = g_pvp->m_settings.LoadValueInt(Settings::Player, "JoyLockbarKey"s); item = IDC_JOYLOCKBARCOMBO; break;
             case 33:selected = g_pvp->m_settings.LoadValueInt(Settings::Player, "JoyPauseKey"s); item = IDC_JOYPAUSECOMBO; break;
             case 34:selected = g_pvp->m_settings.LoadValueInt(Settings::Player, "JoyTweakKey"s); item = IDC_JOYTWEAKCOMBO; break;
+            case 35:hr = g_pvp->m_settings.LoadValue(Settings::Player, "BallHistoryMenu"s, selected); item = IDC_JOYBHMENUCOMBO; break;
+            case 36:hr = g_pvp->m_settings.LoadValue(Settings::Player, "BallHistoryRecall"s, selected); item = IDC_JOYBHRECALLCOMBO; break;
         }
 
         if (!hr)
@@ -572,6 +574,8 @@ BOOL KeysConfigDialog::OnInitDialog()
     AddWndProc(IDC_JOYCUSTOM4BUTTON, (size_t)MyKeyButtonProc, (size_t)pksw);
     AddWndProc(IDC_PAUSEBUTTON, (size_t)MyKeyButtonProc, (size_t)pksw);
     AddWndProc(IDC_TWEAKBUTTON, (size_t)MyKeyButtonProc, (size_t)pksw);
+    AddWndProc(IDC_BALLHISTORYMENUBUTTON, (size_t)MyKeyButtonProc, (size_t)pksw);
+    AddWndProc(IDC_BALLHISTORYRECALLBUTTON, (size_t)MyKeyButtonProc, (size_t)pksw);
 
     int inputApi = g_pvp->m_settings.LoadValueWithDefault(Settings::Player, "InputApi"s, 0);
     int inputApiIndex = inputApi;
@@ -725,6 +729,8 @@ BOOL KeysConfigDialog::OnCommand(WPARAM wParam, LPARAM lParam)
             case IDC_JOYCUSTOM4BUTTON: StartTimer(IDC_JOYCUSTOM4); break;
             case IDC_PAUSEBUTTON: StartTimer(IDC_PAUSE); break;
             case IDC_TWEAKBUTTON: StartTimer(IDC_TWEAK); break;
+            case IDC_BALLHISTORYMENUBUTTON: StartTimer(IDC_BALLHISTORYMENU); break;
+            case IDC_BALLHISTORYRECALLBUTTON: StartTimer(IDC_BALLHISTORYRECALL); break;
             default:
                 return FALSE;
         }//switch
@@ -782,6 +788,8 @@ void KeysConfigDialog::OnOK()
     SetValue(IDC_UDAXISCOMBO, Settings::Player, "UDAxis"s);
     SetValue(IDC_JOYPAUSECOMBO, Settings::Player, "JoyPauseKey"s);
     SetValue(IDC_JOYTWEAKCOMBO, Settings::Player, "JoyTweakKey"s);
+    SetValue(IDC_JOYBHMENUCOMBO, Settings::Player, "BallHistoryMenu"s);
+    SetValue(IDC_JOYBHRECALLCOMBO, Settings::Player, "BallHistoryRecall"s);
 
     size_t selected;
     int newvalue;

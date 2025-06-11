@@ -77,6 +77,7 @@ public:
    // Multi-object manipulation
    Vertex2D GetCenter() const final;
    void PutCenter(const Vertex2D& pv) final;
+   KickerHitCircle * GetKickerHitCircle();
 
    void SetDefaultPhysics(const bool fromMouseClick) final;
    void ExportMesh(ObjLoader& loader) final;
@@ -157,7 +158,7 @@ public:
 
    float HitTest(const BallS& ball, const float dtime, CollisionEvent& coll) const final;
    int GetType() const final { return eTrigger; }
-   void Collide(const CollisionEvent& coll) final { DoCollide(coll.m_ball, coll.m_hitnormal, coll.m_hitflag, false); }
+   void Collide(const CollisionEvent& coll) final;
 
    void DoChangeBallVelocity(HitBall *const pball, const Vertex3Ds &hitnormal) const;
    void DoCollide(HitBall *const pball, const Vertex3Ds &hitnormal, const bool hitbit, const bool newBall);
@@ -165,4 +166,5 @@ public:
    Kicker *m_pkicker = nullptr;
    HitBall *m_pHitBall = nullptr; // The ball inside this kicker
    HitBall *m_lastCapturedBall = nullptr; // same as m_pHitBall but this one won't be nulled only overwritten from another captured ball
+   bool m_collideDisableCollide = false;
 };
