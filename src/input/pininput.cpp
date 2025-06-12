@@ -107,8 +107,6 @@ void PinInput::Init()
    m_joycustom4 = settings.LoadValueWithDefault(Settings::Player, "JoyCustom4"s, m_joycustom4);
    m_joycustom4key = settings.LoadValueWithDefault(Settings::Player, "JoyCustom4Key"s, m_joycustom4key);
 
-   m_ballhistorymenu = settings.LoadValueWithDefault(Settings::Player, "BallHistoryMenu"s, m_ballhistorymenu);
-   m_ballhistoryrecall = settings.LoadValueWithDefault(Settings::Player, "BallHistoryRecall"s, m_ballhistoryrecall);
 
    for (unsigned int i = 0; i < eCKeys; ++i)
       MapActionToKeyboard(static_cast<EnumAssignKeys>(i), g_pvp->m_settings.LoadValueInt(Settings::Player, regkey_string[i]), true);
@@ -684,7 +682,7 @@ void PinInput::FireActionEvent(EnumAssignKeys action, bool isPressed)
       m_leftkey_down_frame = g_pplayer->m_overall_frames;
    }
 
-   if (g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, input, curr_time_msec, false))
+   if (g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, action, isPressed, 0, false))
    {
       // key handled, do nothing
    }
@@ -899,6 +897,9 @@ void PinInput::SetupJoyMapping(uint64_t joystickId, InputLayout inputLayout)
          MapActionToJoystick(ePause, joystickId, settings.LoadValueInt(Settings::Player, "JoyPauseKey"s), true);
          MapActionToJoystick(eTweak, joystickId, settings.LoadValueInt(Settings::Player, "JoyTweakKey"s), true);
 
+         MapActionToJoystick(eBallHistoryMenu, joystickId, settings.LoadValueInt(Settings::Player, "JoyBallHistoryMenuKey"s), true);
+         MapActionToJoystick(eBallHistoryRecall, joystickId, settings.LoadValueInt(Settings::Player, "JoyBallHistoryRecallKey"s), true);
+
          // TODO map to corresponding GenericKey (or define actions for these keys)
          // MapActionToJoystick(, joystickId, settings.LoadValueWithDefault(Settings::Player, "JoyPMBuyIn"s, 0), true); 2
          // MapActionToJoystick(, joystickId, settings.LoadValueWithDefault(Settings::Player, "JoyPMCoin3"s, 0), true); 5
@@ -985,7 +986,7 @@ void PinInput::ProcessInput()
 
 void PinInput::ProcessEvent(const InputEvent& event)
 {
-   if (event.type == InputEvent::Type::Mouse && !g_pplayer->m_liveUI->HasMouseCapture() && !g_pplayer->m_throwBalls && !g_pplayer->m_ballControl && && !g_pplayer->m_BallHistory.Control())
+   if (event.type == InputEvent::Type::Mouse && !g_pplayer->m_liveUI->HasMouseCapture() && !g_pplayer->m_throwBalls && !g_pplayer->m_ballControl && !g_pplayer->m_BallHistory.Control())
    {
       const auto& it = std::ranges::find_if(m_actionMappings.begin(), m_actionMappings.end(),
          [&event](const ActionMapping& mapping) { return (mapping.type == ActionMapping::AM_Mouse) && (mapping.buttonId == event.buttonId); });

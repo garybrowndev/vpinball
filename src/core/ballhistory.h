@@ -4,6 +4,8 @@
 
 #include "simpleini/SimpleIni.h"
 #include "renderer/typedefs3D.h"
+#include "imgui/imgui.h"
+#include "physics/HitBall.h"
 
 struct BallHistoryState
 {
@@ -423,7 +425,7 @@ public:
    void Init(Player &player, int currentTimeMs, bool loadSettings);
    void UnInit(Player &player);
    void Process(Player &player, int currentTimeMsec);
-   bool ProcessKeys(Player &player, const DIDEVICEOBJECTDATA *input, int currentTimeMs, bool process);
+   bool ProcessKeys(Player &player, EnumAssignKeys action, bool isPressed, int currentTimeMs, bool process);
    void ProcessMouse(Player &player, int currentTimeMs);
    bool Control();
    void SetControl(bool control);
@@ -431,8 +433,8 @@ public:
    void ToggleRecall();
    void ResetTrainerRunStartTime();
 
-   DWORD m_PreviousProcessKeysOfs;
-   DWORD m_PreviousProcessKeysData;
+   EnumAssignKeys m_PreviousProcessKeysAction;
+   bool m_PreviousProcessKeyIsPressed;
 
 private:
 
@@ -755,7 +757,9 @@ private:
 
    std::string m_SettingsFilePath;
 
-   bool GetSettingsFileName(Player &player, std::string &fileName);
+   bool GetSettingsFileName(Player &player, std::string &settingsFileName);
+   bool GetSettingsFolderPath(std::string &settingsFolderPath);
+
    void LoadSettings(Player &player);
    void LoadSettingsDifficultyVariance(Player &player, CSimpleIni &iniFile, const char *sectionName, const char *varianceKeyName, S32 &variance, const char *modeKeyName, TrainerOptions::DifficultyVarianceModeType &mode);
    bool LoadSettingsGetValue(CSimpleIni &iniFile, const char *sectionName, const char *keyName, std::istringstream &value);
@@ -781,7 +785,6 @@ private:
    bool ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallPasses(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallFails(std::size_t index, int currentTimeMs);
-   bool ShouldDrawTrainerBallCorridor(int currentTimeMs);
    bool ShouldDrawActiveBallKickers(int currentTimeMs);
    void DrawTrainerBallCorridorPass(Player &player, const char * name, TrainerOptions::BallCorridorOptionsRecord &bcor, Vertex3Ds *overridePosition = nullptr);
    void DrawTrainerBallCorridorOpeningLeft(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor);

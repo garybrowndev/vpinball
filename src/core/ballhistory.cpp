@@ -761,8 +761,8 @@ const char *BallHistory::TrainerModeBallCorridorOpeningPositionLeft3DKeyName = "
 const char *BallHistory::TrainerModeBallCorridorOpeningPositionRight3DKeyName = "BallCorridorOpeningPositionRight3D";
 
 BallHistory::BallHistory(PinTable &pinTable)
-   : m_PreviousProcessKeysOfs(0)
-   , m_PreviousProcessKeysData(0)
+   : m_PreviousProcessKeysAction(EnumAssignKeys::eCKeys)
+   , m_PreviousProcessKeyIsPressed(false)
    , m_ShowStatus(false)
    , m_Control(false)
    , m_WasControlled(false)
@@ -815,17 +815,17 @@ void BallHistory::Init(Player &player, int currentTimeMs, bool loadSettings)
 
    if (m_SettingsFilePath.empty() == true)
    {
-      char nameBuffer[MAX_PATH];
-      std::string exeFilePath(nameBuffer, GetModuleFileName(NULL, nameBuffer, sizeof(nameBuffer)));
-      std::string exeFolderPath = exeFilePath.substr(0, exeFilePath.find_last_of('\\'));
-      std::string settingsFolderPath = exeFolderPath + "\\" + SettingsFolderName;
-      BOOL createDir = CreateDirectory(settingsFolderPath.c_str(), NULL);
-      if (createDir == TRUE || GetLastError() == ERROR_ALREADY_EXISTS)
+      std::string settingsFolderPath;
+      if (GetSettingsFolderPath(settingsFolderPath) == true)
       {
-         std::string settingsFileName;
-         if (GetSettingsFileName(player, settingsFileName) == true)
+         BOOL createDir = CreateDirectory(settingsFolderPath.c_str(), NULL);
+         if (createDir == TRUE || GetLastError() == ERROR_ALREADY_EXISTS)
          {
-            m_SettingsFilePath = settingsFolderPath + "\\" + settingsFileName;
+            std::string settingsFileName;
+            if (GetSettingsFileName(player, settingsFileName) == true)
+            {
+               m_SettingsFilePath = settingsFolderPath + "\\" + settingsFileName;
+            }
          }
       }
    }
@@ -960,27 +960,26 @@ void BallHistory::Process(Player &player, int currentTimeMs)
    }
 }
 
-bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA *input, int currentTimeMs, bool process)
+bool BallHistory::ProcessKeys(Player &player, EnumAssignKeys action, bool isPressed, int currentTimeMs, bool process)
 {
-   if (input)
+   if (action != EnumAssignKeys::eCKeys)
    {
-      m_PreviousProcessKeysOfs = input->dwOfs;
-      m_PreviousProcessKeysData = input->dwData;
+      m_PreviousProcessKeysAction = action;
+      m_PreviousProcessKeyIsPressed = isPressed;
    }
 
-   DWORD dwOfs = m_PreviousProcessKeysOfs;
-   DWORD dwData = m_PreviousProcessKeysData;
+   action = m_PreviousProcessKeysAction;
+   isPressed = m_PreviousProcessKeyIsPressed;
 
    if (process)
    {
-      m_PreviousProcessKeysOfs = 0;
-      m_PreviousProcessKeysData = 0;
+      m_PreviousProcessKeysAction = EnumAssignKeys::eCKeys;
+      m_PreviousProcessKeyIsPressed = false;
    }
 
-
-   if (dwOfs == (DWORD)g_pplayer->m_rgKeys[eBallHistoryMenu])
+   if (action == EnumAssignKeys::eBallHistoryMenu)
    {
-      if (dwData & 0x80)
+      if (isPressed)
       {
          if (process)
          {
@@ -991,9 +990,9 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA *input, i
       }
    }
 
-   if (dwOfs == (DWORD)g_pplayer->m_rgKeys[eBallHistoryRecall])
+   if (action == EnumAssignKeys::eBallHistoryRecall)
    {
-      if (dwData & 0x80)
+      if (isPressed)
       {
          if (m_Control)
          {
@@ -1014,9 +1013,9 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA *input, i
          }
       }
    }
-   else if (m_Control && dwOfs == player.m_rgKeys[eLeftFlipperKey])
+   else if (m_Control && action == EnumAssignKeys::eLeftFlipperKey)
    {
-      if (dwData & 0x80)
+      if (isPressed)
       {
          if (m_Control)
          {
@@ -1029,7 +1028,7 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA *input, i
             }
          }
       }
-      else if (dwData == 0)
+      else
       {
          if (m_Control)
          {
@@ -1041,9 +1040,9 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA *input, i
          }
       }
    }
-   else if (m_Control && dwOfs == player.m_rgKeys[eRightFlipperKey])
+   else if (m_Control && action == EnumAssignKeys::eRightFlipperKey)
    {
-      if (dwData & 0x80)
+      if (isPressed)
       {
          if (m_Control)
          {
@@ -1056,7 +1055,7 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA *input, i
             }
          }
       }
-      else if (dwData == 0)
+      else
       {
          if (m_Control)
          {
@@ -1068,9 +1067,9 @@ bool BallHistory::ProcessKeys(Player &player, const DIDEVICEOBJECTDATA *input, i
          }
       }
    }
-   else if (dwOfs == player.m_rgKeys[ePlungerKey] || dwOfs == player.m_rgKeys[eRightMagnaSave])
+   else if (action == EnumAssignKeys::ePlungerKey || action == EnumAssignKeys::eRightMagnaSave)
    {
-      if (dwData & 0x80)
+      if (isPressed)
       {
          if (m_Control)
          {
@@ -1157,7 +1156,7 @@ bool BallHistory::GetSettingsFileName(Player &player, std::string &fileName)
 
    // Get a handle to a cryptography provider context.
    if (CryptAcquireContext(&hCryptProv, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT) == FALSE || CryptCreateHash(hCryptProv, CALG_MD5, 0, 0, &hMd5Hash) == FALSE
-      || (hTableFile = CreateFile(player.m_ptable->m_szFileName.c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL)) == INVALID_HANDLE_VALUE)
+      || (hTableFile = CreateFile(player.m_ptable->m_filename.c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL)) == INVALID_HANDLE_VALUE)
    {
       return false;
    }
@@ -1205,6 +1204,21 @@ bool BallHistory::GetSettingsFileName(Player &player, std::string &fileName)
    }
 
    return true;
+}
+
+
+bool BallHistory::GetSettingsFolderPath(std::string &settingsFolderPath)
+{
+   settingsFolderPath.clear();
+   char nameBuffer[MAX_PATH];
+   if (DWORD nameBufferLength = GetModuleFileName(NULL, nameBuffer, sizeof(nameBuffer)))
+   {
+      std::string exeFilePath(nameBuffer, nameBufferLength);
+      std::string exeFolderPath = exeFilePath.substr(0, exeFilePath.find_last_of('\\'));
+      settingsFolderPath = exeFolderPath + "\\" + SettingsFolderName;
+      return true;
+   }
+   return false;
 }
 
 void BallHistory::LoadSettings(Player &player)
@@ -1478,11 +1492,11 @@ void BallHistory::SaveSettings(Player &player)
 
    CSimpleIni iniFile;
    {
-      iniFile.SetValue(TableInfoSectionName, FilePathKeyName, player.m_ptable->m_szFileName.c_str());
-      iniFile.SetValue(TableInfoSectionName, TableNameKeyName, player.m_ptable->m_szTableName.c_str());
-      iniFile.SetValue(TableInfoSectionName, AuthorKeyName, player.m_ptable->m_szAuthor.c_str());
-      iniFile.SetValue(TableInfoSectionName, VersionKeyName, player.m_ptable->m_szVersion.c_str());
-      iniFile.SetValue(TableInfoSectionName, DateSavedKeyName, player.m_ptable->m_szDateSaved.c_str());
+      iniFile.SetValue(TableInfoSectionName, FilePathKeyName, player.m_ptable->m_filename.c_str());
+      iniFile.SetValue(TableInfoSectionName, TableNameKeyName, player.m_ptable->m_tableName.c_str());
+      iniFile.SetValue(TableInfoSectionName, AuthorKeyName, player.m_ptable->m_author.c_str());
+      iniFile.SetValue(TableInfoSectionName, VersionKeyName, player.m_ptable->m_version.c_str());
+      iniFile.SetValue(TableInfoSectionName, DateSavedKeyName, player.m_ptable->m_dateSaved.c_str());
    }
 
    {
@@ -2187,7 +2201,17 @@ void BallHistory::DrawLine(Player &player, const char *name, const Vertex3Ds &po
 
       FreeImage_SetPixelColor(dib, 0, 0, &singleColor);
 
-      player.m_ptable->ImportFreeImage(dib, imageColorName);
+
+      std::string settingsFolderPath;
+      if (GetSettingsFolderPath(settingsFolderPath) == true)
+      {
+         std::string tempColorImageFilePath = settingsFolderPath + std::string("\\") + imageColorName + ".png";
+         FreeImage_Save(FIF_PNG, dib, tempColorImageFilePath.c_str(), PNG_DEFAULT);
+
+         player.m_ptable->ImportImage(tempColorImageFilePath, imageColorName);
+
+         DeleteFile(tempColorImageFilePath.c_str());
+      }
    }
 
    Vertex3Ds midpoint = { (posA.x + posB.x) / 2.0f, (posA.y + posB.y) / 2.0f, (posA.z + posB.z) / 2.0f };
@@ -2310,7 +2334,7 @@ void BallHistory::ClearDraws(Player &player)
    {
       for (std::size_t hitableIndex = 0; hitableIndex < player.m_vhitables.size();)
       {
-         Hitable *hitable = player.m_vhitables[hitableIndex];
+         Hitable *hitable = player.m_vhitables[hitableIndex]->GetIHitable();
          if (hitable == drawnBall.second)
          {
             player.m_vhitables.erase(player.m_vhitables.begin() + hitableIndex);
@@ -2326,7 +2350,7 @@ void BallHistory::ClearDraws(Player &player)
    {
       for (std::size_t hitableIndex = 0; hitableIndex < player.m_vhitables.size();)
       {
-         Hitable *hitable = player.m_vhitables[hitableIndex];
+         Hitable *hitable = player.m_vhitables[hitableIndex]->GetIHitable();
          if (hitable == drawnIntersectionCircle.second)
          {
             player.m_vhitables.erase(player.m_vhitables.begin() + hitableIndex);
@@ -2342,7 +2366,7 @@ void BallHistory::ClearDraws(Player &player)
    {
       for (std::size_t hitableIndex = 0; hitableIndex < player.m_vhitables.size();)
       {
-         Hitable *hitable = player.m_vhitables[hitableIndex];
+         Hitable *hitable = player.m_vhitables[hitableIndex]->GetIHitable();
          if (hitable == drawnLines.second)
          {
             player.m_vhitables.erase(player.m_vhitables.begin() + hitableIndex);

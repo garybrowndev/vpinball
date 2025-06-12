@@ -193,6 +193,8 @@ void Settings::Validate(const bool addDefaults)
    SettingInt(Settings::Player, "JoyTableDownKey"s, 0, 0x00, 0xFFFF, ""s);
    SettingInt(Settings::Player, "JoyPauseKey"s, 0, 0x00, 0xFFFF, ""s);
    SettingInt(Settings::Player, "JoyTweakKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyBallHistoryMenuKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyBallHistoryRecallKey"s, 0, 0x00, 0xFFFF, ""s);
 #else
    SettingInt(Settings::Player, "JoyLFlipKey"s, 0, 0x00, 0xFFFF, ""s);
    SettingInt(Settings::Player, "JoyRFlipKey"s, 0, 0x00, 0xFFFF, ""s);
@@ -220,6 +222,8 @@ void Settings::Validate(const bool addDefaults)
    SettingInt(Settings::Player, "JoyTableDownKey"s, 0, 0x00, 0xFFFF, ""s);
    SettingInt(Settings::Player, "JoyPauseKey"s, 0, 0x00, 0xFFFF, ""s);
    SettingInt(Settings::Player, "JoyTweakKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyBallHistoryMenuKey"s, 0, 0x00, 0xFFFF, ""s);
+   SettingInt(Settings::Player, "JoyBallHistoryRecallKey"s, 0, 0x00, 0xFFFF, ""s);
 #endif
 
    //////////////////////////////////////////////////////////////////////////

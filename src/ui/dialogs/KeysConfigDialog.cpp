@@ -477,8 +477,8 @@ BOOL KeysConfigDialog::OnInitDialog()
             case 30:selected = g_pvp->m_settings.LoadValueInt(Settings::Player, "JoyLockbarKey"s); item = IDC_JOYLOCKBARCOMBO; break;
             case 33:selected = g_pvp->m_settings.LoadValueInt(Settings::Player, "JoyPauseKey"s); item = IDC_JOYPAUSECOMBO; break;
             case 34:selected = g_pvp->m_settings.LoadValueInt(Settings::Player, "JoyTweakKey"s); item = IDC_JOYTWEAKCOMBO; break;
-            case 35:hr = g_pvp->m_settings.LoadValue(Settings::Player, "BallHistoryMenu"s, selected); item = IDC_JOYBHMENUCOMBO; break;
-            case 36:hr = g_pvp->m_settings.LoadValue(Settings::Player, "BallHistoryRecall"s, selected); item = IDC_JOYBHRECALLCOMBO; break;
+            case 35:hr = g_pvp->m_settings.LoadValue(Settings::Player, "JoyBallHistoryMenuKey"s, selected); item = IDC_JOYBALLHISTORYMENUCOMBO; break;
+            case 36:hr = g_pvp->m_settings.LoadValue(Settings::Player, "JoyBallHistoryRecallKey"s, selected); item = IDC_JOYBALLHISTORYRECALLCOMBO; break;
         }
 
         if (!hr)
@@ -788,8 +788,8 @@ void KeysConfigDialog::OnOK()
     SetValue(IDC_UDAXISCOMBO, Settings::Player, "UDAxis"s);
     SetValue(IDC_JOYPAUSECOMBO, Settings::Player, "JoyPauseKey"s);
     SetValue(IDC_JOYTWEAKCOMBO, Settings::Player, "JoyTweakKey"s);
-    SetValue(IDC_JOYBHMENUCOMBO, Settings::Player, "BallHistoryMenu"s);
-    SetValue(IDC_JOYBHRECALLCOMBO, Settings::Player, "BallHistoryRecall"s);
+    SetValue(IDC_JOYBALLHISTORYMENUCOMBO, Settings::Player, "JoyBallHistoryMenu"s);
+    SetValue(IDC_JOYBALLHISTORYRECALLCOMBO, Settings::Player, "JoyBallHistoryRecall"s);
 
     size_t selected;
     int newvalue;

@@ -1595,7 +1595,7 @@ void LiveUI::Update(const int width, const int height)
    g_pplayer->m_BallHistory.Process(*g_pplayer, tick);
    g_pplayer->m_BallHistory.DrawMenu = false;
 
-   g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, nullptr, tick, true);
+   g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, EnumAssignKeys::eCKeys, false, tick, true);
 
    ImGui::PopFont();
    ImGui::EndFrame();

@@ -7196,38 +7196,6 @@ Texture *PinTable::ImportImage(const string &filename, const string &imagename)
    return image;
 }
 
-Texture *PinTable::ImportFreeImage(FIBITMAP *dib, const string &imagename)
-{
-   if (imagename.empty())
-   {
-      assert(!"imagename is required");
-   }
-
-   Texture *ppi = GetImage(imagename);
-   if (ppi != nullptr)
-   {
-      for (size_t i = 0; i < m_vimage.size(); i++)
-      {
-         if (m_vimage[i] == ppi)
-         {
-            m_vimage.erase(m_vimage.begin() + i);
-            break;
-         }
-      }
-   }
-
-   ppi = new Texture(BaseTexture::CreateFromFreeImage(dib, false, 0));
-
-   m_textureMap[imagename] = ppi;
-   m_vimage.push_back(ppi);
-   if (m_isLiveInstance)
-   {
-      m_vliveimage.push_back(ppi);
-   }
-
-   return ppi;
-}
-
 void PinTable::RemoveImage(Texture * const ppi)
 {
    RemoveFromVectorSingle(m_vimage, ppi);
