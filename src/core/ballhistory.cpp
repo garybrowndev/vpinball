@@ -822,6 +822,26 @@ void BallHistory::UnInit(Player& player)
    PrintScreenRecord::UnInit();
    m_ActiveBallKickers.clear();
    m_Flippers.clear();
+
+   ClearDraws(player);
+
+   for (auto drawnBall : m_DrawnBalls)
+   {
+      drawnBall.second->RenderRelease();
+      drawnBall.second->Release();
+   }
+
+   for (auto drawnIntersectionCircle : m_DrawnIntersectionCircles)
+   {
+      drawnIntersectionCircle.second->RenderRelease();
+      drawnIntersectionCircle.second->Release();
+   }
+
+   for (auto drawnLine : m_DrawnLines)
+   {
+      drawnLine.second->RenderRelease();
+      drawnLine.second->Release();
+   }
 }
 
 void BallHistory::Process(Player& player, int currentTimeMs)
@@ -3177,7 +3197,7 @@ void BallHistory::ShowRemainingRunInfo()
       totalRunsMs += rr.m_TotalTimeMs;
    }
 
-   if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord > 0)
+   if (runsRemaining && m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord > 0)
    {
       TrainerOptions::RunRecord& rr = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord];
       float averageRunMs = totalRunsMs / float(m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord);
@@ -3188,15 +3208,16 @@ void BallHistory::ShowRemainingRunInfo()
    {
       printScreenTexts.push_back({ "Time", "N/A" });
    }
+   
    PrintScreenRecord::ActiveMenu(printScreenTexts);
 }
 
 void BallHistory::ShowPreviousRunRecord()
 {
+   std::vector<std::pair<std::string, std::string>> printScreenTexts;
+
    if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord > 0)
    {
-      std::vector<std::pair<std::string, std::string>> printScreenTexts;
-
       TrainerOptions::RunRecord& previousRunRecord = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord - 1];
       printScreenTexts.push_back({ "Previous", "" });
       printScreenTexts.push_back({ "Run #", std::format("{}", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord) });
@@ -3251,30 +3272,43 @@ void BallHistory::ShowPreviousRunRecord()
       }
       printScreenTexts.push_back({ "Length", std::format("{:.2f}s", float(previousRunRecord.m_TotalTimeMs) / 1000) });
 
-      PrintScreenRecord::ActiveMenu(printScreenTexts);
    }
+   else
+   {
+      printScreenTexts.push_back({ "Previous", "" });
+      printScreenTexts.push_back({ "Run #", "N/A" });
+      printScreenTexts.push_back({ "Result", "N/A" });
+      printScreenTexts.push_back({ "Reason", "N/A" });
+      printScreenTexts.push_back({ "Length", "N/A" });
+   }
+
+   PrintScreenRecord::ActiveMenu(printScreenTexts);
 }
 
 void BallHistory::ShowCurrentRunRecord(int currentTimeMs)
 {
    std::vector<std::pair<std::string, std::string>> printScreenTexts;
-   DWORD runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
 
    std::size_t runsRemaining = m_MenuOptions.m_TrainerOptions.m_RunRecords.size() - m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord;
    float runsRemainingPercent = runsRemaining / float(m_MenuOptions.m_TrainerOptions.m_RunRecords.size());
 
    printScreenTexts.push_back({ "Current", "" });
-   printScreenTexts.push_back({ "Run #",
-      std::format("{} of {}", runsRemaining > 0 ? std::to_string(m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1) : "N/A", m_MenuOptions.m_TrainerOptions.m_RunRecords.size()) });
-
-   if (m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs > 0)
+   if (runsRemaining)
    {
+      printScreenTexts.push_back({ "Run #",
+         std::format("{} of {}", std::to_string(m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1), m_MenuOptions.m_TrainerOptions.m_RunRecords.size()) });
+
+      DWORD totalMsPerRun = (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun + m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun) * OneSecondMs;
+      DWORD runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
       printScreenTexts.push_back({ "Time",
          std::format("{:.2f}s",
-            ((m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * OneSecondMs) - runElapsedTimeMs + (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs)) / 1000.0f) });
+            std::min(float(m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun),
+               (totalMsPerRun - runElapsedTimeMs) / float(OneSecondMs))) });
    }
    else
    {
+      printScreenTexts.push_back({ "Run #",
+         std::format("{} of {}", "N/A", m_MenuOptions.m_TrainerOptions.m_RunRecords.size()) });
       printScreenTexts.push_back({ "Time", "N/A" });
    }
 
@@ -7328,6 +7362,10 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
 
    ShowRemainingRunInfo();
 
+   ShowPreviousRunRecord();
+
+   ShowCurrentRunRecord(currentTimeMs);
+
    TrainerOptions::RunRecord& currentRunRecord = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord];
    S32 runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
    if (runElapsedTimeMs == 0 || runElapsedTimeMs < (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * S32(OneSecondMs)))
@@ -7352,7 +7390,6 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
             }
          }
 
-         ShowPreviousRunRecord();
          PrintScreenRecord::MenuTitleText(
             "Run %zu (of %zu) starts in %.2f seconds", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_RunRecords.size(), secondsBeforeStart);
          if (!m_MenuOptions.m_MenuError.empty())
@@ -7459,8 +7496,6 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
          PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_TIME_LOW, true);
          m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = true;
       }
-
-      ShowCurrentRunRecord(currentTimeMs);
 
       if (m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size() > 0)
       {
