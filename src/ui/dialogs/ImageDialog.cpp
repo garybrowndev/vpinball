@@ -330,7 +330,7 @@ INT_PTR ImageDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
             //ExtTextOut(pdis->hDC, 0, 20, 0, nullptr, "Image\nPreview", 13, nullptr);
             const LocalString ls(IDS_IMAGE_PREVIEW);
-            const int len = lstrlen(ls.m_szbuffer);
+            const int len = (int)strlen(ls.m_szbuffer);
             DrawText(pdis->hDC, ls.m_szbuffer/*"Image\n\nPreview"*/, len, &rcText, DT_CALCRECT);
 
             const int halfheight = (rcClient.bottom - rcClient.top) / 2;
@@ -568,7 +568,7 @@ void ImageDialog::Export()
             if (GetSaveFileName(&ofn))	//Get filename from user
             {
                int begin; //select only file name from pathfilename
-               for (begin = lstrlen(ofn.lpstrFile); begin >= 0; begin--)
+               for (begin = (int)strlen(ofn.lpstrFile); begin >= 0; begin--)
                {
                   if (ofn.lpstrFile[begin] == PATH_SEPARATOR_CHAR)
                   {
@@ -878,11 +878,11 @@ int ImageDialog::AddListImage(HWND hwndListView, Texture *const ppi)
    ListView_SetItemText(hwndListView, index, 2, sizeString);
    ListView_SetItemText(hwndListView, index, 3, (LPSTR)usedStringNo);
 
-   char *const sizeConv = StrFormatByteSize64((size_t)ppi->GetEstimatedGPUSize(), sizeString, MAXTOKEN);
-   ListView_SetItemText(hwndListView, index, 4, sizeConv);
-
    char *const sizeConv2 = StrFormatByteSize64((size_t)ppi->GetFileSize(), sizeString, MAXTOKEN);
-   ListView_SetItemText(hwndListView, index, 5, sizeConv2);
+   ListView_SetItemText(hwndListView, index, 4, sizeConv2);
+
+   char *const sizeConv = StrFormatByteSize64((size_t)ppi->GetEstimatedGPUSize(), sizeString, MAXTOKEN);
+   ListView_SetItemText(hwndListView, index, 5, sizeConv);
 
    const char *format = ppi->IsHDR() ? (ppi->IsOpaque() ? "RGB_ HDR" : "RGBA HDR") : (ppi->IsOpaque() ? "RGB_" : "RGBA");
    ListView_SetItemText(hwndListView, index, 6, (LPSTR)format);

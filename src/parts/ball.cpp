@@ -452,7 +452,7 @@ void Ball::Render(const unsigned int renderMask)
    // ball movement smoothness by aligning its update to the very last moment before submitting render command to the GPU driver.
    // The command is executed on the render thread, while the game thread is performing continuous physics. therefore the ball object
    // may be modified while the update command is executed.
-   Shader::ShaderState* ss = m_rd->GetCurrentPass()->m_commands.back()->GetShaderState();
+   ShaderState* ss = m_rd->GetCurrentPass()->m_commands.back()->GetShaderState();
    m_rd->AddBeginOfFrameCmd([this, rot, scale, ss](){
       vec3 pos(m_hitBall.m_d.m_pos.x, m_hitBall.m_d.m_pos.y, m_hitBall.m_d.m_lockedInKicker ? (m_hitBall.m_d.m_pos.z - m_hitBall.m_d.m_radius) : m_hitBall.m_d.m_pos.z);
       float delay = m_rd->GetPredictedDisplayDelayInS();
@@ -732,9 +732,7 @@ STDMETHODIMP Ball::get_Image(BSTR *pVal)
 
 STDMETHODIMP Ball::put_Image(BSTR newVal)
 {
-   char buf[MAXTOKEN];
-   WideCharToMultiByteNull(CP_ACP, 0, newVal, -1, buf, MAXTOKEN, nullptr, nullptr);
-   m_d.m_szImage = buf;
+   m_d.m_szImage = MakeString(newVal);
    Texture *const tex = m_ptable->GetImage(m_d.m_szImage);
    if (tex)
       m_pinballEnv = tex;
@@ -753,10 +751,8 @@ STDMETHODIMP Ball::get_FrontDecal(BSTR *pVal)
 
 STDMETHODIMP Ball::put_FrontDecal(BSTR newVal)
 {
-   char szImage[MAXTOKEN];
-   WideCharToMultiByteNull(CP_ACP, 0, newVal, -1, szImage, MAXTOKEN, nullptr, nullptr);
-   m_d.m_imageDecal = szImage;
-   Texture * const tex = m_ptable->GetImage(szImage);
+   m_d.m_imageDecal = MakeString(newVal);
+   Texture *const tex = m_ptable->GetImage(m_d.m_imageDecal);
    if (tex)
    {
       if (tex->IsHDR())

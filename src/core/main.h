@@ -53,7 +53,14 @@ extern "C" {
    #include <atlbase.h>
 }
 #undef strncpy
+#define __STDC_WANT_LIB_EXT1__ 1
 #include <wchar.h>
+#if !defined(_MSC_VER) && !defined(__STDC_LIB_EXT1__)
+inline /*errno_t*/int wcscpy_s(wchar_t* __restrict dest, const size_t destsz, const wchar_t* __restrict src) { wcscpy(dest,src); return 0; }
+inline /*errno_t*/int wcscpy_s(wchar_t* __restrict dest, const wchar_t* __restrict src) { wcscpy(dest,src); return 0; }
+inline /*errno_t*/int wcscat_s(wchar_t* __restrict dest, const size_t destsz, const wchar_t* __restrict src) { wcscat(dest,src); return 0; }
+inline /*errno_t*/int wcscat_s(wchar_t* __restrict dest, const wchar_t* __restrict src) { wcscat(dest,src); return 0; }
+#endif
 #endif
 
 #ifdef _MSC_VER
@@ -163,9 +170,6 @@ static const string defaultPathSearch[] = { string(), "user"s +PATH_SEPARATOR_CH
 
 #define _aligned_malloc(size, align) aligned_alloc(align, size)
 #define _aligned_free free
-
-#undef lstrlen
-#define lstrlen lstrlenA
 
 #undef lstrcmpi
 #define lstrcmpi lstrcmpiA

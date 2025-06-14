@@ -250,25 +250,22 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
    m_pBloomTmpBufferTexture = m_pBloomBufferTexture->Duplicate("BloomBuffer2"s);
 
    std::shared_ptr<BaseTexture> ballTex = std::shared_ptr<BaseTexture>(BaseTexture::CreateFromFile(g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "BallEnv.exr"));
-   m_ballEnvSampler = new Sampler(m_renderDevice, ballTex, false, SA_REPEAT, SA_REPEAT, SF_TRILINEAR);
-   m_ballEnvSampler->SetName("Ball Env");
-   ballTex.reset();
+   m_ballEnvSampler = std::make_shared<Sampler>(m_renderDevice, "Ball Env"s, ballTex, false);
+   ballTex = nullptr;
 
    std::shared_ptr<BaseTexture> aoTex = std::shared_ptr<BaseTexture>(BaseTexture::CreateFromFile(g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "AODither.webp"));
-   m_aoDitherSampler = new Sampler(m_renderDevice, aoTex, true, SA_REPEAT, SA_REPEAT, SF_NONE);
-   m_aoDitherSampler->SetName("AO Dither");
-   aoTex.reset();
+   m_aoDitherSampler = std::make_shared<Sampler>(m_renderDevice, "AO Dither"s, aoTex, true);
+   aoTex = nullptr;
 
    Texture* tableEnv = m_table->GetImage(m_table->m_envImage);
-   std::shared_ptr<BaseTexture> envTex = tableEnv ? tableEnv->GetRawBitmap() : std::shared_ptr<BaseTexture>(BaseTexture::CreateFromFile(g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "EnvMap.webp"));
-   m_envSampler = new Sampler(m_renderDevice, envTex, false, SA_REPEAT, SA_CLAMP, SF_TRILINEAR);
-   m_envSampler->SetName("Table Env");
+   std::shared_ptr<const BaseTexture> envTex = tableEnv ? tableEnv->GetRawBitmap(false, 0) : std::shared_ptr<BaseTexture>(BaseTexture::CreateFromFile(g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "EnvMap.webp"));
+   m_envSampler = std::make_shared<Sampler>(m_renderDevice, "Table Env"s, envTex, false);
 
    PLOGI << "Computing environment map radiance"; // For profiling
 
    const unsigned int envTexHeight = min(envTex->height(), 256u) / 8;
    const unsigned int envTexWidth = envTexHeight * 2;
-   // DirectX 9 does not support bitwise operation in shader, so radical_inverse is not implemented and therefore we use the slow CPU path instead of GPU
+   // DirectX 9 does not support bitwise operation in shader, so radical_inverse is not implemented, and therefore we use the slow CPU path instead of GPU
    // OpenGL ES does not support features used in the irradiance shader, so we use the CPU path for it as well
    // There is a bug when using the Metal shader, so we use the CPU path for it as well
    #if defined(ENABLE_DX9) || defined(__OPENGLES__) || defined(__APPLE__)
@@ -397,9 +394,6 @@ Renderer::~Renderer()
 {
    delete m_mvp;
    m_gpu_profiler.Shutdown();
-   delete m_aoDitherSampler;
-   delete m_envSampler;
-   delete m_ballEnvSampler;
    delete m_ballImage;
    delete m_decalImage;
    delete m_envRadianceTexture;
@@ -422,6 +416,9 @@ Renderer::~Renderer()
    delete m_pOffscreenVRLeft;
    delete m_pOffscreenVRRight;
    ReleaseAORenderTargets();
+   m_ballEnvSampler = nullptr;
+   m_envSampler = nullptr;
+   m_aoDitherSampler = nullptr;
    delete m_renderDevice;
 }
 
@@ -512,14 +509,14 @@ void Renderer::SwapAORenderTargets()
    m_pAORenderTarget2 = tmpAO;
 }
 
-BaseTexture* Renderer::EnvmapPrecalc(std::shared_ptr<BaseTexture> envTex, const unsigned int rad_env_xres, const unsigned int rad_env_yres)
+BaseTexture* Renderer::EnvmapPrecalc(std::shared_ptr<const BaseTexture> envTex, const unsigned int rad_env_xres, const unsigned int rad_env_yres)
 {
    const void* __restrict envmap = envTex->datac();
    const unsigned int env_xres = envTex->width();
    const unsigned int env_yres = envTex->height();
    BaseTexture::Format env_format = envTex->m_format;
    const BaseTexture::Format rad_format = (env_format == BaseTexture::RGB_FP16 || env_format == BaseTexture::RGB_FP32) ? env_format : BaseTexture::SRGB;
-   BaseTexture* radTex = new BaseTexture(rad_env_xres, rad_env_yres, rad_format);
+   BaseTexture* radTex = BaseTexture::Create(rad_env_xres, rad_env_yres, rad_format);
    BYTE* const __restrict rad_envmap = radTex->data();
    bool free_envmap = false;
 
@@ -889,7 +886,7 @@ void Renderer::DrawBackground()
       m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
       m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
       m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
-      g_pplayer->m_renderer->DrawSprite(0.f, 0.f, 1.f, 1.f, 0xFFFFFFFF, m_renderDevice->m_texMan.LoadTexture(pin, SF_TRILINEAR, SA_CLAMP, SA_CLAMP, false), ptable->m_ImageBackdropNightDay ? sqrtf(m_globalEmissionScale) : 1.0f, true);
+      g_pplayer->m_renderer->DrawSprite(0.f, 0.f, 1.f, 1.f, 0xFFFFFFFF, m_renderDevice->m_texMan.LoadTexture(pin, false), ptable->m_ImageBackdropNightDay ? sqrtf(m_globalEmissionScale) : 1.0f, true);
    }
    else
    {
@@ -1328,7 +1325,7 @@ void Renderer::SetupSegmentRenderer(int profile, const bool isBackdrop, const ve
    m_renderDevice->m_DMDShader->SetVector(SHADER_glassArea, &glassArea);
    m_renderDevice->m_DMDShader->SetVector(SHADER_glassPad, emitterPad.x - parallaxU, emitterPad.z + parallaxU, emitterPad.y - parallaxV, emitterPad.w + parallaxV);
    m_renderDevice->m_DMDShader->SetFloat4v(SHADER_alphaSegState, reinterpret_cast<const vec4*>(segs), 4);
-   m_renderDevice->m_DMDShader->SetTexture(SHADER_displayTex, segSDF, SF_TRILINEAR, SA_CLAMP, SA_CLAMP, true);
+   m_renderDevice->m_DMDShader->SetTexture(SHADER_displayTex, segSDF, true, SF_TRILINEAR, SA_CLAMP, SA_CLAMP);
    m_renderDevice->m_DMDShader->SetTechnique(isBackdrop ? SHADER_TECHNIQUE_display_Seg : SHADER_TECHNIQUE_display_Seg_world);
 }
 
@@ -1501,7 +1498,7 @@ void Renderer::DrawDynamics(bool onlyBalls)
    m_render_mask = mask;
 }
 
-void Renderer::DrawSprite(const float posx, const float posy, const float width, const float height, const COLORREF color, Sampler* const tex, const float intensity, const bool backdrop)
+void Renderer::DrawSprite(const float posx, const float posy, const float width, const float height, const COLORREF color, std::shared_ptr<const Sampler> tex, const float intensity, const bool backdrop)
 {
    Vertex3D_NoTex2 vertices[4] =
    {
@@ -1521,7 +1518,7 @@ void Renderer::DrawSprite(const float posx, const float posy, const float width,
    m_renderDevice->m_DMDShader->SetVector(SHADER_vColor_Intensity, &c);
    m_renderDevice->m_DMDShader->SetTechnique(tex ? SHADER_TECHNIQUE_basic_noDMD : SHADER_TECHNIQUE_basic_noDMD_notex);
    if (tex)
-      m_renderDevice->m_DMDShader->SetTexture(SHADER_tex_sprite, tex);
+      m_renderDevice->m_DMDShader->SetTexture(SHADER_tex_sprite, tex, SF_TRILINEAR, SA_CLAMP, SA_CLAMP);
    m_renderDevice->m_DMDShader->SetVector(SHADER_glassArea, 0.f, 0.f, 1.f, 1.f);
    m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
    m_renderDevice->DrawTexturedQuad(m_renderDevice->m_DMDShader, vertices);
@@ -1596,8 +1593,9 @@ void Renderer::RenderStaticPrepass()
       PLOGI << "Performing prerendering of static parts."; // For profiling
       RenderDevice::SetMainTextureDefaultFiltering(SF_BILINEAR);
    }
+   ShaderState::m_disableMipmaps = IsUsingStaticPrepass();
 
-   //#define STATIC_PRERENDER_ITERATIONS_KOROBOV 7.0 // for the (commented out) lattice-based QMC oversampling, 'magic factor', depending on the the number of iterations!
+   //#define STATIC_PRERENDER_ITERATIONS_KOROBOV 7.0 // for the (commented out) lattice-based QMC oversampling, 'magic factor', depending on the number of iterations!
    // loop for X times and accumulate/average these renderings
    // NOTE: iter == 0 MUST ALWAYS PRODUCE an offset of 0,0!
    int n_iter = IsUsingStaticPrepass() ? (STATIC_PRERENDER_ITERATIONS - 1) : 0;
@@ -1684,6 +1682,7 @@ void Renderer::RenderStaticPrepass()
    // if rendering static/with heavy oversampling, re-enable the aniso/trilinear filter now for the normal rendering
    const bool forceAniso = m_table->m_settings.LoadValueWithDefault(Settings::Player, "ForceAnisotropicFiltering"s, true);
    RenderDevice::SetMainTextureDefaultFiltering(forceAniso ? SF_ANISOTROPIC : SF_TRILINEAR);
+   ShaderState::m_disableMipmaps = false;
 
    // Now finalize static buffer with static AO
    if (GetAOMode() == 1)
@@ -2206,7 +2205,7 @@ void Renderer::PrepareVideoBuffers(RenderTarget* outputBackBuffer)
          const float maxDisplayLuminance = m_renderDevice->m_outputWnd[0]->GetHDRHeadRoom() * (m_renderDevice->m_outputWnd[0]->GetSDRWhitePoint() * 80.f); // Maximum luminance of display in nits, note that GetSDRWhitePoint()*80 should usually be in the 200 nits range
          m_renderDevice->m_FBShader->SetVector(SHADER_exposure_wcg,
             m_exposure,
-            (m_renderDevice->m_outputWnd[0]->GetSDRWhitePoint() * 80.f) / maxDisplayLuminance, // Apply SDR whitepoint (1.0 -> white point in nits), then scale down by maximum luminance (in nits) of display to get a relative value before before tonemapping, equal to 1/GetHDRHeadRoom()
+            (m_renderDevice->m_outputWnd[0]->GetSDRWhitePoint() * 80.f) / maxDisplayLuminance, // Apply SDR whitepoint (1.0 -> white point in nits), then scale down by maximum luminance (in nits) of display to get a relative value before tonemapping, equal to 1/GetHDRHeadRoom()
             maxDisplayLuminance / 10000.f, // Apply back maximum luminance in nits of display after tonemapping, scaled down to PQ limits (1.0 is 10000 nits)
             1.f);
 
@@ -2235,7 +2234,7 @@ void Renderer::PrepareVideoBuffers(RenderTarget* outputBackBuffer)
       Texture *const pin = m_table->GetImage(m_table->m_imageColorGrade);
       if (pin)
          // FIXME ensure that we always honor the linear RGB. Here it can be defeated if texture is used for something else (which is very unlikely)
-         m_renderDevice->m_FBShader->SetTexture(SHADER_tex_color_lut, pin, SF_BILINEAR, SA_CLAMP, SA_CLAMP, true);
+         m_renderDevice->m_FBShader->SetTexture(SHADER_tex_color_lut, pin, true, SF_BILINEAR, SA_CLAMP, SA_CLAMP);
       m_renderDevice->m_FBShader->SetVector(SHADER_bloom_dither_colorgrade,
          IsBloomEnabled() ? 1.f : 0.f, // Bloom
          (!isHdr2020 && (outputBackBuffer->GetColorFormat() != colorFormat::RGBA10)) ? 1.f : 0.f, // Dither
@@ -2410,7 +2409,7 @@ void Renderer::PrepareVideoBuffers(RenderTarget* outputBackBuffer)
    // This needs a modification of the shader to use the filtered texture (tex_fb_filtered) instead of unfiltered
    if (false)
    {
-      std::shared_ptr<BaseTexture> tex = std::make_shared<BaseTexture>(renderedRT->GetWidth(), renderedRT->GetHeight(), BaseTexture::RGB);
+      std::shared_ptr<BaseTexture> tex = std::shared_ptr<BaseTexture>(BaseTexture::Create(renderedRT->GetWidth(), renderedRT->GetHeight(), BaseTexture::RGB));
       BYTE *const __restrict pdest = tex->data();
       for (size_t i = 0; i < (size_t)renderedRT->GetWidth() * renderedRT->GetHeight(); ++i)
       {
@@ -2422,13 +2421,12 @@ void Renderer::PrepareVideoBuffers(RenderTarget* outputBackBuffer)
          pdest[i * 3 + 1] = ((i >> 2) & 1) == 0 ? 0x00 : ((i & 1) == 0 && (y & 1) == 0) ? 0x00 : 0xFF;
          pdest[i * 3 + 2] = ((y >> 2) & 1) == 0 ? 0x00 : ((i & 1) == 0 && (y & 1) == 0) ? 0x00 : 0xFF;
       }
-      Sampler *checker = new Sampler(m_renderDevice, tex, true, SA_CLAMP, SA_CLAMP, SF_NONE);
+      std::shared_ptr<Sampler> checker = std::make_shared<Sampler>(m_renderDevice, "Checker", tex, true);
       m_renderDevice->m_FBShader->SetVector(SHADER_w_h_height, (float)(1.0 / renderedRT->GetWidth()), (float)(1.0 / renderedRT->GetHeight()), 1.f, 1.f);
       m_renderDevice->m_FBShader->SetTexture(SHADER_tex_fb_filtered, checker);
       m_renderDevice->m_FBShader->SetTechnique(SHADER_TECHNIQUE_fb_mirror);
       m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
       renderedRT = outputRT;
-      delete checker;
    }
 
    // Stereo and AA are performed on LDR render buffer after tonemapping (RGB8 or RGB10, but nof RGBF).
@@ -2601,13 +2599,13 @@ void Renderer::PrepareVideoBuffers(RenderTarget* outputBackBuffer)
          int fw = w, fh = h;
          if ((m_vrPreviewShrink && ar < previewAr) || (!m_vrPreviewShrink && ar > previewAr))
          { // Fit on Y
-            const int scaledW = (int)(h * previewAr);
+            const int scaledW = (int)((float)h * previewAr);
             x = (w - scaledW) / 2;
             fw = scaledW;
          }
          else
          { // Fit on X
-            const int scaledH = (int)(w / previewAr);
+            const int scaledH = (int)((float)w / previewAr);
             y = (h - scaledH) / 2;
             fh = scaledH;
          }

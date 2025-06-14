@@ -901,7 +901,7 @@ void Ramp::Render(const unsigned int renderMask)
       }
       else
       {
-         m_rd->m_basicShader->SetTexture(SHADER_tex_base_color, pin, SF_TRILINEAR, sam, sam);
+         m_rd->m_basicShader->SetTexture(SHADER_tex_base_color, pin, false, SF_TRILINEAR, sam, sam);
          m_rd->m_basicShader->SetTechniqueMaterial(SHADER_TECHNIQUE_basic_with_texture, *mat, pin->m_alphaTestValue >= 0.f && !pin->IsOpaque());
          m_rd->m_basicShader->SetAlphaTestValue(pin->m_alphaTestValue);
          m_rd->m_basicShader->SetMaterial(mat, !pin->IsOpaque());
@@ -923,7 +923,7 @@ void Ramp::Render(const unsigned int renderMask)
           * since the texture coordinates always stay within [0,1] anyway. */
          SamplerAddressMode sam = m_d.m_imagealignment == ImageModeWrap ? SA_CLAMP : SA_REPEAT;
          m_rd->m_basicShader->SetTechniqueMaterial(SHADER_TECHNIQUE_basic_with_texture, *mat, pin->m_alphaTestValue >= 0.f && !pin->IsOpaque());
-         m_rd->m_basicShader->SetTexture(SHADER_tex_base_color, pin, SF_TRILINEAR, sam, sam);
+         m_rd->m_basicShader->SetTexture(SHADER_tex_base_color, pin, false, SF_TRILINEAR, sam, sam);
          m_rd->m_basicShader->SetAlphaTestValue(pin->m_alphaTestValue);
          m_rd->m_basicShader->SetMaterial(mat, !pin->IsOpaque());
       }
@@ -1597,10 +1597,7 @@ STDMETHODIMP Ramp::get_Material(BSTR *pVal)
 
 STDMETHODIMP Ramp::put_Material(BSTR newVal)
 {
-   char buf[MAXNAMEBUFFER];
-   WideCharToMultiByteNull(CP_ACP, 0, newVal, -1, buf, MAXNAMEBUFFER, nullptr, nullptr);
-   m_d.m_szMaterial = buf;
-
+   m_d.m_szMaterial = MakeString(newVal);
    return S_OK;
 }
 
@@ -1632,8 +1629,7 @@ STDMETHODIMP Ramp::get_Image(BSTR *pVal)
 
 STDMETHODIMP Ramp::put_Image(BSTR newVal)
 {
-   char szImage[MAXTOKEN];
-   WideCharToMultiByteNull(CP_ACP, 0, newVal, -1, szImage, MAXTOKEN, nullptr, nullptr);
+   const string szImage = MakeString(newVal);
    const Texture * const tex = m_ptable->GetImage(szImage);
    if (tex && tex->IsHDR())
    {
@@ -1641,7 +1637,7 @@ STDMETHODIMP Ramp::put_Image(BSTR newVal)
        return E_FAIL;
    }
 
-   if(lstrcmpi(szImage, m_d.m_szImage.c_str()) != 0)
+   if(!StrCompareNoCase(szImage, m_d.m_szImage))
    {
       m_d.m_szImage = szImage;
       m_dynamicVertexBufferRegenerate = true;
@@ -1943,10 +1939,7 @@ STDMETHODIMP Ramp::get_PhysicsMaterial(BSTR *pVal)
 
 STDMETHODIMP Ramp::put_PhysicsMaterial(BSTR newVal)
 {
-   char buf[MAXNAMEBUFFER];
-   WideCharToMultiByteNull(CP_ACP, 0, newVal, -1, buf, MAXNAMEBUFFER, nullptr, nullptr);
-   m_d.m_szPhysicsMaterial = buf;
-
+   m_d.m_szPhysicsMaterial = MakeString(newVal);
    return S_OK;
 }
 
@@ -1967,8 +1960,7 @@ void Ramp::ExportMesh(ObjLoader& loader)
 {
    if (m_d.m_visible)
    {
-      char name[sizeof(m_wzName)/sizeof(m_wzName[0])];
-      WideCharToMultiByteNull(CP_ACP, 0, m_wzName, -1, name, sizeof(name), nullptr, nullptr);
+      const string name = MakeString(m_wzName);
       loader.WriteObjectName(name);
       if (!IsHabitrail())
       {

@@ -35,7 +35,12 @@ void RenderPass::Reset(const string& name, RenderTarget* const rt)
 void RenderPass::RecycleCommands(std::vector<RenderCommand*>& commandPool)
 {
    if (commandPool.size() < 1024)
+   {
+      for (RenderCommand* cmd : m_commands)
+         if (cmd->GetShaderState())
+            cmd->GetShaderState()->m_samplers.clear();
       commandPool.insert(commandPool.end(), m_commands.begin(), m_commands.end());
+   }
    else
       for (RenderCommand* cmd : m_commands)
          delete cmd;
@@ -47,6 +52,13 @@ void RenderPass::AddPrecursor(RenderPass* dependency)
    assert(this != dependency);
    if (FindIndexOf(m_dependencies, dependency) == -1)
       m_dependencies.push_back(dependency);
+}
+
+void RenderPass::ClearCommands()
+{
+   for (RenderCommand* cmd : m_commands)
+      delete cmd;
+   m_commands.clear();
 }
 
 void RenderPass::SortCommands()

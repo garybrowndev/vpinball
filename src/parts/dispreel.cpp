@@ -390,7 +390,7 @@ void DispReel::Render(const unsigned int renderMask)
 
    m_rd->m_DMDShader->SetVector(SHADER_glassArea, 0.f, 0.f, 1.f, 1.f);
 
-   m_rd->m_DMDShader->SetTexture(SHADER_tex_sprite, pin, SF_TRILINEAR, SA_REPEAT, SA_REPEAT);
+   m_rd->m_DMDShader->SetTexture(SHADER_tex_sprite, pin, false, SF_TRILINEAR, SA_REPEAT, SA_REPEAT);
 
    // set up all the reel positions within the object frame
    const float renderspacingx = max(0.0f, m_d.m_reelspacing / (float)EDITOR_BG_WIDTH);
@@ -690,8 +690,7 @@ STDMETHODIMP DispReel::get_Image(BSTR *pVal)
 
 STDMETHODIMP DispReel::put_Image(BSTR newVal)
 {
-   char szImage[MAXTOKEN];
-   WideCharToMultiByteNull(CP_ACP, 0, newVal, -1, szImage, MAXTOKEN, nullptr, nullptr);
+   const string szImage = MakeString(newVal);
    const Texture * const tex = m_ptable->GetImage(szImage);
    if (tex && tex->IsHDR())
    {
@@ -726,10 +725,7 @@ STDMETHODIMP DispReel::get_Sound(BSTR *pVal)
 
 STDMETHODIMP DispReel::put_Sound(BSTR newVal)
 {
-   char buf[MAXTOKEN];
-   WideCharToMultiByteNull(CP_ACP, 0, newVal, -1, buf, MAXTOKEN, nullptr, nullptr);
-   m_d.m_szSound = buf;
-
+   m_d.m_szSound = MakeString(newVal);
    return S_OK;
 }
 
