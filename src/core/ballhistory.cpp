@@ -586,13 +586,50 @@ void BallHistory::PrintScreenRecord::ShowNameValueTable(const char* name, ImFont
 void BallHistory::PrintScreenRecord::TransformPosition(float& positionX, float& positionY)
 {
    ImGuiIO& io = ImGui::GetIO();
+   bool transform = true;
    if (positionX >= -1.0f && positionX <= 1.0f)
    {
       positionX *= io.DisplaySize.x;
+      transform = false;
    }
    if (positionY >= -1.0f && positionY <= 1.0f)
    {
       positionY *= io.DisplaySize.y;
+      transform = false;
+   }
+
+   if (transform)
+   {
+      TransformAspectRatio(positionX, positionY);
+   }
+}
+
+void BallHistory::PrintScreenRecord::TransformAspectRatio(float& positionX, float& positionY)
+{
+   int width = g_pplayer->m_playfieldWnd->GetWidth();
+   int height = g_pplayer->m_playfieldWnd->GetHeight();
+   float rotationDegrees = g_pplayer->m_ptable->mViewSetups[g_pplayer->m_ptable->m_BG_current_set].GetRotation(width, height);
+
+   if (rotationDegrees < 90.0f)
+   {
+      // do nothing
+   }
+   else if (rotationDegrees < 180.0f)
+   {
+      float oldPositionY = positionY;
+      positionY = width - positionX;
+      positionX = oldPositionY;
+   }
+   else if (rotationDegrees < 270.0f)
+   {
+      positionX = width - positionX;
+      positionY = height - positionY;
+   }
+   else
+   {
+      float oldPositionX = positionX;
+      positionX = height - positionY;
+      positionY = oldPositionX;
    }
 }
 
@@ -2620,6 +2657,60 @@ void BallHistory::DrawTrainerBallCorridor(Player& player)
    DrawTrainerBallCorridorOpeningRight(player, bcor);
 }
 
+void BallHistory::DrawActiveBallKickerCheckPosition(Player &player, POINT checkPosition, int xMax, int yMax, std::string& kickerText)
+{
+   float positionX = float(checkPosition.x);
+   float positionY = float(checkPosition.y);
+   PrintScreenRecord::TransformAspectRatio(positionX, positionY);
+   checkPosition = { LONG(positionX), LONG(positionY) };
+
+   if (checkPosition.x < 0)
+   {
+      if (checkPosition.y < 0)
+      {
+         kickerText = "<^ " + kickerText;
+      }
+      else if (checkPosition.y >= 0 && checkPosition.y < yMax)
+      {
+         kickerText = "<< " + kickerText;
+      }
+      else
+      {
+         kickerText = "<v " + kickerText;
+      }
+   }
+   else if (checkPosition.x >= 0 && checkPosition.x < xMax)
+   {
+      if (checkPosition.y < 0)
+      {
+         kickerText = "^^ " + kickerText;
+      }
+      else if (checkPosition.y >= 0 && checkPosition.y < yMax)
+      {
+         // do nothing
+      }
+      else
+      {
+         kickerText = "vv " + kickerText;
+      }
+   }
+   else
+   {
+      if (checkPosition.y < 0)
+      {
+         kickerText = kickerText + " ^>";
+      }
+      else if (checkPosition.y >= 0 && checkPosition.y < yMax)
+      {
+         kickerText = kickerText + " >>";
+      }
+      else
+      {
+         kickerText = kickerText + " v>";
+      }
+   }
+}
+
 void BallHistory::DrawActiveBallKickers(Player& player)
 {
    float ballRadius = GetDefaultBallRadius();
@@ -2635,51 +2726,7 @@ void BallHistory::DrawActiveBallKickers(Player& player)
          int xMax = int(ImGui::GetIO().DisplaySize.x);
          int yMax = int(ImGui::GetIO().DisplaySize.y);
 
-         if (screenPoint.x < 0)
-         {
-            if (screenPoint.y < 0)
-            {
-               kickerText = "<^ " + kickerText;
-            }
-            else if (screenPoint.y >= 0 && screenPoint.y < yMax)
-            {
-               kickerText = "<< " + kickerText;
-            }
-            else
-            {
-               kickerText = "<v " + kickerText;
-            }
-         }
-         else if (screenPoint.x >= 0 && screenPoint.x < xMax)
-         {
-            if (screenPoint.y < 0)
-            {
-               kickerText = "^^ " + kickerText;
-            }
-            else if (screenPoint.y >= 0 && screenPoint.y < yMax)
-            {
-               // do nothing
-            }
-            else
-            {
-               kickerText = "vv " + kickerText;
-            }
-         }
-         else
-         {
-            if (screenPoint.y < 0)
-            {
-               kickerText = kickerText + " ^>";
-            }
-            else if (screenPoint.y >= 0 && screenPoint.y < yMax)
-            {
-               kickerText = kickerText + " >>";
-            }
-            else
-            {
-               kickerText = kickerText + " v>";
-            }
-         }
+         DrawActiveBallKickerCheckPosition(player, screenPoint, xMax, yMax, kickerText);
 
          PrintScreenRecord::Text(ImGuiDrawActiveBallKickersLabels[abkIndex], float(screenPoint.x), float(screenPoint.y), kickerText.c_str());
 

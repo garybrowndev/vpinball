@@ -494,6 +494,7 @@ private:
 
       static void Init();
       static void UnInit();
+      static void TransformAspectRatio(float &positionX, float &positionY);
       static void Text(const char *name, float positionX, float positionY, const char *format, ...);
       static void MenuTitleText(const char *format, ...);
       static void MenuText(bool selected, const char *format, ...);
@@ -791,6 +792,7 @@ private:
    void DrawTrainerBallCorridorOpeningRight(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor);
    void DrawTrainerModeVisuals(Player &player, int currentTimeMs);
    void DrawTrainerBallCorridor(Player &player);
+   void DrawActiveBallKickerCheckPosition(Player &player, POINT checkPosition, int xMax, int yMax, std::string &kickerText);
    void DrawActiveBallKickers(Player &player);
    void DrawAngleVelocityPreviewHelperAdd(Player &player, TrainerOptions::BallStartOptionsRecord &bsor, float angle, float velocity, float radius);
    void DrawAngleVelocityPreviewHelper(Player &player, TrainerOptions::BallStartOptionsRecord &bsor, float angleStep, float velocityStep, float radius);
