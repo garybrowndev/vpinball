@@ -13,27 +13,23 @@
 #include <bgfx/platform.h>
 #endif
 
-Sampler::Sampler(RenderDevice* rd, std::shared_ptr<const BaseTexture> surf, const bool force_linear_rgb, const SamplerAddressMode clampu, const SamplerAddressMode clampv, const SamplerFilter filter)
-   : m_dirty(false)
+Sampler::Sampler(RenderDevice* rd, string name, std::shared_ptr<const BaseTexture> surf, const bool force_linear_rgb)
+   : m_name(std::move(name))
    , m_type(SurfaceType::RT_DEFAULT)
    , m_ownTexture(true)
    , m_rd(rd)
    , m_width(surf->width())
    , m_height(surf->height())
-   , m_clampu(clampu)
-   , m_clampv(clampv)
-   , m_filter(filter)
 {
 #if defined(ENABLE_BGFX)
-   m_isLinear = true;
    switch (surf->m_format)
    {
    case BaseTexture::BW: m_bgfx_format = bgfx::TextureFormat::Enum::R8; break;
    case BaseTexture::RGB: m_bgfx_format = bgfx::TextureFormat::Enum::RGB8; break;
-   case BaseTexture::SRGB: m_bgfx_format = bgfx::TextureFormat::Enum::RGBA8; m_isLinear = force_linear_rgb; break;
+   case BaseTexture::SRGB: m_bgfx_format = bgfx::TextureFormat::Enum::RGBA8; break;
    case BaseTexture::RGBA: m_bgfx_format = bgfx::TextureFormat::Enum::RGBA8; break;
-   case BaseTexture::SRGBA: m_bgfx_format = bgfx::TextureFormat::Enum::RGBA8; m_isLinear = force_linear_rgb; break;
-   case BaseTexture::SRGB565: m_bgfx_format = bgfx::TextureFormat::Enum::RGBA8; m_isLinear = force_linear_rgb; break;
+   case BaseTexture::SRGBA: m_bgfx_format = bgfx::TextureFormat::Enum::RGBA8; break;
+   case BaseTexture::SRGB565: m_bgfx_format = bgfx::TextureFormat::Enum::RGBA8; break;
    case BaseTexture::RGB_FP16: m_bgfx_format = bgfx::TextureFormat::Enum::RGBA16F; break;
    case BaseTexture::RGBA_FP16: m_bgfx_format = bgfx::TextureFormat::Enum::RGBA16F; break;
    case BaseTexture::RGB_FP32: m_bgfx_format = bgfx::TextureFormat::Enum::RGBA32F; break;
@@ -52,11 +48,11 @@ Sampler::Sampler(RenderDevice* rd, std::shared_ptr<const BaseTexture> surf, cons
    else if (surf->m_format == BaseTexture::RGBA)
       format = colorFormat::RGBA;
    else if (surf->m_format == BaseTexture::SRGB)
-      format = colorFormat::SRGB;
+      format = force_linear_rgb ? colorFormat::RGB : colorFormat::SRGB;
    else if (surf->m_format == BaseTexture::SRGBA)
-      format = colorFormat::SRGBA;
+      format = force_linear_rgb ? colorFormat::RGBA : colorFormat::SRGBA;
    else if (surf->m_format == BaseTexture::SRGB565)
-      format = colorFormat::RGB5;
+      format = colorFormat::RGB5; // FIXME this is incorrect sRGB wise
    else if (surf->m_format == BaseTexture::RGB_FP16)
       format = colorFormat::RGB16F;
    else if (surf->m_format == BaseTexture::RGBA_FP16)
@@ -67,22 +63,12 @@ Sampler::Sampler(RenderDevice* rd, std::shared_ptr<const BaseTexture> surf, cons
       format = colorFormat::GREY8;
    else
       assert(false); // Unsupported image format
-   if (force_linear_rgb)
-   {
-      if (format == colorFormat::SRGB)
-         format = colorFormat::RGB;
-      else if (format == colorFormat::SRGBA)
-         format = colorFormat::RGBA;
-   }
    m_texture = CreateTexture(surf, 0, format, 0);
-   m_isLinear = format != colorFormat::SRGB && format != colorFormat::SRGBA;
 
 #elif defined(ENABLE_DX9)
    m_rd->m_curTextureUpdates++;
    colorFormat texformat;
    IDirect3DTexture9* sysTex = CreateSystemTexture(surf, force_linear_rgb, texformat);
-
-   m_isLinear = texformat == colorFormat::RGBA16F || texformat == colorFormat::RGBA32F || force_linear_rgb;
 
    HRESULT hr = m_rd->GetCoreDevice()->CreateTexture(m_width, m_height, (texformat != colorFormat::DXT5 && m_rd->m_autogen_mipmap) ? 0 : sysTex->GetLevelCount(),
       (texformat != colorFormat::DXT5 && m_rd->m_autogen_mipmap) ? textureUsage::AUTOMIPMAP : 0, (D3DFORMAT)texformat, (D3DPOOL)memoryPool::DEFAULT, &m_texture, nullptr);
@@ -101,30 +87,25 @@ Sampler::Sampler(RenderDevice* rd, std::shared_ptr<const BaseTexture> surf, cons
 }
 
 #if defined(ENABLE_BGFX)
-Sampler::Sampler(RenderDevice* rd, SurfaceType type, bgfx::TextureHandle bgfxTexture, unsigned int width, unsigned int height, bool ownTexture, bool linear_rgb, const SamplerAddressMode clampu, const SamplerAddressMode clampv, const SamplerFilter filter)
+Sampler::Sampler(RenderDevice* rd, string name, SurfaceType type, bgfx::TextureHandle bgfxTexture, unsigned int width, unsigned int height, bool ownTexture)
    : m_type(type)
+   , m_name(std::move(name))
    , m_rd(rd)
-   , m_dirty(false)
    , m_ownTexture(ownTexture)
-   , m_clampu(clampu)
-   , m_clampv(clampv)
-   , m_filter(filter)
    , m_mipsTexture(bgfxTexture)
    , m_width(width)
    , m_height(height)
-   , m_isLinear(linear_rgb)
 {
+   assert(bgfx::isValid(bgfxTexture));
+   bgfx::setName(bgfxTexture, m_name.c_str());
 }
 
 #elif defined(ENABLE_OPENGL)
-Sampler::Sampler(RenderDevice* rd, SurfaceType type, GLuint glTexture, bool ownTexture, bool force_linear_rgb, const SamplerAddressMode clampu, const SamplerAddressMode clampv, const SamplerFilter filter)
+Sampler::Sampler(RenderDevice* rd, string name, SurfaceType type, GLuint glTexture, bool ownTexture)
    : m_type(type)
+   , m_name(std::move(name))
    , m_rd(rd)
-   , m_dirty(false)
    , m_ownTexture(ownTexture)
-   , m_clampu(clampu)
-   , m_clampv(clampv)
-   , m_filter(filter)
 {
    switch (m_type)
    {
@@ -146,25 +127,24 @@ Sampler::Sampler(RenderDevice* rd, SurfaceType type, GLuint glTexture, bool ownT
 #else
    internal_format = SRGBA;
 #endif
-   m_isLinear = !((internal_format == SRGB) || (internal_format == SRGBA) || (internal_format == SDXT5) || (internal_format == SBC7)) || force_linear_rgb;
    m_texture = glTexture;
+#ifndef __OPENGLES__
+   if (GLAD_GL_VERSION_4_3)
+      glObjectLabel(GL_TEXTURE, m_texture, (GLsizei)m_name.length(), m_name.c_str());
+#endif
 }
 
 #elif defined(ENABLE_DX9)
-Sampler::Sampler(RenderDevice* rd, IDirect3DTexture9* dx9Texture, bool ownTexture, bool force_linear_rgb, const SamplerAddressMode clampu, const SamplerAddressMode clampv, const SamplerFilter filter)
-   : m_dirty(false)
+Sampler::Sampler(RenderDevice* rd, string name, IDirect3DTexture9* dx9Texture, bool ownTexture)
+   : m_name(std::move(name))
    , m_type(SurfaceType::RT_DEFAULT)
    , m_ownTexture(ownTexture)
    , m_rd(rd)
-   , m_clampu(clampu)
-   , m_clampv(clampv)
-   , m_filter(filter)
 {
    D3DSURFACE_DESC desc;
    dx9Texture->GetLevelDesc(0, &desc);
    m_width = desc.Width;
    m_height = desc.Height;
-   m_isLinear = desc.Format == D3DFMT_A16B16G16R16F || desc.Format == D3DFMT_A32B32G32R32F || force_linear_rgb;
    m_texture = dx9Texture;
 }
 #endif
@@ -177,9 +157,6 @@ namespace bgfx { extern void release(const bgfx::Memory* _mem); }
 
 Sampler::~Sampler()
 {
-   if (m_rd)
-      m_rd->UnbindSampler(this);
-
    #if defined(ENABLE_BGFX)
    if (m_textureUpdate)
       bgfx::release(m_textureUpdate);
@@ -189,7 +166,6 @@ Sampler::~Sampler()
       bgfx::destroy(m_mipsTexture);
 
    #elif defined(ENABLE_OPENGL)
-   Unbind();
    if (m_ownTexture)
       glDeleteTextures(1, &m_texture);
 
@@ -209,7 +185,7 @@ bgfx::TextureHandle Sampler::GetCoreTexture(bool genMipmaps)
       const std::lock_guard<std::mutex> lock(m_textureUpdateMutex);
       if (!bgfx::isValid(m_nomipsTexture))
       {
-         m_nomipsTexture = bgfx::createTexture2D(m_width, m_height, false, 1, m_bgfx_format, m_isLinear ? BGFX_TEXTURE_NONE : BGFX_TEXTURE_SRGB);
+         m_nomipsTexture = bgfx::createTexture2D(m_width, m_height, false, 1, m_bgfx_format, m_isTextureUpdateLinear ? BGFX_TEXTURE_NONE : BGFX_TEXTURE_SRGB);
          bgfx::setName(m_nomipsTexture, (m_name + ".NoMipMap").c_str());
       }
       bgfx::updateTexture2D(m_nomipsTexture, 0, 0, 0, 0, m_width, m_height, m_textureUpdate);
@@ -221,8 +197,8 @@ bgfx::TextureHandle Sampler::GetCoreTexture(bool genMipmaps)
       // Defer mipmap generation if we are approaching BGFX limits (using magic margins) or it is not needed
       if (!genMipmaps
        || m_rd->m_activeViewId < 0
-       || m_rd->m_activeViewId >= (int)bgfx::getCaps()->limits.maxFrameBuffers - 16 // We approximate the number of framebuffer used by the view index
-       || m_rd->m_activeViewId >= (int)bgfx::getCaps()->limits.maxViews - 32)
+       || m_rd->m_activeViewId >= static_cast<int>(bgfx::getCaps()->limits.maxFrameBuffers) - 16 // We approximate the number of framebuffer used by the view index
+       || m_rd->m_activeViewId >= static_cast<int>(bgfx::getCaps()->limits.maxViews) - 32)
          return m_nomipsTexture;
       // TODO BGFX a clean GPU mipmap generation with Kaiser filter would be better than doing a blit to trigger default's driver render target mipmap generation
       // For a simple and readable reference, see (parameters: alpha=4, stretch=1, m_width=filter half width):
@@ -231,7 +207,7 @@ bgfx::TextureHandle Sampler::GetCoreTexture(bool genMipmaps)
       // Create a frame buffer and blit texture to it
       if (!bgfx::isValid(m_mipsTexture))
       {
-         m_mipsTexture = bgfx::createTexture2D(m_width, m_height, true, 1, m_bgfx_format, (m_isLinear ? BGFX_TEXTURE_NONE : BGFX_TEXTURE_SRGB) | BGFX_TEXTURE_RT | BGFX_TEXTURE_BLIT_DST);
+         m_mipsTexture = bgfx::createTexture2D(m_width, m_height, true, 1, m_bgfx_format, (m_isTextureUpdateLinear ? BGFX_TEXTURE_NONE : BGFX_TEXTURE_SRGB) | BGFX_TEXTURE_RT | BGFX_TEXTURE_BLIT_DST);
          bgfx::setName(m_mipsTexture, m_name.c_str());
       }
       bgfx::FrameBufferHandle mipsFramebuffer = bgfx::createFrameBuffer(1, &m_mipsTexture);
@@ -283,57 +259,50 @@ void Sampler::UpdateTexture(std::shared_ptr<const BaseTexture> surf, const bool 
    m_rd->m_curTextureUpdates++;
 
 #if defined(ENABLE_BGFX)
-   #ifdef DEBUG
-   bool linear = ((surf->m_format == BaseTexture::SRGBA) || (surf->m_format == BaseTexture::SRGB) || (surf->m_format == BaseTexture::SRGB565)) ? force_linear_rgb : true;
-   assert(linear == m_isLinear); // TODO BGFX we could support changing the linearRGB flag but is this really useful ?
-   #endif
    const std::lock_guard<std::mutex> lock(m_textureUpdateMutex);
    if (m_textureUpdate)
       bgfx::release(m_textureUpdate);
+   m_textureUpdate = nullptr;
+   m_isTextureUpdateLinear = BaseTexture::IsLinearFormat(surf->m_format) || force_linear_rgb;
    switch (surf->m_format)
    {
    case BaseTexture::BW: assert(m_bgfx_format == bgfx::TextureFormat::Enum::R8); break;
    case BaseTexture::RGB: assert(m_bgfx_format == bgfx::TextureFormat::Enum::RGB8); break;
    case BaseTexture::RGBA: assert(m_bgfx_format == bgfx::TextureFormat::Enum::RGBA8); break;
    case BaseTexture::SRGB:
-   {
-      assert(m_bgfx_format == bgfx::TextureFormat::Enum::RGBA8);
-      const unsigned int size = surf->height() * surf->width();
-      m_textureUpdate = bgfx::alloc(static_cast<uint32_t>(size * 4));
-      copy_rgb_rgba<false>((unsigned int*)m_textureUpdate->data, surf->datac(), static_cast<size_t>(size));
-      return;
-   }
-   case BaseTexture::SRGBA: assert(m_bgfx_format == bgfx::TextureFormat::Enum::RGBA8); break;
-   case BaseTexture::SRGB565:
-   {
-      assert(m_bgfx_format == bgfx::TextureFormat::Enum::RGBA8);
-      const unsigned int size = surf->height() * surf->width();
-      m_textureUpdate = bgfx::alloc(static_cast<uint32_t>(size * 4));
-      static constexpr UINT8 lum32[] = { 0, 8, 16, 25, 33, 41, 49, 58, 66, 74, 82, 90, 99, 107, 115, 123, 132, 140, 148, 156, 165, 173, 181, 189, 197, 206, 214, 222, 230, 239, 247, 255 };
-      static constexpr UINT8 lum64[] = { 0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 45, 49, 53, 57, 61, 65, 69, 73, 77, 81, 85, 89, 93, 97, 101, 105, 109, 113, 117, 121, 125, 130, 134, 138,
-         142, 146, 150, 154, 158, 162, 166, 170, 174, 178, 182, 186, 190, 194, 198, 202, 206, 210, 215, 219, 223, 227, 231, 235, 239, 243, 247, 251, 255 };
-      uint32_t* const data = reinterpret_cast<uint32_t*>(m_textureUpdate->data);
-      const uint16_t* const frame = reinterpret_cast<const uint16_t*>(surf->datac());
-      for (unsigned int ofs = 0; ofs < size; ofs++)
+      if (m_bgfx_format == bgfx::TextureFormat::Enum::RGBA8)
       {
-         const uint16_t rgb565 = frame[ofs];
-         data[ofs] = 0xFF000000 | (lum32[rgb565 & 0x1F] << 16) | (lum64[(rgb565 >> 5) & 0x3F] << 8) | lum32[(rgb565 >> 11) & 0x1F];
-      }
-      return;
-   }
-   case BaseTexture::RGB_FP16:
-      assert(m_bgfx_format == bgfx::TextureFormat::Enum::RGBA16F);
-      { // Add alpha
-         BaseTexture* tmp = surf->NewWithAlpha();
+         BaseTexture* tmp = surf->Convert(BaseTexture::SRGBA);
          auto releaseFn = [](void* _ptr, void* _userData) { delete static_cast<BaseTexture*>(_userData); };
          m_textureUpdate = bgfx::makeRef(tmp->datac(), m_height * tmp->pitch(), releaseFn, (void*)tmp);
       }
-      return;
+      else
+         assert(m_bgfx_format == bgfx::TextureFormat::Enum::RGB8);
+      break;
+   case BaseTexture::SRGBA: assert(m_bgfx_format == bgfx::TextureFormat::Enum::RGBA8); break;
+   case BaseTexture::SRGB565:
+      if (m_bgfx_format == bgfx::TextureFormat::Enum::RGBA8)
+      {
+         BaseTexture* tmp = surf->Convert(BaseTexture::SRGBA);
+         auto releaseFn = [](void* _ptr, void* _userData) { delete static_cast<BaseTexture*>(_userData); };
+         m_textureUpdate = bgfx::makeRef(tmp->datac(), m_height * tmp->pitch(), releaseFn, (void*)tmp);
+      }
+      else
+         assert(m_bgfx_format == bgfx::TextureFormat::Enum::R5G6B5);
+      break;
+   case BaseTexture::RGB_FP16:
+      assert(m_bgfx_format == bgfx::TextureFormat::Enum::RGBA16F);
+      {
+         BaseTexture* tmp = surf->Convert(BaseTexture::RGBA_FP16);
+         auto releaseFn = [](void* _ptr, void* _userData) { delete static_cast<BaseTexture*>(_userData); };
+         m_textureUpdate = bgfx::makeRef(tmp->datac(), m_height * tmp->pitch(), releaseFn, (void*)tmp);
+      }
+      break;
    case BaseTexture::RGBA_FP16: assert(m_bgfx_format == bgfx::TextureFormat::Enum::RGBA16F); break;
    case BaseTexture::RGB_FP32:
       assert(m_bgfx_format == bgfx::TextureFormat::Enum::RGBA32F);
-      { // Add alpha
-         BaseTexture* tmp = surf->NewWithAlpha();
+      {
+         BaseTexture* tmp = surf->Convert(BaseTexture::RGBA_FP32);
          auto releaseFn = [](void* _ptr, void* _userData) { delete static_cast<BaseTexture*>(_userData); };
          m_textureUpdate = bgfx::makeRef(tmp->datac(), m_height * tmp->pitch(), releaseFn, (void*)tmp);
       }
@@ -341,11 +310,12 @@ void Sampler::UpdateTexture(std::shared_ptr<const BaseTexture> surf, const bool 
    case BaseTexture::RGBA_FP32: assert(m_bgfx_format == bgfx::TextureFormat::Enum::RGBA32F); break;
    default: assert(false); break;
    }
-   m_textureUpdate = bgfx::copy(surf->datac(), static_cast<uint32_t>(surf->height() * surf->pitch()));
 
-   assert(bgfx::isTextureValid(1, false, 1, m_bgfx_format, m_isLinear ? BGFX_TEXTURE_NONE : BGFX_TEXTURE_SRGB));
-   assert(bgfx::isTextureValid(1, false, 1, m_bgfx_format, (m_isLinear ? BGFX_TEXTURE_NONE : BGFX_TEXTURE_SRGB) | BGFX_TEXTURE_RT | BGFX_TEXTURE_BLIT_DST));
+   assert(bgfx::isTextureValid(1, false, 1, m_bgfx_format, m_isTextureUpdateLinear ? BGFX_TEXTURE_NONE : BGFX_TEXTURE_SRGB));
+   assert(bgfx::isTextureValid(1, false, 1, m_bgfx_format, (m_isTextureUpdateLinear ? BGFX_TEXTURE_NONE : BGFX_TEXTURE_SRGB) | BGFX_TEXTURE_RT | BGFX_TEXTURE_BLIT_DST));
 
+   if (m_textureUpdate == nullptr)
+      m_textureUpdate = bgfx::copy(surf->datac(), static_cast<uint32_t>(surf->height() * surf->pitch()));
 
 #elif defined(ENABLE_OPENGL)
    colorFormat format;
@@ -401,31 +371,6 @@ void Sampler::UpdateTexture(std::shared_ptr<const BaseTexture> surf, const bool 
    SAFE_RELEASE(sysTex);
 
 #endif
-}
-
-void Sampler::SetClamp(const SamplerAddressMode clampu, const SamplerAddressMode clampv)
-{
-   m_clampu = clampu;
-   m_clampv = clampv;
-}
-
-void Sampler::SetFilter(const SamplerFilter filter)
-{
-   m_filter = filter;
-}
-
-void Sampler::SetName(const string& name)
-{
-   #if defined(ENABLE_BGFX)
-   m_name = name;
-   if (bgfx::isValid(m_mipsTexture))
-      bgfx::setName(m_mipsTexture, name.c_str());
-   if (bgfx::isValid(m_nomipsTexture))
-      bgfx::setName(m_nomipsTexture, name.c_str());
-   #elif defined(ENABLE_OPENGL) && !defined(__OPENGLES__)
-   if (GLAD_GL_VERSION_4_3)
-      glObjectLabel(GL_TEXTURE, m_texture, (GLsizei)name.length(), name.c_str());
-   #endif
 }
 
 #if defined(ENABLE_BGFX)
@@ -521,6 +466,11 @@ GLuint Sampler::CreateTexture(std::shared_ptr<const BaseTexture> surf, unsigned 
           gl_to_string(comp_format), comp_format,
           gl_to_string(col_format), col_format,
           gl_to_string(col_type), col_type);
+#endif
+
+#ifndef __OPENGLES__
+   if (GLAD_GL_VERSION_4_3)
+      glObjectLabel(GL_TEXTURE, m_texture, (GLsizei)m_name.length(), m_name.c_str());
 #endif
 
    if (surf->datac())

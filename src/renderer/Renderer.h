@@ -62,7 +62,7 @@ public:
       const vec4& emitterPad, const vec3& glassTint, const float glassRougness, ITexManCacheable* const glassTex, const vec4& glassArea, const vec3& glassAmbient);
    void DrawStatics();
    void DrawDynamics(bool onlyBalls);
-   void DrawSprite(const float posx, const float posy, const float width, const float height, const COLORREF color, Sampler* const tex, const float intensity, const bool backdrop = false);
+   void DrawSprite(const float posx, const float posy, const float width, const float height, const COLORREF color, std::shared_ptr<const Sampler> tex, const float intensity, const bool backdrop = false);
 
    void ReinitRenderable(Renderable* part) { m_renderableToInit.push_back(part); }
 
@@ -83,7 +83,7 @@ public:
       return IsUsingStaticPrepass() ? 1 : 0; // If AO is static prepass only and we are running without it, disable AO
    }
 
-   Sampler* GetBallEnvironment() const { return m_ballEnvSampler; }
+   std::shared_ptr<Sampler> GetBallEnvironment() const { return m_ballEnvSampler; }
 
    BackGlass* m_backGlass = nullptr;
 
@@ -152,7 +152,7 @@ private:
    bool IsBloomEnabled() const;
    void Bloom();
    void SSRefl();
-   BaseTexture* EnvmapPrecalc(std::shared_ptr<BaseTexture> envTex, const unsigned int rad_env_xres, const unsigned int rad_env_yres);
+   BaseTexture* EnvmapPrecalc(std::shared_ptr<const BaseTexture> envTex, const unsigned int rad_env_xres, const unsigned int rad_env_yres);
 
    bool m_shaderDirty = true;
    void SetupShaders();
@@ -211,10 +211,10 @@ private:
 
    bool m_dynamicAO;
    bool m_disableAO;
-   Sampler* m_aoDitherSampler = nullptr;
+   std::shared_ptr<Sampler> m_aoDitherSampler = nullptr;
 
-   Sampler* m_envSampler = nullptr;
-   Sampler* m_ballEnvSampler = nullptr;
+   std::shared_ptr<Sampler> m_envSampler = nullptr;
+   std::shared_ptr<Sampler> m_ballEnvSampler = nullptr;
 
    bool m_ss_refl;
 

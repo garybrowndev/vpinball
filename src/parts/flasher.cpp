@@ -650,10 +650,7 @@ STDMETHODIMP Flasher::get_ImageA(BSTR *pVal)
 
 STDMETHODIMP Flasher::put_ImageA(BSTR newVal)
 {
-   char szImage[MAXTOKEN];
-   WideCharToMultiByteNull(CP_ACP, 0, newVal, -1, szImage, MAXTOKEN, nullptr, nullptr);
-   m_d.m_szImageA = szImage;
-
+   m_d.m_szImageA = MakeString(newVal);
    return S_OK;
 }
 
@@ -668,46 +665,23 @@ STDMETHODIMP Flasher::get_ImageB(BSTR *pVal)
 
 STDMETHODIMP Flasher::put_ImageB(BSTR newVal)
 {
-   char szImage[MAXTOKEN];
-   WideCharToMultiByteNull(CP_ACP, 0, newVal, -1, szImage, MAXTOKEN, nullptr, nullptr);
-   m_d.m_szImageB = szImage;
-
+   m_d.m_szImageB = MakeString(newVal);
    return S_OK;
 }
 
 STDMETHODIMP Flasher::get_Filter(BSTR *pVal)
 {
-   WCHAR wz[MAXNAMEBUFFER];
+   const WCHAR *wz;
 
    switch (m_d.m_filter)
    {
-   case Filter_Additive:
-   {
-      MultiByteToWideCharNull(CP_ACP, 0, "Additive", -1, wz, MAXNAMEBUFFER);
-      break;
-   }
-   case Filter_Multiply:
-   {
-      MultiByteToWideCharNull(CP_ACP, 0, "Multiply", -1, wz, MAXNAMEBUFFER);
-      break;
-   }
-   case Filter_Overlay:
-   {
-      MultiByteToWideCharNull(CP_ACP, 0, "Overlay", -1, wz, MAXNAMEBUFFER);
-      break;
-   }
-   case Filter_Screen:
-   {
-      MultiByteToWideCharNull(CP_ACP, 0, "Screen", -1, wz, MAXNAMEBUFFER);
-      break;
-   }
+   case Filter_Additive: wz = L"Additive"; break;
+   case Filter_Multiply: wz = L"Multiply"; break;
+   case Filter_Overlay:  wz = L"Overlay"; break;
+   case Filter_Screen:   wz = L"Screen"; break;
    default:
       assert(!"Invalid Flasher Filter");
-   case Filter_None:
-   {
-      MultiByteToWideCharNull(CP_ACP, 0, "None", -1, wz, MAXNAMEBUFFER);
-      break;
-   }
+   case Filter_None:     wz = L"None"; break;
    }
    *pVal = SysAllocString(wz);
 
@@ -716,18 +690,17 @@ STDMETHODIMP Flasher::get_Filter(BSTR *pVal)
 
 STDMETHODIMP Flasher::put_Filter(BSTR newVal)
 {
-   char m_szFilter[MAXNAMEBUFFER];
-   WideCharToMultiByteNull(CP_ACP, 0, newVal, -1, m_szFilter, MAXNAMEBUFFER, nullptr, nullptr);
+   const string szFilter = lowerCase(MakeString(newVal));
 
-   if (strcmp(m_szFilter, "Additive") == 0 && m_d.m_filter != Filter_Additive)
+   if (szFilter == "additive" && m_d.m_filter != Filter_Additive)
       m_d.m_filter = Filter_Additive;
-   else if (strcmp(m_szFilter, "Multiply") == 0 && m_d.m_filter != Filter_Multiply)
+   else if (szFilter == "multiply" && m_d.m_filter != Filter_Multiply)
       m_d.m_filter = Filter_Multiply;
-   else if (strcmp(m_szFilter, "Overlay") == 0 && m_d.m_filter != Filter_Overlay)
+   else if (szFilter == "overlay" && m_d.m_filter != Filter_Overlay)
       m_d.m_filter = Filter_Overlay;
-   else if (strcmp(m_szFilter, "Screen") == 0 && m_d.m_filter != Filter_Screen)
+   else if (szFilter == "screen" && m_d.m_filter != Filter_Screen)
       m_d.m_filter = Filter_Screen;
-   else if (strcmp(m_szFilter, "None") == 0 && m_d.m_filter != Filter_None)
+   else if (szFilter == "none" && m_d.m_filter != Filter_None)
       m_d.m_filter = Filter_None;
 
    return S_OK;
@@ -863,7 +836,7 @@ STDMETHODIMP Flasher::put_DMDPixels(VARIANT pVal) // assumes VT_UI1 as input //!
        || m_dmdFrame->m_format != BaseTexture::BW)
    {
       delete m_dmdFrame;
-      m_dmdFrame = new BaseTexture(m_dmdSize.x * scale, m_dmdSize.y * scale, BaseTexture::BW);
+      m_dmdFrame = BaseTexture::Create(m_dmdSize.x * scale, m_dmdSize.y * scale, BaseTexture::BW);
    }
    const int size = m_dmdSize.x * m_dmdSize.y;
    // Convert from gamma compressed [0..100] luminance to linear [0..255] luminance, eventually applying ScaleFX upscaling
@@ -910,7 +883,7 @@ STDMETHODIMP Flasher::put_DMDColoredPixels(VARIANT pVal) //!! assumes VT_UI4 as 
        || m_dmdFrame->m_format != BaseTexture::SRGBA)
    {
       delete m_dmdFrame;
-      m_dmdFrame = new BaseTexture(m_dmdSize.x * scale, m_dmdSize.y * scale, BaseTexture::SRGBA);
+      m_dmdFrame = BaseTexture::Create(m_dmdSize.x * scale, m_dmdSize.y * scale, BaseTexture::SRGBA);
    }
    const int size = m_dmdSize.x * m_dmdSize.y;
    DWORD *const data = reinterpret_cast<DWORD *>(m_dmdFrame->data());
@@ -961,7 +934,7 @@ STDMETHODIMP Flasher::put_VideoCapUpdate(BSTR cWinTitle)
     if (m_videoCapWidth == 0 || m_videoCapHeight == 0) return S_FALSE; //safety.  VideoCapWidth/Height needs to be set prior to this call
 
     char szWinTitle[MAXNAMEBUFFER];
-    WideCharToMultiByteNull(CP_ACP, 0, cWinTitle, -1, szWinTitle, MAXNAMEBUFFER, nullptr, nullptr);
+    WideCharToMultiByteNull(CP_ACP, 0, cWinTitle, -1, szWinTitle, std::size(szWinTitle), nullptr, nullptr);
 
     //if PASS blank title then we treat as STOP capture and free resources.  Should be called on table1_exit
     if (szWinTitle[0] == '\0')
@@ -971,7 +944,7 @@ STDMETHODIMP Flasher::put_VideoCapUpdate(BSTR cWinTitle)
     }
 
     if (m_isVideoCap == false) {  // VideoCap has not started because no sourcewin found
-        m_videoCapHwnd = ::FindWindow(0, szWinTitle);
+        m_videoCapHwnd = ::FindWindow(nullptr, szWinTitle);
         if (m_videoCapHwnd == nullptr)
             return S_FALSE;
 
@@ -980,7 +953,7 @@ STDMETHODIMP Flasher::put_VideoCapUpdate(BSTR cWinTitle)
         ResetVideoCap();
         try
         {
-           m_videoCapTex = new BaseTexture(m_videoCapWidth, m_videoCapHeight, BaseTexture::SRGBA);
+           m_videoCapTex = BaseTexture::Create(m_videoCapWidth, m_videoCapHeight, BaseTexture::SRGBA);
         }
         catch (...)
         {
@@ -1411,8 +1384,7 @@ void Flasher::Render(const unsigned int renderMask)
          switch (displayProfile)
          {
          case 0: // Pixelated
-            // FIXME BGFX: if the same texture is used multiple times in the same frame with different clamp/filter then only one is applied (may happen here if a DMD window is also enabled with the same texture source)
-            m_rd->m_flasherShader->SetTexture(SHADER_tex_flasher_A, m_dmdFrame, SF_POINT);
+            m_rd->m_flasherShader->SetTexture(SHADER_tex_flasher_A, m_dmdFrame, false, SF_POINT);
             m_rd->m_flasherShader->SetVector(SHADER_staticColor_Alpha, color.x * color.w, color.y * color.w, color.z * color.w, 1.f);
             m_rd->m_flasherShader->SetVector(SHADER_alphaTestValueAB_filterMode_addBlend, -1.f, -1.f, 0.f, m_d.m_addBlend ? 1.f : 0.f);
             m_rd->m_flasherShader->SetVector(SHADER_amount_blend_modulate_vs_add_flasherMode, 0.f, clampedModulateVsAdd, 0.f, 0.f);
@@ -1424,7 +1396,7 @@ void Flasher::Render(const unsigned int renderMask)
             m_rd->m_flasherShader->SetTechnique(SHADER_TECHNIQUE_basic_noLight);
             break;
          case 1: // Smoothed
-            m_rd->m_flasherShader->SetTexture(SHADER_tex_flasher_A, m_dmdFrame, SF_TRILINEAR);
+            m_rd->m_flasherShader->SetTexture(SHADER_tex_flasher_A, m_dmdFrame, false, SF_TRILINEAR);
             m_rd->m_flasherShader->SetVector(SHADER_staticColor_Alpha, color.x * color.w, color.y * color.w, color.z * color.w, 1.f);
             m_rd->m_flasherShader->SetVector(SHADER_alphaTestValueAB_filterMode_addBlend, -1.f, -1.f, 0.f, m_d.m_addBlend ? 1.f : 0.f);
             m_rd->m_flasherShader->SetVector(SHADER_amount_blend_modulate_vs_add_flasherMode, 0.f, clampedModulateVsAdd, 0.f, 0.f);

@@ -635,6 +635,7 @@ LiveUI::LiveUI(RenderDevice *const rd)
    m_pininput = &(m_player->m_pininput);
    m_renderer = m_player->m_renderer;
    m_disable_esc = m_live_table->m_settings.LoadValueBool(Settings::Player, "DisableESC"s);
+   m_show_fps = m_app->m_settings.LoadValueInt(Settings::Player, "ShowFPS"s);
 
    m_selection.type = Selection::SelectionType::S_NONE;
    m_useEditorCam = false;
@@ -729,6 +730,7 @@ LiveUI::LiveUI(RenderDevice *const rd)
 
 LiveUI::~LiveUI()
 {
+   m_app->m_settings.SaveValue(Settings::Player, "ShowFPS"s, m_show_fps);
    HideUI();
    if (ImGui::GetCurrentContext())
    {
@@ -828,17 +830,17 @@ ImGui::MarkdownImageData LiveUI::MarkdownImageCallback(ImGui::MarkdownLinkCallba
    Texture *const ppi = ui->m_live_table->GetImage(std::string(data.link, data.linkLength));
    if (ppi == nullptr)
       return ImGui::MarkdownImageData {};
-   Sampler *const sampler = ui->m_renderer->m_renderDevice->m_texMan.LoadTexture(ppi, SamplerFilter::SF_BILINEAR, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, false);
+   std::shared_ptr<Sampler> sampler = ui->m_renderer->m_renderDevice->m_texMan.LoadTexture(ppi, false);
    if (sampler == nullptr)
       return ImGui::MarkdownImageData {};
    #if defined(ENABLE_BGFX)
-   ImTextureID image = (ImTextureID)sampler;
+      ImTextureID image = sampler;
    #elif defined(ENABLE_OPENGL)
-   ImTextureID image = (ImTextureID)sampler->GetCoreTexture();
+      ImTextureID image = (ImTextureID)sampler->GetCoreTexture();
    #elif defined(ENABLE_DX9)
-   ImTextureID image = (ImTextureID)sampler->GetCoreTexture();
+      ImTextureID image = (ImTextureID)sampler->GetCoreTexture();
    #endif
-   ImGui::MarkdownImageData imageData { true, false, image, ImVec2((float)sampler->GetWidth(), (float)sampler->GetHeight()) };
+   ImGui::MarkdownImageData imageData { true, false, image, ImVec2(static_cast<float>(sampler->GetWidth()), static_cast<float>(sampler->GetHeight())) };
    ImVec2 const contentSize = ImGui::GetContentRegionAvail();
    if (imageData.size.x > contentSize.x)
    {
@@ -1277,7 +1279,7 @@ void LiveUI::UpdatePerfOverlay()
       {
          ImPlot::SetupAxis(ImAxis_X1, nullptr, rt_axis);
          ImPlot::SetupAxis(ImAxis_Y1, nullptr, ImPlotAxisFlags_LockMin);
-         ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 2000.f / min(m_player->GetTargetRefreshRate(), 200.f), ImGuiCond_Always);
+         ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 2000.f / min(m_player->GetTargetRefreshRate(), 200.f), ImGuiCond_Always); // range is twice the target frame rate
          if (m_plotFPS.m_rolling)
             ImPlot::SetupAxisLimits(ImAxis_X1, 0, m_plotFPS.m_timeSpan, ImGuiCond_Always);
          else
@@ -1297,7 +1299,7 @@ void LiveUI::UpdatePerfOverlay()
       {
          ImPlot::SetupAxis(ImAxis_X1, nullptr, rt_axis);
          ImPlot::SetupAxis(ImAxis_Y1, nullptr, ImPlotAxisFlags_LockMin);
-         ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 2.f, ImGuiCond_Always);
+         ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 2.f * max(1.f, m_plotPhysx.GetMovingMax()), ImGuiCond_Always);
          if (m_plotPhysx.m_rolling)
             ImPlot::SetupAxisLimits(ImAxis_X1, 0, m_plotPhysx.m_timeSpan, ImGuiCond_Always);
          else
@@ -1317,7 +1319,7 @@ void LiveUI::UpdatePerfOverlay()
       {
          ImPlot::SetupAxis(ImAxis_X1, nullptr, rt_axis);
          ImPlot::SetupAxis(ImAxis_Y1, nullptr, ImPlotAxisFlags_LockMin);
-         ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 2.f, ImGuiCond_Always);
+         ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 2.f * max(1.f, m_plotScript.GetMovingMax()), ImGuiCond_Always);
          if (m_plotScript.m_rolling)
             ImPlot::SetupAxisLimits(ImAxis_X1, 0, m_plotScript.m_timeSpan, ImGuiCond_Always);
          else
@@ -4111,8 +4113,8 @@ void LiveUI::UpdatePlumbWindow()
             const ImVec2 &pos = ImGui::GetWindowPos();
             ImGui::GetWindowDrawList()->AddLine(pos + ImVec2(0.f, halfSize.y), pos + ImVec2(fullSize.x, halfSize.y), IM_COL32_WHITE);
             ImGui::GetWindowDrawList()->AddLine(pos + ImVec2(halfSize.x, 0.f), pos + ImVec2(halfSize.y, fullSize.y), IM_COL32_WHITE);
-            const Vertex3Ds &nudge = (float)PHYS_FACTOR * m_player->m_physics->GetNudgeAcceleration(); // Range: -1..1
-            ImVec2 nudgePos = pos + halfSize + ImVec2(nudge.x, nudge.y) * halfSize * 2.f + ImVec2(0.5f, 0.5f);
+            const Vertex3Ds nudge = (float)PHYS_FACTOR * m_player->m_physics->GetNudgeAcceleration(); // Range: -1..1
+            const ImVec2 nudgePos = pos + halfSize + ImVec2(nudge.x, nudge.y) * halfSize * 2.f + ImVec2(0.5f, 0.5f);
             ImGui::GetWindowDrawList()->AddCircleFilled(nudgePos, 5.f * m_dpi, IM_COL32(255, 0, 0, 255));
             ImGui::EndChild();
          }
@@ -4536,23 +4538,23 @@ void LiveUI::ImageProperties()
    }
    ImGui::EndDisabled();
    ImGui::Separator();
-   ImGui::BeginDisabled(m_selection.image->GetRawBitmap() == nullptr || !m_selection.image->GetRawBitmap()->HasAlpha());
+   ImGui::BeginDisabled(m_selection.image->GetRawBitmap(false, 0) == nullptr || !m_selection.image->GetRawBitmap(false, 0)->HasAlpha());
    if (ImGui::InputFloat("Alpha Mask", &m_selection.image->m_alphaTestValue))
       m_table->SetNonUndoableDirty(eSaveDirty);
    ImGui::EndDisabled();
    ImGui::Separator();
-   Sampler *sampler = m_renderer->m_renderDevice->m_texMan.LoadTexture(m_selection.image, SamplerFilter::SF_BILINEAR, SamplerAddressMode::SA_CLAMP, SamplerAddressMode::SA_CLAMP, false);
-#if defined(ENABLE_BGFX)
-   ImTextureID image = (ImTextureID)sampler;
-#elif defined(ENABLE_OPENGL)
-   ImTextureID image = sampler ? (ImTextureID)sampler->GetCoreTexture() : 0;
-#elif defined(ENABLE_DX9)
-   ImTextureID image = sampler ? (ImTextureID)sampler->GetCoreTexture() : 0;
-#endif
+   std::shared_ptr<Sampler> sampler = m_renderer->m_renderDevice->m_texMan.LoadTexture(m_selection.image, false);
+   #if defined(ENABLE_BGFX)
+      ImTextureID image = sampler;
+   #elif defined(ENABLE_OPENGL)
+      ImTextureID image = sampler ? (ImTextureID)sampler->GetCoreTexture() : 0;
+   #elif defined(ENABLE_DX9)
+      ImTextureID image = sampler ? (ImTextureID)sampler->GetCoreTexture() : 0;
+   #endif
    if (image)
    {
       const float w = ImGui::GetWindowWidth();
-      ImGui::Image(image, ImVec2(w, (float)sampler->GetHeight() * w / (float) sampler->GetWidth()));
+      ImGui::Image(image, ImVec2(w, static_cast<float>(sampler->GetHeight()) * w / static_cast<float>(sampler->GetWidth())));
    }
 }
 
