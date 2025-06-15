@@ -740,8 +740,6 @@ private:
    std::map<std::string, CComObject<Light>*> m_DrawnIntersectionCircles;
    std::map<std::string, CComObject<Rubber>*> m_DrawnLines;
 
-   IDirect3DVertexDeclaration9 *m_VertexColorDeclaration;
-
    DWORD m_AutoControlBallColor;
    DWORD m_RecallBallColor;
    DWORD m_TrainerBallStartColor;

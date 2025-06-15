@@ -2499,20 +2499,6 @@ bool BallHistory::ShouldDrawActiveBallKickers(int currentTimeMs)
    }
 }
 
-static UINT compute_primitive_count(D3DPRIMITIVETYPE type, const int vertexCount)
-{
-   switch (type)
-   {
-   case D3DPRIMITIVETYPE::D3DPT_POINTLIST: return vertexCount;
-   case D3DPRIMITIVETYPE::D3DPT_LINELIST: return vertexCount / 2;
-   case D3DPRIMITIVETYPE::D3DPT_LINESTRIP: return std::max(0, vertexCount - 1);
-   case D3DPRIMITIVETYPE::D3DPT_TRIANGLELIST: return vertexCount / 3;
-   case D3DPRIMITIVETYPE::D3DPT_TRIANGLESTRIP:
-   case D3DPRIMITIVETYPE::D3DPT_TRIANGLEFAN: return std::max(0, vertexCount - 2);
-   default: return 0;
-   }
-}
-
 void BallHistory::DrawTrainerBallCorridorPass(Player& player, const char* name, TrainerOptions::BallCorridorOptionsRecord& bcor, Vertex3Ds* overridePosition)
 {
    Vertex3Ds* position = overridePosition;
