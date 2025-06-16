@@ -2,6 +2,12 @@
 
 #include "core/stdafx.h"
 
+#ifndef __BALLHISTORY_WIN32__
+
+bool BallHistory::DrawMenu = false;
+
+#else
+
 #include <algorithm>
 #include <numeric>
 #include <random>
@@ -8357,3 +8363,5 @@ void BallHistory::PlaySound(UINT rcId, bool async) { ::PlaySound(MAKEINTRESOURCE
 void BallHistory::StopSound() { ::PlaySound(NULL, NULL, 0); }
 
 // ================================================================================================================================================================================================================================================
+
+#endif

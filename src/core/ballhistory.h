@@ -1,5 +1,30 @@
 #pragma once
 
+#ifndef __BALLHISTORY_WIN32__
+
+struct BallHistory 
+{
+public:
+   static bool DrawMenu;
+
+   BallHistory(PinTable &pinTable) { }
+   void Init(Player &player, int currentTimeMs, bool loadSettings) { }
+   void UnInit(Player &player) { }
+   void Process(Player &player, int currentTimeMsec) { }
+   bool ProcessKeys(Player &player, EnumAssignKeys action, bool isPressed, int currentTimeMs, bool process) { return false; }
+   void ProcessMouse(Player &player, int currentTimeMs) { }
+   bool Control() { return false; }
+   void SetControl(bool control) { }
+   void ToggleControl() { }
+   void ToggleRecall() { }
+   void ResetTrainerRunStartTime() { }
+
+   EnumAssignKeys m_PreviousProcessKeysAction;
+   bool m_PreviousProcessKeyIsPressed;
+};
+
+#else
+
 #include <set>
 
 #include "simpleini/SimpleIni.h"
@@ -873,3 +898,5 @@ private:
    void PlaySound(UINT rcId, bool async = false);
    void StopSound();
 };
+
+#endif
