@@ -2,6 +2,12 @@
 
 #include "core/stdafx.h"
 
+#ifndef __BALLHISTORY_WIN32__
+
+bool BallHistory::DrawMenu = false;
+
+#else
+
 #include <algorithm>
 #include <numeric>
 #include <random>
@@ -2496,20 +2502,6 @@ bool BallHistory::ShouldDrawActiveBallKickers(int currentTimeMs)
       break;
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallKickerBehaviorMode: return (currentTimeMs % OneSecondMs) >= DrawBallBlinkMs;
    default: return true;
-   }
-}
-
-static UINT compute_primitive_count(D3DPRIMITIVETYPE type, const int vertexCount)
-{
-   switch (type)
-   {
-   case D3DPRIMITIVETYPE::D3DPT_POINTLIST: return vertexCount;
-   case D3DPRIMITIVETYPE::D3DPT_LINELIST: return vertexCount / 2;
-   case D3DPRIMITIVETYPE::D3DPT_LINESTRIP: return std::max(0, vertexCount - 1);
-   case D3DPRIMITIVETYPE::D3DPT_TRIANGLELIST: return vertexCount / 3;
-   case D3DPRIMITIVETYPE::D3DPT_TRIANGLESTRIP:
-   case D3DPRIMITIVETYPE::D3DPT_TRIANGLEFAN: return std::max(0, vertexCount - 2);
-   default: return 0;
    }
 }
 
@@ -8371,3 +8363,5 @@ void BallHistory::PlaySound(UINT rcId, bool async) { ::PlaySound(MAKEINTRESOURCE
 void BallHistory::StopSound() { ::PlaySound(NULL, NULL, 0); }
 
 // ================================================================================================================================================================================================================================================
+
+#endif

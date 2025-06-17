@@ -235,7 +235,9 @@ public:
    // Speed: 0..1
    void PlayRumble(const float lowFrequencySpeed, const float highFrequencySpeed, const int ms_duration);
 
-   HWND GetFocusHWnd() {return m_focusHWnd;}
+   #ifdef _WIN32
+   HWND GetFocusHWnd() { return m_focusHWnd; }
+   #endif
 
    struct InputState
    {
