@@ -199,30 +199,30 @@ public:
    {
       static const char * ImGuiBallStartLabels[];
 
-      static const S32 AngleMinimum = 0;
-      static const S32 AngleMaximum = 360;
+      static const int32_t AngleMinimum = 0;
+      static const int32_t AngleMaximum = 360;
 
-      static const S32 TotalAnglesMinimum = 1;
-      static const S32 TotalAnglesMaximum = 36;
+      static const int32_t TotalAnglesMinimum = 1;
+      static const int32_t TotalAnglesMaximum = 36;
 
-      static const S32 VelocityMinimum = 0;
-      static const S32 VelocityMaximum = 100;
+      static const int32_t VelocityMinimum = 0;
+      static const int32_t VelocityMaximum = 100;
 
-      static const S32 TotalVelocitiesMinimum = 1;
-      static const S32 TotalVelocitiesMaximum = 20;
+      static const int32_t TotalVelocitiesMinimum = 1;
+      static const int32_t TotalVelocitiesMaximum = 20;
 
       Vertex3Ds m_StartPosition;
       Vertex3Ds m_StartVelocity;
       Vertex3Ds m_StartAngularMomentum;
       float m_AngleRangeStart;
       float m_AngleRangeFinish;
-      S32 m_TotalRangeAngles;
+      int32_t m_TotalRangeAngles;
       float m_VelocityRangeStart;
       float m_VelocityRangeFinish;
-      S32 m_TotalRangeVelocities;
+      int32_t m_TotalRangeVelocities;
 
       BallStartOptionsRecord();
-      BallStartOptionsRecord(const Vertex3Ds &startPosition, const Vertex3Ds &startVelocity, const Vertex3Ds &startAngularMomentum, float angleRangeStart, float angleRangeFinish, S32 totalRangeAngles, float velocityRangeStart, float velocityRangeFinish, S32 totalRangeVelocities);
+      BallStartOptionsRecord(const Vertex3Ds &startPosition, const Vertex3Ds &startVelocity, const Vertex3Ds &startAngularMomentum, float angleRangeStart, float angleRangeFinish, int32_t totalRangeAngles, float velocityRangeStart, float velocityRangeFinish, int32_t totalRangeVelocities);
       bool IsZero();
    };
 
@@ -231,8 +231,8 @@ public:
       static const char * ImGuiBallPassLabels[];
       static const char * ImGuiBallFailLabels[];
 
-      static const S32 RadiusPercentMinimum = 1;
-      static const S32 RadiusPercentMaximum = 300;
+      static const int32_t RadiusPercentMinimum = 1;
+      static const int32_t RadiusPercentMaximum = 300;
       static const float RadiusPercentDisabled;
 
       Vertex3Ds m_EndPosition;
@@ -251,8 +251,8 @@ public:
       static const char * ImGuiDrawTrainerBallCorridorOpeningLeftLabel;
       static const char * ImGuiDrawTrainerBallCorridorOpeningRightLabel;
 
-      static const S32 RadiusPercentMinimum = 0;
-      static const S32 RadiusPercentMaximum = 300;
+      static const int32_t RadiusPercentMinimum = 0;
+      static const int32_t RadiusPercentMaximum = 300;
 
       Vertex3Ds m_PassPosition;
       float m_PassRadiusPercent;
@@ -317,49 +317,49 @@ public:
    bool m_SoundEffectsCountdownEnabled;
    bool m_SoundEffectsMenuPlayed;
 
-   static const S32 GameplayDifficultyMinimum = 0;
-   static const S32 GameplayDifficultyMaximum = 100;
-   S32 m_GameplayDifficulty;
+   static const int32_t GameplayDifficultyMinimum = 0;
+   static const int32_t GameplayDifficultyMaximum = 100;
+   int32_t m_GameplayDifficulty;
 
-   static const S32 VarianceDifficultyMinimum = 0;
-   static const S32 VarianceDifficultyMaximum = 100;
-   S32 m_VarianceDifficulty;
+   static const int32_t VarianceDifficultyMinimum = 0;
+   static const int32_t VarianceDifficultyMaximum = 100;
+   int32_t m_VarianceDifficulty;
 
-   static const S32 GravityVarianceMinimum = 0;
-   static const S32 GravityVarianceMaximum = 500;
-   S32 m_GravityVariance;
+   static const int32_t GravityVarianceMinimum = 0;
+   static const int32_t GravityVarianceMaximum = 500;
+   int32_t m_GravityVariance;
 
    DifficultyVarianceModeType m_GravityVarianceMode;
 
-   static const S32 PlayfieldFrictionVarianceMinimum = 0;
-   static const S32 PlayfieldFrictionVarianceMaximum = 500;
-   S32 m_PlayfieldFrictionVariance;
+   static const int32_t PlayfieldFrictionVarianceMinimum = 0;
+   static const int32_t PlayfieldFrictionVarianceMaximum = 500;
+   int32_t m_PlayfieldFrictionVariance;
 
    DifficultyVarianceModeType m_PlayfieldFrictionVarianceMode;
 
-   static const S32 FlipperStrengthVarianceMinimum = 0;
-   static const S32 FlipperStrengthVarianceMaximum = 500;
-   S32 m_FlipperStrengthVariance;
+   static const int32_t FlipperStrengthVarianceMinimum = 0;
+   static const int32_t FlipperStrengthVarianceMaximum = 500;
+   int32_t m_FlipperStrengthVariance;
 
    DifficultyVarianceModeType m_FlipperStrengthVarianceMode;
 
-   static const S32 FlipperFrictionVarianceMinimum = 0;
-   static const S32 FlipperFrictionVarianceMaximum = 500;
-   S32 m_FlipperFrictionVariance;
+   static const int32_t FlipperFrictionVarianceMinimum = 0;
+   static const int32_t FlipperFrictionVarianceMaximum = 500;
+   int32_t m_FlipperFrictionVariance;
 
    DifficultyVarianceModeType m_FlipperFrictionVarianceMode;
 
-   static const S32 TotalRunsMinimum = 1;
-   static const S32 TotalRunsMaximum = 100;
-   S32 m_TotalRuns;
+   static const int32_t TotalRunsMinimum = 1;
+   static const int32_t TotalRunsMaximum = 100;
+   int32_t m_TotalRuns;
 
-   static const S32 MaxSecondsPerRunMinimum = 1;
-   static const S32 MaxSecondsPerRunMaximum = 30;
-   S32 m_MaxSecondsPerRun;
+   static const int32_t MaxSecondsPerRunMinimum = 1;
+   static const int32_t MaxSecondsPerRunMaximum = 30;
+   int32_t m_MaxSecondsPerRun;
 
-   static const S32 CountdownSecondsBeforeRunMinimum = 0;
-   static const S32 CountdownSecondsBeforeRunMaximum = 5;
-   S32 m_CountdownSecondsBeforeRun;
+   static const int32_t CountdownSecondsBeforeRunMinimum = 0;
+   static const int32_t CountdownSecondsBeforeRunMaximum = 5;
+   int32_t m_CountdownSecondsBeforeRun;
 
    std::vector<BallStartOptionsRecord> m_BallStartOptionsRecords;
    std::size_t m_BallStartOptionsRecordsSize;
@@ -378,7 +378,7 @@ public:
    bool m_SetupBallStarts;
 
    bool m_SetupDifficulty;
-   S32 m_GameplayDifficultyInitial;
+   int32_t m_GameplayDifficultyInitial;
    float m_GravityInitial;
    float m_PlayfieldFrictionInitial;
    float m_FlipperStrengthInitial;
@@ -484,20 +484,20 @@ private:
    {
       struct ProfilerScope
       {
-         U64 &m_ProfilerUsec;
-         U64 m_TempUsec;
+         uint64_t &m_ProfilerUsec;
+         uint64_t m_TempUsec;
 
-         ProfilerScope(U64 &usec);
+         ProfilerScope(uint64_t &usec);
          virtual ~ProfilerScope();
       };
 
-      U64 m_ProcessUsec;
-      U64 m_ShowStatusUsec;
-      U64 m_ProcessMenuUsec;
-      U64 m_DrawBallHistoryUsec;
-      U64 m_ProcessModeNormalUsec;
-      U64 m_ProcessModeTrainerUsec;
-      U64 m_DrawTrainerBallsUsec;
+      uint64_t m_ProcessUsec;
+      uint64_t m_ShowStatusUsec;
+      uint64_t m_ProcessMenuUsec;
+      uint64_t m_DrawBallHistoryUsec;
+      uint64_t m_ProcessModeNormalUsec;
+      uint64_t m_ProcessModeTrainerUsec;
+      uint64_t m_DrawTrainerBallsUsec;
 
       ProfilerRecord();
       void SetZero();
@@ -632,10 +632,10 @@ private:
 
       static const int SkipKeyPressHoldMs;
       static const int SkipKeyIntervalMs;
-      static const S32 SkipKeyStepFactor;
+      static const int32_t SkipKeyStepFactor;
 
       static const int SkipControlIntervalMs;
-      static const S32 SkipControlStepFactor;
+      static const int32_t SkipControlStepFactor;
 
       static const float DefaultBallRadius;
 
@@ -643,7 +643,7 @@ private:
       ModeType m_ModeType;
       std::string m_MenuError;
 
-      S32 m_CreateZ;
+      int32_t m_CreateZ;
 
       NormalOptions m_NormalOptions;
       TrainerOptions m_TrainerOptions;
@@ -785,10 +785,10 @@ private:
    bool GetSettingsFolderPath(std::string &settingsFolderPath);
 
    void LoadSettings(Player &player);
-   void LoadSettingsDifficultyVariance(Player &player, CSimpleIni &iniFile, const char *sectionName, const char *varianceKeyName, S32 &variance, const char *modeKeyName, TrainerOptions::DifficultyVarianceModeType &mode);
+   void LoadSettingsDifficultyVariance(Player &player, CSimpleIni &iniFile, const char *sectionName, const char *varianceKeyName, int32_t &variance, const char *modeKeyName, TrainerOptions::DifficultyVarianceModeType &mode);
    bool LoadSettingsGetValue(CSimpleIni &iniFile, const char *sectionName, const char *keyName, std::istringstream &value);
    void SaveSettings(Player &player);
-   void SaveSettingsDifficultyVariance(Player &player, CSimpleIni &iniFile, const char *sectionName, const char *varianceKeyName, S32 variance, const char *modeKeyName, TrainerOptions::DifficultyVarianceModeType mode);
+   void SaveSettingsDifficultyVariance(Player &player, CSimpleIni &iniFile, const char *sectionName, const char *varianceKeyName, int32_t variance, const char *modeKeyName, TrainerOptions::DifficultyVarianceModeType mode);
    void InitBallsDecreased(Player &player);
    void InitBallsIncreased(Player &player);
    void InitControlVBalls(Player &player);
@@ -835,28 +835,28 @@ private:
    void ShowDifficultyTableConstants(Player &player);
    void ShowDifficultyVarianceStatusesMenu(std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses);
    void ShowDifficultyVarianceMode(const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
-   void ShowDifficultyVarianceRange(const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, S32 variance, float initial, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
+   void ShowDifficultyVarianceRange(const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, int32_t variance, float initial, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
    void ShowDifficultyVarianceStatusAll(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
-   void ShowDifficultyVarianceStatusSingle(const std::string &name, float current, S32 variance, float initial, TrainerOptions::DifficultyVarianceModeType mode, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
+   void ShowDifficultyVarianceStatusSingle(const std::string &name, float current, int32_t variance, float initial, TrainerOptions::DifficultyVarianceModeType mode, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
    void ShowDifficultyVarianceStatusGravity(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
    void ShowDifficultyVarianceStatusPlayfieldFriction(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
    void ShowDifficultyVarianceStatusFlipperStrength(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
    void ShowDifficultyVarianceStatusFlipperFriction(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
    void ShowResult(std::size_t total, std::vector<DWORD> &timesMs, const char *type, const char *subType, std::vector<std::pair<std::string, std::string>> &results);
    template <class T> float CalculateStandardDeviation(std::vector<T> &values);
-   float CalculateDifficultyVariance(Player &player, float initial, float current, S32 variance, TrainerOptions::DifficultyVarianceModeType varianceMode);
+   float CalculateDifficultyVariance(Player &player, float initial, float current, int32_t variance, TrainerOptions::DifficultyVarianceModeType varianceMode);
    void InitBallStartOptionRecords();
    void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs);
    void ProcessMode(Player &player, int currentTimeMs);
    void ProcessModeNormal(Player &player);
    void ProcessModeTrainer(Player &player, int currentTimeMs);
-   S32 ProcessMenuChangeValue(S32 value, S32 delta, S32 min, S32 max, bool skip);
-   template <class T> void ProcessMenuChangeValueInc(T &value, S32 min, S32 max);
-   template <class T> void ProcessMenuChangeValueIncSkip(T &value, S32 min, S32 max);
-   template <class T> void ProcessMenuChangeValueDec(T &value, S32 min, S32 max);
-   template <class T> void ProcessMenuChangeValueDecSkip(T &value, S32 min, S32 max);
-   template <class T> void ProcessMenuChangeValueSkip(T &value, S32 min, S32 max, int currentTimeMs);
-   template <class T> void ProcessMenuAction(MenuOptionsRecord::MenuActionType menuAction, MenuOptionsRecord::MenuStateType enterMenuState, T &value, S32 minimum, S32 maximum, int currentTimeMs);
+   int32_t ProcessMenuChangeValue(int32_t value, int32_t delta, int32_t min, int32_t max, bool skip);
+   template <class T> void ProcessMenuChangeValueInc(T &value, int32_t min, int32_t max);
+   template <class T> void ProcessMenuChangeValueIncSkip(T &value, int32_t min, int32_t max);
+   template <class T> void ProcessMenuChangeValueDec(T &value, int32_t min, int32_t max);
+   template <class T> void ProcessMenuChangeValueDecSkip(T &value, int32_t min, int32_t max);
+   template <class T> void ProcessMenuChangeValueSkip(T &value, int32_t min, int32_t max, int currentTimeMs);
+   template <class T> void ProcessMenuAction(MenuOptionsRecord::MenuActionType menuAction, MenuOptionsRecord::MenuStateType enterMenuState, T &value, int32_t minimum, int32_t maximum, int currentTimeMs);
 
    void Add(std::vector<HitBall *> &controlVBalls, int currentTimeMsec);
    BallHistoryRecord &Get(std::size_t index);
@@ -897,6 +897,7 @@ private:
 
    void PlaySound(UINT rcId, bool async = false);
    void StopSound();
+   void StopAllSounds();
 };
 
 #endif
