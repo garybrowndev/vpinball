@@ -16,8 +16,24 @@
 
 static const char point = std::use_facet<std::numpunct<char>>(std::locale("")).decimal_point(); // gets the OS locale decimal point (e.g. ',' or '.')
 
-unsigned long long mwc64x_state = 4077358422479273989ull;
+uint64_t mwc64x_state = 4077358422479273989ull;
 
+// (optionally) convert decimal point to locale specific one (i.e. ',' or force to always use '.')
+// and trim all trailing zeros for better readability
+string convert_decimal_point_and_trim(string sz, const bool use_locale) // use_locale: true if the decimal point should be converted to the OS locale setting, otherwise false (i.e. always use '.' as decimal point)
+{
+   const size_t pos = sz.find_first_of(",."); // search for the 2 variants
+   if (pos != string::npos)
+   {
+      sz[pos] = use_locale ? point : '.'; // replace it with the locale specific one (or always use '.' as decimal point)
+
+      size_t pos0 = sz.find_last_not_of('0');
+      if (pos0 == pos)
+         pos0++;
+      sz.erase(pos0 + 1, string::npos); // remove trailing zeros, but leave .0 for integers (line above), as then its clearer that a decimal point can be used for a certain setting!
+   }
+   return sz;
+}
 
 // used by dialogues, etc, locale specific, otherwise use std::from_chars (or e.g. std::stof() (with exception handling) or std::strtof()) directly
 float sz2f(string sz, const bool force_convert_decimal_point)
@@ -65,7 +81,8 @@ float sz2f(string sz, const bool force_convert_decimal_point)
 #endif
 }
 
-// used by dialogues, etc, locale specific, otherwise use e.g. std::to_string() directly
+// used by dialogues, etc, (optionally) locale specific, otherwise use e.g. std::to_string() directly
+// will also trim all trailing zeros for better readability in the UI
 string f2sz(const float f, const bool can_convert_decimal_point)
 {
 #if 1
@@ -575,15 +592,15 @@ bool try_parse_color(const string& str, OLE_COLOR& value)
    if (hexStr.size() != 8)
       return false;
 
-   UINT32 rgba;
+   uint32_t rgba;
    std::stringstream ss;
    ss << std::hex << hexStr;
    if (!(ss >> rgba))
       return false;
 
-   const UINT8 r = (rgba >> 24) & 0xFF;
-   const UINT8 g = (rgba >> 16) & 0xFF;
-   const UINT8 b = (rgba >> 8) & 0xFF;
+   const uint8_t r = (rgba >> 24) & 0xFF;
+   const uint8_t g = (rgba >> 16) & 0xFF;
+   const uint8_t b = (rgba >> 8) & 0xFF;
 
    value = RGB(r, g, b);
 
@@ -643,7 +660,7 @@ vector<string> parse_csv_line(const string& line)
 
 string color_to_hex(OLE_COLOR color)
 {
-   const UINT32 rgba = (GetRValue(color) << 24) | (GetGValue(color) << 16) | (GetBValue(color) << 8) | 0xFF;
+   const uint32_t rgba = (GetRValue(color) << 24) | (GetGValue(color) << 16) | (GetBValue(color) << 8) | 0xFF;
    std::stringstream stream;
    stream << std::setfill('0') << std::setw(8) << std::hex << rgba;
    return stream.str();
@@ -671,7 +688,7 @@ string string_replace_all(const string& szStr, const string& szFrom, const strin
    return string_replace_all(szNewStr, szFrom, szTo, startPos+szTo.length());
 }
 
-string create_hex_dump(const UINT8* buffer, size_t size)
+string create_hex_dump(const uint8_t* buffer, size_t size)
 {
    constexpr int bytesPerLine = 32;
    std::stringstream ss;
