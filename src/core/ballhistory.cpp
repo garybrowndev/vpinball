@@ -332,49 +332,50 @@ const char* BallHistory::PrintScreenRecord::ImGuiStatusLabel = "Status";
 const char* BallHistory::PrintScreenRecord::ImGuiCurrentRunRecordLabel = "CurrentRunRecord";
 const char* BallHistory::PrintScreenRecord::ImGuiErrorLabel = "Error";
 
-ImFont* BallHistory::PrintScreenRecord::Normal12Font = nullptr;
-ImFont* BallHistory::PrintScreenRecord::Normal14Font = nullptr;
-ImFont* BallHistory::PrintScreenRecord::Bold12Font = nullptr;
-ImFont* BallHistory::PrintScreenRecord::Bold14Font = nullptr;
-ImFont* BallHistory::PrintScreenRecord::Bold20Font = nullptr;
+ImFont* BallHistory::PrintScreenRecord::NormalSmallFont = nullptr;
+ImFont* BallHistory::PrintScreenRecord::NormalMediumFont = nullptr;
+ImFont* BallHistory::PrintScreenRecord::BoldSmallFont = nullptr;
+ImFont* BallHistory::PrintScreenRecord::BoldMediumFont = nullptr;
+ImFont* BallHistory::PrintScreenRecord::BoldLargeFont = nullptr;
 
 void BallHistory::PrintScreenRecord::Init()
 {
    ImGuiIO& io = ImGui::GetIO();
+   int rotatedWidth = g_pplayer->m_liveUI->GetRotatedWidth();
 
-   if (Normal12Font == nullptr)
+   if (NormalSmallFont == nullptr)
    {
-      Normal12Font = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, 12.0f);
+      NormalSmallFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, rotatedWidth / 70.0f);
    }
 
-   if (Normal14Font == nullptr)
+   if (NormalMediumFont == nullptr)
    {
-      Normal14Font = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, 14.0f);
+      NormalMediumFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, rotatedWidth / 60.0f);
    }
 
-   if (Bold12Font == nullptr)
+   if (BoldSmallFont == nullptr)
    {
-      Bold12Font = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, 12.0f);
+      BoldSmallFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, rotatedWidth / 70.0f);
    }
 
-   if (Bold14Font == nullptr)
+   if (BoldMediumFont == nullptr)
    {
-      Bold14Font = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, 14.0f);
+      BoldMediumFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, rotatedWidth / 60.0f);
    }
 
-   if (Bold20Font == nullptr)
+   if (BoldLargeFont == nullptr)
    {
-      Bold20Font = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, 20.0f);
+      BoldLargeFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, rotatedWidth / 50.0f);
    }
 }
 
 void BallHistory::PrintScreenRecord::UnInit()
 {
-   Normal12Font = nullptr;
-   Normal14Font = nullptr;
-   Bold12Font = nullptr;
-   Bold14Font = nullptr;
-   Bold20Font = nullptr;
+   NormalSmallFont = nullptr;
+   NormalMediumFont = nullptr;
+   BoldSmallFont = nullptr;
+   BoldMediumFont = nullptr;
+   BoldLargeFont = nullptr;
 }
 
 void BallHistory::PrintScreenRecord::Text(const char* name, float positionX, float positionY, const char* format, ...)
@@ -384,7 +385,7 @@ void BallHistory::PrintScreenRecord::Text(const char* name, float positionX, flo
    va_start(formatArgs, format);
    vsprintf_s(strBuffer, format, formatArgs);
 
-   ShowText(name, Bold14Font, Color::White, positionX, positionY, false, strBuffer);
+   ShowText(name, BoldMediumFont, Color::White, positionX, positionY, false, strBuffer);
 }
 
 void BallHistory::PrintScreenRecord::MenuTitleText(const char* format, ...)
@@ -395,7 +396,7 @@ void BallHistory::PrintScreenRecord::MenuTitleText(const char* format, ...)
    vsprintf_s(strBuffer, format, formatArgs);
 
    std::string tempStr = "*****" + std::string(strBuffer) + "*****";
-   ShowText(ImGuiProcessMenuLabel, Bold14Font, Color::White, 0.50f, 0.25f, true, tempStr.c_str());
+   ShowText(ImGuiProcessMenuLabel, BoldMediumFont, Color::White, 0.50f, 0.25f, true, tempStr.c_str());
 }
 
 void BallHistory::PrintScreenRecord::MenuText(bool selected, const char* format, ...)
@@ -408,11 +409,11 @@ void BallHistory::PrintScreenRecord::MenuText(bool selected, const char* format,
    if (selected)
    {
       std::string tempStr = "-->" + std::string(strBuffer) + "<--";
-      ShowText(ImGuiProcessMenuLabel, Bold12Font, Color::White, 0.50f, 0.25f, true, tempStr.c_str());
+      ShowText(ImGuiProcessMenuLabel, BoldSmallFont, Color::White, 0.50f, 0.25f, true, tempStr.c_str());
    }
    else
    {
-      ShowText(ImGuiProcessMenuLabel, Normal12Font, Color::White, 0.50f, 0.25f, true, strBuffer);
+      ShowText(ImGuiProcessMenuLabel, NormalSmallFont, Color::White, 0.50f, 0.25f, true, strBuffer);
    }
 
    ImGui::SetWindowFocus(ImGuiProcessMenuLabel);
@@ -425,7 +426,7 @@ void BallHistory::PrintScreenRecord::PrintScreenRecord::ActiveMenuText(const cha
    va_start(formatArgs, format);
    vsprintf_s(strBuffer, format, formatArgs);
 
-   ShowText(ImGuiActiveMenuLabel, Normal12Font, Color::White, 0.50f, 0.99f, false, strBuffer);
+   ShowText(ImGuiActiveMenuLabel, NormalSmallFont, Color::White, 0.50f, 0.99f, false, strBuffer);
 }
 
 void BallHistory::PrintScreenRecord::ErrorText(const char* format, ...)
@@ -436,22 +437,22 @@ void BallHistory::PrintScreenRecord::ErrorText(const char* format, ...)
    vsprintf_s(strBuffer, format, formatArgs);
 
    std::string tempStr = "!!!!! ERROR:" + std::string(strBuffer) + "!!!!!";
-   ShowText(ImGuiErrorLabel, Bold20Font, Color::Red, 0.50f, 0.50f, true, tempStr.c_str());
+   ShowText(ImGuiErrorLabel, BoldLargeFont, Color::Red, 0.50f, 0.50f, true, tempStr.c_str());
 }
 
 void BallHistory::PrintScreenRecord::Results(const std::vector<std::pair<std::string, std::string>>& nameValuePairs)
 {
-   ShowNameValueTable(ImGuiProcessMenuLabel, Normal12Font, Color::White, Bold12Font, Color::White, 0.00f, 0.00f, nameValuePairs, false, true);
+   ShowNameValueTable(ImGuiProcessMenuLabel, NormalSmallFont, Color::White, BoldSmallFont, Color::White, 0.00f, 0.00f, nameValuePairs, false, true);
 }
 
 void BallHistory::PrintScreenRecord::Status(const std::vector<std::pair<std::string, std::string>>& nameValuePairs)
 {
-   ShowNameValueTable(ImGuiStatusLabel, Normal12Font, Color::White, Bold12Font, Color::White, 0.0f, 0.0f, nameValuePairs, true, false);
+   ShowNameValueTable(ImGuiStatusLabel, NormalSmallFont, Color::White, BoldSmallFont, Color::White, 0.0f, 0.0f, nameValuePairs, true, false);
 }
 
 void BallHistory::PrintScreenRecord::ActiveMenu(const std::vector<std::pair<std::string, std::string>>& nameValuePairs)
 {
-   ShowNameValueTable(ImGuiActiveMenuLabel, Normal12Font, Color::White, Bold12Font, Color::White, 0.80f, 1.00f, nameValuePairs, false, true);
+   ShowNameValueTable(ImGuiActiveMenuLabel, NormalSmallFont, Color::White, BoldSmallFont, Color::White, 0.80f, 1.00f, nameValuePairs, false, true);
 }
 
 void BallHistory::PrintScreenRecord::ShowText(const char* name, ImFont* font, const ImU32& fontColor, float positionX, float positionY, bool center, const char* str)

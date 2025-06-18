@@ -536,11 +536,11 @@ private:
       static const char *ImGuiCurrentRunRecordLabel;
       static const char *ImGuiErrorLabel;
 
-      static ImFont *Normal12Font;
-      static ImFont *Normal14Font;
-      static ImFont *Bold12Font;
-      static ImFont *Bold14Font;
-      static ImFont *Bold20Font;
+      static ImFont *NormalSmallFont;
+      static ImFont *NormalMediumFont;
+      static ImFont *BoldSmallFont;
+      static ImFont *BoldMediumFont;
+      static ImFont *BoldLargeFont;
 
       static void ShowText(const char *name, ImFont *font, const ImU32 &fontColor, float positionX, float positionY, bool center, const char *str);
       static void ShowNameValueTable(const char *name, ImFont *rowFont, const ImU32 &rowFontColor, ImFont *headerFont, const ImU32 &headerFontColor, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs, bool overflow, bool center);

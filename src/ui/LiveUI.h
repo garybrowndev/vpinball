@@ -32,6 +32,8 @@ public:
    bool IsShowingFPSDetails() const { return m_show_fps > 1; }
    unsigned int PushNotification(const string &message, const int lengthMs, const unsigned int reuseId = 0);
 
+   int GetRotatedWidth();
+
 private:
    // Main UI frame & panels
    void UpdateMainUI();
