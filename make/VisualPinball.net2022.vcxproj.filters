@@ -156,6 +156,9 @@
     <ClCompile Include="../../src/core/pinundo.cpp">
       <Filter>core</Filter>
     </ClCompile>
+    <ClCompile Include="../../src/core/player.cpp">
+      <Filter>core</Filter>
+    </ClCompile>
     <ClCompile Include="../../src/core/Settings.cpp">
       <Filter>core</Filter>
     </ClCompile>
