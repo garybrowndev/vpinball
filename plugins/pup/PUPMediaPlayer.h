@@ -3,7 +3,7 @@
 #include "PUPManager.h"
 #include "LibAv.h"
 /*
-#include "audio/pinsound.h"
+#include "parts/Sound.h"
 #include "../common/Window.h"*/
 
 namespace PUP {
@@ -32,7 +32,7 @@ private:
    void HandleVideoFrame(AVFrame* pFrame);
 
    string m_filename;
-   Uint64 m_startTimestamp = 0; // timestamp in ms when the play command was called
+   uint64_t m_startTimestamp = 0; // timestamp in ms when the play command was called
    bool m_loop = false;
    int m_playIndex = 0;
    float m_volume = 100.f;
@@ -60,7 +60,7 @@ private:
    AVCodecContext* m_pAudioContext = nullptr;
    struct SwrContext* m_pAudioConversionContext = nullptr;
    AVSampleFormat m_audioFormat = AV_SAMPLE_FMT_NONE;
-   //PinSound* m_pPinSound = nullptr;
+   //Sound* m_pSound = nullptr;
 
    std::mutex m_mutex;
    std::thread m_thread;

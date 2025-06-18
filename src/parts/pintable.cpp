@@ -1,7 +1,7 @@
 // license:GPLv3+
 #include "core/stdafx.h"
 #include "core/vpversion.h"
-#include "audio/pinsound.h"
+#include "parts/Sound.h"
 #include "ui/resource.h"
 #include "utils/hash.h"
 #include <algorithm>
@@ -172,9 +172,7 @@ STDMETHODIMP ScriptGlobalTable::NudgeTiltStatus(VARIANT *XPlumb, VARIANT *YPlumb
 
 STDMETHODIMP ScriptGlobalTable::PlaySound(BSTR bstr, LONG LoopCount, float volume, float pan, float randompitch, LONG pitch, VARIANT_BOOL usesame, VARIANT_BOOL restart, float front_rear_fade)
 {
-   if (g_pplayer && g_pplayer->m_PlaySound)
-      m_pt->PlaySound(bstr, LoopCount, volume, pan, randompitch, pitch, usesame, restart, front_rear_fade);
-
+   m_pt->PlaySound(bstr, LoopCount, volume, pan, randompitch, pitch, usesame, restart, front_rear_fade);
    return S_OK;
 }
 
@@ -190,11 +188,9 @@ STDMETHODIMP ScriptGlobalTable::QuitPlayer(int CloseType)
    return S_OK;
 }
 
-STDMETHODIMP ScriptGlobalTable::StopSound(BSTR Sound)
+STDMETHODIMP ScriptGlobalTable::StopSound(BSTR soundName)
 {
-   if (g_pplayer && g_pplayer->m_PlaySound)
-      m_pt->StopSound(Sound);
-
+   m_pt->StopSound(soundName);
    return S_OK;
 }
 
@@ -204,13 +200,32 @@ STDMETHODIMP ScriptGlobalTable::PlayMusic(BSTR str, float volume)
    {
       EndMusic();
 
-      g_pplayer->m_audio = new PinSound();
-      const float MusicVolume = clamp(dequantizeSignedPercent(g_pplayer->m_MusicVolume) * m_pt->m_TableMusicVolume * volume, 0.f, 1.f);
-
-      if (!g_pplayer->m_audio->MusicInit(MakeString(str), MusicVolume))
+      const string musicNameStr = MakeString(str);
+      if (!musicNameStr.empty())
       {
-         delete g_pplayer->m_audio;
-         g_pplayer->m_audio = nullptr;
+         bool success = false;
+         for (int i = 0; !success && i < 5; ++i)
+         {
+            string path;
+            switch (i)
+            {
+            case 0: break;
+            case 1: path = g_pvp->m_myPath + "music" + PATH_SEPARATOR_CHAR; break;
+            case 2: path = g_pvp->m_currentTablePath; break;
+            case 3: path = g_pvp->m_currentTablePath + "music" + PATH_SEPARATOR_CHAR; break;
+            case 4: path = PATH_MUSIC; break;
+            }
+            path = find_case_insensitive_file_path(path + musicNameStr);
+            success = g_pplayer->m_audioPlayer->PlayMusic(path);
+         }
+         if (success)
+         {
+            g_pplayer->m_audioPlayer->SetMusicVolume(m_pt->m_TableMusicVolume * volume);
+         }
+         else
+         {
+            PLOGE << "Failed to stream music: " << musicNameStr;
+         }
       }
    }
    return S_OK;
@@ -218,21 +233,15 @@ STDMETHODIMP ScriptGlobalTable::PlayMusic(BSTR str, float volume)
 
 STDMETHODIMP ScriptGlobalTable::EndMusic()
 {
-   if (g_pplayer && g_pplayer->m_audio)
-   {
-      delete g_pplayer->m_audio;
-      g_pplayer->m_audio = nullptr;
-   }
+   if (g_pplayer)
+      g_pplayer->m_audioPlayer->PauseMusic();
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::put_MusicVolume(float volume)
 {
-   if (g_pplayer && g_pplayer->m_PlayMusic && g_pplayer->m_audio)
-   {
-      const float MusicVolume = clamp(m_pt->m_TableMusicVolume * volume, 0.f, 1.f);
-      g_pplayer->m_audio->MusicVolume(MusicVolume);
-   }
+   if (g_pplayer)
+      g_pplayer->m_audioPlayer->SetMusicVolume(volume);
    return S_OK;
 }
 
@@ -623,7 +632,7 @@ STDMETHODIMP ScriptGlobalTable::SaveValue(BSTR TableName, BSTR ValueName, VARIAN
    BSTR bstr = BstrFromVariant(&Value, 0x409);
 
    DWORD writ;
-   pstmValue->Write((WCHAR *)bstr, (int)wcslen((WCHAR *)bstr) * (int)sizeof(WCHAR), &writ);
+   pstmValue->Write((WCHAR *)bstr, (uint32_t)wcslen((WCHAR *)bstr) * (uint32_t)sizeof(WCHAR), &writ);
 
    SysFreeString(bstr);
 
@@ -1049,20 +1058,20 @@ STDMETHODIMP ScriptGlobalTable::put_DMDPixels(VARIANT pVal) // assumes VT_UI1 as
    SafeArrayAccessData(psa, (void **)&p);
    if (g_pplayer->m_scaleFX_DMD)
    {
-      DWORD *rgba = new DWORD[size * scale * scale];
+      uint32_t *const __restrict rgba = new uint32_t[size * scale * scale];
       for (int ofs = 0; ofs < size; ++ofs)
          rgba[ofs] = V_UI4(&p[ofs]); 
       upscale(rgba, g_pplayer->m_dmdSize, true);
-      BYTE *const data = g_pplayer->m_dmdFrame->data();
+      uint8_t *const __restrict data = g_pplayer->m_dmdFrame->data();
       for (int ofs = 0; ofs < size; ++ofs)
-         data[ofs] = static_cast<BYTE>(InvsRGB((float)(rgba[ofs] & 0xFF) * (float)(1.0 / 100.)) * 255.f);
+         data[ofs] = static_cast<uint8_t>(InvsRGB((float)(rgba[ofs] & 0xFF) * (float)(1.0 / 100.)) * 255.f);
       delete[] rgba;
    }
    else
    {
-      BYTE *const data = g_pplayer->m_dmdFrame->data();
+      uint8_t *const __restrict data = g_pplayer->m_dmdFrame->data();
       for (int ofs = 0; ofs < size; ++ofs)
-         data[ofs] = static_cast<BYTE>(InvsRGB((float)V_UI4(&p[ofs]) * (float)(1.0 / 100.)) * 255.f);
+         data[ofs] = static_cast<uint8_t>(InvsRGB((float)V_UI4(&p[ofs]) * (float)(1.0 / 100.)) * 255.f);
    }
    SafeArrayUnaccessData(psa);
    g_pplayer->m_dmdFrameId++;
@@ -1100,7 +1109,7 @@ STDMETHODIMP ScriptGlobalTable::put_DMDColoredPixels(VARIANT pVal) //!! assumes 
       g_pplayer->m_dmdFrame = BaseTexture::Create(g_pplayer->m_dmdSize.x * scale, g_pplayer->m_dmdSize.y * scale, BaseTexture::SRGBA);
    }
    const int size = g_pplayer->m_dmdSize.x * g_pplayer->m_dmdSize.y;
-   DWORD *const data = reinterpret_cast<DWORD *>(g_pplayer->m_dmdFrame->data());
+   uint32_t *const __restrict data = reinterpret_cast<uint32_t *>(g_pplayer->m_dmdFrame->data());
    VARIANT *p;
    SafeArrayAccessData(psa, (void **)&p);
    for (int ofs = 0; ofs < size; ++ofs)
@@ -1418,10 +1427,6 @@ PinTable::~PinTable()
 
    for (IEditable* edit : m_vedit)
       edit->Release();
-
-   // Stop all sounds
-   for (PinSound* sound : m_vsound)
-      sound->Stop();
 
    if (!m_isLiveInstance)
    { // Sounds, Fonts and images are owned by the editor's table, live table instances just use shallow copy, so don't release them
@@ -2193,7 +2198,7 @@ PinTable* PinTable::CopyForPlay()
    for (Texture* texture : src->m_vimage)
       dst->m_vimage.push_back(texture);
    dst->m_vsound.reserve(src->m_vsound.size() + dst->m_vsound.size());
-   for (PinSound* sound : src->m_vsound)
+   for (VPX::Sound* sound : src->m_vsound)
       dst->m_vsound.push_back(sound);
    dst->m_vfont.reserve(src->m_vfont.size() + dst->m_vfont.size());
    for (PinFont* font : src->m_vfont)
@@ -2699,7 +2704,7 @@ HRESULT PinTable::SaveToStorage(IStorage *pstgRoot, VPXFileFeedback& feedback)
 
                if (SUCCEEDED(hr = pstgData->CreateStream(wStmName.c_str(), STGM_DIRECT | STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE, 0, 0, &pstmItem)))
                {
-                  SaveSoundToStream(m_vsound[i], pstmItem);
+                  m_vsound[i]->SaveToStream(pstmItem);
                   pstmItem->Release();
                   pstmItem = nullptr;
                }
@@ -2811,281 +2816,6 @@ HRESULT PinTable::SaveToStorage(IStorage *pstgRoot, VPXFileFeedback& feedback)
 #else
    return 0L;
 #endif
-}
-
-HRESULT PinTable::SaveSoundToStream(const PinSound * const pps, IStream *pstm)
-{
-   ULONG writ = 0;
-   int len = (int)pps->m_name.length();
-
-   HRESULT hr;
-   if (FAILED(hr = pstm->Write(&len, sizeof(int), &writ)))
-      return hr;
-
-   if (FAILED(hr = pstm->Write(pps->m_name.c_str(), len, &writ)))
-      return hr;
-
-   len = (int)pps->m_path.length();
-
-   if (FAILED(hr = pstm->Write(&len, sizeof(int), &writ)))
-      return hr;
-
-   if (FAILED(hr = pstm->Write(pps->m_path.c_str(), len, &writ)))
-      return hr;
-
-   // removed: previously did write the same name again, but just in lower case
-   //  this rudimentary version here needs to stay as otherwise problems when loading, as one field less
-   len = 1;
-   if (FAILED(hr = pstm->Write(&len, sizeof(int), &writ)))
-      return hr;
-   constexpr char tmp = '\0'; // now just writes a short dummy/empty string
-   if (FAILED(hr = pstm->Write(&tmp, len, &writ)))
-      return hr;
-   //
-
-   const bool wav = isWav(pps->m_path);
-
-   if (wav && FAILED(hr = pstm->Write(&pps->m_wfx, sizeof(pps->m_wfx), &writ))) // only write for WAVs
-      return hr;
-
-
-   if (FAILED(hr = pstm->Write(&pps->m_cdata_org, sizeof(int), &writ)))
-      return hr;
-
-   if (FAILED(hr = pstm->Write(pps->m_pdata_org, pps->m_cdata_org, &writ)))
-      return hr;
-
-   const SoundOutTypes outputTarget = pps->GetOutputTarget();
-   if (FAILED(hr = pstm->Write(&outputTarget, sizeof(bool), &writ)))
-      return hr;
-
-   // Begin NEW_SOUND_FORMAT_VERSION data
-
-   const int volume = pps->GetVolume();
-   if (FAILED(hr = pstm->Write(&volume, sizeof(int), &writ)))
-      return hr;
-   const int pan = pps->GetPan();
-   if (FAILED(hr = pstm->Write(&pan, sizeof(int), &writ)))
-      return hr;
-   const int frontRearFade = pps->GetFrontRearFade();
-   if (FAILED(hr = pstm->Write(&frontRearFade, sizeof(int), &writ)))
-      return hr;
-   if (FAILED(hr = pstm->Write(&volume, sizeof(int), &writ)))
-      return hr;
-
-   return S_OK;
-}
-
-HRESULT PinTable::LoadSoundFromStream(IStream *pstm, const int LoadFileVersion)
-{
-   int len;
-   ULONG read;
-   HRESULT hr;
-
-   PinSound * const pps = new PinSound(m_settings);
-
-   // get length of filename
-   if (FAILED(hr = pstm->Read(&len, sizeof(len), &read)))
-      return hr;
-
-   // read in filename (only filename, no ext)
-   char* tmp = new char[len+1];
-   if (FAILED(hr = pstm->Read(tmp, len, &read)))
-   {
-       delete pps;
-       return hr;
-   }
-   tmp[len] = '\0';
-   pps->m_name = tmp;
-   delete[] tmp;
-
-   // get length of filename including path (// full filename, incl. path)
-   if (FAILED(hr = pstm->Read(&len, sizeof(len), &read)))
-   {
-       delete pps;
-       return hr;
-   }
-
-   //read in filename including path (// full filename, incl. path)
-   tmp = new char[len+1];
-   if (FAILED(hr = pstm->Read(tmp, len, &read)))
-   {
-       delete pps;
-       return hr;
-   }
-   tmp[len] = '\0';
-   pps->m_path = tmp;
-   delete[] tmp;
-
-   // was the lower case name, but not used anymore since 10.7+, 10.8+ also only stores 1,'\0'
-   if (FAILED(hr = pstm->Read(&len, sizeof(len), &read)))
-   {
-       delete pps;
-       return hr;
-   }
-
-   tmp = new char[len];
-   if (FAILED(hr = pstm->Read(tmp, len, &read)))
-   {
-       delete[] tmp;
-       delete pps;
-       return hr;
-   }
-   delete[] tmp;
-
-   const bool wav = isWav(pps->m_path);
-
-   if (wav && FAILED(hr = pstm->Read(&pps->m_wfx, sizeof(pps->m_wfx), &read)))
-   {
-       delete pps;
-       return hr;
-   }
-
-   if (FAILED(hr = pstm->Read(&pps->m_cdata_org, sizeof(int), &read)))
-   {
-       delete pps;
-       return hr;
-   }
-   pps->m_cdata = pps->m_cdata_org;
-
-   // Since vpinball was originally only for windows, the microsoft library import was used, which stores/converts WAVs
-   // to the waveformatex.  OGG files will still have their original header.  For WAVs
-   // we put the regular WAV header back on for SDL to process the file
-   if (wav)
-   {
-         struct WAVEHEADER
-         {
-            DWORD   dwRiff;    // "RIFF"
-            DWORD   dwSize;    // Size
-            DWORD   dwWave;    // "WAVE"
-            DWORD   dwFmt;     // "fmt "
-            DWORD   dwFmtSize; // Wave Format Size
-         };
-         // Static RIFF header
-         static constexpr BYTE WaveHeader[] =
-         {
-            'R','I','F','F',0x00,0x00,0x00,0x00,'W','A','V','E','f','m','t',' ',0x00,0x00,0x00,0x00
-         };
-         // Static wave DATA tag
-         static constexpr BYTE WaveData[] = { 'd','a','t','a' };
-
-      DWORD waveFileSize;
-      char *waveFilePointer;
-
-         waveFileSize = sizeof(WAVEHEADER) + sizeof(WAVEFORMATEX) + pps->m_wfx.cbSize + sizeof(WaveData) + sizeof(DWORD) + pps->m_cdata_org;
-         pps->m_pdata = new char[waveFileSize];
-         waveFilePointer = pps->m_pdata;
-         WAVEHEADER * const waveHeader = reinterpret_cast<WAVEHEADER *>(pps->m_pdata);
-
-         // Wave header
-         memcpy(waveFilePointer, WaveHeader, sizeof(WaveHeader));
-         waveFilePointer += sizeof(WaveHeader);
-
-         // Update sizes in wave header
-         waveHeader->dwSize = waveFileSize - sizeof(DWORD) * 2;
-         waveHeader->dwFmtSize = sizeof(WAVEFORMATEX) + pps->m_wfx.cbSize;
-
-         // WAVEFORMATEX
-         memcpy(waveFilePointer, &pps->m_wfx, sizeof(WAVEFORMATEX) + pps->m_wfx.cbSize);
-         waveFilePointer += sizeof(WAVEFORMATEX) + pps->m_wfx.cbSize;
-
-         // Data header
-         memcpy(waveFilePointer, WaveData, sizeof(WaveData));
-         waveFilePointer += sizeof(WaveData);
-         *(reinterpret_cast<DWORD *>(waveFilePointer)) = pps->m_cdata_org;
-         waveFilePointer += sizeof(DWORD);
-
-      pps->m_pdata_org = waveFilePointer;
-      pps->m_cdata = waveFileSize;
-   }
-   else
-      pps->m_pdata = pps->m_pdata_org = new char[pps->m_cdata];
-
-   if (FAILED(hr = pstm->Read(pps->m_pdata_org, pps->m_cdata_org, &read)))
-   {
-      delete pps;
-      return hr;
-   }
-
-   // this reads in the settings that are used by the Windows UI in the Sound Manager and when PlaySound() is used.
-   if (LoadFileVersion >= NEW_SOUND_FORMAT_VERSION)
-   {
-      SoundOutTypes outputTarget = SoundOutTypes::SNDOUT_TABLE;
-      if (FAILED(hr = pstm->Read(&outputTarget, sizeof(char), &read)))
-      {
-		   delete pps;
-		   return hr;
-      }
-      if (outputTarget < 0 || outputTarget > SoundOutTypes::SNDOUT_BACKGLASS)
-         outputTarget = SoundOutTypes::SNDOUT_TABLE;
-      pps->SetOutputTarget(outputTarget);
-      int volume;
-      if (FAILED(hr = pstm->Read(&volume, sizeof(int), &read)))
-      {
-		   delete pps;
-		   return hr;
-      }
-      pps->SetVolume(volume);
-      int pan;
-      if (FAILED(hr = pstm->Read(&pan, sizeof(int), &read)))
-      {
-		   delete pps;
-		   return hr;
-      }
-      pps->SetPan(pan);
-      int frontRearFade;
-      if (FAILED(hr = pstm->Read(&frontRearFade, sizeof(int), &read)))
-      {
-		   delete pps;
-		   return hr;
-      }
-      pps->SetFrontRearFade(frontRearFade);
-      if (FAILED(hr = pstm->Read(&volume, sizeof(int), &read)))
-      {
-		   delete pps;
-		   return hr;
-      }
-      pps->SetVolume(volume);
-   }
-   else
-   {
-      bool toBackglassOutput = false; // false: for pre-VPX tables
-      if (FAILED(hr = pstm->Read(&toBackglassOutput, sizeof(bool), &read)))
-      {
-		   delete pps;
-		   return hr;
-      }
-
-      pps->SetOutputTarget((StrStrI(pps->m_name.c_str(), "bgout_") != nullptr)
-                        || StrCompareNoCase(pps->m_path, "* Backglass Output *"s) // legacy behavior, where the BG selection was encoded into the strings directly
-                        || toBackglassOutput ? SNDOUT_BACKGLASS : SNDOUT_TABLE);
-   }
-
-   // now load the sound samples from m_pdata into SDL mixer
-   if (FAILED(hr = pps->ReInitialize()))
-   {
-      delete pps;
-      return hr;
-   }
-
-   // search for duplicate names, do not load dupes
-   for(size_t i = 0; i < m_vsound.size(); ++i)
-      if (m_vsound[i]->m_name == pps->m_name && m_vsound[i]->m_path == pps->m_path)
-      {
-         delete pps;
-         return S_FAIL;
-      }
-
-   m_vsound.push_back(pps);
-   return S_OK;
-}
-
-bool PinTable::isWav(const std::string& szPath)
-{
-   const size_t pos = szPath.find_last_of('.');
-   if(pos == string::npos)
-      return true;
-   return StrCompareNoCase(szPath.substr(pos+1), "wav"s);
 }
 
 HRESULT PinTable::WriteInfoValue(IStorage* pstg, const WCHAR * const wzName, const string& szValue, HCRYPTHASH hcrypthash)
@@ -3689,9 +3419,23 @@ HRESULT PinTable::LoadGameFromFilename(const string& filename, VPXFileFeedback& 
                IStream* pstmItem;
                if (SUCCEEDED(hr = pstgData->OpenStream(wStmName.c_str(), nullptr, STGM_DIRECT | STGM_READ | STGM_SHARE_EXCLUSIVE, 0, &pstmItem)))
                {
-                  LoadSoundFromStream(pstmItem, loadfileversion);
+                  VPX::Sound *pps = VPX::Sound::CreateFromStream(pstmItem, loadfileversion);
                   pstmItem->Release();
                   pstmItem = nullptr;
+                  if (pps)
+                  {
+                     // search for duplicate names, do not load dupes
+                     for (size_t i = 0; i < m_vsound.size(); ++i)
+                        if (m_vsound[i]->m_name == pps->m_name)
+                        {
+                           PLOGE << "Duplicate sound name found: " << pps->m_name << ", not loading it!";
+                           delete pps;
+                           pps = nullptr;
+                           break;
+                        }
+                     if (pps)
+                        m_vsound.push_back(pps);
+                  }
                }
                feedback.SoundHasBeenProcessed(i + 1, csounds);
             }
@@ -4508,18 +4252,12 @@ bool PinTable::LoadToken(const int id, BiffReader * const pbr)
    return true;
 }
 
-bool PinTable::ExportSound(PinSound * const pps, const char * const szfilename)
+bool PinTable::ExportSound(VPX::Sound *const pps, const char *const szfilename)
 {
    if(extension_from_path(pps->m_path) == extension_from_path(szfilename))
    {
-      FILE* f;
-      if ((fopen_s(&f, szfilename, "wb") == 0) && f)
-      {
-         fwrite(pps->m_pdata, 1, pps->m_cdata, f);
-         fclose(f);
+      if (pps->SaveToFile(szfilename))
          return true;
-      }
-
 #ifndef __STANDALONE__
       m_mdiTable->MessageBox("Can not Open/Create Sound file!", "Visual Pinball", MB_ICONERROR);
    }
@@ -4532,40 +4270,23 @@ bool PinTable::ExportSound(PinSound * const pps, const char * const szfilename)
    return false;
 }
 
-void PinTable::ReImportSound(const HWND hwndListView, PinSound * const pps, const string& filename)
+void PinTable::ReImportSound(const HWND hwndListView, VPX::Sound *const pps, const string &filename)
 {
 #ifndef __STANDALONE__
-   PinSound * const ppsNew = m_vpinball->m_ps.LoadFile(filename);
-
-   if (ppsNew == nullptr)
+   FILE *f;
+   if (fopen_s(&f, filename.c_str(), "rb") != 0 || !f)
       return;
-
-   //!! meh to all of this: manually copy old sound manager params to temp vars
-
-   const int pan = pps->GetPan();
-   const int frontRearFade = pps->GetFrontRearFade();
-   const int volume = pps->GetVolume();
-   const SoundOutTypes outputTarget = pps->GetOutputTarget();
-   const string name = pps->m_name;
-
-   //!! meh to all of this: kill old raw sound data and DSound/BASS stuff, then copy new one over
-
-   pps->UnInitialize();
-   delete[] pps->m_pdata;
-
-   *pps = *ppsNew;
-
-   //!! meh to all of this: set to 0, so this is not free'd in the dtor, as used in pps from now on
-
-   ppsNew->m_pdata = nullptr;
-   delete ppsNew;
-
-   // recopy old settings over to new sound file
-   pps->SetPan(pan);
-   pps->SetFrontRearFade(frontRearFade);
-   pps->SetVolume(volume);
-   pps->SetOutputTarget(outputTarget);
-   pps->m_name = name;
+   fseek(f, 0, SEEK_END);
+   int cdata = (int)ftell(f);
+   fseek(f, 0, SEEK_SET);
+   uint8_t* pdata = new uint8_t[cdata];
+   if (fread_s(pdata, cdata, 1, cdata, f) < 1)
+   {
+      fclose(f);
+      return;
+   }
+   fclose(f);
+   pps->SetFromFileData(filename, pdata, cdata);
 #endif
 }
 
@@ -4573,7 +4294,7 @@ void PinTable::ReImportSound(const HWND hwndListView, PinSound * const pps, cons
 void PinTable::ImportSound(const HWND hwndListView, const string& filename)
 {
 #ifndef __STANDALONE__
-   PinSound * const pps = m_vpinball->m_ps.LoadFile(filename);
+   VPX::Sound *const pps = VPX::Sound::CreateFromFile(filename);
 
    if (pps == nullptr)
       return;
@@ -4596,7 +4317,7 @@ void PinTable::ListSounds(HWND hwndListView)
 }
 
 
-int PinTable::AddListSound(HWND hwndListView, PinSound * const pps)
+int PinTable::AddListSound(HWND hwndListView, VPX::Sound *const pps)
 {
 #ifndef __STANDALONE__
    LVITEM lvitem;
@@ -4612,10 +4333,10 @@ int PinTable::AddListSound(HWND hwndListView, PinSound * const pps)
 
    switch (pps->GetOutputTarget())
    {
-   case SNDOUT_BACKGLASS:
+   case VPX::SNDOUT_BACKGLASS:
 	   ListView_SetItemText(hwndListView, index, 2, (LPSTR)"Backglass");
 	   break;
-   case SNDOUT_TABLE:
+   case VPX::SNDOUT_TABLE:
 	   ListView_SetItemText(hwndListView, index, 2, (LPSTR)"Table");
 	   break;
    default:
@@ -4633,7 +4354,7 @@ int PinTable::AddListSound(HWND hwndListView, PinSound * const pps)
 #endif
 }
 
-void PinTable::RemoveSound(PinSound * const pps)
+void PinTable::RemoveSound(VPX::Sound *const pps)
 {
    RemoveFromVectorSingle(m_vsound, pps);
 
@@ -6644,7 +6365,7 @@ void PinTable::AddMultiSel(ISelect *psel, const bool add, const bool update, con
         {
             const Primitive *const prim = (Primitive *)piSelect;
             if (!prim->m_mesh.m_animationFrames.empty())
-                info += " (animated " + std::to_string((unsigned long long)prim->m_mesh.m_animationFrames.size() - 1) + " frames)";
+                info += " (animated " + std::to_string((uint64_t)prim->m_mesh.m_animationFrames.size() - 1) + " frames)";
         }
 #ifndef __STANDALONE__
         m_vpinball->SetStatusBarElementInfo(info);
@@ -6990,62 +6711,49 @@ STDMETHODIMP PinTable::put_Offset(float newVal)
    return S_OK;
 }
 
-HRESULT PinTable::StopSound(BSTR Sound)
+VPX::Sound *PinTable::GetSound(const string &name) const
 {
-   const string name = MakeString(Sound);
+   auto sound = std::ranges::find_if(m_vsound, [&](const VPX::Sound *const ps) { return StrCompareNoCase(ps->m_name, name); });
+   if (sound != m_vsound.end())
+      return *sound;
+   return nullptr;
+}
 
-   size_t i;
-   for (i = 0; i < m_vsound.size(); i++)
-      if (StrCompareNoCase(m_vsound[i]->m_name, name))
-         break;
-
-   if (i == m_vsound.size()) // did not find it
-   {
-      if (!name.empty() && !m_soundsMissing.contains(name))
-      {
-         PLOGW << "Request to stop \"" << name << "\", but sound not found.";
-         m_soundsMissing.insert(name);
-      }
+STDMETHODIMP PinTable::PlaySound(BSTR soundName, int loopcount, float volume, float pan, float randompitch, int pitch, VARIANT_BOOL usesame, VARIANT_BOOL restart, float front_rear_fade)
+{
+   if (g_pplayer == nullptr || !g_pplayer->m_PlaySound)
       return S_OK;
+   const string name = MakeString(soundName);
+   if (StrCompareNoCase("knock"s, name) || StrCompareNoCase("knocker"s, name)) // FIXME remove or port to plugin
+      ushock_output_knock();
+   VPX::Sound *const sound = GetSound(name);
+   if (sound)
+   {
+      g_pplayer->m_audioPlayer->PlaySound(sound, volume, randompitch, pitch, pan, front_rear_fade, loopcount, VBTOb(usesame), VBTOb(restart));
    }
-
-   PinSound * const pps = m_vsound[i];
-   pps->Stop();
-
+   else if (!name.empty() && !m_loggedSoundErrors.contains(name))
+   {
+      m_loggedSoundErrors.insert(name);
+      PLOGW << "Request to play \"" << name << "\", but sound was not found.";
+   }
    return S_OK;
 }
 
-void PinTable::StopAllSounds()
+STDMETHODIMP PinTable::StopSound(BSTR soundName)
 {
-   for (size_t i = 0; i < m_vsound.size(); i++)
-      m_vsound[i]->Stop();
-}
-
-
-STDMETHODIMP PinTable::PlaySound(BSTR bstr, int loopcount, float volume, float pan, float randompitch, int pitch, VARIANT_BOOL usesame, VARIANT_BOOL restart, float front_rear_fade)
-{
-   const string name(MakeString(bstr));
-
-   if (StrCompareNoCase("knock"s, name) || StrCompareNoCase("knocker"s, name))
-      ushock_output_knock();
-
-   size_t i;
-   for (i = 0; i < m_vsound.size(); i++)
-      if (StrCompareNoCase(m_vsound[i]->m_name, name))
-         break;
-
-   if (i == m_vsound.size()) // did not find it
-   {
-      if (!name.empty() && !m_soundsMissing.contains(name))
-      {
-         PLOGW << "Request to play \"" << name << "\", but sound not found.";
-         m_soundsMissing.insert(name);
-      }
+   if (g_pplayer == nullptr || !g_pplayer->m_PlaySound)
       return S_OK;
+   const string name = MakeString(soundName);
+   VPX::Sound *sound = GetSound(name);
+   if (sound)
+   {
+      g_pplayer->m_audioPlayer->StopSound(sound);
    }
-
-   PinSound * const pps = m_vsound[i];
-   pps->Play(volume, randompitch, pitch, pan, front_rear_fade, loopcount, VBTOb(usesame), VBTOb(restart));
+   else if (!name.empty() && !m_loggedSoundErrors.contains(name))
+   {
+      m_loggedSoundErrors.insert(name);
+      PLOGW << "Request to stop \"" << name << "\", but sound was not found.";
+   }
 
    return S_OK;
 }
@@ -7580,7 +7288,7 @@ string PinTable::AuditTable(bool log) const
    for (const auto sound : m_vsound)
    {
       //ss << "  . Sound: '" << sound->m_name << "', size: " << (sound->m_cdata / 1024) << "KiB\r\n";
-      totalSize += sound->m_cdata;
+      totalSize += sound->GetFileSize();
    }
    ss << ". Total sound size: " << (totalSize / (1024 * 1024)) << "MiB\r\n";
 
@@ -7682,7 +7390,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
 
    size_t cvar;
    WCHAR **rgstr;
-   DWORD *rgdw;
+   uint32_t *rgdw;
 
    switch (dispID)
    {
@@ -7698,7 +7406,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
       cvar = m_vimage.size();
 
       rgstr = (WCHAR **)CoTaskMemAlloc((cvar + 1) * sizeof(WCHAR *));
-      rgdw = (DWORD *)CoTaskMemAlloc((cvar + 1) * sizeof(DWORD));
+      rgdw = (uint32_t *)CoTaskMemAlloc((cvar + 1) * sizeof(uint32_t));
 
       WCHAR *wzDst = (WCHAR *)CoTaskMemAlloc(7 * sizeof(WCHAR));
       // TEXT
@@ -7709,7 +7417,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
 
       for (size_t ivar = 0; ivar < cvar; ivar++)
       {
-         const DWORD cwch = (DWORD)m_vimage[ivar]->m_name.length() + 1;
+         const int cwch = (int)m_vimage[ivar]->m_name.length() + 1;
          wzDst = (WCHAR *)CoTaskMemAlloc(cwch*sizeof(WCHAR));
          if (wzDst == nullptr)
             ShowError("DISPID_Image alloc failed");
@@ -7717,7 +7425,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
 
          //MsoWzCopy(szSrc,szDst);
          rgstr[ivar + 1] = wzDst;
-         rgdw[ivar + 1] = (DWORD)ivar;
+         rgdw[ivar + 1] = (uint32_t)ivar;
       }
       cvar++;
    }
@@ -7729,7 +7437,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
    {
       cvar = m_materials.size();
       rgstr = (WCHAR **)CoTaskMemAlloc((cvar + 1) * sizeof(WCHAR *));
-      rgdw = (DWORD *)CoTaskMemAlloc((cvar + 1) * sizeof(DWORD));
+      rgdw = (uint32_t *)CoTaskMemAlloc((cvar + 1) * sizeof(uint32_t));
 
       WCHAR *wzDst = (WCHAR *)CoTaskMemAlloc(7 * sizeof(WCHAR));
       // TEXT
@@ -7740,7 +7448,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
 
       for (size_t ivar = 0; ivar < cvar; ivar++)
       {
-         const DWORD cwch = (DWORD)m_materials[ivar]->m_name.length() + 1;
+         const int cwch = (int)m_materials[ivar]->m_name.length() + 1;
          wzDst = (WCHAR *)CoTaskMemAlloc(cwch*sizeof(WCHAR));
          if (wzDst == nullptr)
             ShowError("IDC_MATERIAL_COMBO alloc failed");
@@ -7748,7 +7456,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
 
          //MsoWzCopy(szSrc,szDst);
          rgstr[ivar + 1] = wzDst;
-         rgdw[ivar + 1] = (DWORD)ivar;
+         rgdw[ivar + 1] = (uint32_t)ivar;
       }
       cvar++;
       break;
@@ -7758,7 +7466,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
       cvar = m_vsound.size();
 
       rgstr = (WCHAR **)CoTaskMemAlloc((cvar + 1) * sizeof(WCHAR *));
-      rgdw = (DWORD *)CoTaskMemAlloc((cvar + 1) * sizeof(DWORD));
+      rgdw = (uint32_t *)CoTaskMemAlloc((cvar + 1) * sizeof(uint32_t));
 
       rgstr[0] = (WCHAR *)CoTaskMemAlloc(7 * sizeof(WCHAR));
       wcscpy_s(rgstr[0], 7, L"<None>");
@@ -7766,14 +7474,14 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
 
       for (size_t ivar = 0; ivar < cvar; ivar++)
       {
-         const DWORD cwch = (DWORD)m_vsound[ivar]->m_name.length() + 1;
+         const int cwch = (int)m_vsound[ivar]->m_name.length() + 1;
          rgstr[ivar + 1] = (WCHAR *)CoTaskMemAlloc(cwch * sizeof(WCHAR));
          if (rgstr[ivar + 1] == nullptr)
             ShowError("DISPID_Sound alloc failed");
          MultiByteToWideCharNull(CP_ACP, 0, m_vsound[ivar]->m_name.c_str(), -1, rgstr[ivar + 1], cwch);
 
          //MsoWzCopy(szSrc,szDst);
-         rgdw[ivar + 1] = (DWORD)ivar;
+         rgdw[ivar + 1] = (uint32_t)ivar;
       }
       cvar++;
    }
@@ -7784,7 +7492,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
       cvar = m_vcollection.size();
 
       rgstr = (WCHAR **)CoTaskMemAlloc((cvar + 1) * sizeof(WCHAR *));
-      rgdw = (DWORD *)CoTaskMemAlloc((cvar + 1) * sizeof(DWORD));
+      rgdw = (uint32_t *)CoTaskMemAlloc((cvar + 1) * sizeof(uint32_t));
 
       rgstr[0] = (WCHAR *)CoTaskMemAlloc(7 * sizeof(WCHAR));
       wcscpy_s(rgstr[0], 7, L"<None>");
@@ -7798,7 +7506,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
             ShowError("DISPID_Collection alloc failed (1)");
          else
             memcpy(rgstr[ivar + 1], m_vcollection[(int)ivar].m_wzName, cwch);
-         rgdw[ivar + 1] = (DWORD)ivar;
+         rgdw[ivar + 1] = (uint32_t)ivar;
       }
       cvar++;
    }
@@ -7821,7 +7529,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
             cvar++;
 
       rgstr = (WCHAR **)CoTaskMemAlloc((cvar + 1) * sizeof(WCHAR *));
-      rgdw = (DWORD *)CoTaskMemAlloc((cvar + 1) * sizeof(DWORD));
+      rgdw = (uint32_t *)CoTaskMemAlloc((cvar + 1) * sizeof(uint32_t));
 
       cvar = 0;
 
@@ -7854,7 +7562,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
 
             wcscpy_s(wzDst, cwch, sname);
             rgstr[cvar] = wzDst;
-            rgdw[cvar] = (DWORD)ivar;
+            rgdw[cvar] = (uint32_t)ivar;
             cvar++;
          }
       }
@@ -7865,7 +7573,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
       cvar = 5;
 
       rgstr = (WCHAR **)CoTaskMemAlloc((cvar)* sizeof(WCHAR *));
-      rgdw = (DWORD *)CoTaskMemAlloc((cvar)* sizeof(DWORD));
+      rgdw = (uint32_t *)CoTaskMemAlloc((cvar) * sizeof(uint32_t));
 
       rgstr[0] = (WCHAR *)CoTaskMemAlloc(5 * sizeof(WCHAR));
       wcscpy_s(rgstr[0], 5, L"None");
@@ -7893,7 +7601,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
    pcaStringsOut->pElems = rgstr;
 
    pcaCookiesOut->cElems = (int)cvar;
-   pcaCookiesOut->pElems = rgdw;
+   pcaCookiesOut->pElems = (DWORD*)rgdw;
 
    return S_OK;
 }
@@ -7922,7 +7630,7 @@ STDMETHODIMP PinTable::GetPredefinedValue(DISPID dispID, DWORD dwCookie, VARIANT
       }
       else
       {
-         const DWORD cwch = (DWORD)m_vimage[dwCookie]->m_name.length() + 1;
+         const int cwch = (int)m_vimage[dwCookie]->m_name.length() + 1;
          wzDst = (WCHAR *)CoTaskMemAlloc(cwch*sizeof(WCHAR));
 
          MultiByteToWideCharNull(CP_ACP, 0, m_vimage[dwCookie]->m_name.c_str(), -1, wzDst, cwch);
@@ -7941,7 +7649,7 @@ STDMETHODIMP PinTable::GetPredefinedValue(DISPID dispID, DWORD dwCookie, VARIANT
       }
       else
       {
-         const DWORD cwch = (DWORD)m_materials[dwCookie]->m_name.length() + 1;
+         const int cwch = (int)m_materials[dwCookie]->m_name.length() + 1;
          wzDst = (WCHAR *)CoTaskMemAlloc(cwch*sizeof(WCHAR));
 
          MultiByteToWideCharNull(CP_ACP, 0, m_materials[dwCookie]->m_name.c_str(), -1, wzDst, cwch);
@@ -7959,7 +7667,7 @@ STDMETHODIMP PinTable::GetPredefinedValue(DISPID dispID, DWORD dwCookie, VARIANT
       }
       else
       {
-         const DWORD cwch = (DWORD)m_vsound[dwCookie]->m_name.length() + 1;
+         const int cwch = (int)m_vsound[dwCookie]->m_name.length() + 1;
          wzDst = (WCHAR *)CoTaskMemAlloc(cwch*sizeof(WCHAR));
          if (wzDst == nullptr)
              ShowError("DISPID_Sound alloc failed");
@@ -9375,6 +9083,8 @@ STDMETHODIMP PinTable::put_OverridePhysicsFlippers(VARIANT_BOOL newVal)
    return S_OK;
 }
 
+//
+
 STDMETHODIMP PinTable::ImportPhysics()
 {
    string szInitialDir;
@@ -9394,10 +9104,12 @@ STDMETHODIMP PinTable::ImportPhysics()
    return S_OK;
 }
 
+std::array<string,18> PinTable::VPPelementNames{"gravityConstant"s, "contactFriction"s, "elasticity"s, "elasticityFalloff"s, "playfieldScatter"s, "defaultElementScatter"s, "playfieldminslope"s, "playfieldmaxslope"s,
+                               /*flippers:*/    "speed"s, "strength"s, "elasticity"s, "scatter"s, "eosTorque"s, "eosTorqueAngle"s, "returnStrength"s, "elasticityFalloff"s, "friction"s, "coilRampUp"s};
+
 void PinTable::ImportVPP(const string& filename)
 {
    tinyxml2::XMLDocument xmlDoc;
-   float FlipperPhysicsMass, FlipperPhysicsStrength, FlipperPhysicsElasticity, FlipperPhysicsScatter, FlipperPhysicsTorqueDamping, FlipperPhysicsTorqueDampingAngle, FlipperPhysicsReturnStrength, FlipperPhysicsElasticityFalloff, FlipperPhysicsFriction, FlipperPhysicsCoilRampUp;
    try
    {
       std::stringstream buffer;
@@ -9415,19 +9127,16 @@ void PinTable::ImportVPP(const string& filename)
       const auto physTab = root->FirstChildElement("table");
       const auto physFlip = root->FirstChildElement("flipper");
 
-      static const string elementNames[18] = {"gravityConstant"s, "contactFriction"s, "elasticity"s, "elasticityFalloff"s, "playfieldScatter"s, "defaultElementScatter"s, "playfieldminslope"s, "playfieldmaxslope"s,
-                             /*flippers:*/    "speed"s, "strength"s, "elasticity"s, "scatter"s, "eosTorque"s, "eosTorqueAngle"s, "returnStrength"s, "elasticityFalloff"s, "friction"s, "coilRampUp"s};
-
-      for(size_t i = 0; i < std::size(elementNames); ++i)
+      float FlipperPhysicsMass, FlipperPhysicsStrength, FlipperPhysicsElasticity, FlipperPhysicsScatter, FlipperPhysicsTorqueDamping, FlipperPhysicsTorqueDampingAngle, FlipperPhysicsReturnStrength, FlipperPhysicsElasticityFalloff, FlipperPhysicsFriction, FlipperPhysicsCoilRampUp;
+      for(size_t i = 0; i < std::size(VPPelementNames); ++i)
       {
-         const tinyxml2::XMLElement* el = physTab->FirstChildElement(elementNames[i].c_str());
+         const tinyxml2::XMLElement* el = ((i <= 7) ? physTab : physFlip)->FirstChildElement(VPPelementNames[i].c_str());
          if(el != nullptr)
          {
             const char * const t = el->GetText();
             if (t)
             {
-               float val;
-               my_from_chars(t, t + strlen(t), val);
+               const float val = sz2f(t);
                switch(i)
                {
                case 0:  put_Gravity(val); break;
@@ -9454,13 +9163,13 @@ void PinTable::ImportVPP(const string& filename)
          else
          {
             if(i <= 5) //until "defaultElementScatter"
-               ShowError(elementNames[i] + " is missing");
+               ShowError(VPPelementNames[i] + " is missing");
             else if(i == 6) //"playfieldminslope"
                put_SlopeMin(DEFAULT_TABLE_MIN_SLOPE); //was added lateron, so don't error
             else if(i == 7) //"playfieldmaxslope"
                put_SlopeMax(DEFAULT_TABLE_MAX_SLOPE); //was added lateron, so don't error
             else //flipper fields
-               ShowError("flipper " + elementNames[i] + " is missing");
+               ShowError("flipper " + VPPelementNames[i] + " is missing");
 
             //flipper fields need defaults
             switch(i)
@@ -9502,6 +9211,15 @@ void PinTable::ImportVPP(const string& filename)
       ShowError("Error parsing physics settings file");
    }
    xmlDoc.Clear();
+}
+
+#define EXPORT_VPP_ELEMENT(getter, idx, tab) \
+   { \
+   float value; \
+   getter(&value); \
+   const auto node = xmlDoc.NewElement(VPPelementNames[idx].c_str()); \
+   node->SetText(f2sz(value, false).c_str()); \
+   tab->InsertEndChild(node); \
 }
 
 STDMETHODIMP PinTable::ExportPhysics()
@@ -9567,99 +9285,28 @@ STDMETHODIMP PinTable::ExportPhysics()
    auto physFlip = xmlDoc.NewElement("flipper");
    auto physTab = xmlDoc.NewElement("table");
 
-   float val;
+   EXPORT_VPP_ELEMENT(get_Gravity, 0, physTab);
+   EXPORT_VPP_ELEMENT(get_Friction, 1, physTab);
+   EXPORT_VPP_ELEMENT(get_Elasticity, 2, physTab);
+   EXPORT_VPP_ELEMENT(get_ElasticityFalloff, 3, physTab);
+   EXPORT_VPP_ELEMENT(get_Scatter, 4, physTab);
+   EXPORT_VPP_ELEMENT(get_DefaultScatter, 5, physTab);
+   EXPORT_VPP_ELEMENT(get_SlopeMin, 6, physTab);
+   EXPORT_VPP_ELEMENT(get_SlopeMax, 7, physTab);
 
-   flipper->get_Mass(&val); // was speed
-   auto node = xmlDoc.NewElement("speed");
-   node->SetText(val);
-   physFlip->InsertEndChild(node);
+   // flippers
+   EXPORT_VPP_ELEMENT(flipper->get_Mass, 8, physFlip); // was speed
+   EXPORT_VPP_ELEMENT(flipper->get_Strength, 9, physFlip);
+   EXPORT_VPP_ELEMENT(flipper->get_Elasticity, 10, physFlip);
+   EXPORT_VPP_ELEMENT(flipper->get_Scatter, 11, physFlip);
+   EXPORT_VPP_ELEMENT(flipper->get_EOSTorque, 12, physFlip);
+   EXPORT_VPP_ELEMENT(flipper->get_EOSTorqueAngle, 13, physFlip);
+   EXPORT_VPP_ELEMENT(flipper->get_Return, 14, physFlip);
+   EXPORT_VPP_ELEMENT(flipper->get_ElasticityFalloff, 15, physFlip);
+   EXPORT_VPP_ELEMENT(flipper->get_Friction, 16, physFlip);
+   EXPORT_VPP_ELEMENT(flipper->get_RampUp, 17, physFlip);
 
-   flipper->get_Strength(&val);
-   node = xmlDoc.NewElement("strength");
-   node->SetText(val);
-   physFlip->InsertEndChild(node);
-
-   flipper->get_Elasticity(&val);
-   node = xmlDoc.NewElement("elasticity");
-   node->SetText(val);
-   physFlip->InsertEndChild(node);
-
-   flipper->get_Scatter(&val); // was scatter angle
-   node = xmlDoc.NewElement("scatter");
-   node->SetText(val);
-   physFlip->InsertEndChild(node);
-
-   flipper->get_EOSTorque(&val);
-   node = xmlDoc.NewElement("eosTorque");
-   node->SetText(val);
-   physFlip->InsertEndChild(node);
-
-   flipper->get_EOSTorqueAngle(&val);
-   node = xmlDoc.NewElement("eosTorqueAngle");
-   node->SetText(val);
-   physFlip->InsertEndChild(node);
-
-   flipper->get_Return(&val);
-   node = xmlDoc.NewElement("returnStrength");
-   node->SetText(val);
-   physFlip->InsertEndChild(node);
-
-   flipper->get_ElasticityFalloff(&val);
-   node = xmlDoc.NewElement("elasticityFalloff");
-   node->SetText(val);
-   physFlip->InsertEndChild(node);
-
-   flipper->get_Friction(&val);
-   node = xmlDoc.NewElement("friction");
-   node->SetText(val);
-   physFlip->InsertEndChild(node);
-
-   flipper->get_RampUp(&val);
-   node = xmlDoc.NewElement("coilRampUp");
-   node->SetText(val);
-   physFlip->InsertEndChild(node);
-
-   get_Gravity(&val);
-   node = xmlDoc.NewElement("gravityConstant");
-   node->SetText(val);
-   physTab->InsertEndChild(node);
-
-   get_Friction(&val);
-   node = xmlDoc.NewElement("contactFriction");
-   node->SetText(val);
-   physTab->InsertEndChild(node);
-
-   get_Elasticity(&val);
-   node = xmlDoc.NewElement("elasticity");
-   node->SetText(val);
-   physTab->InsertEndChild(node);
-
-   get_ElasticityFalloff(&val);
-   node = xmlDoc.NewElement("elasticityFalloff");
-   node->SetText(val);
-   physTab->InsertEndChild(node);
-
-   get_DefaultScatter(&val);
-   node = xmlDoc.NewElement("defaultElementScatter");
-   node->SetText(val);
-   physTab->InsertEndChild(node);
-
-   get_Scatter(&val);
-   node = xmlDoc.NewElement("playfieldScatter");
-   node->SetText(val);
-   physTab->InsertEndChild(node);
-
-   get_SlopeMin(&val);
-   node = xmlDoc.NewElement("playfieldminslope");
-   node->SetText(val);
-   physTab->InsertEndChild(node);
-
-   get_SlopeMax(&val);
-   node = xmlDoc.NewElement("playfieldmaxslope");
-   node->SetText(val);
-   physTab->InsertEndChild(node);
-
-   auto settingName = xmlDoc.NewElement("name");
+   const auto settingName = xmlDoc.NewElement("name");
    settingName->SetText(m_title.c_str());
    root->InsertEndChild(settingName);
    root->InsertEndChild(physTab);
@@ -9677,6 +9324,8 @@ STDMETHODIMP PinTable::ExportPhysics()
 
    return S_OK;
 }
+
+//
 
 STDMETHODIMP PinTable::get_EnableDecals(VARIANT_BOOL *pVal)
 {

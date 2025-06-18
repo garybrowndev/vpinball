@@ -12,7 +12,7 @@
 #include "plugins/ControllerPlugin.h"
 #include "plugins/VPXPlugin.h"
 #include "ResURIResolver.h"
-#include "audio/pinsound.h"
+#include "audio/AudioPlayer.h"
 
 class VRDevice;
 
@@ -127,11 +127,11 @@ public:
 
    string GetPerfInfo();
 
-   void SetPlayState(const bool isPlaying, const U32 delayBeforePauseMs = 0); // Allow to play/pause during UI interaction or to perform timed simulation steps (still needs the player window to be focused).
+   void SetPlayState(const bool isPlaying, const uint32_t delayBeforePauseMs = 0); // Allow to play/pause during UI interaction or to perform timed simulation steps (still needs the player window to be focused).
    bool IsPlaying(const bool applyWndFocus = true) const { return (applyWndFocus ? (m_playing && m_focused) : m_focused) && !IsEditorMode(); }
    void OnFocusChanged(const bool isGameFocused); // On focus lost, pause player and show mouse cursor
 
-   U32 m_pauseTimeTarget = 0;
+   uint32_t m_pauseTimeTarget = 0;
    bool m_step = false; // If set to true, the physics engine will do a single physic step and stop simulation (turning this flag to false)
 
    PinTable *const m_pEditorTable; // The untouched version of the table, as it is in the editor (The Player needs it to interact with the UI)
@@ -141,8 +141,8 @@ public:
    ProgressDialog m_progressDialog;
 
    double m_time_sec; // current physics time
-   U32 m_time_msec; // current physics time
-   U32 m_last_frame_time_msec; // used for non-physics controlled animations to update once per-frame only, aligned with m_time_msec
+   uint32_t m_time_msec; // current physics time
+   uint32_t m_last_frame_time_msec; // used for non-physics controlled animations to update once per-frame only, aligned with m_time_msec
 
    HitBall *m_pactiveball = nullptr; // ball the script user can get with ActiveBall
    HitBall *m_pactiveballDebug = nullptr; // ball the debugger will use as ActiveBall when firing events
@@ -182,7 +182,7 @@ public:
 
 private:
    float m_maxFramerate = 0.f; // targeted refresh rate in Hz, if larger refresh rate it will limit FPS by uSleep() //!! currently does not work adaptively as it would require IDirect3DDevice9Ex which is not supported on WinXP
-   U64 m_startFrameTick; // System time in us when render frame was started (beginning of frame animation then collect,...)
+   uint64_t m_startFrameTick;  // System time in us when render frame was started (beginning of frame animation then collect,...)
    unsigned int m_onGameStartMsgId;
    unsigned int m_onPrepareFrameMsgId;
 
@@ -197,7 +197,7 @@ public:
    float GetMechPlungerSpeed() const;
    void MechPlungerUpdate();
 
-   U32 m_LastPlungerHit = 0;  // the last time the plunger was in contact (at least the vicinity) of the ball
+   uint32_t m_LastPlungerHit = 0; // the last time the plunger was in contact (at least the vicinity) of the ball
    float m_curMechPlungerPos; // position from joystick axis input, if a position axis is assigned
    float m_plungerSpeedScale; // scaling factor for plunger speed input, to convert from joystick to internal units
 
@@ -303,9 +303,6 @@ private:
 
 
 #pragma region Audio
-private:
-   int m_pauseMusicRefCount = 0;
-
 public:
    void PauseMusic();
    void UnpauseMusic();
@@ -315,9 +312,20 @@ public:
    bool m_PlaySound;
    int m_MusicVolume; // -100..100
    int m_SoundVolume; // -100..100
-   PinSound *m_audio = nullptr;
+   bool m_musicPlaying = false;
+
+   std::unique_ptr<VPX::AudioPlayer> m_audioPlayer;
+
+private:
+   int m_pauseMusicRefCount = 0;
+
+   // External audio sources
+   static void OnAudioUpdated(const unsigned int msgId, void *userData, void *msgData);
+   unsigned int m_onAudioUpdatedMsgId;
+   ankerl::unordered_dense::map<uint64_t, VPX::AudioPlayer::AudioStreamID> m_audioStreams;
 #pragma endregion
 
+public:
    vector<CLSID*> m_controlclsidsafe; // ActiveX control types which have already been okayed as being safe
 
    enum CloseState
@@ -367,13 +375,6 @@ public:
    ResURIResolver m_resURIResolver;
 
 
-   // External audio sources
-private:
-   static void OnAudioUpdated(const unsigned int msgId, void *userData, void *msgData);
-   unsigned int m_onAudioUpdatedMsgId;
-   ankerl::unordered_dense::map<uint64_t, PinSound*> m_externalAudioPlayers;
-
-
 public:
    bool m_capPUP = false;
    BaseTexture *m_texPUP = nullptr;
@@ -383,7 +384,7 @@ public:
    // all kinds of stats tracking, incl. FPS measurement
    int m_lastMaxChangeTime; // Used to update counters every seconds
    float m_fps;             // Average number of frames per second, updated once per second
-   U32 m_script_max;
+   uint32_t m_script_max;
 
 #ifdef PLAYBACK
    float ParseLog(LARGE_INTEGER *pli1, LARGE_INTEGER *pli2);

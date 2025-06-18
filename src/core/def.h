@@ -150,19 +150,6 @@ inline int FindIndexOf(const vector<T>& v, const T& val)
 #define BOOL int
 #endif
 
-typedef uint32_t        U32;
-typedef int32_t         S32;
-typedef uint16_t        U16;
-typedef int16_t         S16;
-typedef uint8_t         U08;
-typedef int8_t          S08;
-typedef uint8_t         U8;
-typedef int8_t          S8;
-typedef float           F32;
-typedef double          F64;
-typedef uint64_t        U64;
-typedef int64_t         S64;
-
 #define MAXNAMEBUFFER 32
 #define MAXSTRING 1024 // usually used for paths,filenames,etc
 #define MAXTOKEN (32*4)
@@ -186,8 +173,6 @@ inline void ref_count_trigger(const ULONG r, const char *file, const int line) /
 #define SAFE_RELEASE_NO_CHECK_NO_SET(p)	{ const ULONG rcc = (p)->Release(); if(rcc != 0) ref_count_trigger(rcc, __FILE__, __LINE__); }
 #define SAFE_RELEASE_NO_RCC(p)	{ if(p) { (p)->Release(); (p)=nullptr; } } // use for releasing things like surfaces gotten from GetSurfaceLevel (that seem to "share" the refcount with the underlying texture)
 #define FORCE_RELEASE(p)		{ if(p) { ULONG rcc = 1; while(rcc!=0) {rcc = (p)->Release();} (p)=nullptr; } } // release all references until it is 0
-
-#define SAFE_PINSOUND_RELEASE(p) { if(p) { const ULONG rcc = (p)->Release(); if(rcc != 0) ref_count_trigger(rcc, __FILE__, __LINE__); (p)=nullptr; } }
 
 #define hrNotImplemented ResultFromScode(E_NOTIMPL)
 
@@ -373,19 +358,19 @@ __forceinline __m128 sseHorizontalMax(const __m128 &a)
 
 #ifndef __clang__
   #include <bit>
-  #define float_as_int(x) std::bit_cast<int>(x)
-  #define float_as_uint(x) std::bit_cast<unsigned int>(x)
-  #define half_as_short(x) std::bit_cast<short>(x)
-  #define half_as_ushort(x) std::bit_cast<unsigned short>(x)
+  #define float_as_int(x) std::bit_cast<int32_t>(x)
+  #define float_as_uint(x) std::bit_cast<uint32_t>(x)
+  #define half_as_short(x) std::bit_cast<int16_t>(x)
+  #define half_as_ushort(x) std::bit_cast<uint16_t>(x)
   #define int_as_float(x) std::bit_cast<float>(x)
   #define uint_as_float(x) std::bit_cast<float>(x)
   #define short_as_half(x) std::bit_cast<_Float16>(x)
   #define ushort_as_half(x) std::bit_cast<_Float16>(x)
 #else // for whatever reason apple/clang is special again
-  #define float_as_int(x) __builtin_bit_cast(int, x)
-  #define float_as_uint(x) __builtin_bit_cast(unsigned int, x)
-  #define half_as_short(x) __builtin_bit_cast(short, x)
-  #define half_as_ushort(x) __builtin_bit_cast(unsigned short, x)
+  #define float_as_int(x) __builtin_bit_cast(int32_t, x)
+  #define float_as_uint(x) __builtin_bit_cast(uint32_t, x)
+  #define half_as_short(x) __builtin_bit_cast(int16_t, x)
+  #define half_as_ushort(x) __builtin_bit_cast(uint16_t, x)
   #define int_as_float(x) __builtin_bit_cast(float, x)
   #define uint_as_float(x) __builtin_bit_cast(float, x)
   #define short_as_half(x) __builtin_bit_cast(_Float16, x)
@@ -456,13 +441,13 @@ __forceinline unsigned int swap_byteorder(unsigned int x)
 #define TINYMT64_MAT2 0xffd0fff4ull			// can be configured (lower 32bit only, upper=0)
 #define TINYMT64_TMAT 0x58d02ffeffbfffbcull // can be configured (64bit)
 
-inline unsigned long long tinymtu(unsigned long long state[2]) {
-   unsigned long long x = (state[0] & TINYMT64_MASK) ^ state[1];
+inline uint64_t tinymtu(uint64_t state[2]) {
+   uint64_t x = (state[0] & TINYMT64_MASK) ^ state[1];
    x ^= x << TINYMT64_SH0;
    x ^= x >> 32;
    x ^= x << 32;
    x ^= x << TINYMT64_SH1;
-   const unsigned long long mask = -((long long)x & 1);
+   const uint64_t mask = -((int64_t)x & 1);
    state[0] = state[1] ^ (mask & TINYMT64_MAT1);
    state[1] = x ^ (mask & (TINYMT64_MAT2 << 32));
 #if defined(TINYMT64_LINEARITY_CHECK)
@@ -471,10 +456,10 @@ inline unsigned long long tinymtu(unsigned long long state[2]) {
    x = state[0] + state[1];
 #endif
    x ^= state[0] >> TINYMT64_SH8;
-   return x ^ (-((long long)x & 1) & TINYMT64_TMAT);
+   return x ^ (-((int64_t)x & 1) & TINYMT64_TMAT);
 }
 
-extern unsigned long long tinymt64state[2];
+extern uint64_t tinymt64state[2];
 
 __forceinline float rand_mt_01()  { return (float)(tinymtu(tinymt64state) >> (64-24)) * 0.000000059604644775390625f; } // [0..1)
 __forceinline float rand_mt_m11() { return (float)((int64_t)tinymtu(tinymt64state) >> (64-25)) * 0.000000059604644775390625f; } // [-1..1)
@@ -483,14 +468,14 @@ __forceinline float rand_mt_m11() { return (float)((int64_t)tinymtu(tinymt64stat
 
 // via https://cas.ee.ic.ac.uk/people/dt10/research/rngs-gpu-mwc64x.html
 
-extern unsigned long long mwc64x_state;
+extern uint64_t mwc64x_state;
 
-constexpr __forceinline unsigned int mwc64x(unsigned long long& s)
+constexpr __forceinline unsigned int mwc64x(uint64_t& s)
 {
    constexpr unsigned int m = 4294883355u;
    const unsigned int c = (unsigned int)(s >> 32), x = (unsigned int)s;
 
-   s = x * ((unsigned long long)m) + c;
+   s = x * ((uint64_t)m) + c;
    return x ^ c;
 }
 
@@ -604,6 +589,8 @@ constexpr __forceinline float millimetersToVPUnits(const float value)
    // return value * (float)(1.0 / 0.540425);
 }
 
+string convert_decimal_point_and_trim(string sz, const bool use_locale);
+
 float sz2f(string sz, const bool force_convert_decimal_point = false);
 string f2sz(const float f, const bool can_convert_decimal_point = true);
 
@@ -621,14 +608,14 @@ wstring MakeWString(const char* const sz);
 // in case the incoming string length is >= the maximum char length of the outgoing one, WideCharToMultiByte will not produce a zero terminated string
 // this variant always makes sure that the outgoing string is zero terminated
 inline int WideCharToMultiByteNull(
-    const UINT     CodePage,
-    const DWORD    dwFlags,
+    const uint32_t CodePage,
+    const uint32_t dwFlags,
     LPCWSTR        lpWideCharStr,
     const int      cchWideChar,
-    LPSTR          lpMultiByteStr,
+    char*          lpMultiByteStr,
     const int      cbMultiByte,
-    LPCSTR         lpDefaultChar,
-    LPBOOL         lpUsedDefaultChar)
+    const char*    lpDefaultChar,
+    BOOL*          lpUsedDefaultChar)
 {
     const int res = WideCharToMultiByte(CodePage,dwFlags,lpWideCharStr,cchWideChar,lpMultiByteStr,cbMultiByte,lpDefaultChar,lpUsedDefaultChar);
     if(cbMultiByte > 0 && lpMultiByteStr)
@@ -640,9 +627,9 @@ inline int WideCharToMultiByteNull(
 // in case the incoming string length is >= the maximum wchar length of the outgoing one, MultiByteToWideChar will not produce a zero terminated string
 // this variant always makes sure that the outgoing string is zero terminated
 inline int MultiByteToWideCharNull(
-    const UINT     CodePage,
-    const DWORD    dwFlags,
-    LPCSTR         lpMultiByteStr,
+    const uint32_t CodePage,
+    const uint32_t dwFlags,
+    const char*    lpMultiByteStr,
     const int      cbMultiByte,
     LPWSTR         lpWideCharStr,
     const int      cchWideChar)
@@ -756,7 +743,7 @@ vector<string> parse_csv_line(const string& line);
 bool string_contains_case_insensitive(const string& str1, const string& str2);
 bool string_starts_with_case_insensitive(const string& str, const string& prefix);
 string string_replace_all(const string& szStr, const string& szFrom, const string& szTo, const size_t offs = 0);
-string create_hex_dump(const UINT8* buffer, size_t size);
+string create_hex_dump(const uint8_t* buffer, size_t size);
 vector<unsigned char> base64_decode(const string &encoded_string);
 #ifdef ENABLE_OPENGL
 const char* gl_to_string(GLuint value);

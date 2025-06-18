@@ -230,7 +230,8 @@ public:
    STDMETHOD(get_Image)(/*[out, retval]*/ BSTR *pVal);
    STDMETHOD(put_Image)(/*[in]*/ BSTR newVal);
 
-   STDMETHOD(PlaySound)(BSTR bstr, int loopcount, float volume, float pan, float randompitch, int pitch, VARIANT_BOOL usesame, VARIANT_BOOL restart, float front_rear_fade);
+   STDMETHOD(PlaySound)(BSTR soundName, int loopcount, float volume, float pan, float randompitch, int pitch, VARIANT_BOOL usesame, VARIANT_BOOL restart, float front_rear_fade);
+   STDMETHOD(StopSound)(BSTR soundName);
    STDMETHOD(FireKnocker)(/*[in]*/ int Count);
    STDMETHOD(QuitPlayer)(/*[in]*/ int CloseType);
 
@@ -359,7 +360,7 @@ public:
 
    void Render3DProjection(Sur *const psur);
 
-   bool GetDecalsEnabled() const { return m_renderDecals; } // Enable backdrop image, decals and lights on backdrop
+   bool GetDecalsEnabled()  const { return m_renderDecals; }  // Enable backdrop image, decals and lights on backdrop
    bool GetEMReelsEnabled() const { return m_renderEMReels; } // Enable dispreel on backdrop
 
    void Copy(int x, int y);
@@ -369,20 +370,19 @@ public:
    void ExportTableMesh();
    void ImportBackdropPOV(const string &filename);
    void ExportBackdropPOV() const;
+
+   static std::array<string, 18> VPPelementNames; // names of the fields in a .vpp file
    void ImportVPP(const string &filename);
 
    void FireOptionEvent(int event);
    void FireGenericKeyEvent(int dispid, int keycode);
 
    void ImportSound(const HWND hwndListView, const string &filename);
-   void ReImportSound(const HWND hwndListView, PinSound *const pps, const string &filename);
-   bool ExportSound(PinSound *const pps, const char *const filename);
+   void ReImportSound(const HWND hwndListView, VPX::Sound *const pps, const string &filename);
+   bool ExportSound(VPX::Sound *const pps, const char *const filename);
    void ListSounds(HWND hwndListView);
-   int AddListSound(HWND hwndListView, PinSound *const pps);
-   void RemoveSound(PinSound *const pps);
-   HRESULT SaveSoundToStream(const PinSound *const pps, IStream *pstm);
-   HRESULT LoadSoundFromStream(IStream *pstm, const int LoadFileVersion);
-   static bool isWav(const string &szPath);
+   int AddListSound(HWND hwndListView, VPX::Sound *const pps);
+   void RemoveSound(VPX::Sound *const pps);
    bool ExportImage(const Texture *const ppi, const char *const filename);
    Texture* ImportImage(const string &filename, const string &imageName);
    void RemoveImage(Texture *const ppi);
@@ -543,8 +543,7 @@ public:
 
    void FVerifySaveToClose();
 
-   HRESULT StopSound(BSTR Sound);
-   void StopAllSounds();
+   VPX::Sound *GetSound(const string &name) const;
 
    void UpdateCollection(const int index);
    void MoveCollectionUp(CComObject<Collection> *pcol);
@@ -684,8 +683,8 @@ public:
    Vertex2D m_tblNudgePlumb;
 
    bool m_tblAutoStartEnabled;
-   U32 m_tblAutoStart; // msecs before trying an autostart if doing once-only method .. 0 is automethod
-   U32 m_tblAutoStartRetry; // msecs before retrying to autostart.
+   uint32_t m_tblAutoStart; // msecs before trying an autostart if doing once-only method .. 0 is automethod
+   uint32_t m_tblAutoStartRetry; // msecs before retrying to autostart.
 
    bool m_tblMirrorEnabled = false; // Mirror tables left to right.  This is activated by a cheat during table selection.
 
@@ -721,8 +720,7 @@ public:
    vector<Material *> m_materials;
    const vector<Material *> &GetMaterialList() const { return m_materials; }
 
-   vector<PinSound *> m_vsound;
-   ankerl::unordered_dense::set<std::string> m_soundsMissing;
+   vector<VPX::Sound *> m_vsound;
 
    vector<PinFont *> m_vfont;
 
@@ -881,6 +879,8 @@ private:
 
    PinBinary *m_pbTempScreenshot = nullptr; // Holds contents of screenshot image until the image asks for it
 
+   ankerl::unordered_dense::set<std::string> m_loggedSoundErrors;
+
    bool m_dirtyDraw = true; // Whether our background bitmap is up to date
    HBITMAP m_hbmOffScreen = nullptr; // Buffer for drawing the editor window
 
@@ -916,7 +916,6 @@ public:
    STDMETHOD(get_ActiveBall)(/*[out, retval]*/ IBall **pVal);
    STDMETHOD(LoadValue)(BSTR TableName, BSTR ValueName, /*[out, retval]*/ VARIANT *Value);
    STDMETHOD(SaveValue)(BSTR TableName, BSTR ValueName, VARIANT Value);
-   STDMETHOD(StopSound)(BSTR Sound);
    STDMETHOD(AddObject)(BSTR Name, IDispatch *pdisp);
 #ifdef _WIN64
    STDMETHOD(get_GetPlayerHWnd)(/*[out, retval]*/ SIZE_T *pVal);
@@ -962,7 +961,9 @@ public:
 
    STDMETHOD(get_ShowFSS)(/*[out, retval]*/ VARIANT_BOOL *pVal);
 
-   STDMETHOD(PlaySound)(BSTR bstr, LONG LoopCount, float volume, float pan, float randompitch, LONG pitch, VARIANT_BOOL usesame, VARIANT_BOOL restart, float front_rear_fade);
+   STDMETHOD(PlaySound)(BSTR sound, LONG LoopCount, float volume, float pan, float randompitch, LONG pitch, VARIANT_BOOL usesame, VARIANT_BOOL restart, float front_rear_fade);
+   STDMETHOD(StopSound)(BSTR sound);
+
    STDMETHOD(FireKnocker)(/*[in]*/ int Count);
    STDMETHOD(QuitPlayer)(/*[in]*/ int CloseType);
 
@@ -1046,7 +1047,7 @@ namespace PinMame
    {
       double updateTimestamp;
       unsigned int nOutputs;
-      UINT32 outputBitset[]; // Bitset array of nOutputs bits with their current binary state
+      uint32_t outputBitset[]; // Bitset array of nOutputs bits with their current binary state
    } core_tBinaryState;
    #define CORE_DEVICE_STATE_TYPE_CUSTOM          1 // Custom state defined by each driver (value maybe either binary of 0/1 or 0/255, or modulated between 0..255)
    #define CORE_DEVICE_STATE_TYPE_BULB            2 // Bulb state defined by its relative luminance and average filament temperature
@@ -1058,7 +1059,7 @@ namespace PinMame
       union
       {
          // CORE_DEVICE_STATE_TYPE_DS
-         UINT8 customState;            // Custom value, depending on each driver definition
+         uint8_t customState;          // Custom value, depending on each driver definition
          // CORE_DEVICE_STATE_TYPE_BULB
          struct
          {
@@ -1091,13 +1092,13 @@ namespace PinMame
    typedef struct
    {
       unsigned int structSize; // Struct size including header and frame data in bytes (for safe DMD/Display array iteration)
-      unsigned int displayId; // Unique Id, shared between render frame and raw frame used for frame identification
+      unsigned int displayId;  // Unique Id, shared between render frame and raw frame used for frame identification
       double updateTimestamp;
       unsigned int width;
       unsigned int height;
       unsigned int dataFormat;
       unsigned int frameId;
-      UINT8 frameData[]; // The display frame data which size depends on width, height and data format
+      uint8_t frameData[]; // The display frame data which size depends on width, height and data format
    } core_tFrameState;
    typedef struct
    {
