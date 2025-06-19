@@ -305,14 +305,14 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <Midl>
-	  <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
-	  <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
-	  <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
+      <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
+      <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
+      <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
     </Midl>
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>$(WindowsSDK_IncludePath);$(DXSDK_DIR)\Include;$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ENABLE_DX9;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;ENABLE_DX9;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -368,14 +368,14 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_GL|Win32'">
     <Midl>
-	  <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
-	  <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
-	  <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
+      <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
+      <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
+      <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
     </Midl>
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>$(WindowsSDK_IncludePath);$(DXSDK_DIR)\Include;$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ENABLE_SDL_INPUT;ENABLE_SDL_VIDEO;ENABLE_OPENGL;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;ENABLE_SDL_INPUT;ENABLE_SDL_VIDEO;ENABLE_OPENGL;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -440,14 +440,14 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_BGFX|Win32'">
     <Midl>
-	  <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
-	  <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
-	  <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
+      <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
+      <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
+      <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
     </Midl>
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>$(WindowsSDK_IncludePath);$(DXSDK_DIR)\Include;$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ENABLE_SDL_INPUT;BX_CONFIG_DEBUG=1;ENABLE_BGFX;ENABLE_SDL_VIDEO;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;ENABLE_SDL_INPUT;BX_CONFIG_DEBUG=1;ENABLE_BGFX;ENABLE_SDL_VIDEO;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -512,14 +512,14 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Midl>
-	  <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
-	  <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
-	  <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
+      <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
+      <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
+      <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
     </Midl>
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>$(WindowsSDK_IncludePath);$(DXSDK_DIR)\Include;$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ENABLE_DX9;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;DEBUGPHYSICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;ENABLE_DX9;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;DEBUGPHYSICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -577,14 +577,14 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_GL|x64'">
     <Midl>
-	  <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
-	  <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
-	  <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
+      <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
+      <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
+      <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
     </Midl>
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>$(WindowsSDK_IncludePath);$(DXSDK_DIR)\Include;$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ENABLE_SDL_INPUT;ENABLE_SDL_VIDEO;ENABLE_OPENGL;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;DEBUGPHYSICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;ENABLE_SDL_INPUT;ENABLE_SDL_VIDEO;ENABLE_OPENGL;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;DEBUGPHYSICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -642,14 +642,14 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_BGFX|x64'">
     <Midl>
-	  <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
-	  <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
-	  <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
+      <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
+      <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
+      <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
     </Midl>
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>$(WindowsSDK_IncludePath);$(DXSDK_DIR)\Include;$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ENABLE_SDL_INPUT;BX_CONFIG_DEBUG=1;ENABLE_BGFX;ENABLE_SDL_VIDEO;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;ENABLE_SDL_INPUT;BX_CONFIG_DEBUG=1;ENABLE_BGFX;ENABLE_SDL_VIDEO;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -707,9 +707,9 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <Midl>
-	  <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
-	  <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
-	  <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
+      <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
+      <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
+      <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
     </Midl>
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
@@ -717,7 +717,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <AdditionalIncludeDirectories>$(WindowsSDK_IncludePath);$(DXSDK_DIR)\Include;$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ENABLE_DX9;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;ENABLE_DX9;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <ExceptionHandling>Sync</ExceptionHandling>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -747,7 +747,7 @@
       <AdditionalIncludeDirectories>$(SolutionDir)../gen;$(SolutionDir)../../src;$(SolutionDir)../../third-party/include/win32xx/include</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>d3d9.lib;d3dx9.lib;dxerr.lib;comctl32.lib;dxguid.lib;freeimage.lib;winmm.lib;dinput.lib;nvapi.lib;odbc32.lib;odbccp32.lib;SDL364.lib;SDL3_mixer64.lib;imm32.lib;setupapi.lib;hid.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d9.lib;d3dx9.lib;dxerr.lib;comctl32.lib;dxguid.lib;freeimage.lib;winmm.lib;dinput.lib;nvapi.lib;odbc32.lib;odbccp32.lib;SDL3.lib;SDL3_mixer.lib;imm32.lib;setupapi.lib;hid.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <AdditionalLibraryDirectories>$(DXSDK_DIR)\Lib\x86;$(SolutionDir)../../third-party/build-libs/windows-x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreSpecificDefaultLibraries>LIBC;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
@@ -773,9 +773,9 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_GL|Win32'">
     <Midl>
-	  <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
-	  <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
-	  <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
+      <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
+      <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
+      <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
     </Midl>
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
@@ -783,7 +783,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <AdditionalIncludeDirectories>$(WindowsSDK_IncludePath);$(DXSDK_DIR)\Include;$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ENABLE_SDL_INPUT;ENABLE_SDL_VIDEO;ENABLE_OPENGL;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;ENABLE_SDL_INPUT;ENABLE_SDL_VIDEO;ENABLE_OPENGL;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <ExceptionHandling>Sync</ExceptionHandling>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -849,9 +849,9 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_BGFX|Win32'">
     <Midl>
-	  <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
-	  <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
-	  <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
+      <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
+      <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
+      <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
     </Midl>
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
@@ -859,7 +859,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <AdditionalIncludeDirectories>$(WindowsSDK_IncludePath);$(DXSDK_DIR)\Include;$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>BX_CONFIG_DEBUG=0;ENABLE_BGFX;ENABLE_SDL_VIDEO;ENABLE_SDL_INPUT;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;BX_CONFIG_DEBUG=0;ENABLE_BGFX;ENABLE_SDL_VIDEO;ENABLE_SDL_INPUT;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <ExceptionHandling>Sync</ExceptionHandling>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -925,9 +925,9 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Midl>
-	  <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
-	  <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
-	  <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
+      <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
+      <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
+      <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
     </Midl>
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
@@ -935,7 +935,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <AdditionalIncludeDirectories>$(WindowsSDK_IncludePath);$(DXSDK_DIR)\Include;$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ENABLE_DX9;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;ENABLE_DX9;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <ExceptionHandling>Sync</ExceptionHandling>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -1000,9 +1000,9 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_GL|x64'">
     <Midl>
-	  <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
-	  <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
-	  <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
+      <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
+      <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
+      <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
     </Midl>
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
@@ -1010,7 +1010,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <AdditionalIncludeDirectories>$(WindowsSDK_IncludePath);$(DXSDK_DIR)\Include;$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ENABLE_SDL_INPUT;ENABLE_SDL_VIDEO;ENABLE_OPENGL;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;ENABLE_SDL_INPUT;ENABLE_SDL_VIDEO;ENABLE_OPENGL;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <ExceptionHandling>Sync</ExceptionHandling>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -1075,9 +1075,9 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_BGFX|x64'">
     <Midl>
-	  <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
-	  <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
-	  <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
+      <OutputDirectory>$(SolutionDir)../gen/</OutputDirectory>
+      <TypeLibraryName>$(SolutionDir)../gen/vpinball.tlb</TypeLibraryName>
+      <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
     </Midl>
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
@@ -1085,7 +1085,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <AdditionalIncludeDirectories>$(WindowsSDK_IncludePath);$(DXSDK_DIR)\Include;$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>BX_CONFIG_DEBUG=0;ENABLE_BGFX;ENABLE_SDL_VIDEO;ENABLE_SDL_INPUT;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;BX_CONFIG_DEBUG=0;ENABLE_BGFX;ENABLE_SDL_VIDEO;ENABLE_SDL_INPUT;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <ExceptionHandling>Sync</ExceptionHandling>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
