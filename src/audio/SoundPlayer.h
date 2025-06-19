@@ -17,7 +17,7 @@ public:
    static SoundPlayer* Create(AudioPlayer* AudioPlayer, Sound* sound);
    ~SoundPlayer();
 
-   void Play(float volume, const float randompitch, const int pitch, float pan, float front_rear_fade, const int loopcount);
+   void Play(float volume, const float randompitch, const int pitch, float pan, float frontRearFade, const int loopcount);
    void Stop();
 
    bool IsPlaying() const { return m_assignedChannel != -1 && Mix_Playing(m_assignedChannel); }
@@ -25,10 +25,11 @@ public:
    void SetMainVolume(float backglassVolume, float playfieldVolume);
 
 private:
+   SoundPlayer(AudioPlayer* AudioPlayer, Sound* sound);
    SoundPlayer(AudioPlayer* AudioPlayer, Mix_Chunk* mixChunk, SoundOutTypes outputTarget);
 
    class AudioPlayer* const m_audioPlayer;
-   Mix_Chunk* const m_pMixChunkOrg; // the original unmodified loaded sound
+   Mix_Chunk* m_pMixChunkOrg = nullptr; // the original unmodified loaded sound
    const SoundOutTypes m_outputTarget;
 
    float m_soundVolume = 1.f;
@@ -43,7 +44,7 @@ private:
 
    // Resample the original sound to match the pitch settings sent from the table each time.
    // This function can be very slow (a few ms) and may not be called on the main thread.
-   void setPitch(int pitch, float randompitch);
+   void AdjustPitch(int pitch, float randompitch);
 
    // Callback to release assigned channel
    static void OnPlayFinished(int channel, void* udata);
@@ -61,8 +62,8 @@ private:
    static void NullEffect(int chan, void* stream, int len, void* udata) { }
 
    // MixEffects support funcs
-   static void calcPan(float& leftPanRatio, float& rightPanRatio, float adjustedVolRatio, float pan);
-   static void calcFade(float leftPanRatio, float rightPanRatio, float fadeRatio, float& frontLeft, float& frontRight, float& rearLeft, float& rearRight);
+   static void CalcPan(float& leftPanRatio, float& rightPanRatio, float adjustedVolRatio, float pan);
+   static void CalcFade(float leftPanRatio, float rightPanRatio, float fadeRatio, float& frontLeft, float& frontRight, float& rearLeft, float& rearRight);
    static float PanSSF(float pan);
    static float PanTo3D(float input);
    static float FadeSSF(float front_rear_fade);

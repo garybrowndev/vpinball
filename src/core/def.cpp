@@ -60,9 +60,9 @@ float sz2f(string sz, const bool force_convert_decimal_point)
    return (std::from_chars(sz.c_str(), sz.c_str() + sz.length(), result).ec == std::errc{}) ? result : 0.0f; //!! use inf or NaN instead?
 #endif
 #else
-   const int len = (int)sz.length()+1;
+   const int len = MultiByteToWideChar(CP_ACP, 0, sz.c_str(), -1, nullptr, 0); //(int)sz.length()+1;
    WCHAR * const wzT = new WCHAR[len];
-   MultiByteToWideCharNull(CP_ACP, 0, sz.c_str(), -1, wzT, len);
+   MultiByteToWideChar(CP_ACP, 0, sz.c_str(), -1, wzT, len);
 
    CComVariant var = wzT;
 
@@ -113,14 +113,6 @@ string f2sz(const float f, const bool can_convert_decimal_point)
    else
       return "0.0"s; //!! should be localized! i.e. . vs ,
 #endif
-}
-
-bool WzSzEqual(const WCHAR *wz1, const char *sz2)
-{
-   while (*wz1 != L'\0')
-      if (*wz1++ != *sz2++)
-         return false;
-   return (*sz2 == '\0');
 }
 
 LocalString::LocalString(const int resid)
@@ -196,73 +188,73 @@ LocalStringW::LocalStringW(const int resid)
    if (it != ids_map.end())
    {
       const char* sz = it->second;
-      const int len = strlen(sz) + 1; // include null termination
-      MultiByteToWideCharNull(CP_ACP, 0, sz, -1, m_szbuffer, len);
+      MultiByteToWideCharNull(CP_ACP, 0, sz, -1, m_szbuffer, (int)std::size(m_szbuffer));
    }
 #endif
 }
 
+WCHAR *MakeWide(const char* const sz)
+{
+   const int len = MultiByteToWideChar(CP_ACP, 0, sz, -1, nullptr, 0); //(int)strlen(sz) + 1; // include null termination
+   WCHAR * const wzT = new WCHAR[len];
+   MultiByteToWideChar(CP_ACP, 0, sz, -1, wzT, len);
+   return wzT;
+}
+
 WCHAR *MakeWide(const string& sz)
 {
-   const int len = (int)sz.length() + 1; // include null termination
+   const int len = MultiByteToWideChar(CP_ACP, 0, sz.c_str(), -1, nullptr, 0); //(int)sz.length() + 1; // include null termination
    WCHAR * const wzT = new WCHAR[len];
-   MultiByteToWideCharNull(CP_ACP, 0, sz.c_str(), -1, wzT, len);
-
+   MultiByteToWideChar(CP_ACP, 0, sz.c_str(), -1, wzT, len);
    return wzT;
 }
 
 string MakeString(const wstring &wz)
 {
-   // Somewhat overkill since we copy the string twice, once in the temp buffer for conversion, then in the string constructor
-   const int len = (int)wz.length() + 1; // include null termination
-   char *const szT = new char[len];
-   WideCharToMultiByteNull(CP_ACP, 0, wz.c_str(), -1, szT, len, nullptr, nullptr);
-   /*const*/ string result(szT); // const removed for auto-move
-   delete [] szT;
+   const int len = WideCharToMultiByte(CP_ACP, 0, wz.c_str(), -1, nullptr, 0, nullptr, nullptr); //(int)wz.length() + 1; // include null termination
+   string result(len - 1, '\0');
+   WideCharToMultiByte(CP_ACP, 0, wz.c_str(), -1, result.data(), len, nullptr, nullptr);
+   return result;
+}
 
+string MakeString(const WCHAR* const wz)
+{
+   const int len = WideCharToMultiByte(CP_ACP, 0, wz, -1, nullptr, 0, nullptr, nullptr); //(int)wcslen(wz) + 1; // include null termination
+   string result(len - 1, '\0');
+   WideCharToMultiByte(CP_ACP, 0, wz, -1, result.data(), len, nullptr, nullptr);
+   return result;
+}
+
+string MakeString(const BSTR wz)
+{
+   const int len = WideCharToMultiByte(CP_ACP, 0, wz, -1, nullptr, 0, nullptr, nullptr); //(int)SysStringLen(wz) + 1; // include null termination
+   string result(len - 1, '\0');
+   WideCharToMultiByte(CP_ACP, 0, wz, -1, result.data(), len, nullptr, nullptr);
    return result;
 }
 
 wstring MakeWString(const string &sz)
 {
-   // Somewhat overkill since we copy the string twice, once in the temp buffer for conversion, then in the string constructor
-   const int len = (int)sz.length() + 1; // include null termination
-   WCHAR *const wzT = new WCHAR[len];
-   MultiByteToWideCharNull(CP_ACP, 0, sz.c_str(), -1, wzT, len);
-   /*const*/ wstring result(wzT); // const removed for auto-move
-   delete [] wzT;
-
+   const int len = MultiByteToWideChar(CP_ACP, 0, sz.c_str(), -1, nullptr, 0); //(int)sz.length() + 1; // include null termination
+   wstring result(len - 1, L'\0');
+   MultiByteToWideChar(CP_ACP, 0, sz.c_str(), -1, result.data(), len);
    return result;
 }
 
 wstring MakeWString(const char * const sz)
 {
-   // Somewhat overkill since we copy the string twice, once in the temp buffer for conversion, then in the string constructor
-   const int len = (int)strlen(sz) + 1; // include null termination
-   WCHAR *const wzT = new WCHAR[len];
-   MultiByteToWideCharNull(CP_ACP, 0, sz, -1, wzT, len);
-   /*const*/ wstring result(wzT); // const removed for auto-move
-   delete [] wzT;
-
+   const int len = MultiByteToWideChar(CP_ACP, 0, sz, -1, nullptr, 0); //(int)strlen(sz) + 1; // include null termination
+   wstring result(len - 1, L'\0');
+   MultiByteToWideChar(CP_ACP, 0, sz, -1, result.data(), len);
    return result;
 }
 
 char *MakeChar(const WCHAR* const wz)
 {
-   const int len = (int)wcslen(wz) + 1; // include null termination
+   const int len = WideCharToMultiByte(CP_ACP, 0, wz, -1, nullptr, 0, nullptr, nullptr); //(int)wcslen(wz) + 1; // include null termination
    char * const szT = new char[len];
-   WideCharToMultiByteNull(CP_ACP, 0, wz, -1, szT, len, nullptr, nullptr);
-
+   WideCharToMultiByte(CP_ACP, 0, wz, -1, szT, len, nullptr, nullptr);
    return szT;
-}
-
-string MakeString(const WCHAR* const wz)
-{
-   char* szT = MakeChar(wz);
-   string sz = szT;
-   delete [] szT;
-
-   return sz;
 }
 
 HRESULT OpenURL(const string& szURL)
@@ -411,14 +403,14 @@ void copy_folder(const string& srcPath, const string& dstPath)
    const std::filesystem::path dst(dstPath);
    if (!std::filesystem::exists(src) || !std::filesystem::is_directory(src))
    {
-      PLOGE.printf("source path does not exist or is not a directory: %s", srcPath.c_str());
+      PLOGE << "source path does not exist or is not a directory: " << srcPath;
       return;
    }
 
    if (!std::filesystem::exists(dst)) {
       std::error_code ec;
       if (!std::filesystem::create_directory(dst, ec)) {
-         PLOGE.printf("failed to create destination path: %s", dstPath.c_str());
+         PLOGE << "failed to create destination path: " << dstPath;
          return;
       }
    }
@@ -434,7 +426,7 @@ void copy_folder(const string& srcPath, const string& dstPath)
             std::ifstream sourceFile(sourceFilePath, std::ios::binary);
             std::ofstream destinationFile(destinationFilePath, std::ios::binary);
             if (sourceFile && destinationFile) {
-               PLOGI.printf("copying %s to %s", sourceFilePath.c_str(), destinationFilePath.c_str());
+               PLOGI << "copying " << sourceFilePath << " to " << destinationFilePath;
                destinationFile << sourceFile.rdbuf();
                destinationFile.close();
                sourceFile.close();
@@ -484,7 +476,7 @@ string find_case_insensitive_file_path(const string& szPath)
          if (!ec && StrCompareNoCase(ent.path().filename().string(), p.filename().string())) {
             auto found = ent.path().string();
             if (found != path) {
-               PLOGI.printf("case insensitive file match: requested \"%s\", actual \"%s\"", path.c_str(), found.c_str());
+               PLOGI << "case insensitive file match: requested \"" << path << "\", actual \"" << found << '"';
             }
             return found;
          }
@@ -533,7 +525,7 @@ string find_case_insensitive_directory_path(const string& szPath)
             if (!found.empty() && found.back() != PATH_SEPARATOR_CHAR)
                found.push_back(PATH_SEPARATOR_CHAR);
             if (found != path) {
-               PLOGI.printf("case insensitive directory match: requested \"%s\", actual \"%s\"", path.c_str(), found.c_str());
+               PLOGI << "case insensitive directory match: requested \"" << path << "\", actual \"" << found << '"';
             }
             return found;
          }
@@ -811,7 +803,7 @@ vector<string> add_line_numbers(const char* src)
 HRESULT external_open_storage(const OLECHAR* pwcsName, IStorage* pstgPriority, DWORD grfMode, SNB snbExclude, DWORD reserved, IStorage** ppstgOpen)
 {
    char szName[1024];
-   WideCharToMultiByte(CP_ACP, 0, pwcsName, -1, szName, std::size(szName), NULL, NULL);
+   WideCharToMultiByte(CP_ACP, 0, pwcsName, -1, szName, std::size(szName), nullptr, nullptr);
 
    return PoleStorage::Create(szName, "/", (IStorage**)ppstgOpen);
 }
@@ -863,7 +855,7 @@ HRESULT external_create_object(const WCHAR* progid, IClassFactory* cf, IUnknown*
    const char* const szT = MakeChar(progid);
    PLOGI.printf("progid=%s, hres=0x%08x", szT, hres);
    if (hres == E_NOTIMPL) {
-      PLOGW.printf("Creating an object of type \"%s\" is not supported", szT);
+      PLOGW << "Creating an object of type \"" << szT << "\" is not supported";
    }
    delete[] szT;
 
