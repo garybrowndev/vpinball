@@ -341,31 +341,32 @@ ImFont* BallHistory::PrintScreenRecord::BoldLargeFont = nullptr;
 void BallHistory::PrintScreenRecord::Init()
 {
    ImGuiIO& io = ImGui::GetIO();
-   int rotatedWidth = g_pplayer->m_liveUI->GetRotatedWidth();
+
+   int scalingValue = std::min(g_pplayer->m_playfieldWnd->GetWidth(), g_pplayer->m_playfieldWnd->GetHeight());
 
    if (NormalSmallFont == nullptr)
    {
-      NormalSmallFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, rotatedWidth / 70.0f);
+      NormalSmallFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, scalingValue / 70.0f);
    }
 
    if (NormalMediumFont == nullptr)
    {
-      NormalMediumFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, rotatedWidth / 60.0f);
+      NormalMediumFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, scalingValue / 60.0f);
    }
 
    if (BoldSmallFont == nullptr)
    {
-      BoldSmallFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, rotatedWidth / 70.0f);
+      BoldSmallFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, scalingValue / 70.0f);
    }
 
    if (BoldMediumFont == nullptr)
    {
-      BoldMediumFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, rotatedWidth / 60.0f);
+      BoldMediumFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, scalingValue / 60.0f);
    }
 
    if (BoldLargeFont == nullptr)
    {
-      BoldLargeFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, rotatedWidth / 50.0f);
+      BoldLargeFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, scalingValue / 50.0f);
    }
 }
 
@@ -385,7 +386,7 @@ void BallHistory::PrintScreenRecord::Text(const char* name, float positionX, flo
    va_start(formatArgs, format);
    vsprintf_s(strBuffer, format, formatArgs);
 
-   ShowText(name, BoldMediumFont, Color::White, positionX, positionY, false, strBuffer);
+   ShowText(name, BoldMediumFont, Color::White, positionX, positionY, true, strBuffer);
 }
 
 void BallHistory::PrintScreenRecord::MenuTitleText(const char* format, ...)
@@ -7429,8 +7430,8 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
             }
          }
 
-         PrintScreenRecord::MenuTitleText(
-            "Run %zu (of %zu) starts in %.2f seconds", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_RunRecords.size(), secondsBeforeStart);
+         PrintScreenRecord::Text("RunStartCountdown", 0.50f, 0.85f,
+            "<-- Run %zu (of %zu) starts in %.2f seconds -->", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_RunRecords.size(), secondsBeforeStart);
          if (!m_MenuOptions.m_MenuError.empty())
          {
             PrintScreenRecord::ErrorText("%s", m_MenuOptions.m_MenuError.c_str());

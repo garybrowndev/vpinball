@@ -998,21 +998,6 @@ unsigned int LiveUI::PushNotification(const string &message, const int lengthMs,
    }
 }
 
-int LiveUI::GetRotatedWidth()
-{
-   const bool isInteractiveUI = m_ShowUI || m_ShowSplashModal || m_ShowBAMModal;
-   const bool isVR = m_renderer->m_stereo3D == STEREO_VR;
-   int rotate = (isInteractiveUI || isVR) ? 0 : ((int)(m_player->m_ptable->mViewSetups[m_player->m_ptable->m_BG_current_set].GetRotation(m_player->m_playfieldWnd->GetWidth(), m_player->m_playfieldWnd->GetHeight()) / 90.0f));
-   if (rotate == 1 || rotate == 3)
-   {
-      return m_player->m_playfieldWnd->GetHeight();
-   }
-   else
-   {
-      return m_player->m_playfieldWnd->GetWidth();
-   }
-}
-
 void LiveUI::ToggleFPS()
 {
    m_show_fps = (m_show_fps + 1) % 3;
