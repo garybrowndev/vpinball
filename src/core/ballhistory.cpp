@@ -225,14 +225,14 @@ TrainerOptions::TrainerOptions()
    , m_SoundEffectsMenuPlayed(false)
    , m_GameplayDifficulty(0)
    , m_VarianceDifficulty(0)
-   , m_GravityVariance(0)
-   , m_GravityVarianceMode(DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow)
-   , m_PlayfieldFrictionVariance(0)
-   , m_PlayfieldFrictionVarianceMode(DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow)
-   , m_FlipperStrengthVariance(0)
-   , m_FlipperStrengthVarianceMode(DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow)
-   , m_FlipperFrictionVariance(0)
-   , m_FlipperFrictionVarianceMode(DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow)
+   , m_GravitySpread(0)
+   , m_GravitySpreadMode(DifficultySpreadModeType::DifficultySpreadModeType_AboveAndBelow)
+   , m_PlayfieldFrictionSpread(0)
+   , m_PlayfieldFrictionSpreadMode(DifficultySpreadModeType::DifficultySpreadModeType_AboveAndBelow)
+   , m_FlipperStrengthSpread(0)
+   , m_FlipperStrengthSpreadMode(DifficultySpreadModeType::DifficultySpreadModeType_AboveAndBelow)
+   , m_FlipperFrictionSpread(0)
+   , m_FlipperFrictionSpreadMode(DifficultySpreadModeType::DifficultySpreadModeType_AboveAndBelow)
    , m_TotalRuns(5)
    , m_MaxSecondsPerRun(15)
    , m_CountdownSecondsBeforeRun(3)
@@ -443,17 +443,19 @@ void BallHistory::PrintScreenRecord::ErrorText(const char* format, ...)
 
 void BallHistory::PrintScreenRecord::Results(const std::vector<std::pair<std::string, std::string>>& nameValuePairs)
 {
-   ShowNameValueTable(ImGuiProcessMenuLabel, NormalSmallFont, Color::White, BoldSmallFont, Color::White, 0.00f, 0.00f, nameValuePairs, false, true);
+   float calculatedTableWidth = 0.0f;
+   ShowNameValueTable(ImGuiProcessMenuLabel, NormalSmallFont, Color::White, BoldSmallFont, Color::White, 0.00f, 0.00f, nameValuePairs, false, true, &calculatedTableWidth);
+   ShowNameValueTable(ImGuiProcessMenuLabel, NormalSmallFont, Color::White, BoldSmallFont, Color::White, 0.00f, 0.00f, nameValuePairs, false, true, &calculatedTableWidth);
 }
 
 void BallHistory::PrintScreenRecord::Status(const std::vector<std::pair<std::string, std::string>>& nameValuePairs)
 {
-   ShowNameValueTable(ImGuiStatusLabel, NormalSmallFont, Color::White, BoldSmallFont, Color::White, 0.0f, 0.0f, nameValuePairs, true, false);
+   ShowNameValueTable(ImGuiStatusLabel, NormalSmallFont, Color::White, BoldSmallFont, Color::White, 0.0f, 0.0f, nameValuePairs, true, false, nullptr);
 }
 
 void BallHistory::PrintScreenRecord::ActiveMenu(const std::vector<std::pair<std::string, std::string>>& nameValuePairs)
 {
-   ShowNameValueTable(ImGuiActiveMenuLabel, NormalSmallFont, Color::White, BoldSmallFont, Color::White, 0.80f, 1.00f, nameValuePairs, false, true);
+   ShowNameValueTable(ImGuiActiveMenuLabel, NormalSmallFont, Color::White, BoldSmallFont, Color::White, 0.80f, 1.00f, nameValuePairs, false, true, nullptr);
 }
 
 void BallHistory::PrintScreenRecord::ShowText(const char* name, ImFont* font, const ImU32& fontColor, float positionX, float positionY, bool center, const char* str)
@@ -495,7 +497,7 @@ void BallHistory::PrintScreenRecord::ShowText(const char* name, ImFont* font, co
 }
 
 void BallHistory::PrintScreenRecord::ShowNameValueTable(const char* name, ImFont* rowFont, const ImU32& rowFontColor, ImFont* headerFont, const ImU32& headerFontColor, float positionX,
-   float positionY, const std::vector<std::pair<std::string, std::string>>& nameValuePairs, bool overflow, bool center)
+   float positionY, const std::vector<std::pair<std::string, std::string>>& nameValuePairs, bool overflow, bool center, float* calculatedTableWidth)
 {
    if (!BallHistory::DrawMenu)
    {
@@ -513,18 +515,39 @@ void BallHistory::PrintScreenRecord::ShowNameValueTable(const char* name, ImFont
       {
          beginWindowTable = false;
 
-         ImGui::SetNextWindowBgAlpha(0.25f);
+         if (!calculatedTableWidth || *calculatedTableWidth > 0.0f)
+         {
+            ImGui::SetNextWindowBgAlpha(0.25f);
+            windowName = overflow ? name + std::to_string(nameValuePairsIndex) : name;
+         }
+         else
+         {
+            //ImGui::SetNextWindowPos(ImVec2(1919, 1079)); // Off-screen
+            ImGui::SetNextWindowBgAlpha(0.00f);
+            windowName = name + std::string("_DummyMeasureTable");
+         }
 
-         windowName = overflow ? name + std::to_string(nameValuePairsIndex) : name;
          ImGui::Begin(windowName.c_str(), nullptr,
             ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse
                | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_AlwaysAutoResize);
 
-         std::string tableName = windowName + "_Table_" + std::to_string(nameValuePairsIndex);
-         ImGui::BeginTable(tableName.c_str(), 2, ImGuiTableFlags_Borders);
+         if (center && calculatedTableWidth && *calculatedTableWidth > 0.0f)
+         {
+            ImGui::SetCursorPosX((ImGui::GetWindowSize().x - *calculatedTableWidth) / 2.0f);
+         }
 
-         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed);
+         std::string tableName = windowName + "_Table_" + std::to_string(nameValuePairsIndex);
+         if (!calculatedTableWidth || *calculatedTableWidth > 0.0f)
+         {
+            ImGui::BeginTable(tableName.c_str(), 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX);
+         }
+         else
+         {
+            ImGui::BeginTable(tableName.c_str(), 2, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoHostExtendX);
+         }
+
+         ImGui::TableSetupColumn("Name");
+         ImGui::TableSetupColumn("Value");
       }
 
       auto& row = nameValuePairs[nameValuePairsIndex];
@@ -551,12 +574,26 @@ void BallHistory::PrintScreenRecord::ShowNameValueTable(const char* name, ImFont
          if (row.second.empty())
          {
             ImGui::PushFont(headerFont);
-            ImGui::PushStyleColor(ImGuiCol_Text, headerFontColor);
+            if (!calculatedTableWidth || *calculatedTableWidth > 0.0f)
+            {
+               ImGui::PushStyleColor(ImGuiCol_Text, headerFontColor);
+            }
+            else
+            {
+               ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 0, 0, 0));
+            }
          }
          else
          {
             ImGui::PushFont(rowFont);
-            ImGui::PushStyleColor(ImGuiCol_Text, rowFontColor);
+            if (!calculatedTableWidth || *calculatedTableWidth > 0.0f)
+            {
+               ImGui::PushStyleColor(ImGuiCol_Text, rowFontColor);
+            }
+            else
+            {
+               ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0, 0, 0, 0));
+            }
          }
 
          ImGui::TableNextRow();
@@ -565,16 +602,20 @@ void BallHistory::PrintScreenRecord::ShowNameValueTable(const char* name, ImFont
          ImGui::TableSetColumnIndex(1);
          ImGui::TextUnformatted(row.second.c_str());
 
-         if (row.second.empty())
+         if (!calculatedTableWidth || *calculatedTableWidth > 0.0f)
          {
-            ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32(0x11, 0x11, 0x11, 0x40));
-         }
-         else
-         {
-            ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, (nameValuePairsIndex % 2) == 0 ? IM_COL32(0xAA, 0xAA, 0xAA, 0x40) : IM_COL32(0x99, 0x99, 0x99, 0x40));
+            if (row.second.empty())
+            {
+               ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32(0x11, 0x11, 0x11, 0x40));
+            }
+            else
+            {
+               ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, (nameValuePairsIndex % 2) == 0 ? IM_COL32(0xAA, 0xAA, 0xAA, 0x40) : IM_COL32(0x99, 0x99, 0x99, 0x40));
+            }
          }
 
          ImGui::PopStyleColor();
+
          ImGui::PopFont();
       }
    }
@@ -582,6 +623,11 @@ void BallHistory::PrintScreenRecord::ShowNameValueTable(const char* name, ImFont
    if (!beginWindowTable)
    {
       ImGui::EndTable();
+
+      if (calculatedTableWidth)
+      {
+         *calculatedTableWidth = ImGui::GetItemRectSize().x;
+      }
 
       ImVec2 windowSize = ImGui::GetWindowSize();
 
@@ -744,14 +790,14 @@ const char* BallHistory::NormalModeAutoControlVerticesPosition3DKeyName = "Posit
 const char* BallHistory::TrainerModeSettingsSectionName = "TrainerModeSettings";
 const char* BallHistory::TrainerModeGameplayDifficultyKeyName = "GameplayDifficulty";
 const char* BallHistory::TrainerModeVarianceDifficultyKeyName = "VarianceDifficulty";
-const char* BallHistory::TrainerModeGravityVarianceKeyName = "GravityVariance";
-const char* BallHistory::TrainerModeGravityVarianceModeKeyName = "GravityVarianceMode";
-const char* BallHistory::TrainerModePlayfieldFrictionVarianceKeyName = "PlayfieldFrictionVariance";
-const char* BallHistory::TrainerModePlayfieldFrictionVarianceModeKeyName = "PlayfieldFrictionVarianceMode";
-const char* BallHistory::TrainerModeFlipperStrengthVarianceKeyName = "FlipperStrengthVariance";
-const char* BallHistory::TrainerModeFlipperStrengthVarianceModeKeyName = "FlipperStrengthVarianceMode";
-const char* BallHistory::TrainerModeFlipperFrictionVarianceKeyName = "FlipperFrictionVariance";
-const char* BallHistory::TrainerModeFlipperFrictionVarianceModeKeyName = "FlipperFrictionVarianceMode";
+const char* BallHistory::TrainerModeGravitySpreadKeyName = "GravitySpread";
+const char* BallHistory::TrainerModeGravitySpreadModeKeyName = "GravitySpreadMode";
+const char* BallHistory::TrainerModePlayfieldFrictionSpreadKeyName = "PlayfieldFrictionSpread";
+const char* BallHistory::TrainerModePlayfieldFrictionSpreadModeKeyName = "PlayfieldFrictionSpreadMode";
+const char* BallHistory::TrainerModeFlipperStrengthSpreadKeyName = "FlipperStrengthSpread";
+const char* BallHistory::TrainerModeFlipperStrengthSpreadModeKeyName = "FlipperStrengthSpreadMode";
+const char* BallHistory::TrainerModeFlipperFrictionSpreadKeyName = "FlipperFrictionSpread";
+const char* BallHistory::TrainerModeFlipperFrictionSpreadModeKeyName = "FlipperFrictionSpreadMode";
 const char* BallHistory::TrainerModeTotalRunsKeyName = "TotalRuns";
 const char* BallHistory::TrainerModeRunOrderModeKeyName = "RunOrderMode";
 const char* BallHistory::TrainerModeBallKickerBehaviorModeKeyName = "BallKickerBehaviorMode";
@@ -807,6 +853,7 @@ BallHistory::BallHistory(PinTable& pinTable)
    , m_UseTrailsForBallsInitialValue(0)
 {
    m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyInitial = int32_t(pinTable.GetGlobalDifficulty());
+   m_MenuOptions.m_TrainerOptions.m_GameplayDifficulty = m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyInitial;
    pinTable.get_Gravity(&m_MenuOptions.m_TrainerOptions.m_GravityInitial);
    pinTable.get_Friction((&m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionInitial));
    InitFlippers(pinTable);
@@ -1290,17 +1337,17 @@ void BallHistory::LoadSettings(Player& player)
          tempStream >> m_MenuOptions.m_TrainerOptions.m_VarianceDifficulty;
       }
 
-      LoadSettingsDifficultyVariance(player, iniFile, TrainerModeSettingsSectionName, TrainerModeGravityVarianceKeyName, m_MenuOptions.m_TrainerOptions.m_GravityVariance,
-         TrainerModeGravityVarianceModeKeyName, m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode);
+      LoadSettingsDifficultySpread(player, iniFile, TrainerModeSettingsSectionName, TrainerModeGravitySpreadKeyName, m_MenuOptions.m_TrainerOptions.m_GravitySpread,
+         TrainerModeGravitySpreadModeKeyName, m_MenuOptions.m_TrainerOptions.m_GravitySpreadMode);
 
-      LoadSettingsDifficultyVariance(player, iniFile, TrainerModeSettingsSectionName, TrainerModePlayfieldFrictionVarianceKeyName, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVariance,
-         TrainerModePlayfieldFrictionVarianceModeKeyName, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVarianceMode);
+      LoadSettingsDifficultySpread(player, iniFile, TrainerModeSettingsSectionName, TrainerModePlayfieldFrictionSpreadKeyName, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpread,
+         TrainerModePlayfieldFrictionSpreadModeKeyName, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpreadMode);
 
-      LoadSettingsDifficultyVariance(player, iniFile, TrainerModeSettingsSectionName, TrainerModeFlipperStrengthVarianceKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVariance,
-         TrainerModeFlipperStrengthVarianceModeKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode);
+      LoadSettingsDifficultySpread(player, iniFile, TrainerModeSettingsSectionName, TrainerModeFlipperStrengthSpreadKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpread,
+         TrainerModeFlipperStrengthSpreadModeKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpreadMode);
 
-      LoadSettingsDifficultyVariance(player, iniFile, TrainerModeSettingsSectionName, TrainerModeFlipperFrictionVarianceKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVariance,
-         TrainerModeFlipperFrictionVarianceModeKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode);
+      LoadSettingsDifficultySpread(player, iniFile, TrainerModeSettingsSectionName, TrainerModeFlipperFrictionSpreadKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpread,
+         TrainerModeFlipperFrictionSpreadModeKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpreadMode);
 
       if (LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeTotalRunsKeyName, tempStream) == true)
       {
@@ -1475,33 +1522,33 @@ void BallHistory::LoadSettings(Player& player)
    }
 }
 
-void BallHistory::LoadSettingsDifficultyVariance(
-   Player& player, CSimpleIni& iniFile, const char* sectionName, const char* varianceKeyName, int32_t& variance, const char* modeKeyName, TrainerOptions::DifficultyVarianceModeType& mode)
+void BallHistory::LoadSettingsDifficultySpread(
+   Player& player, CSimpleIni& iniFile, const char* sectionName, const char* spreadKeyName, int32_t& spread, const char* modeKeyName, TrainerOptions::DifficultySpreadModeType& mode)
 {
    std::istringstream tempStream;
 
-   if (LoadSettingsGetValue(iniFile, sectionName, varianceKeyName, tempStream) == true)
+   if (LoadSettingsGetValue(iniFile, sectionName, spreadKeyName, tempStream) == true)
    {
-      tempStream >> variance;
+      tempStream >> spread;
    }
 
    if (LoadSettingsGetValue(iniFile, sectionName, modeKeyName, tempStream) == true)
    {
       if (tempStream.str() == "AboveAndBelow")
       {
-         mode = TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow;
+         mode = TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveAndBelow;
       }
       else if (tempStream.str() == "Above")
       {
-         mode = TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly;
+         mode = TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveOnly;
       }
       else if (tempStream.str() == "Below")
       {
-         mode = TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly;
+         mode = TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_BelowOnly;
       }
       else
       {
-         InvalidEnumValue("TrainerOptions::DifficultyVarianceModeType", tempStream.str().c_str());
+         InvalidEnumValue("TrainerOptions::DifficultySpreadModeType", tempStream.str().c_str());
       }
    }
 }
@@ -1553,17 +1600,17 @@ void BallHistory::SaveSettings(Player& player)
       tempStr = std::to_string(m_MenuOptions.m_TrainerOptions.m_VarianceDifficulty);
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeVarianceDifficultyKeyName, tempStr.c_str());
 
-      SaveSettingsDifficultyVariance(player, iniFile, TrainerModeSettingsSectionName, TrainerModeGravityVarianceKeyName, m_MenuOptions.m_TrainerOptions.m_GravityVariance,
-         TrainerModeGravityVarianceModeKeyName, m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode);
+      SaveSettingsDifficultySpread(player, iniFile, TrainerModeSettingsSectionName, TrainerModeGravitySpreadKeyName, m_MenuOptions.m_TrainerOptions.m_GravitySpread,
+         TrainerModeGravitySpreadModeKeyName, m_MenuOptions.m_TrainerOptions.m_GravitySpreadMode);
 
-      SaveSettingsDifficultyVariance(player, iniFile, TrainerModeSettingsSectionName, TrainerModePlayfieldFrictionVarianceKeyName, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVariance,
-         TrainerModePlayfieldFrictionVarianceModeKeyName, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVarianceMode);
+      SaveSettingsDifficultySpread(player, iniFile, TrainerModeSettingsSectionName, TrainerModePlayfieldFrictionSpreadKeyName, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpread,
+         TrainerModePlayfieldFrictionSpreadModeKeyName, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpreadMode);
 
-      SaveSettingsDifficultyVariance(player, iniFile, TrainerModeSettingsSectionName, TrainerModeFlipperStrengthVarianceKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVariance,
-         TrainerModeFlipperStrengthVarianceModeKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode);
+      SaveSettingsDifficultySpread(player, iniFile, TrainerModeSettingsSectionName, TrainerModeFlipperStrengthSpreadKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpread,
+         TrainerModeFlipperStrengthSpreadModeKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpreadMode);
 
-      SaveSettingsDifficultyVariance(player, iniFile, TrainerModeSettingsSectionName, TrainerModeFlipperFrictionVarianceKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVariance,
-         TrainerModeFlipperFrictionVarianceModeKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode);
+      SaveSettingsDifficultySpread(player, iniFile, TrainerModeSettingsSectionName, TrainerModeFlipperFrictionSpreadKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpread,
+         TrainerModeFlipperFrictionSpreadModeKeyName, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpreadMode);
 
       tempStr = std::to_string(m_MenuOptions.m_TrainerOptions.m_TotalRuns);
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeTotalRunsKeyName, tempStr.c_str());
@@ -1709,18 +1756,18 @@ void BallHistory::SaveSettings(Player& player)
    iniFile.SaveFile(m_SettingsFilePath.c_str());
 }
 
-void BallHistory::SaveSettingsDifficultyVariance(
-   Player& player, CSimpleIni& iniFile, const char* sectionName, const char* varianceKeyName, int32_t variance, const char* modeKeyName, TrainerOptions::DifficultyVarianceModeType mode)
+void BallHistory::SaveSettingsDifficultySpread(
+   Player& player, CSimpleIni& iniFile, const char* sectionName, const char* spreadKeyName, int32_t spread, const char* modeKeyName, TrainerOptions::DifficultySpreadModeType mode)
 {
-   std::string tempStr = std::to_string(variance);
-   iniFile.SetValue(sectionName, varianceKeyName, tempStr.c_str());
+   std::string tempStr = std::to_string(spread);
+   iniFile.SetValue(sectionName, spreadKeyName, tempStr.c_str());
 
    switch (mode)
    {
-   case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow: tempStr = "AboveAndBelow"; break;
-   case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly: tempStr = "Above"; break;
-   case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly: tempStr = "Below"; break;
-   default: InvalidEnumValue("TrainerOptions::DifficultyVarianceModeType", mode); break;
+   case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveAndBelow: tempStr = "AboveAndBelow"; break;
+   case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveOnly: tempStr = "Above"; break;
+   case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_BelowOnly: tempStr = "Below"; break;
+   default: InvalidEnumValue("TrainerOptions::DifficultySpreadModeType", mode); break;
    }
    iniFile.SetValue(sectionName, modeKeyName, tempStr.c_str());
 }
@@ -2650,7 +2697,7 @@ void BallHistory::DrawTrainerBallCorridor(Player& player)
    DrawTrainerBallCorridorOpeningRight(player, bcor);
 }
 
-void BallHistory::DrawActiveBallKickerCheckPosition(Player &player, POINT checkPosition, int xMax, int yMax, std::string& kickerText)
+void BallHistory::DrawActiveBallKickerCheckPosition(Player& player, POINT checkPosition, int xMax, int yMax, std::string& kickerText)
 {
    float positionX = float(checkPosition.x);
    float positionY = float(checkPosition.y);
@@ -3126,7 +3173,7 @@ void BallHistory::ShowStatus(Player& player, int currentTimeMs)
       statuses.push_back({ "Gameplay\nInitial", std::format("{}", m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyInitial) });
       statuses.push_back({ "Variance", std::format("{}", m_MenuOptions.m_TrainerOptions.m_VarianceDifficulty) });
 
-      ShowDifficultyVarianceStatusAll(player, statuses, true);
+      ShowDifficultySpreadStatusAll(player, statuses, true);
 
       statuses.push_back({ "Run Options", "" });
       statuses.push_back({ "Total", std::format("{}", m_MenuOptions.m_TrainerOptions.m_TotalRuns) });
@@ -3248,7 +3295,7 @@ void BallHistory::ShowRemainingRunInfo()
    {
       printScreenTexts.push_back({ "Time", "N/A" });
    }
-   
+
    PrintScreenRecord::ActiveMenu(printScreenTexts);
 }
 
@@ -3311,7 +3358,6 @@ void BallHistory::ShowPreviousRunRecord()
       default: InvalidEnumValue("TrainerOptions::RunRecord::ResultType", previousRunRecord.m_Result); break;
       }
       printScreenTexts.push_back({ "Length", std::format("{:.2f}s", float(previousRunRecord.m_TotalTimeMs) / 1000) });
-
    }
    else
    {
@@ -3335,20 +3381,17 @@ void BallHistory::ShowCurrentRunRecord(int currentTimeMs)
    printScreenTexts.push_back({ "Current", "" });
    if (runsRemaining)
    {
-      printScreenTexts.push_back({ "Run #",
-         std::format("{} of {}", std::to_string(m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1), m_MenuOptions.m_TrainerOptions.m_RunRecords.size()) });
+      printScreenTexts.push_back(
+         { "Run #", std::format("{} of {}", std::to_string(m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1), m_MenuOptions.m_TrainerOptions.m_RunRecords.size()) });
 
       DWORD totalMsPerRun = (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun + m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun) * OneSecondMs;
       DWORD runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
-      printScreenTexts.push_back({ "Time",
-         std::format("{:.2f}s",
-            std::min(float(m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun),
-               (totalMsPerRun - runElapsedTimeMs) / float(OneSecondMs))) });
+      printScreenTexts.push_back(
+         { "Time", std::format("{:.2f}s", std::min(float(m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun), (totalMsPerRun - runElapsedTimeMs) / float(OneSecondMs))) });
    }
    else
    {
-      printScreenTexts.push_back({ "Run #",
-         std::format("{} of {}", "N/A", m_MenuOptions.m_TrainerOptions.m_RunRecords.size()) });
+      printScreenTexts.push_back({ "Run #", std::format("{} of {}", "N/A", m_MenuOptions.m_TrainerOptions.m_RunRecords.size()) });
       printScreenTexts.push_back({ "Time", "N/A" });
    }
 
@@ -3461,109 +3504,143 @@ void BallHistory::ShowSection(const char* title, const std::vector<std::string>&
       PrintScreenRecord::MenuText(false, desc.c_str());
    }
 }
-void BallHistory::ShowDifficultyVarianceStatusesMenu(std::vector<std::pair<std::string, std::string>>& difficultyVarianceStatuses)
+void BallHistory::ShowDifficultySpreadStatusesMenu(std::vector<std::pair<std::string, std::string>>& difficultySpreadStatuses)
 {
-   for (auto& status : difficultyVarianceStatuses)
-   {
-      PrintScreenRecord::MenuText(false, "%s = %s", status.first.c_str(), status.second.c_str());
-   }
+   PrintScreenRecord::Results(difficultySpreadStatuses);
 }
 
-void BallHistory::ShowDifficultyVarianceMode(const std::string& difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode,
-   std::vector<std::pair<std::string, std::string>>& difficultyVarianceStatuses, bool newlines)
+void BallHistory::ShowDifficultySpreadMode(
+   TrainerOptions::DifficultySpreadModeType spreadMode, std::vector<std::pair<std::string, std::string>>& difficultySpreadStatuses, bool newlines)
 {
    std::string separator = newlines ? "\n" : " ";
-   switch (varianceMode)
+   switch (spreadMode)
    {
-   case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow:
-      difficultyVarianceStatuses.push_back({ difficultyVarianceName + separator + "Variance Mode", "Above +" + separator + "Below" });
-      break;
-   case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly:
-      difficultyVarianceStatuses.push_back({ difficultyVarianceName + separator + "Variance Mode", "Above" + separator + "Only" });
-      break;
-   case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly:
-      difficultyVarianceStatuses.push_back({ difficultyVarianceName + separator + "Variance Mode", "Below" + separator + "Only" });
-      break;
+   case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveAndBelow: difficultySpreadStatuses.push_back({ "Mode", "Above &" + separator + "Below" }); break;
+   case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveOnly: difficultySpreadStatuses.push_back({ "Mode", "Above" + separator + "Only" }); break;
+   case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_BelowOnly: difficultySpreadStatuses.push_back({ "Mode", "Below" + separator + "Only" }); break;
    default:
-      difficultyVarianceStatuses.push_back({ difficultyVarianceName + separator + "Variance Mode", "**UNKNOWN**" });
-      InvalidEnumValue("TrainerModeOptions::DifficultyVarianceModeType", varianceMode);
+      difficultySpreadStatuses.push_back({ "Mode", "**UNKNOWN**" });
+      InvalidEnumValue("TrainerModeOptions::DifficultySpreadModeType", spreadMode);
       break;
    }
 }
 
-void BallHistory::ShowDifficultyVarianceRange(const std::string& difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, int32_t variance, float initial,
-   std::vector<std::pair<std::string, std::string>>& difficultyVarianceStatuses, bool newlines)
+void BallHistory::ShowDifficultySpreadRange(
+   TrainerOptions::DifficultySpreadModeType spreadMode, int32_t spread, float initial, std::vector<std::pair<std::string, std::string>>& difficultySpreadStatuses, bool newlines)
 {
-   std::string nameSeparator = newlines ? "\n" : " ";
    std::string valueSeparator = newlines ? "\n" : ",";
-   float varianceDiff = initial * (variance / 100.0f);
-   float varianceAbove = initial + varianceDiff;
-   float varianceBelow = initial - varianceDiff;
-   switch (varianceMode)
+   float spreadDiff = initial * (spread / 100.0f);
+   float spreadAbove = initial + spreadDiff;
+   float spreadBelow = initial - spreadDiff;
+   switch (spreadMode)
    {
-   case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow:
-      difficultyVarianceStatuses.push_back({ difficultyVarianceName + nameSeparator + "Range", std::format("[{:.3f}{}{:.3f}]", varianceBelow, valueSeparator, varianceAbove) });
+   case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveAndBelow:
+      difficultySpreadStatuses.push_back({ "Range", std::format("[{:.3f}{}{:.3f}]", spreadBelow, valueSeparator, spreadAbove) });
       break;
-   case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly:
-      difficultyVarianceStatuses.push_back({ difficultyVarianceName + nameSeparator + "Range", std::format("[{:.3f}{}{:.3f}]", initial, valueSeparator, varianceAbove) });
+   case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveOnly:
+      difficultySpreadStatuses.push_back({ "Range", std::format("[{:.3f}{}{:.3f}]", initial, valueSeparator, spreadAbove) });
       break;
-   case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly:
-      difficultyVarianceStatuses.push_back({ difficultyVarianceName + nameSeparator + "Range", std::format("[{:.3f}{}{:.3f}]", varianceBelow, valueSeparator, initial) });
+   case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_BelowOnly:
+      difficultySpreadStatuses.push_back({ "Range", std::format("[{:.3f}{}{:.3f}]", initial, valueSeparator, spreadBelow) });
       break;
    default:
-      difficultyVarianceStatuses.push_back({ difficultyVarianceName + nameSeparator + "Range", "**UNKNOWN**" });
-      InvalidEnumValue("TrainerModeOptions::DifficultyVarianceModeType", varianceMode);
+      difficultySpreadStatuses.push_back({ "Range", "**UNKNOWN**" });
+      InvalidEnumValue("TrainerModeOptions::DifficultySpreadModeType", spreadMode);
       break;
    }
 }
 
-void BallHistory::ShowDifficultyVarianceStatusAll(Player& player, std::vector<std::pair<std::string, std::string>>& difficultyVarianceStatuses, bool newlines)
+void BallHistory::ShowDifficultySpreadStatusAll(Player& player, std::vector<std::pair<std::string, std::string>>& difficultySpreadStatuses, bool newlines)
 {
-   ShowDifficultyVarianceStatusGravity(player, difficultyVarianceStatuses, newlines);
-   ShowDifficultyVarianceStatusPlayfieldFriction(player, difficultyVarianceStatuses, newlines);
-   ShowDifficultyVarianceStatusFlipperStrength(player, difficultyVarianceStatuses, newlines);
-   ShowDifficultyVarianceStatusFlipperFriction(player, difficultyVarianceStatuses, newlines);
+   ShowDifficultySpreadStatusGravity(player, difficultySpreadStatuses, newlines);
+   ShowDifficultySpreadStatusPlayfieldFriction(player, difficultySpreadStatuses, newlines);
+   ShowDifficultySpreadStatusFlipperStrength(player, difficultySpreadStatuses, newlines);
+   ShowDifficultySpreadStatusFlipperFriction(player, difficultySpreadStatuses, newlines);
 }
 
-void BallHistory::ShowDifficultyVarianceStatusSingle(const std::string& name, float current, int32_t variance, float initial, TrainerOptions::DifficultyVarianceModeType mode,
-   std::vector<std::pair<std::string, std::string>>& difficultyVarianceStatuses, bool newlines)
+void BallHistory::ShowDifficultySpreadStatusSingle(const std::string& name, float current, int32_t spread, float initial, TrainerOptions::DifficultySpreadModeType mode,
+   std::vector<std::pair<std::string, std::string>>& difficultySpreadStatuses, bool newlines)
 {
-   std::string separator = newlines ? "\n" : " ";
-   difficultyVarianceStatuses.push_back({ name + separator + "Variance", std::format("{}%", variance) });
-   ShowDifficultyVarianceMode(name, mode, difficultyVarianceStatuses, newlines);
-   ShowDifficultyVarianceRange(name, mode, variance, initial, difficultyVarianceStatuses, newlines);
-   difficultyVarianceStatuses.push_back({ name + separator + "Current", std::format("{:.3f}", current) });
-   difficultyVarianceStatuses.push_back({ name + separator + "Initial", std::format("{:.3f}", initial) });
+   difficultySpreadStatuses.push_back({ name, "" });
+   difficultySpreadStatuses.push_back({ "Spread", std::format("{}%", spread) });
+   ShowDifficultySpreadMode(mode, difficultySpreadStatuses, newlines);
+   ShowDifficultySpreadRange(mode, spread, initial, difficultySpreadStatuses, newlines);
+   difficultySpreadStatuses.push_back({ "Current", std::format("{:.3f}", current) });
+   difficultySpreadStatuses.push_back({ "Initial", std::format("{:.3f}", initial) });
+
+   float difference = std::abs(CalculateDifficultySpread(*g_pplayer, initial, initial, spread, mode, true) - initial);
+   std::string directionStr;
+   if (difference == 0)
+   {
+      directionStr = "";
+   }
+   else if (mode == TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveAndBelow)
+   {
+      directionStr = "+/-";
+   }
+   else if (difference > 0)
+   {
+      directionStr = "+";
+   }
+   else if (difference < 0)
+   {
+      directionStr = "-";
+   }
+   difficultySpreadStatuses.push_back({ "Diff", std::format("{}{:.3f}", directionStr, difference) });
+
+   difficultySpreadStatuses.push_back({ "Preview", "" });
+   std::size_t runSpreadPreviewMiddleIndex = (m_MenuOptions.m_TrainerOptions.m_TotalRuns - 1) / 2;
+   std::map<std::size_t, float> runSpreadPreviewIndexesAndValues = {
+      { 0, 0.0f },
+      { runSpreadPreviewMiddleIndex / 2, 0.0f },
+      { runSpreadPreviewMiddleIndex, 0.0f },
+      { runSpreadPreviewMiddleIndex + (runSpreadPreviewMiddleIndex / 2), 0.0f },
+      { m_MenuOptions.m_TrainerOptions.m_TotalRuns - 1, 0.0f }
+   };
+   ::srand(((::time(nullptr) / 5) % 2) == 0 ? 0 : 1);
+   float currentSpreadValue = initial;
+   for (std::size_t runIndex = 0; runIndex < m_MenuOptions.m_TrainerOptions.m_TotalRuns; runIndex++)
+   {
+      if (runSpreadPreviewIndexesAndValues.count(runIndex))
+      {
+         runSpreadPreviewIndexesAndValues[runIndex] = currentSpreadValue;
+      }
+      currentSpreadValue = CalculateDifficultySpread(*g_pplayer, initial, currentSpreadValue, spread, mode, true);
+   }
+   for (auto runSpreadPreviewIndexAndValue : runSpreadPreviewIndexesAndValues)
+   {
+      difficultySpreadStatuses.push_back({ "Run #" + std::to_string(runSpreadPreviewIndexAndValue.first + 1), std::format("{:.3f}", runSpreadPreviewIndexAndValue.second) });
+   }
 }
 
-void BallHistory::ShowDifficultyVarianceStatusGravity(Player& player, std::vector<std::pair<std::string, std::string>>& difficultyVarianceStatuses, bool newlines)
+void BallHistory::ShowDifficultySpreadStatusGravity(Player& player, std::vector<std::pair<std::string, std::string>>& difficultySpreadStatuses, bool newlines)
 {
    float gravityCurrent = 0.0f;
    player.m_ptable->get_Gravity(&gravityCurrent);
-   ShowDifficultyVarianceStatusSingle("Gravity", gravityCurrent, m_MenuOptions.m_TrainerOptions.m_GravityVariance, m_MenuOptions.m_TrainerOptions.m_GravityInitial,
-      m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode, difficultyVarianceStatuses, newlines);
+   ShowDifficultySpreadStatusSingle("Gravity", gravityCurrent, m_MenuOptions.m_TrainerOptions.m_GravitySpread, m_MenuOptions.m_TrainerOptions.m_GravityInitial,
+      m_MenuOptions.m_TrainerOptions.m_GravitySpreadMode, difficultySpreadStatuses, newlines);
 }
 
-void BallHistory::ShowDifficultyVarianceStatusPlayfieldFriction(Player& player, std::vector<std::pair<std::string, std::string>>& difficultyVarianceStatuses, bool newlines)
+void BallHistory::ShowDifficultySpreadStatusPlayfieldFriction(Player& player, std::vector<std::pair<std::string, std::string>>& difficultySpreadStatuses, bool newlines)
 {
    float playfieldFrictionCurrent = 0.0f;
    player.m_ptable->get_Friction(&playfieldFrictionCurrent);
-   ShowDifficultyVarianceStatusSingle("Playfield Friction", playfieldFrictionCurrent, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVariance,
-      m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionInitial, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVarianceMode, difficultyVarianceStatuses, newlines);
+   ShowDifficultySpreadStatusSingle("Playfield\nFriction", playfieldFrictionCurrent, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpread,
+      m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionInitial, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpreadMode, difficultySpreadStatuses, newlines);
 }
 
-void BallHistory::ShowDifficultyVarianceStatusFlipperStrength(Player& player, std::vector<std::pair<std::string, std::string>>& difficultyVarianceStatuses, bool newlines)
+void BallHistory::ShowDifficultySpreadStatusFlipperStrength(Player& player, std::vector<std::pair<std::string, std::string>>& difficultySpreadStatuses, bool newlines)
 {
    float flipperStrengthCurrent = GetFlipperStrength();
-   ShowDifficultyVarianceStatusSingle("Flipper Strength", flipperStrengthCurrent, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVariance,
-      m_MenuOptions.m_TrainerOptions.m_FlipperStrengthInitial, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode, difficultyVarianceStatuses, newlines);
+   ShowDifficultySpreadStatusSingle("Flipper\nStrength", flipperStrengthCurrent, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpread,
+      m_MenuOptions.m_TrainerOptions.m_FlipperStrengthInitial, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpreadMode, difficultySpreadStatuses, newlines);
 }
 
-void BallHistory::ShowDifficultyVarianceStatusFlipperFriction(Player& player, std::vector<std::pair<std::string, std::string>>& difficultyVarianceStatuses, bool newlines)
+void BallHistory::ShowDifficultySpreadStatusFlipperFriction(Player& player, std::vector<std::pair<std::string, std::string>>& difficultySpreadStatuses, bool newlines)
 {
    float flipperFrictionCurrent = GetFlipperFriction();
-   ShowDifficultyVarianceStatusSingle("Flipper Friction", flipperFrictionCurrent, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVariance,
-      m_MenuOptions.m_TrainerOptions.m_FlipperFrictionInitial, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode, difficultyVarianceStatuses, newlines);
+   ShowDifficultySpreadStatusSingle("Flipper\nFriction", flipperFrictionCurrent, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpread,
+      m_MenuOptions.m_TrainerOptions.m_FlipperFrictionInitial, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpreadMode, difficultySpreadStatuses, newlines);
 }
 
 void BallHistory::ShowResult(std::size_t total, std::vector<DWORD>& timesMs, const char* type, const char* subType, std::vector<std::pair<std::string, std::string>>& results)
@@ -3623,30 +3700,30 @@ template <class T> float BallHistory::CalculateStandardDeviation(std::vector<T>&
    return std::sqrtf(variance);
 }
 
-float BallHistory::CalculateDifficultyVariance(Player& player, float initial, float current, int32_t variance, TrainerOptions::DifficultyVarianceModeType varianceMode)
+float BallHistory::CalculateDifficultySpread(Player& player, float initial, float current, int32_t spread, TrainerOptions::DifficultySpreadModeType spreadMode, bool useRand)
 {
-   if (variance > 0)
+   if (spread > 0)
    {
       float direction = 0.0f;
       float min = initial;
       float max = initial;
-      float diff = initial * variance / 100.0f;
-      switch (varianceMode)
+      float diff = initial * spread / 100.0f;
+      switch (spreadMode)
       {
-      case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow:
-         direction = rand_mt_m11() >= 0.0f ? 0.5f : -0.5f;
+      case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveAndBelow:
+         direction = (useRand ? (::rand() % 2 - 1) : rand_mt_m11()) >= 0.0f ? 0.5f : -0.5f;
          min -= diff;
          max += diff;
          break;
-      case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly:
+      case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveOnly:
          direction = 1.0f;
          max += diff;
          break;
-      case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly:
+      case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_BelowOnly:
          direction = -1.0f;
          min -= diff;
          break;
-      default: InvalidEnumValue("TrainerOptions::DifficultyVarianceModeType", varianceMode); break;
+      default: InvalidEnumValue("TrainerOptions::DifficultySpreadModeType", spreadMode); break;
       }
 
       float range = max - min;
@@ -4268,14 +4345,14 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       {
          PrintScreenRecord::MenuTitleText("Current Configuration");
 
-         std::vector<std::pair<std::string, std::string>> difficultyVarianceStatuses;
+         std::vector<std::pair<std::string, std::string>> difficultyStatuses;
 
-         difficultyVarianceStatuses.push_back({ "Gameplay Difficulty", std::format("{}", m_MenuOptions.m_TrainerOptions.m_GameplayDifficulty) });
-         difficultyVarianceStatuses.push_back({ "Gameplay Difficulty Initial", std::format("{}", m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyInitial) });
-         difficultyVarianceStatuses.push_back({ "Variance Difficulty", std::format("{}", m_MenuOptions.m_TrainerOptions.m_VarianceDifficulty) });
+         difficultyStatuses.push_back({ "Gameplay Difficulty", std::format("{}", m_MenuOptions.m_TrainerOptions.m_GameplayDifficulty) });
+         difficultyStatuses.push_back({ "Gameplay Difficulty Initial", std::format("{}", m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyInitial) });
+         difficultyStatuses.push_back({ "Variance Difficulty", std::format("{}", m_MenuOptions.m_TrainerOptions.m_VarianceDifficulty) });
 
-         ShowDifficultyVarianceStatusAll(player, difficultyVarianceStatuses, false);
-         ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
+         ShowDifficultySpreadStatusAll(player, difficultyStatuses, false);
+         ShowDifficultySpreadStatusesMenu(difficultyStatuses);
 
          ShowSection(DescriptionSectionTitle,
             { "Configure Difficulty and Variance", "Controls scatter (difficulty) lowering randomness creating consistent play",
@@ -4909,12 +4986,12 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
                = float(std::max(std::min(int32_t(bsor.m_AngleRangeFinish), TrainerOptions::BallStartOptionsRecord::AngleMaximum), TrainerOptions::BallStartOptionsRecord::AngleMinimum));
             bsor.m_TotalRangeAngles
                = std::max(std::min(int32_t(bsor.m_TotalRangeAngles), TrainerOptions::BallStartOptionsRecord::TotalAnglesMaximum), TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum);
-            bsor.m_VelocityRangeStart
-               = float(std::max(std::min(int32_t(bsor.m_VelocityRangeStart), TrainerOptions::BallStartOptionsRecord::VelocityMaximum), TrainerOptions::BallStartOptionsRecord::VelocityMinimum));
-            bsor.m_VelocityRangeFinish
-               = float(std::max(std::min(int32_t(bsor.m_VelocityRangeFinish), TrainerOptions::BallStartOptionsRecord::VelocityMaximum), TrainerOptions::BallStartOptionsRecord::VelocityMinimum));
-            bsor.m_TotalRangeVelocities = std::max(
-               std::min(int32_t(bsor.m_TotalRangeVelocities), TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMaximum), TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum);
+            bsor.m_VelocityRangeStart = float(
+               std::max(std::min(int32_t(bsor.m_VelocityRangeStart), TrainerOptions::BallStartOptionsRecord::VelocityMaximum), TrainerOptions::BallStartOptionsRecord::VelocityMinimum));
+            bsor.m_VelocityRangeFinish = float(
+               std::max(std::min(int32_t(bsor.m_VelocityRangeFinish), TrainerOptions::BallStartOptionsRecord::VelocityMaximum), TrainerOptions::BallStartOptionsRecord::VelocityMinimum));
+            bsor.m_TotalRangeVelocities = std::max(std::min(int32_t(bsor.m_TotalRangeVelocities), TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMaximum),
+               TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum);
             m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectCustomBallStartVelocityStart;
             break;
          default: InvalidEnumValue("TrainerOptions::BallStartAngleVelocityModeType", m_MenuOptions.m_TrainerOptions.m_BallStartAngleVelocityMode); break;
@@ -5434,8 +5511,8 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       TrainerOptions::BallEndOptionsRecord& bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
       PrintScreenRecord::MenuTitleText("Ball Pass Distance (%% of ball radius)");
-      PrintScreenRecord::MenuText(false, "(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, static_cast<int32_t>(bpor.m_EndRadiusPercent),
-         TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
+      PrintScreenRecord::MenuText(false, "(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum,
+         static_cast<int32_t>(bpor.m_EndRadiusPercent), TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
 
       PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuTitleText("Current Configuration");
@@ -6287,24 +6364,17 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
    {
       PrintScreenRecord::MenuTitleText("Difficulty Options");
       PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_Accept, "Accept");
-      PrintScreenRecord::MenuText(
-         m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_GameplayDifficulty, "Gameplay Difficulty");
-      PrintScreenRecord::MenuText(
-         m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_VarianceDifficulty, "Variance Difficulty");
-      PrintScreenRecord::MenuText(
-         m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_GravityVariance, "Gravity Variance");
-      PrintScreenRecord::MenuText(
-         m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_PlayfieldFrictionVariance,
-         "Playfield Friction Variance");
-      PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_FlipperStrengthVariance,
-         "Flipper Strength Variance");
-      PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_FlipperFrictionVariance,
-         "Flipper Friction Variance");
+      PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_GameplayDifficulty, "Gameplay Difficulty");
+      PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_VarianceDifficulty, "Variance Difficulty");
+      PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_GravitySpread, "Gravity Spread");
+      PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_PlayfieldFrictionSpread, "Playfield Friction Spread");
+      PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_FlipperStrengthSpread, "Flipper Strength Spread");
+      PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_FlipperFrictionSpread, "Flipper Friction Spread");
 
       PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
-      std::vector<std::pair<std::string, std::string>> difficultyVarianceStatuses;
+      std::vector<std::pair<std::string, std::string>> difficultyStatuses;
       bool acceptMode = m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState == TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_Accept;
       switch (m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState)
       {
@@ -6329,48 +6399,47 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
                { "Variance Difficulty controls speed of variance within specified range", "Lowering/Raising causes slow/fast variance between baseline and target range" });
             break;
          }
-      case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_GravityVariance:
-         difficultyVarianceStatuses.push_back({ "Gravity Variance", std::format("{}", m_MenuOptions.m_TrainerOptions.m_GravityVariance) });
-         ShowDifficultyVarianceStatusGravity(player, difficultyVarianceStatuses, false);
-         ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
+      case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_GravitySpread:
+         ShowDifficultySpreadStatusGravity(player, difficultyStatuses, false);
+         ShowDifficultySpreadStatusesMenu(difficultyStatuses);
 
          if (!acceptMode)
          {
             ShowSection(DescriptionSectionTitle,
-               { "Gravity Variance sets range above/below 'Initial'", "'Current'/'Initial' provided for reference", "'Current' shows active table value",
+               { "Gravity Spread sets range above/below 'Initial'", "'Current'/'Initial' provided for reference", "'Current' shows active table value",
                   "'Initial' shows starting table value" });
             break;
          }
-      case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_PlayfieldFrictionVariance:
-         ShowDifficultyVarianceStatusPlayfieldFriction(player, difficultyVarianceStatuses, false);
-         ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
+      case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_PlayfieldFrictionSpread:
+         ShowDifficultySpreadStatusPlayfieldFriction(player, difficultyStatuses, false);
+         ShowDifficultySpreadStatusesMenu(difficultyStatuses);
 
          if (!acceptMode)
          {
             ShowSection(DescriptionSectionTitle,
-               { "Playfield Friction Variance sets range above/below 'Initial'", "'Current'/'Initial' provided for reference", "'Current' shows active table value",
+               { "Playfield Friction Spread sets range above/below 'Initial'", "'Current'/'Initial' provided for reference", "'Current' shows active table value",
                   "'Initial' shows starting table value" });
             break;
          }
-      case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_FlipperStrengthVariance:
-         ShowDifficultyVarianceStatusFlipperStrength(player, difficultyVarianceStatuses, false);
-         ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
+      case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_FlipperStrengthSpread:
+         ShowDifficultySpreadStatusFlipperStrength(player, difficultyStatuses, false);
+         ShowDifficultySpreadStatusesMenu(difficultyStatuses);
 
          if (!acceptMode)
          {
             ShowSection(DescriptionSectionTitle,
-               { "Flipper Strength Variance sets range above/below 'Initial'", "'Current'/'Initial' provided for reference", "'Current' shows active table value",
+               { "Flipper Strength Spread sets range above/below 'Initial'", "'Current'/'Initial' provided for reference", "'Current' shows active table value",
                   "'Initial' shows starting table value" });
             break;
          }
-      case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_FlipperFrictionVariance:
-         ShowDifficultyVarianceStatusFlipperFriction(player, difficultyVarianceStatuses, false);
-         ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
+      case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_FlipperFrictionSpread:
+         ShowDifficultySpreadStatusFlipperFriction(player, difficultyStatuses, false);
+         ShowDifficultySpreadStatusesMenu(difficultyStatuses);
 
          if (!acceptMode)
          {
             ShowSection(DescriptionSectionTitle,
-               { "Flipper Friction Variance sets range above/below 'Initial'", "'Current'/'Initial' provided for reference", "'Current' shows active table value",
+               { "Flipper Friction Spread sets range above/below 'Initial'", "'Current'/'Initial' provided for reference", "'Current' shows active table value",
                   "'Initial' shows starting table value" });
             break;
          }
@@ -6417,17 +6486,17 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
          case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_VarianceDifficulty:
             m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyVarianceDifficulty;
             break;
-         case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_GravityVariance:
-            m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyGravityVariance;
+         case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_GravitySpread:
+            m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyGravitySpread;
             break;
-         case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_PlayfieldFrictionVariance:
-            m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyPlayfieldFrictionVariance;
+         case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_PlayfieldFrictionSpread:
+            m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyPlayfieldFrictionSpread;
             break;
-         case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_FlipperStrengthVariance:
-            m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperStrengthVariance;
+         case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_FlipperStrengthSpread:
+            m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperStrengthSpread;
             break;
-         case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_FlipperFrictionVariance:
-            m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperFrictionVariance;
+         case TrainerOptions::DifficultyConfigModeState::DifficultyConfigModeState_FlipperFrictionSpread:
+            m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperFrictionSpread;
             break;
          default: InvalidEnumValue("TrainerOptions::DifficultyConfigModeState", m_MenuOptions.m_TrainerOptions.m_DifficultyConfigModeState); break;
          }
@@ -6461,66 +6530,66 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       ProcessMenuAction<int32_t>(menuAction, MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyOptions, m_MenuOptions.m_TrainerOptions.m_VarianceDifficulty,
          TrainerOptions::VarianceDifficultyMinimum, TrainerOptions::VarianceDifficultyMaximum, currentTimeMs);
       break;
-   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyGravityVariance:
+   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyGravitySpread:
    {
-      PrintScreenRecord::MenuTitleText("Gravity Variance");
+      PrintScreenRecord::MenuTitleText("Gravity Spread");
       PrintScreenRecord::MenuText(
-         false, "(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::GravityVarianceMinimum, m_MenuOptions.m_TrainerOptions.m_GravityVariance, TrainerOptions::GravityVarianceMaximum);
+         false, "(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::GravitySpreadMinimum, m_MenuOptions.m_TrainerOptions.m_GravitySpread, TrainerOptions::GravitySpreadMaximum);
 
       PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
-      std::vector<std::pair<std::string, std::string>> difficultyVarianceStatuses;
-      ShowDifficultyVarianceStatusGravity(player, difficultyVarianceStatuses, false);
-      ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
+      std::vector<std::pair<std::string, std::string>> difficultySpreadStatuses;
+      ShowDifficultySpreadStatusGravity(player, difficultySpreadStatuses, false);
+      ShowDifficultySpreadStatusesMenu(difficultySpreadStatuses);
 
       ShowSection(DescriptionSectionTitle,
-         { "Use flippers to set Gravity Variance above/below 'Initial'", "'Current'/'Initial' provided for reference", "'Current' shows active table value",
+         { "Use flippers to set Gravity Spread above/below 'Initial'", "'Current'/'Initial' provided for reference", "'Current' shows active table value",
             "'Initial' shows starting table value" });
 
-      ProcessMenuAction<int32_t>(menuAction, MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyGravityVarianceType, m_MenuOptions.m_TrainerOptions.m_GravityVariance,
-         TrainerOptions::GravityVarianceMinimum, TrainerOptions::GravityVarianceMaximum, currentTimeMs);
+      ProcessMenuAction<int32_t>(menuAction, MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyGravitySpreadType, m_MenuOptions.m_TrainerOptions.m_GravitySpread,
+         TrainerOptions::GravitySpreadMinimum, TrainerOptions::GravitySpreadMaximum, currentTimeMs);
    }
    break;
-   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyGravityVarianceType:
+   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyGravitySpreadType:
    {
-      PrintScreenRecord::MenuTitleText("Gravity Variance Mode");
+      PrintScreenRecord::MenuTitleText("Gravity Spread Mode");
       PrintScreenRecord::MenuText(
-         m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow, "Above and Below");
-      PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly, "Above Only");
-      PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly, "Below Only");
+         m_MenuOptions.m_TrainerOptions.m_GravitySpreadMode == TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveAndBelow, "Above & Below");
+      PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_GravitySpreadMode == TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveOnly, "Above Only");
+      PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_GravitySpreadMode == TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_BelowOnly, "Below Only");
 
       PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
-      std::vector<std::pair<std::string, std::string>> difficultyVarianceStatuses;
-      ShowDifficultyVarianceStatusGravity(player, difficultyVarianceStatuses, false);
-      ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
+      std::vector<std::pair<std::string, std::string>> difficultySpreadStatuses;
+      ShowDifficultySpreadStatusGravity(player, difficultySpreadStatuses, false);
+      ShowDifficultySpreadStatusesMenu(difficultySpreadStatuses);
 
-      switch (m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode)
+      switch (m_MenuOptions.m_TrainerOptions.m_GravitySpreadMode)
       {
-      case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow:
+      case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveAndBelow:
          ShowSection(DescriptionSectionTitle,
             {
-               "Configures Gravity Variance range to ['Variance Below', 'Variance Above']",
+               "Configures Gravity Spread range to ['Spread Below', 'Spread Above']",
                "Plunger accepts configuration",
             });
          break;
-      case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly:
+      case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveOnly:
          ShowSection(DescriptionSectionTitle,
             {
-               "Configures Gravity Variance range to ['Initial', 'Variance Above']",
+               "Configures Gravity Spread range to ['Initial', 'Spread Above']",
                "Plunger accepts configuration",
             });
          break;
-      case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly:
+      case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_BelowOnly:
          ShowSection(DescriptionSectionTitle,
             {
-               "Configures Gravity Variance range to ['Variance Below', 'Initial']",
+               "Configures Gravity Spread range to ['Spread Below', 'Initial']",
                "Plunger accepts configuration",
             });
          break;
-      default: InvalidEnumValue("TrainerOptions::DifficultyVarianceModeType", m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode); break;
+      default: InvalidEnumValue("TrainerOptions::DifficultySpreadModeType", m_MenuOptions.m_TrainerOptions.m_GravitySpreadMode); break;
       }
 
       switch (menuAction)
@@ -6530,80 +6599,80 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
          // do nothing
          break;
       case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
-         ProcessMenuChangeValueDec<TrainerOptions::DifficultyVarianceModeType>(
-            m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode, 0, TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_COUNT - 1);
+         ProcessMenuChangeValueDec<TrainerOptions::DifficultySpreadModeType>(
+            m_MenuOptions.m_TrainerOptions.m_GravitySpreadMode, 0, TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_COUNT - 1);
          break;
       case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
-         ProcessMenuChangeValueInc<TrainerOptions::DifficultyVarianceModeType>(
-            m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode, 0, TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_COUNT - 1);
+         ProcessMenuChangeValueInc<TrainerOptions::DifficultySpreadModeType>(
+            m_MenuOptions.m_TrainerOptions.m_GravitySpreadMode, 0, TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_COUNT - 1);
          break;
       case MenuOptionsRecord::MenuActionType::MenuActionType_Enter: m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyOptions; break;
       default: InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction); break;
       }
    }
    break;
-   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyPlayfieldFrictionVariance:
+   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyPlayfieldFrictionSpread:
    {
-      PrintScreenRecord::MenuTitleText("Playfield Friction Variance");
-      PrintScreenRecord::MenuText(false, "(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::PlayfieldFrictionVarianceMinimum,
-         m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVariance, TrainerOptions::PlayfieldFrictionVarianceMaximum);
+      PrintScreenRecord::MenuTitleText("Playfield Friction Spread");
+      PrintScreenRecord::MenuText(false, "(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::PlayfieldFrictionSpreadMinimum,
+         m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpread, TrainerOptions::PlayfieldFrictionSpreadMaximum);
 
       PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
-      std::vector<std::pair<std::string, std::string>> difficultyVarianceStatuses;
-      ShowDifficultyVarianceStatusPlayfieldFriction(player, difficultyVarianceStatuses, false);
-      ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
+      std::vector<std::pair<std::string, std::string>> difficultySpreadStatuses;
+      ShowDifficultySpreadStatusPlayfieldFriction(player, difficultySpreadStatuses, false);
+      ShowDifficultySpreadStatusesMenu(difficultySpreadStatuses);
 
       ShowSection(DescriptionSectionTitle,
-         { "Use flippers to set Playfield Friction Variance above/below 'Initial'", "'Current'/'Initial' provided for reference", "'Current' shows active table value",
+         { "Use flippers to set Playfield Friction Spread above/below 'Initial'", "'Current'/'Initial' provided for reference", "'Current' shows active table value",
             "'Initial' shows starting table value" });
 
-      ProcessMenuAction<int32_t>(menuAction, MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyPlayfieldFrictionVarianceType,
-         m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVariance, TrainerOptions::PlayfieldFrictionVarianceMinimum, TrainerOptions::PlayfieldFrictionVarianceMaximum, currentTimeMs);
+      ProcessMenuAction<int32_t>(menuAction, MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyPlayfieldFrictionSpreadType,
+         m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpread, TrainerOptions::PlayfieldFrictionSpreadMinimum, TrainerOptions::PlayfieldFrictionSpreadMaximum, currentTimeMs);
    }
    break;
-   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyPlayfieldFrictionVarianceType:
+   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyPlayfieldFrictionSpreadType:
    {
-      PrintScreenRecord::MenuTitleText("Playfield Friction Variance Mode");
+      PrintScreenRecord::MenuTitleText("Playfield Friction Spread Mode");
       PrintScreenRecord::MenuText(
-         m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow, "Above and Below");
+         m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpreadMode == TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveAndBelow, "Above & Below");
       PrintScreenRecord::MenuText(
-         m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly, "Above Only");
+         m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpreadMode == TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveOnly, "Above Only");
       PrintScreenRecord::MenuText(
-         m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly, "Below Only");
+         m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpreadMode == TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_BelowOnly, "Below Only");
 
       PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
-      std::vector<std::pair<std::string, std::string>> difficultyVarianceStatuses;
-      ShowDifficultyVarianceStatusPlayfieldFriction(player, difficultyVarianceStatuses, false);
-      ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
+      std::vector<std::pair<std::string, std::string>> difficultySpreadStatuses;
+      ShowDifficultySpreadStatusPlayfieldFriction(player, difficultySpreadStatuses, false);
+      ShowDifficultySpreadStatusesMenu(difficultySpreadStatuses);
 
-      switch (m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVarianceMode)
+      switch (m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpreadMode)
       {
-      case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow:
+      case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveAndBelow:
          ShowSection(DescriptionSectionTitle,
             {
-               "Configures Playfield Friction Variance range to ['Variance Below', 'Variance Above']",
+               "Configures Playfield Friction Spread range to ['Spread Below', 'Spread Above']",
                "Plunger accepts configuration",
             });
          break;
-      case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly:
+      case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveOnly:
          ShowSection(DescriptionSectionTitle,
             {
-               "Configures Playfield Friction Variance range to ['Initial', 'Variance Above']",
+               "Configures Playfield Friction Spread range to ['Initial', 'Spread Above']",
                "Plunger accepts configuration",
             });
          break;
-      case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly:
+      case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_BelowOnly:
          ShowSection(DescriptionSectionTitle,
             {
-               "Configures Playfield Friction Variance range to ['Variance Below', 'Initial']",
+               "Configures Playfield Friction Spread range to ['Spread Below', 'Initial']",
                "Plunger accepts configuration",
             });
          break;
-      default: InvalidEnumValue("TrainerOptions::DifficultyVarianceModeType", m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVarianceMode); break;
+      default: InvalidEnumValue("TrainerOptions::DifficultySpreadModeType", m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpreadMode); break;
       }
 
       switch (menuAction)
@@ -6613,80 +6682,80 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
          // do nothing
          break;
       case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
-         ProcessMenuChangeValueDec<TrainerOptions::DifficultyVarianceModeType>(
-            m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVarianceMode, 0, TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_COUNT - 1);
+         ProcessMenuChangeValueDec<TrainerOptions::DifficultySpreadModeType>(
+            m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpreadMode, 0, TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_COUNT - 1);
          break;
       case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
-         ProcessMenuChangeValueInc<TrainerOptions::DifficultyVarianceModeType>(
-            m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVarianceMode, 0, TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_COUNT - 1);
+         ProcessMenuChangeValueInc<TrainerOptions::DifficultySpreadModeType>(
+            m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpreadMode, 0, TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_COUNT - 1);
          break;
       case MenuOptionsRecord::MenuActionType::MenuActionType_Enter: m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyOptions; break;
       default: InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction); break;
       }
    }
    break;
-   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperStrengthVariance:
+   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperStrengthSpread:
    {
-      PrintScreenRecord::MenuTitleText("Flipper Strength Variance");
-      PrintScreenRecord::MenuText(false, "(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::FlipperStrengthVarianceMinimum, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVariance,
-         TrainerOptions::FlipperStrengthVarianceMaximum);
+      PrintScreenRecord::MenuTitleText("Flipper Strength Spread");
+      PrintScreenRecord::MenuText(false, "(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::FlipperStrengthSpreadMinimum, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpread,
+         TrainerOptions::FlipperStrengthSpreadMaximum);
 
       PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
-      std::vector<std::pair<std::string, std::string>> difficultyVarianceStatuses;
-      ShowDifficultyVarianceStatusFlipperStrength(player, difficultyVarianceStatuses, false);
-      ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
+      std::vector<std::pair<std::string, std::string>> difficultySpreadStatuses;
+      ShowDifficultySpreadStatusFlipperStrength(player, difficultySpreadStatuses, false);
+      ShowDifficultySpreadStatusesMenu(difficultySpreadStatuses);
 
       ShowSection(DescriptionSectionTitle,
-         { "Use flippers to set Flipper Strength Variance above/below 'Initial'", "'Current'/'Initial' provided for reference", "'Current' shows active table value",
+         { "Use flippers to set Flipper Strength Spread above/below 'Initial'", "'Current'/'Initial' provided for reference", "'Current' shows active table value",
             "'Initial' shows starting table value" });
 
-      ProcessMenuAction<int32_t>(menuAction, MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperStrengthVarianceType,
-         m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVariance, TrainerOptions::FlipperStrengthVarianceMinimum, TrainerOptions::FlipperStrengthVarianceMaximum, currentTimeMs);
+      ProcessMenuAction<int32_t>(menuAction, MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperStrengthSpreadType,
+         m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpread, TrainerOptions::FlipperStrengthSpreadMinimum, TrainerOptions::FlipperStrengthSpreadMaximum, currentTimeMs);
    }
    break;
-   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperStrengthVarianceType:
+   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperStrengthSpreadType:
    {
-      PrintScreenRecord::MenuTitleText("Flipper Strength Variance Mode");
+      PrintScreenRecord::MenuTitleText("Flipper Strength Spread Mode");
       PrintScreenRecord::MenuText(
-         m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow, "Above and Below");
+         m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpreadMode == TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveAndBelow, "Above & Below");
       PrintScreenRecord::MenuText(
-         m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly, "Above Only");
+         m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpreadMode == TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveOnly, "Above Only");
       PrintScreenRecord::MenuText(
-         m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly, "Below Only");
+         m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpreadMode == TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_BelowOnly, "Below Only");
 
       PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
-      std::vector<std::pair<std::string, std::string>> difficultyVarianceStatuses;
-      ShowDifficultyVarianceStatusFlipperStrength(player, difficultyVarianceStatuses, false);
-      ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
+      std::vector<std::pair<std::string, std::string>> difficultySpreadStatuses;
+      ShowDifficultySpreadStatusFlipperStrength(player, difficultySpreadStatuses, false);
+      ShowDifficultySpreadStatusesMenu(difficultySpreadStatuses);
 
-      switch (m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode)
+      switch (m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpreadMode)
       {
-      case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow:
+      case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveAndBelow:
          ShowSection(DescriptionSectionTitle,
             {
-               "Configures Flipper Strength Variance range to ['Variance Below', 'Variance Above']",
+               "Configures Flipper Strength Spread range to ['Spread Below', 'Spread Above']",
                "Plunger accepts configuration",
             });
          break;
-      case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly:
+      case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveOnly:
          ShowSection(DescriptionSectionTitle,
             {
-               "Configures Flipper Strength Variance range to ['Initial', 'Variance Above']",
+               "Configures Flipper Strength Spread range to ['Initial', 'Spread Above']",
                "Plunger accepts configuration",
             });
          break;
-      case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly:
+      case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_BelowOnly:
          ShowSection(DescriptionSectionTitle,
             {
-               "Configures Flipper Strength Variance range to ['Variance Below', 'Initial']",
+               "Configures Flipper Strength Spread range to ['Spread Below', 'Initial']",
                "Plunger accepts configuration",
             });
          break;
-      default: InvalidEnumValue("TrainerOptions::DifficultyVarianceModeType", m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode); break;
+      default: InvalidEnumValue("TrainerOptions::DifficultySpreadModeType", m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpreadMode); break;
       }
 
       switch (menuAction)
@@ -6696,80 +6765,80 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
          // do nothing
          break;
       case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
-         ProcessMenuChangeValueDec<TrainerOptions::DifficultyVarianceModeType>(
-            m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode, 0, TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_COUNT - 1);
+         ProcessMenuChangeValueDec<TrainerOptions::DifficultySpreadModeType>(
+            m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpreadMode, 0, TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_COUNT - 1);
          break;
       case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
-         ProcessMenuChangeValueInc<TrainerOptions::DifficultyVarianceModeType>(
-            m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode, 0, TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_COUNT - 1);
+         ProcessMenuChangeValueInc<TrainerOptions::DifficultySpreadModeType>(
+            m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpreadMode, 0, TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_COUNT - 1);
          break;
       case MenuOptionsRecord::MenuActionType::MenuActionType_Enter: m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyOptions; break;
       default: InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction); break;
       }
    }
    break;
-   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperFrictionVariance:
+   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperFrictionSpread:
    {
-      PrintScreenRecord::MenuTitleText("Flipper Friction Variance");
-      PrintScreenRecord::MenuText(false, "(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::FlipperFrictionVarianceMinimum, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVariance,
-         TrainerOptions::FlipperFrictionVarianceMaximum);
+      PrintScreenRecord::MenuTitleText("Flipper Friction Spread");
+      PrintScreenRecord::MenuText(false, "(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::FlipperFrictionSpreadMinimum, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpread,
+         TrainerOptions::FlipperFrictionSpreadMaximum);
 
       PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
-      std::vector<std::pair<std::string, std::string>> difficultyVarianceStatuses;
-      ShowDifficultyVarianceStatusFlipperFriction(player, difficultyVarianceStatuses, false);
-      ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
+      std::vector<std::pair<std::string, std::string>> difficultySpreadStatuses;
+      ShowDifficultySpreadStatusFlipperFriction(player, difficultySpreadStatuses, false);
+      ShowDifficultySpreadStatusesMenu(difficultySpreadStatuses);
 
       ShowSection(DescriptionSectionTitle,
-         { "Use flippers to set Flipper Friction Variance above/below 'Initial'", "'Current'/'Initial' provided for reference", "'Current' shows active table value",
+         { "Use flippers to set Flipper Friction Spread above/below 'Initial'", "'Current'/'Initial' provided for reference", "'Current' shows active table value",
             "'Initial' shows starting table value" });
 
-      ProcessMenuAction<int32_t>(menuAction, MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperFrictionVarianceType,
-         m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVariance, TrainerOptions::FlipperFrictionVarianceMinimum, TrainerOptions::FlipperFrictionVarianceMaximum, currentTimeMs);
+      ProcessMenuAction<int32_t>(menuAction, MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperFrictionSpreadType,
+         m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpread, TrainerOptions::FlipperFrictionSpreadMinimum, TrainerOptions::FlipperFrictionSpreadMaximum, currentTimeMs);
    }
    break;
-   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperFrictionVarianceType:
+   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyFlipperFrictionSpreadType:
    {
-      PrintScreenRecord::MenuTitleText("Flipper Friction Variance Mode");
+      PrintScreenRecord::MenuTitleText("Flipper Friction Spread Mode");
       PrintScreenRecord::MenuText(
-         m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow, "Above and Below");
+         m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpreadMode == TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveAndBelow, "Above & Below");
       PrintScreenRecord::MenuText(
-         m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly, "Above Only");
+         m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpreadMode == TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveOnly, "Above Only");
       PrintScreenRecord::MenuText(
-         m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode == TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly, "Below Only");
+         m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpreadMode == TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_BelowOnly, "Below Only");
 
       PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
-      std::vector<std::pair<std::string, std::string>> difficultyVarianceStatuses;
-      ShowDifficultyVarianceStatusFlipperFriction(player, difficultyVarianceStatuses, false);
-      ShowDifficultyVarianceStatusesMenu(difficultyVarianceStatuses);
+      std::vector<std::pair<std::string, std::string>> difficultySpreadStatuses;
+      ShowDifficultySpreadStatusFlipperFriction(player, difficultySpreadStatuses, false);
+      ShowDifficultySpreadStatusesMenu(difficultySpreadStatuses);
 
-      switch (m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode)
+      switch (m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpreadMode)
       {
-      case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveAndBelow:
+      case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveAndBelow:
          ShowSection(DescriptionSectionTitle,
             {
-               "Configures Flipper Friction Variance range to ['Variance Below', 'Variance Above']",
+               "Configures Flipper Friction Spread range to ['Spread Below', 'Spread Above']",
                "Plunger accepts configuration",
             });
          break;
-      case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_AboveOnly:
+      case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_AboveOnly:
          ShowSection(DescriptionSectionTitle,
             {
-               "Configures Flipper Friction Variance range to ['Initial', 'Variance Above']",
+               "Configures Flipper Friction Spread range to ['Initial', 'Spread Above']",
                "Plunger accepts configuration",
             });
          break;
-      case TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_BelowOnly:
+      case TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_BelowOnly:
          ShowSection(DescriptionSectionTitle,
             {
-               "Configures Flipper Friction Variance range to ['Variance Below', 'Initial']",
+               "Configures Flipper Friction Spread range to ['Spread Below', 'Initial']",
                "Plunger accepts configuration",
             });
          break;
-      default: InvalidEnumValue("TrainerOptions::DifficultyVarianceModeType", m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode); break;
+      default: InvalidEnumValue("TrainerOptions::DifficultySpreadModeType", m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpreadMode); break;
       }
 
       switch (menuAction)
@@ -6779,12 +6848,12 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
          // do nothing
          break;
       case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
-         ProcessMenuChangeValueDec<TrainerOptions::DifficultyVarianceModeType>(
-            m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode, 0, TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_COUNT - 1);
+         ProcessMenuChangeValueDec<TrainerOptions::DifficultySpreadModeType>(
+            m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpreadMode, 0, TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_COUNT - 1);
          break;
       case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
-         ProcessMenuChangeValueInc<TrainerOptions::DifficultyVarianceModeType>(
-            m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode, 0, TrainerOptions::DifficultyVarianceModeType::DifficultyVarianceModeType_COUNT - 1);
+         ProcessMenuChangeValueInc<TrainerOptions::DifficultySpreadModeType>(
+            m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpreadMode, 0, TrainerOptions::DifficultySpreadModeType::DifficultySpreadModeType_COUNT - 1);
          break;
       case MenuOptionsRecord::MenuActionType::MenuActionType_Enter: m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectDifficultyOptions; break;
       default: InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction); break;
@@ -6973,7 +7042,8 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       switch (menuAction)
       {
       case MenuOptionsRecord::MenuActionType::MenuActionType_None:
-         ProcessMenuChangeValueSkip<int32_t>(m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun, TrainerOptions::MaxSecondsPerRunMinimum, TrainerOptions::MaxSecondsPerRunMaximum, currentTimeMs);
+         ProcessMenuChangeValueSkip<int32_t>(
+            m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun, TrainerOptions::MaxSecondsPerRunMinimum, TrainerOptions::MaxSecondsPerRunMaximum, currentTimeMs);
          break;
       case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
          // do nothing
@@ -7430,8 +7500,8 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
             }
          }
 
-         PrintScreenRecord::Text("RunStartCountdown", 0.50f, 0.85f,
-            "<-- Run %zu (of %zu) starts in %.2f seconds -->", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_RunRecords.size(), secondsBeforeStart);
+         PrintScreenRecord::Text("RunStartCountdown", 0.50f, 0.85f, "<-- Run %zu (of %zu) starts in %.2f seconds -->", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1,
+            m_MenuOptions.m_TrainerOptions.m_RunRecords.size(), secondsBeforeStart);
          if (!m_MenuOptions.m_MenuError.empty())
          {
             PrintScreenRecord::ErrorText("%s", m_MenuOptions.m_MenuError.c_str());
@@ -7440,7 +7510,8 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
 
       player.m_renderer->m_trailForBalls = 0;
    }
-   else if (runElapsedTimeMs < ((m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * int32_t(OneSecondMs)) + (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * int32_t(OneSecondMs))))
+   else if (runElapsedTimeMs
+      < ((m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * int32_t(OneSecondMs)) + (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * int32_t(OneSecondMs))))
    {
       if (m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed != -1)
       {
@@ -7487,40 +7558,40 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
 
          if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord > 0)
          {
-            if (m_MenuOptions.m_TrainerOptions.m_GravityVariance > 0)
+            if (m_MenuOptions.m_TrainerOptions.m_GravitySpread > 0)
             {
                float currentGravity = 0.0f;
                player.m_ptable->get_Gravity(&currentGravity);
-               float newGravity = CalculateDifficultyVariance(player, m_MenuOptions.m_TrainerOptions.m_GravityInitial, currentGravity, m_MenuOptions.m_TrainerOptions.m_GravityVariance,
-                  m_MenuOptions.m_TrainerOptions.m_GravityVarianceMode);
+               float newGravity = CalculateDifficultySpread(player, m_MenuOptions.m_TrainerOptions.m_GravityInitial, currentGravity, m_MenuOptions.m_TrainerOptions.m_GravitySpread,
+                  m_MenuOptions.m_TrainerOptions.m_GravitySpreadMode, false);
 
                player.m_ptable->put_Gravity(newGravity);
             }
 
-            if (m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVariance > 0)
+            if (m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpread > 0)
             {
                float currentPlayfieldFriction = 0.0f;
                player.m_ptable->get_Friction(&currentPlayfieldFriction);
-               float newPlayfieldFriction = CalculateDifficultyVariance(player, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionInitial, currentPlayfieldFriction,
-                  m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVariance, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionVarianceMode);
+               float newPlayfieldFriction = CalculateDifficultySpread(player, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionInitial, currentPlayfieldFriction,
+                  m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpread, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpreadMode, false);
 
                player.m_ptable->put_Friction(newPlayfieldFriction);
             }
 
-            if (m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVariance > 0)
+            if (m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpread > 0)
             {
                float currentFlipperStrength = GetFlipperStrength();
-               float newFlipperStrength = CalculateDifficultyVariance(player, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthInitial, currentFlipperStrength,
-                  m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVariance, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthVarianceMode);
+               float newFlipperStrength = CalculateDifficultySpread(player, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthInitial, currentFlipperStrength,
+                  m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpread, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpreadMode, false);
 
                SetFlipperStrength(newFlipperStrength);
             }
 
-            if (m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVariance > 0)
+            if (m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpread > 0)
             {
                float currentFlipperFriction = GetFlipperFriction();
-               float newFlipperFriction = CalculateDifficultyVariance(player, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionInitial, currentFlipperFriction,
-                  m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVariance, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionVarianceMode);
+               float newFlipperFriction = CalculateDifficultySpread(player, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionInitial, currentFlipperFriction,
+                  m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpread, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpreadMode, false);
 
                SetFlipperFriction(newFlipperFriction);
             }
@@ -7978,7 +8049,8 @@ template <class T> void BallHistory::ProcessMenuChangeValueSkip(T& value, int32_
 }
 
 template <class T>
-void BallHistory::ProcessMenuAction(MenuOptionsRecord::MenuActionType menuAction, MenuOptionsRecord::MenuStateType enterMenuState, T& value, int32_t minimum, int32_t maximum, int currentTimeMs)
+void BallHistory::ProcessMenuAction(
+   MenuOptionsRecord::MenuActionType menuAction, MenuOptionsRecord::MenuStateType enterMenuState, T& value, int32_t minimum, int32_t maximum, int currentTimeMs)
 {
    switch (menuAction)
    {
@@ -8368,7 +8440,7 @@ void BallHistory::StopAllSounds()
    StopSound();
    for (size_t i = 0; i < g_pplayer->m_ptable->m_vsound.size(); i++)
       g_pplayer->m_audioPlayer->StopSound(g_pplayer->m_ptable->m_vsound[i]);
-   
+
    ::PlaySound(NULL, NULL, 0);
 }
 

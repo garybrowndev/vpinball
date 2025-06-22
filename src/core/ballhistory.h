@@ -156,19 +156,19 @@ public:
       DifficultyConfigModeState_Accept,
       DifficultyConfigModeState_GameplayDifficulty,
       DifficultyConfigModeState_VarianceDifficulty,
-      DifficultyConfigModeState_GravityVariance,
-      DifficultyConfigModeState_PlayfieldFrictionVariance,
-      DifficultyConfigModeState_FlipperStrengthVariance,
-      DifficultyConfigModeState_FlipperFrictionVariance,
+      DifficultyConfigModeState_GravitySpread,
+      DifficultyConfigModeState_PlayfieldFrictionSpread,
+      DifficultyConfigModeState_FlipperStrengthSpread,
+      DifficultyConfigModeState_FlipperFrictionSpread,
       DifficultyConfigModeState_COUNT
    };
 
-   enum DifficultyVarianceModeType
+   enum DifficultySpreadModeType
    {
-      DifficultyVarianceModeType_AboveAndBelow,
-      DifficultyVarianceModeType_AboveOnly,
-      DifficultyVarianceModeType_BelowOnly,
-      DifficultyVarianceModeType_COUNT
+      DifficultySpreadModeType_AboveAndBelow,
+      DifficultySpreadModeType_AboveOnly,
+      DifficultySpreadModeType_BelowOnly,
+      DifficultySpreadModeType_COUNT
    };
 
    enum RunOrderModeType
@@ -325,29 +325,29 @@ public:
    static const int32_t VarianceDifficultyMaximum = 100;
    int32_t m_VarianceDifficulty;
 
-   static const int32_t GravityVarianceMinimum = 0;
-   static const int32_t GravityVarianceMaximum = 500;
-   int32_t m_GravityVariance;
+   static const int32_t GravitySpreadMinimum = 0;
+   static const int32_t GravitySpreadMaximum = 500;
+   int32_t m_GravitySpread;
 
-   DifficultyVarianceModeType m_GravityVarianceMode;
+   DifficultySpreadModeType m_GravitySpreadMode;
 
-   static const int32_t PlayfieldFrictionVarianceMinimum = 0;
-   static const int32_t PlayfieldFrictionVarianceMaximum = 500;
-   int32_t m_PlayfieldFrictionVariance;
+   static const int32_t PlayfieldFrictionSpreadMinimum = 0;
+   static const int32_t PlayfieldFrictionSpreadMaximum = 500;
+   int32_t m_PlayfieldFrictionSpread;
 
-   DifficultyVarianceModeType m_PlayfieldFrictionVarianceMode;
+   DifficultySpreadModeType m_PlayfieldFrictionSpreadMode;
 
-   static const int32_t FlipperStrengthVarianceMinimum = 0;
-   static const int32_t FlipperStrengthVarianceMaximum = 500;
-   int32_t m_FlipperStrengthVariance;
+   static const int32_t FlipperStrengthSpreadMinimum = 0;
+   static const int32_t FlipperStrengthSpreadMaximum = 500;
+   int32_t m_FlipperStrengthSpread;
 
-   DifficultyVarianceModeType m_FlipperStrengthVarianceMode;
+   DifficultySpreadModeType m_FlipperStrengthSpreadMode;
 
-   static const int32_t FlipperFrictionVarianceMinimum = 0;
-   static const int32_t FlipperFrictionVarianceMaximum = 500;
-   int32_t m_FlipperFrictionVariance;
+   static const int32_t FlipperFrictionSpreadMinimum = 0;
+   static const int32_t FlipperFrictionSpreadMaximum = 500;
+   int32_t m_FlipperFrictionSpread;
 
-   DifficultyVarianceModeType m_FlipperFrictionVarianceMode;
+   DifficultySpreadModeType m_FlipperFrictionSpreadMode;
 
    static const int32_t TotalRunsMinimum = 1;
    static const int32_t TotalRunsMaximum = 100;
@@ -543,7 +543,7 @@ private:
       static ImFont *BoldLargeFont;
 
       static void ShowText(const char *name, ImFont *font, const ImU32 &fontColor, float positionX, float positionY, bool center, const char *str);
-      static void ShowNameValueTable(const char *name, ImFont *rowFont, const ImU32 &rowFontColor, ImFont *headerFont, const ImU32 &headerFontColor, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs, bool overflow, bool center);
+      static void ShowNameValueTable(const char *name, ImFont *rowFont, const ImU32 &rowFontColor, ImFont *headerFont, const ImU32 &headerFontColor, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs, bool overflow, bool center, float *calculatedTableWidth);
       static void TransformPosition(float &positionX, float &positionY);
       static void SetWindowPosClamped(const char * name, const ImVec2 &position, const ImVec2 &size, bool center);
    };
@@ -604,14 +604,14 @@ private:
          MenuStateType_Trainer_SelectDifficultyOptions,
          MenuStateType_Trainer_SelectDifficultyGameplayDifficulty,
          MenuStateType_Trainer_SelectDifficultyVarianceDifficulty,
-         MenuStateType_Trainer_SelectDifficultyGravityVariance,
-         MenuStateType_Trainer_SelectDifficultyGravityVarianceType,
-         MenuStateType_Trainer_SelectDifficultyPlayfieldFrictionVariance,
-         MenuStateType_Trainer_SelectDifficultyPlayfieldFrictionVarianceType,
-         MenuStateType_Trainer_SelectDifficultyFlipperStrengthVariance,
-         MenuStateType_Trainer_SelectDifficultyFlipperStrengthVarianceType,
-         MenuStateType_Trainer_SelectDifficultyFlipperFrictionVariance,
-         MenuStateType_Trainer_SelectDifficultyFlipperFrictionVarianceType,
+         MenuStateType_Trainer_SelectDifficultyGravitySpread,
+         MenuStateType_Trainer_SelectDifficultyGravitySpreadType,
+         MenuStateType_Trainer_SelectDifficultyPlayfieldFrictionSpread,
+         MenuStateType_Trainer_SelectDifficultyPlayfieldFrictionSpreadType,
+         MenuStateType_Trainer_SelectDifficultyFlipperStrengthSpread,
+         MenuStateType_Trainer_SelectDifficultyFlipperStrengthSpreadType,
+         MenuStateType_Trainer_SelectDifficultyFlipperFrictionSpread,
+         MenuStateType_Trainer_SelectDifficultyFlipperFrictionSpreadType,
          MenuStateType_Trainer_SelectTotalRuns,
          MenuStateType_Trainer_SelectRunOrderMode,
          MenuStateType_Trainer_SelectBallKickerBehaviorMode,
@@ -700,14 +700,14 @@ private:
    static const char *TrainerModeSettingsSectionName;
    static const char *TrainerModeGameplayDifficultyKeyName;
    static const char *TrainerModeVarianceDifficultyKeyName;
-   static const char *TrainerModeGravityVarianceKeyName;
-   static const char *TrainerModeGravityVarianceModeKeyName;
-   static const char *TrainerModePlayfieldFrictionVarianceKeyName;
-   static const char *TrainerModePlayfieldFrictionVarianceModeKeyName;
-   static const char *TrainerModeFlipperStrengthVarianceKeyName;
-   static const char *TrainerModeFlipperStrengthVarianceModeKeyName;
-   static const char *TrainerModeFlipperFrictionVarianceKeyName;
-   static const char *TrainerModeFlipperFrictionVarianceModeKeyName;
+   static const char *TrainerModeGravitySpreadKeyName;
+   static const char *TrainerModeGravitySpreadModeKeyName;
+   static const char *TrainerModePlayfieldFrictionSpreadKeyName;
+   static const char *TrainerModePlayfieldFrictionSpreadModeKeyName;
+   static const char *TrainerModeFlipperStrengthSpreadKeyName;
+   static const char *TrainerModeFlipperStrengthSpreadModeKeyName;
+   static const char *TrainerModeFlipperFrictionSpreadKeyName;
+   static const char *TrainerModeFlipperFrictionSpreadModeKeyName;
    static const char *TrainerModeTotalRunsKeyName;
    static const char *TrainerModeRunOrderModeKeyName;
    static const char *TrainerModeBallKickerBehaviorModeKeyName;
@@ -785,10 +785,10 @@ private:
    bool GetSettingsFolderPath(std::string &settingsFolderPath);
 
    void LoadSettings(Player &player);
-   void LoadSettingsDifficultyVariance(Player &player, CSimpleIni &iniFile, const char *sectionName, const char *varianceKeyName, int32_t &variance, const char *modeKeyName, TrainerOptions::DifficultyVarianceModeType &mode);
+   void LoadSettingsDifficultySpread(Player &player, CSimpleIni &iniFile, const char *sectionName, const char *spreadKeyName, int32_t &spread, const char *modeKeyName, TrainerOptions::DifficultySpreadModeType &mode);
    bool LoadSettingsGetValue(CSimpleIni &iniFile, const char *sectionName, const char *keyName, std::istringstream &value);
    void SaveSettings(Player &player);
-   void SaveSettingsDifficultyVariance(Player &player, CSimpleIni &iniFile, const char *sectionName, const char *varianceKeyName, int32_t variance, const char *modeKeyName, TrainerOptions::DifficultyVarianceModeType mode);
+   void SaveSettingsDifficultySpread(Player &player, CSimpleIni &iniFile, const char *sectionName, const char *spreadKeyName, int32_t spread, const char *modeKeyName, TrainerOptions::DifficultySpreadModeType mode);
    void InitBallsDecreased(Player &player);
    void InitBallsIncreased(Player &player);
    void InitControlVBalls(Player &player);
@@ -833,18 +833,18 @@ private:
    void ShowBallCorridorOptionsRecord(TrainerOptions::BallCorridorOptionsRecord &bcor);
    void ShowSection(const char *title, const std::vector<std::string> &description);
    void ShowDifficultyTableConstants(Player &player);
-   void ShowDifficultyVarianceStatusesMenu(std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses);
-   void ShowDifficultyVarianceMode(const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
-   void ShowDifficultyVarianceRange(const std::string &difficultyVarianceName, TrainerOptions::DifficultyVarianceModeType varianceMode, int32_t variance, float initial, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
-   void ShowDifficultyVarianceStatusAll(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
-   void ShowDifficultyVarianceStatusSingle(const std::string &name, float current, int32_t variance, float initial, TrainerOptions::DifficultyVarianceModeType mode, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
-   void ShowDifficultyVarianceStatusGravity(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
-   void ShowDifficultyVarianceStatusPlayfieldFriction(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
-   void ShowDifficultyVarianceStatusFlipperStrength(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
-   void ShowDifficultyVarianceStatusFlipperFriction(Player &player, std::vector<std::pair<std::string, std::string>> &difficultyVarianceStatuses, bool newlines);
+   void ShowDifficultySpreadStatusesMenu(std::vector<std::pair<std::string, std::string>> &difficultySpreadStatuses);
+   void ShowDifficultySpreadMode(TrainerOptions::DifficultySpreadModeType spreadMode, std::vector<std::pair<std::string, std::string>> &difficultySpreadStatuses, bool newlines);
+   void ShowDifficultySpreadRange(TrainerOptions::DifficultySpreadModeType spreadMode, int32_t spread, float initial, std::vector<std::pair<std::string, std::string>> &difficultySpreadStatuses, bool newlines);
+   void ShowDifficultySpreadStatusAll(Player &player, std::vector<std::pair<std::string, std::string>> &difficultySpreadStatuses, bool newlines);
+   void ShowDifficultySpreadStatusSingle(const std::string &name, float current, int32_t spread, float initial, TrainerOptions::DifficultySpreadModeType mode, std::vector<std::pair<std::string, std::string>> &difficultySpreadStatuses, bool newlines);
+   void ShowDifficultySpreadStatusGravity(Player &player, std::vector<std::pair<std::string, std::string>> &difficultySpreadStatuses, bool newlines);
+   void ShowDifficultySpreadStatusPlayfieldFriction(Player &player, std::vector<std::pair<std::string, std::string>> &difficultySpreadStatuses, bool newlines);
+   void ShowDifficultySpreadStatusFlipperStrength(Player &player, std::vector<std::pair<std::string, std::string>> &difficultySpreadStatuses, bool newlines);
+   void ShowDifficultySpreadStatusFlipperFriction(Player &player, std::vector<std::pair<std::string, std::string>> &difficultySpreadStatuses, bool newlines);
    void ShowResult(std::size_t total, std::vector<DWORD> &timesMs, const char *type, const char *subType, std::vector<std::pair<std::string, std::string>> &results);
    template <class T> float CalculateStandardDeviation(std::vector<T> &values);
-   float CalculateDifficultyVariance(Player &player, float initial, float current, int32_t variance, TrainerOptions::DifficultyVarianceModeType varianceMode);
+   float CalculateDifficultySpread(Player &player, float initial, float current, int32_t spread, TrainerOptions::DifficultySpreadModeType spreadMode, bool useRand);
    void InitBallStartOptionRecords();
    void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs);
    void ProcessMode(Player &player, int currentTimeMs);
