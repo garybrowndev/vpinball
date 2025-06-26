@@ -544,7 +544,8 @@ private:
       static const char *ImGuiActiveMenuLabel;
       static const char *ImGuiStatusLabel;
       static const char *ImGuiCurrentRunRecordLabel;
-      static const char *ImGuiErrorLabel;
+      static const char *ImGuiErrorTopLabel;
+      static const char *ImGuiErrorBottomLabel;
 
       static ImFont *NormalSmallFont;
       static ImFont *NormalMediumFont;
@@ -843,15 +844,16 @@ private:
    void ShowBallEndOptionsRecord(TrainerOptions::BallEndOptionsRecord &beor);
    void ShowBallCorridorOptionsRecord(TrainerOptions::BallCorridorOptionsRecord &bcor);
    void ShowSection(const char *title, const std::vector<std::string> &description);
-   void ShowGameplayDifficultyConfigValues(std::vector<std::pair<std::string, std::string>> &difficultySpreadConfig);
-   void ShowPhysicsVarianceSpreadConfigMode(TrainerOptions::PhysicsVarianceSpreadModeType spreadMode, std::vector<std::pair<std::string, std::string>> &physicsVarianceSpreadConfig, bool newlines);
-   void ShowPhysicsVarianceSpreadConfigRange(TrainerOptions::PhysicsVarianceSpreadModeType spreadMode, int32_t spread, float initial, std::vector<std::pair<std::string, std::string>> &physicsVarianceSpreadConfig, bool newlines);
-   void ShowPhysicsVarianceSpreadConfigAll(Player &player, std::vector<std::pair<std::string, std::string>> &PhysicsVarianceSpreadConfig, bool showPreview, bool newlines);
-   void ShowPhysicsVarianceSpreadConfigSingle(const std::string &name, float current, int32_t spread, float initial, TrainerOptions::PhysicsVarianceSpreadModeType mode, std::vector<std::pair<std::string, std::string>> &physicsVarianceSpreadConfig, bool showPreview, bool newlines);
-   void ShowPhysicsVarianceSpreadConfigGravity(Player &player, std::vector<std::pair<std::string, std::string>> &physicsVarianceSpreadConfig, bool showPreview, bool newlines);
-   void ShowPhysicsVarianceSpreadConfigPlayfieldFriction(Player &player, std::vector<std::pair<std::string, std::string>> &physicsVarianceSpreadConfig, bool showPreview, bool newlines);
-   void ShowPhysicsVarianceSpreadConfigFlipperStrength(Player &player, std::vector<std::pair<std::string, std::string>> &physicsVarianceSpreadConfig, bool showPreview, bool newlines);
-   void ShowPhysicsVarianceSpreadConfigFlipperFriction(Player &player, std::vector<std::pair<std::string, std::string>> &physicsVarianceSpreadConfig, bool showPreview, bool newlines);
+   void GetGameplayDifficultyConfigValues(std::vector<std::pair<std::string, std::string>> &difficultySpreadConfig);
+   void GetPhysicsVarianceVolatilityConfig(std::vector<std::pair<std::string, std::string>> &physicsVarianceVolatilityConfig);
+   void GetPhysicsVarianceSpreadConfigMode(TrainerOptions::PhysicsVarianceSpreadModeType spreadMode, std::vector<std::pair<std::string, std::string>> &physicsVarianceSpreadConfig, bool newlines);
+   void GetPhysicsVarianceSpreadConfigRange(TrainerOptions::PhysicsVarianceSpreadModeType spreadMode, int32_t spread, float initial, std::vector<std::pair<std::string, std::string>> &physicsVarianceSpreadConfig, bool newlines);
+   void GetPhysicsVarianceSpreadConfigAll(Player &player, std::vector<std::pair<std::string, std::string>> &PhysicsVarianceSpreadConfig, bool showPreview, bool newlines);
+   void GetPhysicsVarianceSpreadConfigSingle(const std::string &name, float current, int32_t spread, float initial, TrainerOptions::PhysicsVarianceSpreadModeType mode, std::vector<std::pair<std::string, std::string>> &physicsVarianceSpreadConfig, bool showPreview, bool newlines);
+   void GetPhysicsVarianceSpreadConfigGravity(Player &player, std::vector<std::pair<std::string, std::string>> &physicsVarianceSpreadConfig, bool showPreview, bool newlines);
+   void GetPhysicsVarianceSpreadConfigPlayfieldFriction(Player &player, std::vector<std::pair<std::string, std::string>> &physicsVarianceSpreadConfig, bool showPreview, bool newlines);
+   void GetPhysicsVarianceSpreadConfigFlipperStrength(Player &player, std::vector<std::pair<std::string, std::string>> &physicsVarianceSpreadConfig, bool showPreview, bool newlines);
+   void GetPhysicsVarianceSpreadConfigFlipperFriction(Player &player, std::vector<std::pair<std::string, std::string>> &physicsVarianceSpreadConfig, bool showPreview, bool newlines);
    void ShowResult(std::size_t total, std::vector<DWORD> &timesMs, const char *type, const char *subType, std::vector<std::pair<std::string, std::string>> &results);
    template <class T> float CalculateStandardDeviation(std::vector<T> &values);
    float CalculatePhysicsVarianceSpread(Player &player, float initial, float current, int32_t spread, TrainerOptions::PhysicsVarianceSpreadModeType spreadMode, bool useRand);

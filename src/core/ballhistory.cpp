@@ -331,7 +331,8 @@ const char* BallHistory::PrintScreenRecord::ImGuiProcessMenuLabel = "ProcessMenu
 const char* BallHistory::PrintScreenRecord::ImGuiActiveMenuLabel = "ActiveMenu";
 const char* BallHistory::PrintScreenRecord::ImGuiStatusLabel = "Status";
 const char* BallHistory::PrintScreenRecord::ImGuiCurrentRunRecordLabel = "CurrentRunRecord";
-const char* BallHistory::PrintScreenRecord::ImGuiErrorLabel = "Error";
+const char* BallHistory::PrintScreenRecord::ImGuiErrorTopLabel = "ErrorTop";
+const char* BallHistory::PrintScreenRecord::ImGuiErrorBottomLabel = "ErrorBottom";
 
 ImFont* BallHistory::PrintScreenRecord::NormalSmallFont = nullptr;
 ImFont* BallHistory::PrintScreenRecord::NormalMediumFont = nullptr;
@@ -439,7 +440,8 @@ void BallHistory::PrintScreenRecord::ErrorText(const char* format, ...)
    vsprintf_s(strBuffer, format, formatArgs);
 
    std::string tempStr = "!!!!! ERROR:" + std::string(strBuffer) + "!!!!!";
-   ShowText(ImGuiErrorLabel, BoldLargeFont, Color::Red, 0.50f, 0.50f, true, tempStr.c_str());
+   ShowText(ImGuiErrorTopLabel, BoldLargeFont, Color::Red, 0.50f, 0.10f, true, tempStr.c_str());
+   ShowText(ImGuiErrorBottomLabel, BoldLargeFont, Color::Red, 0.50f, 0.90f, true, tempStr.c_str());
 }
 
 void BallHistory::PrintScreenRecord::Results(const std::vector<std::pair<std::string, std::string>>& nameValuePairs)
@@ -601,7 +603,14 @@ void BallHistory::PrintScreenRecord::ShowNameValueTable(const char* name, ImFont
          ImGui::TableSetColumnIndex(0);
          ImGui::TextUnformatted(row.first.c_str());
          ImGui::TableSetColumnIndex(1);
-         ImGui::TextUnformatted(row.second.c_str());
+         if (row.second[0] == ' ')
+         {
+            ImGui::TextUnformatted(row.second.c_str() + 1);
+         }
+         else
+         {
+            ImGui::TextUnformatted(row.second.c_str());
+         }
 
          if (!calculatedTableWidth || *calculatedTableWidth > 0.0f)
          {
@@ -3202,13 +3211,13 @@ void BallHistory::ShowStatus(Player& player, int currentTimeMs)
       }
 
       statuses.push_back({ "Gameplay\nDifficulty", "" });
-      ShowGameplayDifficultyConfigValues(statuses);
+      GetGameplayDifficultyConfigValues(statuses);
 
       if (player.m_ptable->m_overridePhysics == 0)
       {
          statuses.push_back({ "Physics\nVariance", "" });
          statuses.push_back({ "Volatility", std::format("{}", m_MenuOptions.m_TrainerOptions.m_Volatility) });
-         ShowPhysicsVarianceSpreadConfigAll(player, statuses, true, true);
+         GetPhysicsVarianceSpreadConfigAll(player, statuses, true, true);
       }
       else
       {
@@ -3513,7 +3522,7 @@ void BallHistory::ShowBallCorridorOptionsRecord(TrainerOptions::BallCorridorOpti
    PrintScreenRecord::MenuText(false, "Opening Right = %.2f,%.2f,%.2f (x,y,z)", bcor.m_OpeningPositionRight.x, bcor.m_OpeningPositionRight.y, bcor.m_OpeningPositionRight.z);
 }
 
-void BallHistory::ShowGameplayDifficultyConfigValues(std::vector<std::pair<std::string, std::string>> &difficultySpreadConfig)
+void BallHistory::GetGameplayDifficultyConfigValues(std::vector<std::pair<std::string, std::string>> &difficultySpreadConfig)
 {
    if (m_MenuOptions.m_TrainerOptions.m_GameplayDifficulty == TrainerOptions::GameplayDifficultyDisabled)
    {
@@ -3536,7 +3545,12 @@ void BallHistory::ShowSection(const char* title, const std::vector<std::string>&
    }
 }
 
-void BallHistory::ShowPhysicsVarianceSpreadConfigMode(TrainerOptions::PhysicsVarianceSpreadModeType spreadMode, std::vector<std::pair<std::string, std::string>>& physicsVarianceSpreadConfig, bool newlines)
+void BallHistory::GetPhysicsVarianceVolatilityConfig(std::vector<std::pair<std::string, std::string>> &physicsVarianceVolatilityConfig)
+{
+   physicsVarianceVolatilityConfig.push_back({ "Volatility", std::format("{}", m_MenuOptions.m_TrainerOptions.m_Volatility) });
+}
+
+void BallHistory::GetPhysicsVarianceSpreadConfigMode(TrainerOptions::PhysicsVarianceSpreadModeType spreadMode, std::vector<std::pair<std::string, std::string>>& physicsVarianceSpreadConfig, bool newlines)
 {
    std::string separator = newlines ? "\n" : " ";
    switch (spreadMode)
@@ -3557,7 +3571,7 @@ void BallHistory::ShowPhysicsVarianceSpreadConfigMode(TrainerOptions::PhysicsVar
    }
 }
 
-void BallHistory::ShowPhysicsVarianceSpreadConfigRange(TrainerOptions::PhysicsVarianceSpreadModeType spreadMode, int32_t spread, float initial, std::vector<std::pair<std::string, std::string>>& physicsVarianceSpreadConfig, bool newlines)
+void BallHistory::GetPhysicsVarianceSpreadConfigRange(TrainerOptions::PhysicsVarianceSpreadModeType spreadMode, int32_t spread, float initial, std::vector<std::pair<std::string, std::string>>& physicsVarianceSpreadConfig, bool newlines)
 {
    std::string valueSeparator = newlines ? "\n" : ",";
    float spreadDiff = initial * (spread / 100.0f);
@@ -3582,23 +3596,23 @@ void BallHistory::ShowPhysicsVarianceSpreadConfigRange(TrainerOptions::PhysicsVa
    }
 }
 
-void BallHistory::ShowPhysicsVarianceSpreadConfigAll(Player& player, std::vector<std::pair<std::string, std::string>>& physicsVarianceSpreadConfig, bool showPreview, bool newlines)
+void BallHistory::GetPhysicsVarianceSpreadConfigAll(Player& player, std::vector<std::pair<std::string, std::string>>& physicsVarianceSpreadConfig, bool showPreview, bool newlines)
 {
-   ShowPhysicsVarianceSpreadConfigGravity(player, physicsVarianceSpreadConfig, showPreview, newlines);
-   ShowPhysicsVarianceSpreadConfigPlayfieldFriction(player, physicsVarianceSpreadConfig, showPreview, newlines);
-   ShowPhysicsVarianceSpreadConfigFlipperStrength(player, physicsVarianceSpreadConfig, showPreview, newlines);
-   ShowPhysicsVarianceSpreadConfigFlipperFriction(player, physicsVarianceSpreadConfig, showPreview, newlines);
+   GetPhysicsVarianceSpreadConfigGravity(player, physicsVarianceSpreadConfig, showPreview, newlines);
+   GetPhysicsVarianceSpreadConfigPlayfieldFriction(player, physicsVarianceSpreadConfig, showPreview, newlines);
+   GetPhysicsVarianceSpreadConfigFlipperStrength(player, physicsVarianceSpreadConfig, showPreview, newlines);
+   GetPhysicsVarianceSpreadConfigFlipperFriction(player, physicsVarianceSpreadConfig, showPreview, newlines);
 }
 
-void BallHistory::ShowPhysicsVarianceSpreadConfigSingle(const std::string& name, float current, int32_t spread, float initial, TrainerOptions::PhysicsVarianceSpreadModeType mode,
+void BallHistory::GetPhysicsVarianceSpreadConfigSingle(const std::string& name, float current, int32_t spread, float initial, TrainerOptions::PhysicsVarianceSpreadModeType mode,
    std::vector<std::pair<std::string, std::string>>& physicsVarianceSpreadConfig, bool showPreview, bool newlines)
 {
    physicsVarianceSpreadConfig.push_back({ name, std::format(" {} (default)", FormatFloat(initial)) });
    physicsVarianceSpreadConfig.push_back({ "Spread", std::format("{}%", spread) });
-   ShowPhysicsVarianceSpreadConfigMode(mode, physicsVarianceSpreadConfig, newlines);
-   ShowPhysicsVarianceSpreadConfigRange(mode, spread, initial, physicsVarianceSpreadConfig, newlines);
+   GetPhysicsVarianceSpreadConfigMode(mode, physicsVarianceSpreadConfig, newlines);
+   GetPhysicsVarianceSpreadConfigRange(mode, spread, initial, physicsVarianceSpreadConfig, newlines);
 
-   float difference = std::abs(CalculatePhysicsVarianceSpread(*g_pplayer, initial, initial, spread, mode, true) - initial);
+   float difference = CalculatePhysicsVarianceSpread(*g_pplayer, initial, initial, spread, mode, true) - initial;
    std::string directionStr;
    if (difference == 0)
    {
@@ -3616,7 +3630,7 @@ void BallHistory::ShowPhysicsVarianceSpreadConfigSingle(const std::string& name,
    {
       directionStr = "-";
    }
-   physicsVarianceSpreadConfig.push_back({ "Current (+/-)", std::format("{} ({}{})", FormatFloat(current), directionStr, FormatFloat(difference)) });
+   physicsVarianceSpreadConfig.push_back({ "Current (+/-)", std::format("{} ({}{})", FormatFloat(current), directionStr, FormatFloat(std::abs(difference))) });
 
    if (showPreview)
    {
@@ -3646,33 +3660,33 @@ void BallHistory::ShowPhysicsVarianceSpreadConfigSingle(const std::string& name,
    }
 }
 
-void BallHistory::ShowPhysicsVarianceSpreadConfigGravity(Player& player, std::vector<std::pair<std::string, std::string>>& physicsVarianceSpreadConfig, bool showPreview, bool newlines)
+void BallHistory::GetPhysicsVarianceSpreadConfigGravity(Player& player, std::vector<std::pair<std::string, std::string>>& physicsVarianceSpreadConfig, bool showPreview, bool newlines)
 {
    float gravityCurrent = 0.0f;
    player.m_ptable->get_Gravity(&gravityCurrent);
-   ShowPhysicsVarianceSpreadConfigSingle("Gravity", gravityCurrent, m_MenuOptions.m_TrainerOptions.m_GravitySpread, m_MenuOptions.m_TrainerOptions.m_GravityTableDefault,
+   GetPhysicsVarianceSpreadConfigSingle("Gravity", gravityCurrent, m_MenuOptions.m_TrainerOptions.m_GravitySpread, m_MenuOptions.m_TrainerOptions.m_GravityTableDefault,
       m_MenuOptions.m_TrainerOptions.m_GravitySpreadMode, physicsVarianceSpreadConfig, showPreview, newlines);
 }
 
-void BallHistory::ShowPhysicsVarianceSpreadConfigPlayfieldFriction(Player& player, std::vector<std::pair<std::string, std::string>>& physicsVarianceSpreadConfig, bool showPreview, bool newlines)
+void BallHistory::GetPhysicsVarianceSpreadConfigPlayfieldFriction(Player& player, std::vector<std::pair<std::string, std::string>>& physicsVarianceSpreadConfig, bool showPreview, bool newlines)
 {
    float playfieldFrictionCurrent = 0.0f;
    player.m_ptable->get_Friction(&playfieldFrictionCurrent);
-   ShowPhysicsVarianceSpreadConfigSingle("Playfield Friction", playfieldFrictionCurrent, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpread,
+   GetPhysicsVarianceSpreadConfigSingle("Playfield Friction", playfieldFrictionCurrent, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpread,
       m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionTableDefault, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpreadMode, physicsVarianceSpreadConfig, showPreview, newlines);
 }
 
-void BallHistory::ShowPhysicsVarianceSpreadConfigFlipperStrength(Player& player, std::vector<std::pair<std::string, std::string>>& physicsVarianceSpreadConfig, bool showPreview, bool newlines)
+void BallHistory::GetPhysicsVarianceSpreadConfigFlipperStrength(Player& player, std::vector<std::pair<std::string, std::string>>& physicsVarianceSpreadConfig, bool showPreview, bool newlines)
 {
    float flipperStrengthCurrent = GetFlipperStrength();
-   ShowPhysicsVarianceSpreadConfigSingle("Flipper Strength", flipperStrengthCurrent, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpread,
+   GetPhysicsVarianceSpreadConfigSingle("Flipper Strength", flipperStrengthCurrent, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpread,
       m_MenuOptions.m_TrainerOptions.m_FlipperStrengthTableDefault, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpreadMode, physicsVarianceSpreadConfig, showPreview, newlines);
 }
 
-void BallHistory::ShowPhysicsVarianceSpreadConfigFlipperFriction(Player& player, std::vector<std::pair<std::string, std::string>>& physicsVarianceSpreadConfig, bool showPreview, bool newlines)
+void BallHistory::GetPhysicsVarianceSpreadConfigFlipperFriction(Player& player, std::vector<std::pair<std::string, std::string>>& physicsVarianceSpreadConfig, bool showPreview, bool newlines)
 {
    float flipperFrictionCurrent = GetFlipperFriction();
-   ShowPhysicsVarianceSpreadConfigSingle("Flipper Friction", flipperFrictionCurrent, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpread,
+   GetPhysicsVarianceSpreadConfigSingle("Flipper Friction", flipperFrictionCurrent, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpread,
       m_MenuOptions.m_TrainerOptions.m_FlipperFrictionTableDefault, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpreadMode, physicsVarianceSpreadConfig, showPreview, newlines);
 }
 
@@ -4524,7 +4538,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
          PrintScreenRecord::MenuTitleText("Current Configuration");
 
          std::vector<std::pair<std::string, std::string>> gameplayDifficultyConfig;
-         ShowGameplayDifficultyConfigValues(gameplayDifficultyConfig);
+         GetGameplayDifficultyConfigValues(gameplayDifficultyConfig);
          PrintScreenRecord::Results(gameplayDifficultyConfig);
 
          ShowSection(DescriptionSectionTitle,
@@ -4539,15 +4553,14 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
          PrintScreenRecord::MenuTitleText("Current Configuration");
          if (player.m_ptable->m_overridePhysics)
          {
-            PrintScreenRecord::MenuText(false, "TODO GARY DESCRIPTION CANNOT DO PHYSICS VARIANCE");
+            PrintScreenRecord::MenuText(false, "Physics Variance disabled");
+            PrintScreenRecord::MenuText(false, "Physics overidden by Global Set");
          }
          else
          {
             std::vector<std::pair<std::string, std::string>> physicsVarianceConfig;
-
-            physicsVarianceConfig.push_back({ "Volatility", std::format("{}", m_MenuOptions.m_TrainerOptions.m_Volatility) });
-
-            ShowPhysicsVarianceSpreadConfigAll(player, physicsVarianceConfig, false, false);
+            GetPhysicsVarianceVolatilityConfig(physicsVarianceConfig);
+            GetPhysicsVarianceSpreadConfigAll(player, physicsVarianceConfig, false, false);
             PrintScreenRecord::Results(physicsVarianceConfig);
 
             ShowSection(DescriptionSectionTitle,
@@ -4726,7 +4739,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
             }
             else
             {
-               m_MenuOptions.m_MenuError = "TODO GARY DESCRIPTION CANNOT DO PHYSICS VARIANCE";
+               m_MenuOptions.m_MenuError = "Physics Variance disabled because Physics overidden by Global Set";
             }
             break;
          case TrainerOptions::ConfigModeStateType::ConfigModeStateType_TotalRuns:
@@ -6848,7 +6861,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
       std::vector<std::pair<std::string, std::string>> gameplayDifficultyConfig;
-      ShowGameplayDifficultyConfigValues(gameplayDifficultyConfig);
+      GetGameplayDifficultyConfigValues(gameplayDifficultyConfig);
       PrintScreenRecord::Results(gameplayDifficultyConfig);
 
       bool acceptMode = m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyConfigModeState == TrainerOptions::GameplayDifficultyConfigModeState::GameplayDifficultyConfigModeState_Accept;
@@ -6936,7 +6949,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuTitleText("Current Configuration");
       std::vector<std::pair<std::string, std::string>> gameplayDifficultyConfig;
-      ShowGameplayDifficultyConfigValues(gameplayDifficultyConfig);
+      GetGameplayDifficultyConfigValues(gameplayDifficultyConfig);
       PrintScreenRecord::Results(gameplayDifficultyConfig);
 
       ShowSection(DescriptionSectionTitle,
@@ -6963,7 +6976,9 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
       std::vector<std::pair<std::string, std::string>> physicsVarianceConfig;
+      std::vector<std::string> descriptions;
       bool acceptMode = m_MenuOptions.m_TrainerOptions.m_PhysicsVarianceConfigModeState == TrainerOptions::PhysicsVarianceConfigModeState::PhysicsVarianceConfigModeState_Accept;
+      bool volatilityMode = m_MenuOptions.m_TrainerOptions.m_PhysicsVarianceConfigModeState == TrainerOptions::PhysicsVarianceConfigModeState::PhysicsVarianceConfigModeState_Volatility;
       switch (m_MenuOptions.m_TrainerOptions.m_PhysicsVarianceConfigModeState)
       {
       // default at beginning due to purposeful fall through
@@ -6973,78 +6988,95 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       case TrainerOptions::PhysicsVarianceConfigModeState::PhysicsVarianceConfigModeState_Accept:
          // purposeful fall through
       case TrainerOptions::PhysicsVarianceConfigModeState::PhysicsVarianceConfigModeState_Volatility:
-         physicsVarianceConfig.push_back({ "Volatility", std::format("{}", m_MenuOptions.m_TrainerOptions.m_Volatility) });
+         GetPhysicsVarianceVolatilityConfig(physicsVarianceConfig);
          if (!acceptMode)
          {
-            ShowSection(DescriptionSectionTitle,
+            descriptions = 
             {
                "Volatility controls speed of variance within specified range",
                "Lowering/Raising causes slow/fast variance between baseline and target range"
-            });
-            break;
+            };
+            // purposeful fall through
          }
       case TrainerOptions::PhysicsVarianceConfigModeState::PhysicsVarianceConfigModeState_GravitySpread:
-         ShowPhysicsVarianceSpreadConfigGravity(player, physicsVarianceConfig, !acceptMode, false);
+         GetPhysicsVarianceSpreadConfigGravity(player, physicsVarianceConfig, !acceptMode, false);
 
          if (!acceptMode)
          {
-            ShowSection(DescriptionSectionTitle,
+            if (!volatilityMode)
             {
-               "Gravity Spread sets range above/below 'Table Default'",
-               "'Current'/'Table Default' provided for reference",
-               "'Current' shows active table value"
-            });
-            break;
+               descriptions = 
+               {
+                  "Gravity Spread sets range above/below 'Table Default'",
+                  "'Current'/'Table Default' provided for reference",
+                  "'Current' shows active table value"
+               };
+               break;
+            }
+            // purposeful fall through
          }
       case TrainerOptions::PhysicsVarianceConfigModeState::PhysicsVarianceConfigModeState_PlayfieldFrictionSpread:
-         ShowPhysicsVarianceSpreadConfigPlayfieldFriction(player, physicsVarianceConfig, !acceptMode, false);
+         GetPhysicsVarianceSpreadConfigPlayfieldFriction(player, physicsVarianceConfig, !acceptMode, false);
 
          if (!acceptMode)
          {
-            ShowSection(DescriptionSectionTitle,
+            if (!volatilityMode)
             {
-               "Playfield Friction Spread sets range above/below 'Table Default'",
-               "'Current'/'Table Default' provided for reference",
-               "'Current' shows active table value"
-            });
-            break;
+               descriptions = 
+               {
+                  "Playfield Friction Spread sets range above/below 'Table Default'",
+                  "'Current'/'Table Default' provided for reference",
+                  "'Current' shows active table value"
+               };
+               break;
+            }
+            // purposeful fall through
          }
       case TrainerOptions::PhysicsVarianceConfigModeState::PhysicsVarianceConfigModeState_FlipperStrengthSpread:
-         ShowPhysicsVarianceSpreadConfigFlipperStrength(player, physicsVarianceConfig, !acceptMode, false);
+         GetPhysicsVarianceSpreadConfigFlipperStrength(player, physicsVarianceConfig, !acceptMode, false);
 
          if (!acceptMode)
          {
-            ShowSection(DescriptionSectionTitle,
+            if (!volatilityMode)
             {
-               "Flipper Strength Spread sets range above/below 'Table Default'",
-               "'Current'/'Table Default' provided for reference",
-               "'Current' shows active table value"
-            });
-            break;
+               descriptions = 
+               {
+                  "Flipper Strength Spread sets range above/below 'Table Default'",
+                  "'Current'/'Table Default' provided for reference",
+                  "'Current' shows active table value"
+               };
+               break;
+            }
+            // purposeful fall through
          }
       case TrainerOptions::PhysicsVarianceConfigModeState::PhysicsVarianceConfigModeState_FlipperFrictionSpread:
-         ShowPhysicsVarianceSpreadConfigFlipperFriction(player, physicsVarianceConfig, !acceptMode, false);
+         GetPhysicsVarianceSpreadConfigFlipperFriction(player, physicsVarianceConfig, !acceptMode, false);
 
          if (!acceptMode)
          {
-            ShowSection(DescriptionSectionTitle,
+            if (!volatilityMode)
             {
-               "Flipper Friction Spread sets range above/below 'Table Default'",
-               "'Current'/'Table Default' provided for reference",
-               "'Current' shows active table value"
-            });
-            break;
+               descriptions = 
+               {
+                  "Flipper Friction Spread sets range above/below 'Table Default'",
+                  "'Current'/'Table Default' provided for reference",
+                  "'Current' shows active table value"
+               };
+               break;
+            }
+            // purposeful fall through
          }
       }
 
       PrintScreenRecord::Results(physicsVarianceConfig);
-
+      
       if (acceptMode)
       {
-         ShowSection(DescriptionSectionTitle,
-         {
-            "Accept current configuration"
-         });
+         ShowSection(DescriptionSectionTitle, { "Accept current configuration" });
+      }
+      else
+      {
+         ShowSection(DescriptionSectionTitle, descriptions);
       }
 
       switch (menuAction)
@@ -7103,22 +7135,25 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
    }
    break;
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectPhysicsVarianceVolatility:
+   {
       PrintScreenRecord::MenuTitleText("Volatility");
       PrintScreenRecord::MenuText(false, "(minimum)%d <-- %d --> %d(maximum)", TrainerOptions::VolatilityMinimum, m_MenuOptions.m_TrainerOptions.m_Volatility,
          TrainerOptions::VolatilityMaximum);
 
       PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuTitleText("Current Configuration");
-      PrintScreenRecord::Results(
-      {
-         { "Volatility", std::format("{}", m_MenuOptions.m_TrainerOptions.m_Volatility) }
-      });
+      
+      std::vector<std::pair<std::string, std::string>> physicsVarianceConfig;
+      GetPhysicsVarianceVolatilityConfig(physicsVarianceConfig);
+      GetPhysicsVarianceSpreadConfigAll(player, physicsVarianceConfig, true, false);
+      PrintScreenRecord::Results(physicsVarianceConfig);
 
       ShowSection(DescriptionSectionTitle, { "Volatility controls speed of variation", "Lowering/Raising causes variance to move slower/faster along range" });
 
       ProcessMenuAction<int32_t>(menuAction, MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectPhysicsVarianceOptions, m_MenuOptions.m_TrainerOptions.m_Volatility,
          TrainerOptions::VolatilityMinimum, TrainerOptions::VolatilityMaximum, currentTimeMs);
-      break;
+   }
+   break;
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectPhysicsVarianceGravitySpread:
    {
       PrintScreenRecord::MenuTitleText("Gravity Spread");
@@ -7128,9 +7163,9 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
-      std::vector<std::pair<std::string, std::string>> physicsVarianceSpreadConfig;
-      ShowPhysicsVarianceSpreadConfigGravity(player, physicsVarianceSpreadConfig, true, false);
-      PrintScreenRecord::Results(physicsVarianceSpreadConfig);
+      std::vector<std::pair<std::string, std::string>> physicsVarianceSpreadConfigGravity;
+      GetPhysicsVarianceSpreadConfigGravity(player, physicsVarianceSpreadConfigGravity, true, false);
+      PrintScreenRecord::Results(physicsVarianceSpreadConfigGravity);
 
       ShowSection(DescriptionSectionTitle,
       {
@@ -7154,9 +7189,9 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
-      std::vector<std::pair<std::string, std::string>> physicsVarianceSpreadConfig;
-      ShowPhysicsVarianceSpreadConfigGravity(player, physicsVarianceSpreadConfig, true, false);
-      PrintScreenRecord::Results(physicsVarianceSpreadConfig);
+      std::vector<std::pair<std::string, std::string>> physicsVarianceSpreadConfigGravity;
+      GetPhysicsVarianceSpreadConfigGravity(player, physicsVarianceSpreadConfigGravity, true, false);
+      PrintScreenRecord::Results(physicsVarianceSpreadConfigGravity);
 
       switch (m_MenuOptions.m_TrainerOptions.m_GravitySpreadMode)
       {
@@ -7216,9 +7251,9 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
-      std::vector<std::pair<std::string, std::string>> physicsVarianceSpreadConfig;
-      ShowPhysicsVarianceSpreadConfigPlayfieldFriction(player, physicsVarianceSpreadConfig, true, false);
-      PrintScreenRecord::Results(physicsVarianceSpreadConfig);
+      std::vector<std::pair<std::string, std::string>> physicsVarianceSpreadConfigPlayfieldFriction;
+      GetPhysicsVarianceSpreadConfigPlayfieldFriction(player, physicsVarianceSpreadConfigPlayfieldFriction, true, false);
+      PrintScreenRecord::Results(physicsVarianceSpreadConfigPlayfieldFriction);
 
       ShowSection(DescriptionSectionTitle,
       {
@@ -7244,9 +7279,9 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
-      std::vector<std::pair<std::string, std::string>> physicsVarianceSpreadConfig;
-      ShowPhysicsVarianceSpreadConfigPlayfieldFriction(player, physicsVarianceSpreadConfig, true, false);
-      PrintScreenRecord::Results(physicsVarianceSpreadConfig);
+      std::vector<std::pair<std::string, std::string>> physicsVarianceSpreadConfigPlayfieldFriction;
+      GetPhysicsVarianceSpreadConfigPlayfieldFriction(player, physicsVarianceSpreadConfigPlayfieldFriction, true, false);
+      PrintScreenRecord::Results(physicsVarianceSpreadConfigPlayfieldFriction);
 
       switch (m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpreadMode)
       {
@@ -7306,9 +7341,9 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
-      std::vector<std::pair<std::string, std::string>> physicsVarianceSpreadConfig;
-      ShowPhysicsVarianceSpreadConfigFlipperStrength(player, physicsVarianceSpreadConfig, true, false);
-      PrintScreenRecord::Results(physicsVarianceSpreadConfig);
+      std::vector<std::pair<std::string, std::string>> physicsVarianceSpreadConfigFlipperStrength;
+      GetPhysicsVarianceSpreadConfigFlipperStrength(player, physicsVarianceSpreadConfigFlipperStrength, true, false);
+      PrintScreenRecord::Results(physicsVarianceSpreadConfigFlipperStrength);
 
       ShowSection(DescriptionSectionTitle,
       {
@@ -7334,9 +7369,9 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
-      std::vector<std::pair<std::string, std::string>> physicsVarianceSpreadConfig;
-      ShowPhysicsVarianceSpreadConfigFlipperStrength(player, physicsVarianceSpreadConfig, true, false);
-      PrintScreenRecord::Results(physicsVarianceSpreadConfig);
+      std::vector<std::pair<std::string, std::string>> physicsVarianceSpreadConfigFlipperStrength;
+      GetPhysicsVarianceSpreadConfigFlipperStrength(player, physicsVarianceSpreadConfigFlipperStrength, true, false);
+      PrintScreenRecord::Results(physicsVarianceSpreadConfigFlipperStrength);
 
       switch (m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpreadMode)
       {
@@ -7396,9 +7431,9 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
-      std::vector<std::pair<std::string, std::string>> physicsVarianceSpreadConfig;
-      ShowPhysicsVarianceSpreadConfigFlipperFriction(player, physicsVarianceSpreadConfig, true, false);
-      PrintScreenRecord::Results(physicsVarianceSpreadConfig);
+      std::vector<std::pair<std::string, std::string>> physicsVarianceSpreadConfigFlipperFriction;
+      GetPhysicsVarianceSpreadConfigFlipperFriction(player, physicsVarianceSpreadConfigFlipperFriction, true, false);
+      PrintScreenRecord::Results(physicsVarianceSpreadConfigFlipperFriction);
 
       ShowSection(DescriptionSectionTitle,
       {
@@ -7424,9 +7459,9 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       PrintScreenRecord::MenuText(false, "");
       PrintScreenRecord::MenuTitleText("Current Configuration");
 
-      std::vector<std::pair<std::string, std::string>> physicsVarianceSpreadConfig;
-      ShowPhysicsVarianceSpreadConfigFlipperFriction(player, physicsVarianceSpreadConfig, true, false);
-      PrintScreenRecord::Results(physicsVarianceSpreadConfig);
+      std::vector<std::pair<std::string, std::string>> physicsVarianceSpreadConfigFlipperFriction;
+      GetPhysicsVarianceSpreadConfigFlipperFriction(player, physicsVarianceSpreadConfigFlipperFriction, true, false);
+      PrintScreenRecord::Results(physicsVarianceSpreadConfigFlipperFriction);
 
       switch (m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpreadMode)
       {
