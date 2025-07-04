@@ -532,18 +532,11 @@ private:
       static void Init();
       static void UnInit();
       static void TransformAspectRatio(float &positionX, float &positionY);
-
       static void Text(const char *name, float positionX, float positionY, const std::string &message);
       static void MenuTitleText(const std::string &message);
       static void MenuText(bool selected, const std::string &message);
       static void ActiveMenuText(const std::string &message);
       static void ErrorText(const std::string &message);
-
-      static void Text(const char *name, float positionX, float positionY, const char *format, ...);
-      static void MenuTitleText(const char *format, ...);
-      static void MenuText(bool selected, const char *format, ...);
-      static void ActiveMenuText(const char *format, ...);
-      static void ErrorText(const char *format, ...);
       static void Results(const std::vector<std::pair<std::string, std::string>> &nameValuePairs);
       static void Status(const std::vector<std::pair<std::string, std::string>> &nameValuePairs);
       static void ActiveMenu(const std::vector<std::pair<std::string, std::string>> &nameValuePairs);
@@ -562,7 +555,7 @@ private:
       static ImFont *BoldMediumFont;
       static ImFont *BoldLargeFont;
 
-      static void ShowText(const char *name, ImFont *font, const ImU32 &fontColor, float positionX, float positionY, bool center, const char *str);
+      static void ShowText(const char *name, ImFont *font, const ImU32 &fontColor, float positionX, float positionY, bool center, const std::string &message);
       static void ShowNameValueTable(const char *name, ImFont *rowFont, const ImU32 &rowFontColor, ImFont *headerFont, const ImU32 &headerFontColor, float positionX, float positionY, const std::vector<std::pair<std::string, std::string>> &nameValuePairs, bool overflow, bool center, float *calculatedTableWidth);
       static void TransformPosition(float &positionX, float &positionY);
       static void SetWindowPosClamped(const char * name, const ImVec2 &position, const ImVec2 &size, bool center);
@@ -819,12 +812,12 @@ private:
    void ControlPrev();
    void ResetBallHistoryRenderSizes();
    void DrawBallHistory(Player &player);
-   void DrawFakeBall(Player &player, const char * name, const Vertex3Ds &m_pos, float radius, DWORD color);
-   void DrawFakeBall(Player &player, const char * name, Vertex3Ds &position, float radius, DWORD color, const Vertex3Ds *lineEndPosition, DWORD lineColor, int lineThickness);
-   void DrawFakeBall(Player &player, const char * name, Vertex3Ds &position, DWORD color, const Vertex3Ds *lineEndPosition, DWORD lineColor, int lineThickness);
+   void DrawFakeBall(Player &player, const std::string& name, const Vertex3Ds &m_pos, float radius, DWORD color);
+   void DrawFakeBall(Player &player, const std::string& name, Vertex3Ds &position, float radius, DWORD color, const Vertex3Ds *lineEndPosition, DWORD lineColor, int lineThickness);
+   void DrawFakeBall(Player &player, const std::string& name, Vertex3Ds &position, DWORD color, const Vertex3Ds *lineEndPosition, DWORD lineColor, int lineThickness);
    void DrawLineRotate(Rubber &drawnLine, const Vertex3Ds& center, const Vertex3Ds& start, const Vertex3Ds& end);
-   void DrawLine(Player &player, const char * name, const Vertex3Ds &positionA, const Vertex3Ds &positionB, DWORD color, int thickness);
-   void DrawIntersectionCircle(Player &player, const char * name, Vertex3Ds &position, float intersectionRadius, DWORD color);
+   void DrawLine(Player &player, const std::string& name, const Vertex3Ds &positionA, const Vertex3Ds &positionB, DWORD color, int thickness);
+   void DrawIntersectionCircle(Player &player, const std::string& name, Vertex3Ds &position, float intersectionRadius, DWORD color);
    void DrawNormalModeVisuals(Player &player, int currentTimeMs);
    void ClearDraws(Player &player);
    bool ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs);
@@ -922,7 +915,7 @@ private:
    void CenterMouse(Player &player);
 
    void InvalidEnumValue(const char *enumName, const int enumValue);
-   void InvalidEnumValue(const char *enumName, const char *enumValue);
+   void InvalidEnumValue(const char *enumName, const std::string& enumValue);
 
    void PlaySound(UINT rcId, bool async = false);
    void StopSound();

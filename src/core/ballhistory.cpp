@@ -1,5 +1,3 @@
-#pragma once
-
 #include "core/stdafx.h"
 
 #ifndef __BALLHISTORY_WIN32__
@@ -382,90 +380,40 @@ void BallHistory::PrintScreenRecord::UnInit()
 
 void BallHistory::PrintScreenRecord::Text(const char *name, float positionX, float positionY, const std::string &message)
 {
-   Text(name, positionX, positionY, message.c_str());
+   ShowText(name, BoldMediumFont, Color::White, positionX, positionY, true, message);
 }
 
 void BallHistory::PrintScreenRecord::MenuTitleText(const std::string &message)
 {
-   MenuTitleText(message.c_str());
+   std::string tempStr = "*****" + message + "*****";
+   ShowText(ImGuiProcessMenuLabel, BoldMediumFont, Color::White, 0.50f, 0.25f, true, tempStr);
 }
 
 void BallHistory::PrintScreenRecord::MenuText(bool selected, const std::string &message)
 {
-   MenuText(selected, message.c_str());
-}
-
-void BallHistory::PrintScreenRecord::ActiveMenuText(const std::string &message)
-{
-   ActiveMenuText(message.c_str());
-}
-
-void BallHistory::PrintScreenRecord::ErrorText(const std::string &message)
-{
-   ErrorText(message.c_str());
-}
-
-void BallHistory::PrintScreenRecord::Text(const char* name, float positionX, float positionY, const char* format, ...)
-{
-   char strBuffer[1024] = { 0 };
-   va_list formatArgs;
-   va_start(formatArgs, format);
-   vsprintf_s(strBuffer, format, formatArgs);
-
-   ShowText(name, BoldMediumFont, Color::White, positionX, positionY, true, strBuffer);
-}
-
-void BallHistory::PrintScreenRecord::MenuTitleText(const char* format, ...)
-{
-   char strBuffer[1024] = { 0 };
-   va_list formatArgs;
-   va_start(formatArgs, format);
-   vsprintf_s(strBuffer, format, formatArgs);
-
-   std::string tempStr = "*****" + std::string(strBuffer) + "*****";
-   ShowText(ImGuiProcessMenuLabel, BoldMediumFont, Color::White, 0.50f, 0.25f, true, tempStr.c_str());
-}
-
-void BallHistory::PrintScreenRecord::MenuText(bool selected, const char* format, ...)
-{
-   char strBuffer[1024] = { 0 };
-   va_list formatArgs;
-   va_start(formatArgs, format);
-   vsprintf_s(strBuffer, format, formatArgs);
-
    if (selected)
    {
-      std::string tempStr = "-->" + std::string(strBuffer) + "<--";
-      ShowText(ImGuiProcessMenuLabel, BoldSmallFont, Color::White, 0.50f, 0.25f, true, tempStr.c_str());
+      std::string tempStr = "-->" + message + "<--";
+      ShowText(ImGuiProcessMenuLabel, BoldSmallFont, Color::White, 0.50f, 0.25f, true, tempStr);
    }
    else
    {
-      ShowText(ImGuiProcessMenuLabel, NormalSmallFont, Color::White, 0.50f, 0.25f, true, strBuffer);
+      ShowText(ImGuiProcessMenuLabel, NormalSmallFont, Color::White, 0.50f, 0.25f, true, message);
    }
 
    ImGui::SetWindowFocus(ImGuiProcessMenuLabel);
 }
 
-void BallHistory::PrintScreenRecord::PrintScreenRecord::ActiveMenuText(const char* format, ...)
+void BallHistory::PrintScreenRecord::ActiveMenuText(const std::string &message)
 {
-   char strBuffer[1024] = { 0 };
-   va_list formatArgs;
-   va_start(formatArgs, format);
-   vsprintf_s(strBuffer, format, formatArgs);
-
-   ShowText(ImGuiActiveMenuLabel, NormalSmallFont, Color::White, 0.50f, 0.99f, false, strBuffer);
+   ShowText(ImGuiActiveMenuLabel, NormalSmallFont, Color::White, 0.50f, 0.99f, false, message);
 }
 
-void BallHistory::PrintScreenRecord::ErrorText(const char* format, ...)
+void BallHistory::PrintScreenRecord::ErrorText(const std::string &message)
 {
-   char strBuffer[1024] = { 0 };
-   va_list formatArgs;
-   va_start(formatArgs, format);
-   vsprintf_s(strBuffer, format, formatArgs);
-
-   std::string tempStr = "!!!!! ERROR:" + std::string(strBuffer) + "!!!!!";
-   ShowText(ImGuiErrorTopLabel, BoldLargeFont, Color::Red, 0.50f, 0.10f, true, tempStr.c_str());
-   ShowText(ImGuiErrorBottomLabel, BoldLargeFont, Color::Red, 0.50f, 0.90f, true, tempStr.c_str());
+   std::string tempStr = "!!!!! ERROR:" + message + "!!!!!";
+   ShowText(ImGuiErrorTopLabel, BoldLargeFont, Color::Red, 0.50f, 0.10f, true, tempStr);
+   ShowText(ImGuiErrorBottomLabel, BoldLargeFont, Color::Red, 0.50f, 0.90f, true, tempStr);
 }
 
 void BallHistory::PrintScreenRecord::Results(const std::vector<std::pair<std::string, std::string>>& nameValuePairs)
@@ -485,7 +433,7 @@ void BallHistory::PrintScreenRecord::ActiveMenu(const std::vector<std::pair<std:
    ShowNameValueTable(ImGuiActiveMenuLabel, NormalSmallFont, Color::White, BoldSmallFont, Color::White, 0.80f, 1.00f, nameValuePairs, false, true, nullptr);
 }
 
-void BallHistory::PrintScreenRecord::ShowText(const char* name, ImFont* font, const ImU32& fontColor, float positionX, float positionY, bool center, const char* str)
+void BallHistory::PrintScreenRecord::ShowText(const char* name, ImFont* font, const ImU32& fontColor, float positionX, float positionY, bool center, const std::string& message)
 {
    if (!BallHistory::DrawMenu)
    {
@@ -509,13 +457,13 @@ void BallHistory::PrintScreenRecord::ShowText(const char* name, ImFont* font, co
 
    if (center)
    {
-      ImVec2 textSize = ImGui::CalcTextSize(str);
+      ImVec2 textSize = ImGui::CalcTextSize(message.c_str());
       float windowWidth = ImGui::GetWindowSize().x;
       float textPosX = (windowWidth - textSize.x) / 2.0f;
       ImGui::SetCursorPosX(textPosX);
    }
 
-   ImGui::TextUnformatted(str);
+   ImGui::TextUnformatted(message.c_str());
 
    ImGui::PopStyleColor();
 
@@ -1442,7 +1390,7 @@ void BallHistory::LoadSettings(Player& player)
          }
          else
          {
-            InvalidEnumValue("TrainerOptions::RunOrderModeType", tempStream.str().c_str());
+            InvalidEnumValue("TrainerOptions::RunOrderModeType", tempStream.str());
          }
       }
 
@@ -1458,7 +1406,7 @@ void BallHistory::LoadSettings(Player& player)
          }
          else
          {
-            InvalidEnumValue("TrainerOptions::BallKickerBehaviorModeType", tempStream.str().c_str());
+            InvalidEnumValue("TrainerOptions::BallKickerBehaviorModeType", tempStream.str());
          }
       }
 
@@ -1613,7 +1561,7 @@ void BallHistory::LoadSettingsPhysicsVarianceSpread(Player& player, CSimpleIni& 
       }
       else
       {
-         InvalidEnumValue("TrainerOptions::PhysicsVarianceSpreadModeType", tempStream.str().c_str());
+         InvalidEnumValue("TrainerOptions::PhysicsVarianceSpreadModeType", tempStream.str());
       }
    }
 }
@@ -2212,7 +2160,7 @@ void BallHistory::DrawBallHistory(Player& player)
             drawBallHistoryRecords[ballHistoryStateIndex].LastDrawnBallHistoryRecord = &tempCurrentBhr;
             drawBallHistoryRecords[ballHistoryStateIndex].TotalToRender++;
             std::string drawLineName = "DrawBallHistoryLine" + std::to_string(drawLineIndex++);
-            DrawLine(player, drawLineName.c_str(), ballHistoryState.m_Position, lastDrawnPos, m_AutoControlBallColor, 10);
+            DrawLine(player, drawLineName, ballHistoryState.m_Position, lastDrawnPos, m_AutoControlBallColor, 1);
          }
       }
 
@@ -2286,13 +2234,13 @@ void BallHistory::DrawBallHistory(Player& player)
          if (ballHistoryState.m_DrawRadius > 0.0f)
          {
             std::string drawBallHistoryFakeBallName = "DrawBallHistoryBall" + std::to_string(ballHistoryRecordIndex++);
-            DrawFakeBall(player, drawBallHistoryFakeBallName.c_str(), ballHistoryState.m_Position, ballHistoryState.m_DrawRadius, ballHistoryState.m_Color);
+            DrawFakeBall(player, drawBallHistoryFakeBallName, ballHistoryState.m_Position, ballHistoryState.m_DrawRadius, ballHistoryState.m_Color);
          }
       }
    }
 }
 
-void BallHistory::DrawFakeBall(Player& player, const char* name, const Vertex3Ds& position, float radius, DWORD color)
+void BallHistory::DrawFakeBall(Player& player, const std::string& name, const Vertex3Ds& position, float radius, DWORD color)
 {
    CComObject<Ball>* drawnBall = nullptr;
    auto findIt = m_DrawnBalls.find(name);
@@ -2318,7 +2266,7 @@ void BallHistory::DrawFakeBall(Player& player, const char* name, const Vertex3Ds
    player.m_vhitables.push_back(drawnBall);
 }
 
-void BallHistory::DrawFakeBall(Player& player, const char* name, Vertex3Ds& position, float radius, DWORD ballColor, const Vertex3Ds* lineEndPosition, DWORD lineColor, int lineThickness)
+void BallHistory::DrawFakeBall(Player& player, const std::string& name, Vertex3Ds& position, float radius, DWORD ballColor, const Vertex3Ds* lineEndPosition, DWORD lineColor, int lineThickness)
 {
    float ballRadius = radius == 0.0f ? GetDefaultBallRadius() : radius;
 
@@ -2326,11 +2274,11 @@ void BallHistory::DrawFakeBall(Player& player, const char* name, Vertex3Ds& posi
    if (lineEndPosition)
    {
       std::string drawLineName = std::string(name) + "Line";
-      DrawLine(player, drawLineName.c_str(), position, *lineEndPosition, lineColor, lineThickness);
+      DrawLine(player, drawLineName, position, *lineEndPosition, lineColor, lineThickness);
    }
 }
 
-void BallHistory::DrawFakeBall(Player& player, const char* name, Vertex3Ds& position, DWORD ballColor, const Vertex3Ds* lineEndPosition, DWORD lineColor, int lineThickness)
+void BallHistory::DrawFakeBall(Player& player, const std::string& name, Vertex3Ds& position, DWORD ballColor, const Vertex3Ds* lineEndPosition, DWORD lineColor, int lineThickness)
 {
    DrawFakeBall(player, name, position, 0.0f, ballColor, lineEndPosition, lineColor, lineThickness);
 }
@@ -2359,7 +2307,7 @@ void BallHistory::DrawLineRotate(Rubber& drawnLine, const Vertex3Ds& center, con
    drawnLine.m_d.m_rotZ = deltaPitch * (180.0f / M_PIf) * -1;
 }
 
-void BallHistory::DrawLine(Player& player, const char* name, const Vertex3Ds& posA, const Vertex3Ds& posB, DWORD color, int thickness)
+void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex3Ds& posA, const Vertex3Ds& posB, DWORD color, int thickness)
 {
    float lineLength = BallHistory::DistancePixels(posA, posB);
    if (lineLength == 0.0f)
@@ -2381,7 +2329,6 @@ void BallHistory::DrawLine(Player& player, const char* name, const Vertex3Ds& po
 
       FreeImage_SetPixelColor(dib, 0, 0, &singleColor);
 
-
       std::string settingsFolderPath;
       if (GetSettingsFolderPath(settingsFolderPath) == true)
       {
@@ -2390,7 +2337,7 @@ void BallHistory::DrawLine(Player& player, const char* name, const Vertex3Ds& po
 
          player.m_ptable->ImportImage(tempColorImageFilePath, imageColorName);
 
-         DeleteFile(tempColorImageFilePath.c_str());
+         ::DeleteFile(tempColorImageFilePath.c_str());
       }
    }
 
@@ -2432,7 +2379,7 @@ void BallHistory::DrawLine(Player& player, const char* name, const Vertex3Ds& po
    }
 }
 
-void BallHistory::DrawIntersectionCircle(Player& player, const char* name, Vertex3Ds& position, float intersectionRadiusPercent, DWORD color)
+void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name, Vertex3Ds& position, float intersectionRadiusPercent, DWORD color)
 {
    CComObject<Light>* drawnIntersectionCircle = nullptr;
    auto findIt = m_DrawnIntersectionCircles.find(name);
@@ -2486,9 +2433,9 @@ void BallHistory::DrawNormalModeVisuals(Player& player, int currentTimeMs)
       {
          NormalOptions::AutoControlVertex& acv = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[acvIndex];
          std::string autoControlFakeBallName = "AutoControlBall" + std::to_string(acvIndex);
-         DrawFakeBall(player, autoControlFakeBallName.c_str(), acv.m_Position, ballRadius, m_AutoControlBallColor);
+         DrawFakeBall(player, autoControlFakeBallName, acv.m_Position, ballRadius, m_AutoControlBallColor);
          POINT screenPoint = Get2DPointFrom3D(player, acv.m_Position);
-         PrintScreenRecord::Text(NormalOptions::ImGuiDrawAutoControlVertexLabels[acvIndex], float(screenPoint.x), float(screenPoint.y), "%zu", acvIndex + 1);
+         PrintScreenRecord::Text(NormalOptions::ImGuiDrawAutoControlVertexLabels[acvIndex], float(screenPoint.x), float(screenPoint.y), std::format("{}", acvIndex + 1));
       }
 
       if (m_MenuOptions.m_NormalOptions.m_RecallControlIndex != NormalOptions::RecallControlIndexDisabled)
@@ -2498,7 +2445,7 @@ void BallHistory::DrawNormalModeVisuals(Player& player, int currentTimeMs)
          {
             BallHistoryState& recallBallHistoryState = recallBallHistoryRecord.m_BallHistoryStates[bhsIndex];
             std::string recallBallFakeBallName = "RecallBall" + std::to_string(bhsIndex);
-            DrawFakeBall(player, recallBallFakeBallName.c_str(), recallBallHistoryState.m_Position, ballRadius, m_RecallBallColor);
+            DrawFakeBall(player, recallBallFakeBallName, recallBallHistoryState.m_Position, ballRadius, m_RecallBallColor);
             POINT screenPoint = Get2DPointFrom3D(player, recallBallHistoryState.m_Position);
             PrintScreenRecord::Text(NormalOptions::ImGuiDrawRecallVertexLabels[bhsIndex], float(screenPoint.x), float(screenPoint.y), "RCL");
          }
@@ -2783,10 +2730,10 @@ void BallHistory::DrawTrainerModeVisuals(Player& player, int currentTimeMs)
          if (!bsor.m_StartPosition.IsZero())
          {
             std::string ballStartFakeBallName = "BallStart" + std::to_string(bsorIndex);
-            DrawFakeBall(player, ballStartFakeBallName.c_str(), bsor.m_StartPosition, ballRadius, m_TrainerBallStartColor);
+            DrawFakeBall(player, ballStartFakeBallName, bsor.m_StartPosition, ballRadius, m_TrainerBallStartColor);
             DrawAngleVelocityPreview(player, bsor);
             POINT screenPoint = Get2DPointFrom3D(player, bsor.m_StartPosition);
-            PrintScreenRecord::Text(TrainerOptions::BallStartOptionsRecord::ImGuiBallStartLabels[bsorIndex], float(screenPoint.x), float(screenPoint.y), "S-%zu", bsorIndex + 1);
+            PrintScreenRecord::Text(TrainerOptions::BallStartOptionsRecord::ImGuiBallStartLabels[bsorIndex], float(screenPoint.x), float(screenPoint.y), std::format("S-{}", bsorIndex + 1));
          }
       }
    }
@@ -2799,14 +2746,14 @@ void BallHistory::DrawTrainerModeVisuals(Player& player, int currentTimeMs)
          if (!bpor.m_EndPosition.IsZero())
          {
             std::string ballPassFakeBallName = "BallPass" + std::to_string(bporIndex);
-            DrawFakeBall(player, ballPassFakeBallName.c_str(), bpor.m_EndPosition, ballRadius, m_TrainerBallPassColor);
+            DrawFakeBall(player, ballPassFakeBallName, bpor.m_EndPosition, ballRadius, m_TrainerBallPassColor);
             if (bpor.m_EndRadiusPercent != TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
             {
                std::string ballPassIntersectionCircleName = "BallPassIntersectionCircle" + std::to_string(bporIndex);
-               DrawIntersectionCircle(player, ballPassIntersectionCircleName.c_str(), bpor.m_EndPosition, bpor.m_EndRadiusPercent, Color::Blue);
+               DrawIntersectionCircle(player, ballPassIntersectionCircleName, bpor.m_EndPosition, bpor.m_EndRadiusPercent, Color::Blue);
             }
             POINT screenPoint = Get2DPointFrom3D(player, bpor.m_EndPosition);
-            PrintScreenRecord::Text(TrainerOptions::BallEndOptionsRecord::ImGuiBallPassLabels[bporIndex], float(screenPoint.x), float(screenPoint.y), "P-%zu", bporIndex + 1);
+            PrintScreenRecord::Text(TrainerOptions::BallEndOptionsRecord::ImGuiBallPassLabels[bporIndex], float(screenPoint.x), float(screenPoint.y), std::format("P-{}", bporIndex + 1));
          }
       }
    }
@@ -2819,14 +2766,14 @@ void BallHistory::DrawTrainerModeVisuals(Player& player, int currentTimeMs)
          if (!bfor.m_EndPosition.IsZero())
          {
             std::string ballFailFakeBallName = "BallFail" + std::to_string(bforIndex);
-            DrawFakeBall(player, ballFailFakeBallName.c_str(), bfor.m_EndPosition, ballRadius, m_TrainerBallFailColor);
+            DrawFakeBall(player, ballFailFakeBallName, bfor.m_EndPosition, ballRadius, m_TrainerBallFailColor);
             if (bfor.m_EndRadiusPercent != TrainerOptions::BallEndOptionsRecord::RadiusPercentDisabled)
             {
                std::string ballFailIntersectionCircleName = "BallFailIntersectionCircle" + std::to_string(bforIndex);
-               DrawIntersectionCircle(player, ballFailIntersectionCircleName.c_str(), bfor.m_EndPosition, bfor.m_EndRadiusPercent, Color::Blue);
+               DrawIntersectionCircle(player, ballFailIntersectionCircleName, bfor.m_EndPosition, bfor.m_EndRadiusPercent, Color::Blue);
             }
             POINT screenPoint = Get2DPointFrom3D(player, bfor.m_EndPosition);
-            PrintScreenRecord::Text(TrainerOptions::BallEndOptionsRecord::ImGuiBallFailLabels[bforIndex], float(screenPoint.x), float(screenPoint.y), "F-%zu", bforIndex + 1);
+            PrintScreenRecord::Text(TrainerOptions::BallEndOptionsRecord::ImGuiBallFailLabels[bforIndex], float(screenPoint.x), float(screenPoint.y), std::format("F-{}", bforIndex + 1));
          }
       }
    }
@@ -2924,10 +2871,10 @@ void BallHistory::DrawActiveBallKickers(Player& player)
 
          DrawActiveBallKickerCheckPosition(player, screenPoint, xMax, yMax, kickerText);
 
-         PrintScreenRecord::Text(ImGuiDrawActiveBallKickersLabels[abkIndex], float(screenPoint.x), float(screenPoint.y), kickerText.c_str());
+         PrintScreenRecord::Text(ImGuiDrawActiveBallKickersLabels[abkIndex], float(screenPoint.x), float(screenPoint.y), kickerText);
 
          std::string activeBallKickerFakeBallName = "ActiveBallKicker" + std::to_string(abkIndex);
-         DrawFakeBall(player, activeBallKickerFakeBallName.c_str(), kickerPosition, ballRadius, m_ActiveBallKickerColor);
+         DrawFakeBall(player, activeBallKickerFakeBallName, kickerPosition, ballRadius, m_ActiveBallKickerColor);
       }
    }
 }
@@ -2957,7 +2904,7 @@ void BallHistory::DrawAngleVelocityPreviewHelperAdd(Player& player, TrainerOptio
    unsigned char blue = 0xFF - red;
    DWORD color = (blue << 16) | (0x00 << 8) | red;
 
-   DrawLine(player, name.c_str(), bsor.m_StartPosition, (pointBefore + pointAfter) / 2.0f, color, 10);
+   DrawLine(player, name, bsor.m_StartPosition, (pointBefore + pointAfter) / 2.0f, color, 10);
 }
 
 void BallHistory::DrawAngleVelocityPreviewHelper(Player& player, TrainerOptions::BallStartOptionsRecord& bsor, float angleStep, float velocityStep, float radius)
@@ -3081,7 +3028,7 @@ void BallHistory::ShowStatus(Player& player, int currentTimeMs)
    {
    case MenuOptionsRecord::ModeType::ModeType_Normal:
       statuses.push_back({ "Normal Options", "" });
-      statuses.push_back({ "Control", std::format("{}", m_Control ? "true" : "false") });
+      statuses.push_back({ "Control", m_Control ? "true" : "false" });
       statuses.push_back({ "Current Control\nIndex", std::format("{}", m_CurrentControlIndex) });
 
       statuses.push_back({ "BH Records\nHeadIndex", std::format("{}", m_BallHistoryRecordsHeadIndex) });
@@ -3107,7 +3054,7 @@ void BallHistory::ShowStatus(Player& player, int currentTimeMs)
       {
          NormalOptions::AutoControlVertex& autoControlVertex = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[autoControlVerticesIndex];
          statuses.push_back({ std::format("({})-Position", autoControlVerticesIndex + 1), std::format("{:.1f}x\n{:.1f}y\n{:.1f}z", autoControlVertex.m_Position.x, autoControlVertex.m_Position.y, autoControlVertex.m_Position.z) });
-         statuses.push_back({ std::format("({})-Active", autoControlVerticesIndex + 1), std::format("{}", autoControlVertex.Active ? "true" : "false") });
+         statuses.push_back({ std::format("({})-Active", autoControlVerticesIndex + 1), autoControlVertex.Active ? "true" : "false" });
       }
 
       statuses.push_back({ "Recall Control", "" });
@@ -3218,7 +3165,7 @@ void BallHistory::ShowStatus(Player& player, int currentTimeMs)
                   associatedBallStartIndexesOutput += std::to_string(associatedBallStartIndex + 1) + ",";
                }
                associatedBallStartIndexesOutput = associatedBallStartIndexesOutput.substr(0, associatedBallStartIndexesOutput.length() - 1);
-               statuses.push_back({ "Associations", std::format("{}", associatedBallStartIndexesOutput.c_str()) });
+               statuses.push_back({ "Associations", associatedBallStartIndexesOutput });
             }
 
             if (bpor.m_StopBallsTracker.size() == 0)
@@ -3281,7 +3228,7 @@ void BallHistory::ShowStatus(Player& player, int currentTimeMs)
                   associatedBallStartIndexesOutput += std::to_string(associatedBallStartIndex + 1) + ",";
                }
                associatedBallStartIndexesOutput = associatedBallStartIndexesOutput.substr(0, associatedBallStartIndexesOutput.length() - 1);
-               statuses.push_back({ "Associations", std::format("{}", associatedBallStartIndexesOutput.c_str()) });
+               statuses.push_back({ "Associations", associatedBallStartIndexesOutput });
             }
 
             if (bfor.m_StopBallsTracker.size() == 0)
@@ -3375,10 +3322,10 @@ void BallHistory::ShowStatus(Player& player, int currentTimeMs)
       statuses.push_back({ "Countdown", std::format("{}s", m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun) });
 
       statuses.push_back({ "Sound Effects", "" });
-      statuses.push_back({ "Pass", std::format("({})", m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled ? "X" : "O") });
-      statuses.push_back({ "Fail", std::format("({})", m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled ? "X" : "O") });
-      statuses.push_back({ "Time Low", std::format("({})", m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled ? "X" : "O") });
-      statuses.push_back({ "Countdown", std::format("({})", m_MenuOptions.m_TrainerOptions.m_SoundEffectsCountdownEnabled ? "X" : "O") });
+      statuses.push_back({ "Pass", std::format("({})", m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled ? 'X' : 'O') });
+      statuses.push_back({ "Fail", std::format("({})", m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled ? 'X' : 'O') });
+      statuses.push_back({ "Time Low", std::format("({})", m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled ? 'X' : 'O') });
+      statuses.push_back({ "Countdown", std::format("({})", m_MenuOptions.m_TrainerOptions.m_SoundEffectsCountdownEnabled ? 'X' : 'O') });
       break;
    }
    case MenuOptionsRecord::ModeType::ModeType_Disabled:
@@ -3406,7 +3353,7 @@ void BallHistory::ShowStatus(Player& player, int currentTimeMs)
    {
       if (Flipper* flipper = m_Flippers[flipperIndex])
       {
-         statuses.push_back({ std::format("Flipper {}", flipperIndex + 1), std::format("{}", flipper->GetName()) });
+         statuses.push_back({ std::format("Flipper {}", flipperIndex + 1), flipper->GetName() });
       }
    }
 
@@ -3421,12 +3368,12 @@ void BallHistory::ShowRecallBall(Player& player)
    }
    else
    {
-      PrintScreenRecord::MenuText(false, "Recall Control Index = %zu", m_MenuOptions.m_NormalOptions.m_RecallControlIndex);
+      PrintScreenRecord::MenuText(false, std::format("Recall Control Index = {}", m_MenuOptions.m_NormalOptions.m_RecallControlIndex));
       BallHistoryRecord& recallBallHistoryRecord = m_BallHistoryRecords[m_MenuOptions.m_NormalOptions.m_RecallControlIndex];
       for (auto& recallBallHistoryState : recallBallHistoryRecord.m_BallHistoryStates)
       {
          POINT screenPoint = Get2DPointFrom3D(player, recallBallHistoryState.m_Position);
-         PrintScreenRecord::MenuText(false, "Recall Ball %.2f,%.2f,%.2f,%ld,%ld (3x,3y,3z,2x,2y)", recallBallHistoryState.m_Position.x, recallBallHistoryState.m_Position.y, recallBallHistoryState.m_Position.z, screenPoint.x, screenPoint.y);
+         PrintScreenRecord::MenuText(false, std::format("Recall Ball {:.2f},{:.2f},{:.2f},{},{} (3x,3y,3z,2x,2y)", recallBallHistoryState.m_Position.x, recallBallHistoryState.m_Position.y, recallBallHistoryState.m_Position.z, screenPoint.x, screenPoint.y));
       }
    }
 }
@@ -3440,7 +3387,7 @@ void BallHistory::ShowAutoControlVertices(Player& player)
       {
          NormalOptions::AutoControlVertex& autoControlVertex = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[autoControlVerticesIndex];
          POINT screenPoint = Get2DPointFrom3D(player, autoControlVertex.m_Position);
-         PrintScreenRecord::MenuText(false, "ACL %zu %.2f,%.2f,%.2f,%ld,%ld,%s (3x,3y,3z,2x,2y,active)", autoControlVerticesIndex + 1, autoControlVertex.m_Position.x, autoControlVertex.m_Position.y, autoControlVertex.m_Position.z, screenPoint.x, screenPoint.y, autoControlVertex.Active ? "true" : "false");
+         PrintScreenRecord::MenuText(false, std::format("ACL {} {:.2f},{:.2f},{:.2f},{},{},{} (3x,3y,3z,2x,2y,active)", autoControlVerticesIndex + 1, autoControlVertex.m_Position.x, autoControlVertex.m_Position.y, autoControlVertex.m_Position.z, screenPoint.x, screenPoint.y, autoControlVertex.Active ? "true" : "false"));
       }
    }
    else
@@ -3668,7 +3615,7 @@ void BallHistory::GetBallFailOptionsConfigs(std::vector<std::pair<std::string, s
 void BallHistory::GetBallFailOptionsConfig(TrainerOptions::BallEndOptionsRecord &beor, std::size_t beorIndex, std::vector<std::pair<std::string, std::string>> &ballFailOptionsConfig)
 {
    ballFailOptionsConfig.push_back({ std::format("Ball Fail {}", beorIndex + 1), "" });
-   GetBallEndOptionsConfig(m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[beorIndex], ballFailOptionsConfig);
+   GetBallEndOptionsConfig(m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[beorIndex], ballFailOptionsConfig);
 }
 
 void BallHistory::GetBallEndOptionsConfig(TrainerOptions::BallEndOptionsRecord& beor, std::vector<std::pair<std::string, std::string>> &ballEndOptionsConfig)
@@ -3707,7 +3654,7 @@ void BallHistory::GetBallEndOptionsConfig(TrainerOptions::BallEndOptionsRecord& 
          associatedBallStartIndexesOutput += std::to_string(associatedBallStartIndex + 1) + ",";
       }
       associatedBallStartIndexesOutput = associatedBallStartIndexesOutput.substr(0, associatedBallStartIndexesOutput.length() - 1);
-      ballEndOptionsConfig.push_back({ "Associations", associatedBallStartIndexesOutput.c_str() });
+      ballEndOptionsConfig.push_back({ "Associations", associatedBallStartIndexesOutput });
    }
 
    if (beor.m_StopBallsTracker.size() == 0)
@@ -3754,7 +3701,7 @@ void BallHistory::ShowSection(const char* title, const std::vector<std::string>&
    PrintScreenRecord::MenuTitleText(title);
    for (std::string desc : descriptions)
    {
-      PrintScreenRecord::MenuText(false, desc.c_str());
+      PrintScreenRecord::MenuText(false, desc);
    }
 }
 
@@ -4030,9 +3977,9 @@ void BallHistory::InitBallStartOptionRecords()
    {
       BallHistoryState& ballHistoryState = ballHistoryRecord.m_BallHistoryStates[ballHistoryStateIndex];
 
-      PrintScreenRecord::MenuText(false, "Ball %zu Pos = %.2f,%.2f,%.2f (x,y,z)", ballHistoryStateIndex + 1, ballHistoryState.m_Position.x, ballHistoryState.m_Position.y, ballHistoryState.m_Position.z);
-      PrintScreenRecord::MenuText(false, "Ball %zu Vel = %.2f,%.2f,%.2f (x,y,z)", ballHistoryStateIndex + 1, ballHistoryState.m_Velocity.x, ballHistoryState.m_Velocity.y, ballHistoryState.m_Velocity.z);
-      PrintScreenRecord::MenuText(false, "Ball %zu Mom = %.2f,%.2f,%.2f (x,y,z)", ballHistoryStateIndex + 1, ballHistoryState.m_AngularMomentum.x, ballHistoryState.m_AngularMomentum.y, ballHistoryState.m_AngularMomentum.z);
+      PrintScreenRecord::MenuText(false, std::format("Ball {} Pos = {:.2f},{:.2f},{:.2f} (x,y,z)", ballHistoryStateIndex + 1, ballHistoryState.m_Position.x, ballHistoryState.m_Position.y, ballHistoryState.m_Position.z));
+      PrintScreenRecord::MenuText(false, std::format("Ball {} Vel = {:.2f},{:.2f},{:.2f} (x,y,z)", ballHistoryStateIndex + 1, ballHistoryState.m_Velocity.x, ballHistoryState.m_Velocity.y, ballHistoryState.m_Velocity.z));
+      PrintScreenRecord::MenuText(false, std::format("Ball {} Mom = {:.2f},{:.2f},{:.2f} (x,y,z)", ballHistoryStateIndex + 1, ballHistoryState.m_AngularMomentum.x, ballHistoryState.m_AngularMomentum.y, ballHistoryState.m_AngularMomentum.z));
 
       TrainerOptions::BallStartOptionsRecord bsor(
          ballHistoryState.m_Position,
@@ -4085,7 +4032,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
 
    if (!m_MenuOptions.m_MenuError.empty())
    {
-      PrintScreenRecord::ErrorText("%s", m_MenuOptions.m_MenuError.c_str());
+      PrintScreenRecord::ErrorText(std::format("{}", m_MenuOptions.m_MenuError));
    }
 
    POINT mousePosition2D = { 0 };
@@ -4281,7 +4228,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       ShowSection(DescriptionSectionTitle,
       {
          "Use flippers to navigate backward/forward through current Ball History",
-         ("Press Ball History Menu key '" + std::string(1, GetBallHistoryKey(player, eBallHistoryMenu)) + "' to continue play").c_str(),
+         "Press Ball History Menu key '" + std::string(1, GetBallHistoryKey(player, eBallHistoryMenu)) + "' to continue play",
          "Plunger accepts and resets ball positions to selected Ball History location"
       });
 
@@ -4406,7 +4353,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       ShowSection(DescriptionSectionTitle,
       {
          "Use flippers to navigate backward/forward through current Ball History",
-         ("Press Ball History Menu key '" + std::string(1, GetBallHistoryKey(player, eBallHistoryMenu)) + "' to continue play").c_str(),
+         "Press Ball History Menu key '" + std::string(1, GetBallHistoryKey(player, eBallHistoryMenu)) + "' to continue play",
          "Plunger accepts sets Recall position to selected Ball History location"
       });
 
@@ -4463,11 +4410,11 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       PrintScreenRecord::MenuTitleText("Manage Auto Control Locations");
 
       mousePosition3D = Get3DPointFromMousePosition(player, m_MenuOptions.m_CreateZ);
-      PrintScreenRecord::MenuText(false,
-         "Point %zu %.2f,%.2f,%.2f,%ld,%ld (3x,3y,3z,2x,2y)",
+      PrintScreenRecord::MenuText(false, std::format(
+         "Point {} {:.2f},{:.2f},{:.2f},{},{} (3x,3y,3z,2x,2y)",
          m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size() + 1,
          mousePosition3D.x, mousePosition3D.y, mousePosition3D.z,
-         mousePosition2D.x, mousePosition2D.y);
+         mousePosition2D.x, mousePosition2D.y));
 
       PrintScreenRecord::MenuText(false, "");
 
@@ -5051,7 +4998,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
 
       ShowPreviousRunRecord();
 
-      PrintScreenRecord::MenuText(false, "%s:", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord == m_MenuOptions.m_TrainerOptions.m_RunRecords.size() ? "Final Run Results" : "Current Run Results");
+      PrintScreenRecord::MenuText(false, std::format("{}:", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord == m_MenuOptions.m_TrainerOptions.m_RunRecords.size() ? "Final Run Results" : "Current Run Results"));
       if (m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord > 0)
       {
          std::size_t totalPassLocation = 0;
@@ -5334,7 +5281,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
          PrintScreenRecord::MenuText(
             m_MenuOptions.m_TrainerOptions.m_BallStartCompleteMode == TrainerOptions::BallStartCompleteModeType::BallStartCompleteModeType_Select &&
                m_MenuOptions.m_CurrentCompleteIndex == bsorIndex,
-            "Edit Ball %zu%s", bsorIndex + 1, bsor.m_StartPosition.IsZero() ? " (Not Set)" : "");
+            std::format("Edit Ball {}{}", bsorIndex + 1, bsor.m_StartPosition.IsZero() ? " (Not Set)" : ""));
          if (!ballNotSetNumber && bsor.m_StartPosition.IsZero())
          {
             ballNotSetNumber = bsorIndex + 1;
@@ -5464,8 +5411,8 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
 
       mousePosition3D = Get3DPointFromMousePosition(player, bsor.m_StartPosition.z);
 
-      PrintScreenRecord::MenuTitleText("Custom Ball Start %zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
-      PrintScreenRecord::MenuText(false, "Position %.2f,%.2f,%.2f (3x,3y,3z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
+      PrintScreenRecord::MenuTitleText(std::format("Custom Ball Start {} Location", m_MenuOptions.m_CurrentBallIndex + 1));
+      PrintScreenRecord::MenuText(false, std::format("Position {:.2f},{:.2f},{:.2f} (3x,3y,3z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z));
 
       PrintScreenRecord::MenuText(false, "");
 
@@ -5539,7 +5486,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
    {
       TrainerOptions::BallStartOptionsRecord& bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
-      PrintScreenRecord::MenuTitleText("Custom Ball Start %zu Angle/Velocity Mode", m_MenuOptions.m_CurrentBallIndex + 1);
+      PrintScreenRecord::MenuTitleText(std::format("Custom Ball Start {} Angle/Velocity Mode", m_MenuOptions.m_CurrentBallIndex + 1));
       PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_BallStartAngleVelocityMode == TrainerOptions::BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_Drop, "Drop");
       PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_BallStartAngleVelocityMode == TrainerOptions::BallStartAngleVelocityModeType::BallStartAngleVelocityModeType_Custom, "Custom");
 
@@ -5619,7 +5566,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
    {
       TrainerOptions::BallStartOptionsRecord& bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
-      PrintScreenRecord::MenuTitleText("Custom Ball Start %zu Start Velocity", m_MenuOptions.m_CurrentBallIndex + 1);
+      PrintScreenRecord::MenuTitleText(std::format("Custom Ball Start {} Start Velocity", m_MenuOptions.m_CurrentBallIndex + 1));
       PrintScreenRecord::MenuText(false,
          std::format("(minimum){} <-- {} --> {}(maximum)",
          TrainerOptions::BallStartOptionsRecord::VelocityMinimum,
@@ -5653,7 +5600,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
    {
       TrainerOptions::BallStartOptionsRecord& bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
-      PrintScreenRecord::MenuTitleText("Custom Ball Start %zu Finish Velocity", m_MenuOptions.m_CurrentBallIndex + 1);
+      PrintScreenRecord::MenuTitleText(std::format("Custom Ball Start {} Finish Velocity", m_MenuOptions.m_CurrentBallIndex + 1));
       PrintScreenRecord::MenuText(false,
          std::format("(minimum){} <-- {} --> {}(maximum)",
          TrainerOptions::BallStartOptionsRecord::VelocityMinimum,
@@ -5720,7 +5667,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       int32_t minimum = TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMinimum + (bsor.m_VelocityRangeStart == bsor.m_VelocityRangeFinish ? 0 : 1);
       int32_t maximum = (bsor.m_VelocityRangeStart == bsor.m_VelocityRangeFinish ? 1 : TrainerOptions::BallStartOptionsRecord::TotalVelocitiesMaximum);
 
-      PrintScreenRecord::MenuTitleText("Custom Ball Start %zu Total Velocities", m_MenuOptions.m_CurrentBallIndex + 1);
+      PrintScreenRecord::MenuTitleText(std::format("Custom Ball Start {} Total Velocities", m_MenuOptions.m_CurrentBallIndex + 1));
       PrintScreenRecord::MenuText(false,
          std::format("(minimum){} <-- {} --> {}(maximum)",
          minimum,
@@ -5729,9 +5676,11 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       
       PrintScreenRecord::MenuText(false, "");
 
+      // TODO GARY Take a look at this, something doesn't seem right here
       if (minimum == 1 && maximum == 1)
       {
-         PrintScreenRecord::MenuText(false, "(Start=Finish, Total must be 1)", minimum, static_cast<int32_t>(bsor.m_TotalRangeVelocities), maximum);
+         PrintScreenRecord::MenuText(false, std::format("(Start=Finish, Total must be 1)"));
+         //PrintScreenRecord::MenuText(false, "(Start=Finish, Total must be 1)", minimum, static_cast<int32_t>(bsor.m_TotalRangeVelocities), maximum);
       }
 
       PrintScreenRecord::MenuTitleText("Current Configuration");
@@ -5754,7 +5703,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
    {
       TrainerOptions::BallStartOptionsRecord& bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
-      PrintScreenRecord::MenuTitleText("Custom Ball Start %zu Start Angle", m_MenuOptions.m_CurrentBallIndex + 1);
+      PrintScreenRecord::MenuTitleText(std::format("Custom Ball Start {} Start Angle", m_MenuOptions.m_CurrentBallIndex + 1));
       PrintScreenRecord::MenuText(false,
          std::format("(minimum){} <-- {} --> {}(maximum)",
          TrainerOptions::BallStartOptionsRecord::AngleMinimum,
@@ -5788,7 +5737,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
    {
       TrainerOptions::BallStartOptionsRecord& bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
-      PrintScreenRecord::MenuTitleText("Custom Ball Start %zu Finish Angle", m_MenuOptions.m_CurrentBallIndex + 1);
+      PrintScreenRecord::MenuTitleText(std::format("Custom Ball Start {} Finish Angle", m_MenuOptions.m_CurrentBallIndex + 1));
       PrintScreenRecord::MenuText(false,
          std::format("(minimum){} <-- {} --> {}(maximum)",
          TrainerOptions::BallStartOptionsRecord::AngleMinimum,
@@ -5824,7 +5773,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
 
       int32_t minimum = TrainerOptions::BallStartOptionsRecord::TotalAnglesMinimum + (bsor.m_AngleRangeStart == bsor.m_AngleRangeFinish ? 0 : 1);
 
-      PrintScreenRecord::MenuTitleText("Custom Ball Start %zu Total Angles", m_MenuOptions.m_CurrentBallIndex + 1);
+      PrintScreenRecord::MenuTitleText(std::format("Custom Ball Start {} Total Angles", m_MenuOptions.m_CurrentBallIndex + 1));
       PrintScreenRecord::MenuText(false,
          std::format("(minimum){} <-- {} --> {}(maximum)",
          minimum,
@@ -5857,12 +5806,12 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       {
          PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode == TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select
                && m_MenuOptions.m_CurrentCompleteIndex == bporIndex,
-            "Edit Ball %zu", bporIndex + 1);
+            std::format("Edit Ball {}", bporIndex + 1));
       }
       PrintScreenRecord::MenuText(
          m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode == TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select &&
             m_MenuOptions.m_CurrentCompleteIndex == m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(),
-         "Create Ball %zu", m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size() + 1);
+         std::format("Create Ball {}", m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size() + 1));
 
       switch (m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode)
       {
@@ -6014,7 +5963,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
    {
       TrainerOptions::BallEndOptionsRecord& bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
-      PrintScreenRecord::MenuTitleText("Ball Pass %zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
+      PrintScreenRecord::MenuTitleText(std::format("Ball Pass {} Location", m_MenuOptions.m_CurrentBallIndex + 1));
       PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode == TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_Config, "Config");
       PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode == TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_Delete, "Delete");
 
@@ -6095,8 +6044,8 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       TrainerOptions::BallEndOptionsRecord& bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
       mousePosition3D = Get3DPointFromMousePosition(player, bpor.m_EndPosition.z);
 
-      PrintScreenRecord::MenuTitleText("Ball Pass %zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
-      PrintScreenRecord::MenuText(false, "Position = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
+      PrintScreenRecord::MenuTitleText(std::format("Ball Pass {} Location", m_MenuOptions.m_CurrentBallIndex + 1));
+      PrintScreenRecord::MenuText(false, std::format("Position = {:.2f},{:.2f},{:.2f} (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z));
 
       for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
       {
@@ -6175,7 +6124,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
    {
       TrainerOptions::BallEndOptionsRecord& bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
-      PrintScreenRecord::MenuTitleText("Ball Pass %zu Finish Mode", m_MenuOptions.m_CurrentBallIndex + 1);
+      PrintScreenRecord::MenuTitleText(std::format("Ball Pass {} Finish Mode", m_MenuOptions.m_CurrentBallIndex + 1));
       PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode == TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Distance, "Distance");
       PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode == TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop, "Stop");
 
@@ -6254,7 +6203,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       TrainerOptions::BallEndOptionsRecord& bpor = m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
       PrintScreenRecord::MenuTitleText("Ball Pass Distance (%% of ball radius)");
-      PrintScreenRecord::MenuText(false, "(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, static_cast<int32_t>(bpor.m_EndRadiusPercent), TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
+      PrintScreenRecord::MenuText(false, std::format("(minimum){}% <-- {}% --> {}%(maximum)", TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, static_cast<int32_t>(bpor.m_EndRadiusPercent), TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum));
 
       PrintScreenRecord::MenuText(false, "");
       
@@ -6286,14 +6235,14 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
             PrintScreenRecord::MenuText(
                m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode == TrainerOptions::BallEndAssociationModeType::BallEndAssociationModeType_Select &&
                   m_MenuOptions.m_CurrentAssociationIndex == bsorIndex,
-               "Ball %zu", bsorIndex + 1);
+               std::format("Ball {}u", bsorIndex + 1));
          }
          else
          {
             PrintScreenRecord::MenuText(
                   m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode == TrainerOptions::BallEndAssociationModeType::BallEndAssociationModeType_Select &&
                      m_MenuOptions.m_CurrentAssociationIndex == bsorIndex,
-               "(X) Ball %zu", bsorIndex + 1);
+               std::format("(X) Ball {}", bsorIndex + 1));
          }
       }
 
@@ -6415,12 +6364,12 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
          PrintScreenRecord::MenuText(
             m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode == TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select &&
                m_MenuOptions.m_CurrentCompleteIndex == bforIndex,
-            "Edit Ball %zu", bforIndex + 1);
+            std::format("Edit Ball {}", bforIndex + 1));
       }
       PrintScreenRecord::MenuText(
          m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode == TrainerOptions::BallEndCompleteModeType::BallEndCompleteModeType_Select &&
             m_MenuOptions.m_CurrentCompleteIndex == m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size(),
-         "Create Ball %zu", m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size() + 1);
+         std::format("Create Ball {}", m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size() + 1));
 
       switch (m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode)
       {
@@ -6573,7 +6522,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
    {
       TrainerOptions::BallEndOptionsRecord& bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
-      PrintScreenRecord::MenuTitleText("Ball Fail %zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
+      PrintScreenRecord::MenuTitleText(std::format("Ball Fail {} Location", m_MenuOptions.m_CurrentBallIndex + 1));
       PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode == TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_Config, "Config");
       PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_BallEndLocationMode == TrainerOptions::BallEndLocationModeType::BallEndLocationModeType_Delete, "Delete");
 
@@ -6654,15 +6603,15 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       TrainerOptions::BallEndOptionsRecord& bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
       mousePosition3D = Get3DPointFromMousePosition(player, bfor.m_EndPosition.z);
 
-      PrintScreenRecord::MenuTitleText("Ball Fail %zu Location", m_MenuOptions.m_CurrentBallIndex + 1);
+      PrintScreenRecord::MenuTitleText(std::format("Ball Fail {} Location", m_MenuOptions.m_CurrentBallIndex + 1));
 
-      PrintScreenRecord::MenuText(false, "Position = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
+      PrintScreenRecord::MenuText(false, std::format("Position = {:.2f},{:.2f},{:.2f} (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z));
 
       for (std::size_t bsorIndex = 0; bsorIndex < m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize; bsorIndex++)
       {
          TrainerOptions::BallStartOptionsRecord& bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
          float distance = DistancePixels(mousePosition3D, bsor.m_StartPosition);
-         PrintScreenRecord::MenuText(false, "Fail<-->Start %zu = %.2f", bsorIndex + 1, distance);
+         PrintScreenRecord::MenuText(false, std::format("Fail<-->Start {} = {:.2f}", bsorIndex + 1, distance));
       }
 
       PrintScreenRecord::MenuText(false, "");
@@ -6734,7 +6683,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
    {
       TrainerOptions::BallEndOptionsRecord& bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
-      PrintScreenRecord::MenuTitleText("Ball Fail %zu Finish Mode", m_MenuOptions.m_CurrentBallIndex + 1);
+      PrintScreenRecord::MenuTitleText(std::format("Ball Fail {} Finish Mode", m_MenuOptions.m_CurrentBallIndex + 1));
       PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode == TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Distance, "Distance");
       PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode == TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_Stop, "Stop");
 
@@ -6813,7 +6762,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       TrainerOptions::BallEndOptionsRecord& bfor = m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords[m_MenuOptions.m_CurrentBallIndex];
 
       PrintScreenRecord::MenuTitleText("Ball Fail Distance (%% of ball radius)");
-      PrintScreenRecord::MenuText(false, "(minimum)%d%% <-- %d%%--> %d%%(maximum)", TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, static_cast<int32_t>(bfor.m_EndRadiusPercent), TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum);
+      PrintScreenRecord::MenuText(false, std::format("(minimum){}% <-- {}%--> {}%(maximum)", TrainerOptions::BallEndOptionsRecord::RadiusPercentMinimum, static_cast<int32_t>(bfor.m_EndRadiusPercent), TrainerOptions::BallEndOptionsRecord::RadiusPercentMaximum));
 
       PrintScreenRecord::MenuText(false, "");
 
@@ -6844,14 +6793,14 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
             PrintScreenRecord::MenuText(
                m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode == TrainerOptions::BallEndAssociationModeType::BallEndAssociationModeType_Select &&
                   m_MenuOptions.m_CurrentAssociationIndex == bsorIndex,
-               "Ball %zu", bsorIndex + 1);
+               std::format("Ball %zu", bsorIndex + 1));
          }
          else
          {
             PrintScreenRecord::MenuText(
                m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode == TrainerOptions::BallEndAssociationModeType::BallEndAssociationModeType_Select &&
                   m_MenuOptions.m_CurrentAssociationIndex == bsorIndex,
-               "(X) Ball %zu", bsorIndex + 1);
+               std::format("(X) Ball %zu", bsorIndex + 1));
          }
       }
 
@@ -7050,7 +6999,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       mousePosition3D = Get3DPointFromMousePosition(player, bcor.m_PassPosition.z);
 
       PrintScreenRecord::MenuTitleText("Ball Corridor Pass Location");
-      PrintScreenRecord::MenuText(false, "Position = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
+      PrintScreenRecord::MenuText(false, std::format("Position = {:.2f},{:.2f},{:.2f} (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z));
 
       PrintScreenRecord::MenuText(false, "");
 
@@ -7127,7 +7076,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       TrainerOptions::BallCorridorOptionsRecord& bcor = m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord;
 
       PrintScreenRecord::MenuTitleText("Ball Corridor Pass Width (%% of ball radius)");
-      PrintScreenRecord::MenuText(false, "(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::BallCorridorOptionsRecord::RadiusPercentMinimum, static_cast<int32_t>(bcor.m_PassRadiusPercent), TrainerOptions::BallCorridorOptionsRecord::RadiusPercentMaximum);
+      PrintScreenRecord::MenuText(false, std::format("(minimum){}% <-- {}% --> {}%(maximum)", TrainerOptions::BallCorridorOptionsRecord::RadiusPercentMinimum, static_cast<int32_t>(bcor.m_PassRadiusPercent), TrainerOptions::BallCorridorOptionsRecord::RadiusPercentMaximum));
 
       PrintScreenRecord::MenuText(false, "");
 
@@ -7171,7 +7120,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       mousePosition3D = Get3DPointFromMousePosition(player, bcor.m_OpeningPositionLeft.z);
 
       PrintScreenRecord::MenuTitleText("Ball Corridor Opening Left");
-      PrintScreenRecord::MenuText(false, "Position = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
+      PrintScreenRecord::MenuText(false, std::format("Position = {:.2f},{:.2f},{:.2f} (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z));
 
       PrintScreenRecord::MenuText(false, "");
 
@@ -7246,7 +7195,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       mousePosition3D = Get3DPointFromMousePosition(player, bcor.m_OpeningPositionRight.z);
 
       PrintScreenRecord::MenuTitleText("Ball Corridor Opening Right");
-      PrintScreenRecord::MenuText(false, "Position = %.2f,%.2f,%.2f (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z);
+      PrintScreenRecord::MenuText(false, std::format("Position = {:.2f},{:.2f},{:.2f} (x,y,z)", mousePosition3D.x, mousePosition3D.y, mousePosition3D.z));
 
       PrintScreenRecord::MenuText(false, "");
 
@@ -7646,7 +7595,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectPhysicsVarianceGravitySpread:
    {
       PrintScreenRecord::MenuTitleText("Gravity Spread");
-      PrintScreenRecord::MenuText(false, "(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::GravitySpreadMinimum, m_MenuOptions.m_TrainerOptions.m_GravitySpread, TrainerOptions::GravitySpreadMaximum);
+      PrintScreenRecord::MenuText(false, std::format("(minimum){}% <-- {}% --> {}%(maximum)", TrainerOptions::GravitySpreadMinimum, m_MenuOptions.m_TrainerOptions.m_GravitySpread, TrainerOptions::GravitySpreadMaximum));
 
       PrintScreenRecord::MenuText(false, "");
 
@@ -7733,7 +7682,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectPhysicsVariancePlayfieldFrictionSpread:
    {
       PrintScreenRecord::MenuTitleText("Playfield Friction Spread");
-      PrintScreenRecord::MenuText(false, "(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::PlayfieldFrictionSpreadMinimum, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpread, TrainerOptions::PlayfieldFrictionSpreadMaximum);
+      PrintScreenRecord::MenuText(false, std::format("(minimum){}% <-- {}% --> {}%(maximum)", TrainerOptions::PlayfieldFrictionSpreadMinimum, m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionSpread, TrainerOptions::PlayfieldFrictionSpreadMaximum));
 
       PrintScreenRecord::MenuText(false, "");
 
@@ -7820,7 +7769,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectPhysicsVarianceFlipperStrengthSpread:
    {
       PrintScreenRecord::MenuTitleText("Flipper Strength Spread");
-      PrintScreenRecord::MenuText(false, "(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::FlipperStrengthSpreadMinimum, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpread, TrainerOptions::FlipperStrengthSpreadMaximum);
+      PrintScreenRecord::MenuText(false, std::format("(minimum){}% <-- {}% --> {}%(maximum)", TrainerOptions::FlipperStrengthSpreadMinimum, m_MenuOptions.m_TrainerOptions.m_FlipperStrengthSpread, TrainerOptions::FlipperStrengthSpreadMaximum));
 
       PrintScreenRecord::MenuText(false, "");
 
@@ -7907,7 +7856,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectPhysicsVarianceFlipperFrictionSpread:
    {
       PrintScreenRecord::MenuTitleText("Flipper Friction Spread");
-      PrintScreenRecord::MenuText(false, "(minimum)%d%% <-- %d%% --> %d%%(maximum)", TrainerOptions::FlipperFrictionSpreadMinimum, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpread, TrainerOptions::FlipperFrictionSpreadMaximum);
+      PrintScreenRecord::MenuText(false, std::format("(minimum){}% <-- {}% --> {}%(maximum)", TrainerOptions::FlipperFrictionSpreadMinimum, m_MenuOptions.m_TrainerOptions.m_FlipperFrictionSpread, TrainerOptions::FlipperFrictionSpreadMaximum));
 
       PrintScreenRecord::MenuText(false, "");
       
@@ -8296,10 +8245,10 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectSoundEffects:
       PrintScreenRecord::MenuTitleText("Sound Effects");
       PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode == TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_Accept, "Accept");
-      PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode == TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_Pass, "(%s) Pass", m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled ? "X" : "O");
-      PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode == TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_Fail, "(%s) Fail", m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled ? "X" : "O");
-      PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode == TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_Countdown, "(%s) Countdown", m_MenuOptions.m_TrainerOptions.m_SoundEffectsCountdownEnabled ? "X" : "O");
-      PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode == TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_TimeLow, "(%s) Time Low", m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled ? "X" : "O");
+      PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode == TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_Pass, std::format("({}) Pass", m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled ? 'X' : 'O'));
+      PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode == TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_Fail, std::format("({}) Fail", m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled ? 'X' : 'O'));
+      PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode == TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_Countdown, std::format("({}) Countdown", m_MenuOptions.m_TrainerOptions.m_SoundEffectsCountdownEnabled ? 'X' : 'O'));
+      PrintScreenRecord::MenuText(m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode == TrainerOptions::SoundEffectsModeType::SoundEffectsModeType_TimeLow, std::format("({}) Time Low", m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled ? 'X' : 'O'));
 
       switch (m_MenuOptions.m_TrainerOptions.m_SoundEffectsMode)
       {
@@ -8420,7 +8369,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
 
       ShowSection(DescriptionSectionTitle,
       {
-         ("Press Ball History Menu key '" + std::string(1, GetBallHistoryKey(player, eBallHistoryMenu)) + "' to continue play").c_str(),
+         "Press Ball History Menu key '" + std::string(1, GetBallHistoryKey(player, eBallHistoryMenu)) + "' to continue play",
          "Plunger returns to previous menu" }
       );
 
@@ -8729,10 +8678,10 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
             }
          }
 
-         PrintScreenRecord::Text("RunStartCountdown", 0.50f, 0.85f, "<-- Run %zu (of %zu) starts in %.2f seconds -->", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_RunRecords.size(), secondsBeforeStart);
+         PrintScreenRecord::Text("RunStartCountdown", 0.50f, 0.85f, std::format("<-- Run {} (of {}) starts in {:.2f} seconds -->", m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1, m_MenuOptions.m_TrainerOptions.m_RunRecords.size(), secondsBeforeStart));
          if (!m_MenuOptions.m_MenuError.empty())
          {
-            PrintScreenRecord::ErrorText("%s", m_MenuOptions.m_MenuError.c_str());
+            PrintScreenRecord::ErrorText(m_MenuOptions.m_MenuError);
          }
       }
 
@@ -9688,7 +9637,7 @@ void BallHistory::InvalidEnumValue(const char* enumName, const int enumValue)
    m_MenuOptions.m_MenuError = errorMessage.str();
 }
 
-void BallHistory::InvalidEnumValue(const char* enumName, const char* enumValue)
+void BallHistory::InvalidEnumValue(const char* enumName, const std::string& enumValue)
 {
    std::stringstream errorMessage;
    errorMessage << "Ball History: Invalid value '" << enumValue << "' for enum type " << enumName;
