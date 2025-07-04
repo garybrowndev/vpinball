@@ -1093,10 +1093,7 @@ STDMETHODIMP Flipper::put_Y(float newVal)
 
 STDMETHODIMP Flipper::get_Surface(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szSurface.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szSurface);
    return S_OK;
 }
 
@@ -1108,10 +1105,7 @@ STDMETHODIMP Flipper::put_Surface(BSTR newVal)
 
 STDMETHODIMP Flipper::get_Material(BSTR *pVal)
 {
-   WCHAR wz[MAXNAMEBUFFER];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szMaterial.c_str(), -1, wz, MAXNAMEBUFFER);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szMaterial);
    return S_OK;
 }
 
@@ -1165,10 +1159,7 @@ STDMETHODIMP Flipper::put_OverridePhysics(PhysicsSet newVal)
 
 STDMETHODIMP Flipper::get_RubberMaterial(BSTR *pVal)
 {
-   WCHAR wz[MAXNAMEBUFFER];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szRubberMaterial.c_str(), -1, wz, MAXNAMEBUFFER);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szRubberMaterial);
    return S_OK;
 }
 
@@ -1383,10 +1374,7 @@ STDMETHODIMP Flipper::put_FlipperRadiusMin(float newVal)
 
 STDMETHODIMP Flipper::get_Image(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szImage.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szImage);
    return S_OK;
 }
 

@@ -82,11 +82,7 @@ void Decal::SetDefaults(const bool fromMouseClick)
       if (!hr || !fromMouseClick)
          fd.lpstrName = (LPOLESTR)(L"Arial Black");
       else
-      {
-         const int len = (int)tmp.length() + 1;
-         fd.lpstrName = (LPOLESTR)malloc(len*sizeof(WCHAR));
-         MultiByteToWideCharNull(CP_ACP, 0, tmp.c_str(), -1, fd.lpstrName, len);
-      }
+         fd.lpstrName = (LPOLESTR)MakeWide(tmp);
 
       fd.sWeight = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "FontWeight"s, FW_NORMAL) : FW_NORMAL;
       fd.sCharset = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "FontCharSet"s, 0) : 0;
@@ -96,7 +92,7 @@ void Decal::SetDefaults(const bool fromMouseClick)
 
       OleCreateFontIndirect(&fd, IID_IFont, (void **)&m_pIFont);
       if (hr && fromMouseClick)
-         free(fd.lpstrName);
+         delete [] fd.lpstrName;
 #endif
    }
 
@@ -732,7 +728,6 @@ void Decal::RenderSetup(RenderDevice *device)
 void Decal::RenderRelease()
 {
    assert(m_rd != nullptr);
-   delete m_textImg;
    delete m_meshBuffer;
    m_textImg = nullptr;
    m_meshBuffer = nullptr;
@@ -770,7 +765,7 @@ void Decal::Render(const unsigned int renderMask)
          m_rd->m_basicShader->SetTechniqueMaterial(SHADER_TECHNIQUE_basic_with_texture, *mat, false);
       else
          m_rd->m_basicShader->SetTechnique(SHADER_TECHNIQUE_bg_decal_with_texture);
-      m_rd->m_basicShader->SetTexture(SHADER_tex_base_color, m_textImg);
+      m_rd->m_basicShader->SetTexture(SHADER_tex_base_color, m_textImg.get());
    }
    else
    {
@@ -862,10 +857,7 @@ STDMETHODIMP Decal::put_Rotation(float newVal)
 
 STDMETHODIMP Decal::get_Image(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szImage.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szImage);
    return S_OK;
 }
 
@@ -939,10 +931,7 @@ STDMETHODIMP Decal::put_Y(float newVal)
 
 STDMETHODIMP Decal::get_Surface(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szSurface.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szSurface);
    return S_OK;
 }
 
@@ -968,10 +957,7 @@ STDMETHODIMP Decal::put_Type(DecalType newVal)
 
 STDMETHODIMP Decal::get_Text(BSTR *pVal)
 {
-   WCHAR wz[MAXSTRING];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_text.c_str(), -1, wz, MAXSTRING);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_text);
    return S_OK;
 }
 
@@ -1011,10 +997,7 @@ STDMETHODIMP Decal::put_FontColor(OLE_COLOR newVal)
 
 STDMETHODIMP Decal::get_Material(BSTR *pVal)
 {
-   WCHAR wz[MAXNAMEBUFFER];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szMaterial.c_str(), -1, wz, MAXNAMEBUFFER);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szMaterial);
    return S_OK;
 }
 

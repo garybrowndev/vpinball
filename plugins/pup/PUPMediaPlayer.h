@@ -2,16 +2,15 @@
 
 #include "PUPManager.h"
 #include "LibAv.h"
-/*
-#include "parts/Sound.h"
-#include "../common/Window.h"*/
+#include "ThreadPool.h"
+// #include "parts/Sound.h"
 
 namespace PUP {
 
 class PUPMediaPlayer final
 {
 public:
-   PUPMediaPlayer();
+   PUPMediaPlayer(const string& name);
    ~PUPMediaPlayer();
 
    void Play(const string& filename);
@@ -25,11 +24,17 @@ public:
    void SetLength(int length);
    void Render(VPXRenderContext2D* const ctx, const SDL_Rect& destRect);
 
+   void SetBounds(const SDL_Rect& rect);
+
 private:
+   void StopBlocking();
    void Run();
    AVCodecContext* OpenStream(AVFormatContext* pInputFormatContext, int stream);
    void HandleAudioFrame(AVFrame* pFrame);
    void HandleVideoFrame(AVFrame* pFrame);
+
+   const string m_name;
+   SDL_Rect m_bounds;
 
    string m_filename;
    uint64_t m_startTimestamp = 0; // timestamp in ms when the play command was called
@@ -47,11 +52,11 @@ private:
    int m_videoStream = -1;
    AVCodecContext* m_pVideoContext = nullptr;
 
-   SwsContext* m_swsContext = nullptr;
-   int m_nRgbFrames = 0; // Circular buffer of m_nRgbFrames frames, ready to be rendered if framePTS >= playPTS
+   // Circular buffer of m_nRgbFrames frames, ready to be rendered if framePTS >= playPTS
    int m_activeRgbFrame = 0;
-   AVFrame** m_rgbFrames = nullptr;
-   uint8_t** m_rgbFrameBuffers = nullptr;
+   vector<AVFrame*> m_rgbFrames;
+   vector<VPXTexture> m_videoTextures;
+   SwsContext* m_swsContext = nullptr;
 
    VPXTexture m_videoTexture = nullptr;
    unsigned int m_videoTextureId = 0xFFFFFF;
@@ -67,6 +72,8 @@ private:
    bool m_running = false;
 
    const LibAV& m_libAv;
+
+   ThreadPool m_commandQueue;
 };
 
 }

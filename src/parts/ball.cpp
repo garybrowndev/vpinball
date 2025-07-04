@@ -231,7 +231,7 @@ void Ball::RenderSetup(RenderDevice *device)
 
    if (m_d.m_useTableRenderSettings && g_pplayer->m_renderer->m_overwriteBallImages && g_pplayer->m_renderer->m_ballImage)
    {
-      m_pinballEnv = g_pplayer->m_renderer->m_ballImage;
+      m_pinballEnv = g_pplayer->m_renderer->m_ballImage.get();
       m_d.m_pinballEnvSphericalMapping = true;
    }
    else if (m_d.m_szImage.empty())
@@ -243,7 +243,7 @@ void Ball::RenderSetup(RenderDevice *device)
       m_pinballEnv = m_ptable->GetImage(m_d.m_szImage) ? m_ptable->GetImage(m_d.m_szImage) : nullptr;
 
    if (m_d.m_useTableRenderSettings && g_pplayer->m_renderer->m_overwriteBallImages && g_pplayer->m_renderer->m_decalImage)
-      m_pinballDecal = g_pplayer->m_renderer->m_decalImage;
+      m_pinballDecal = g_pplayer->m_renderer->m_decalImage.get();
    else if (m_d.m_imageDecal.empty())
       m_pinballDecal = nullptr;
    else
@@ -724,9 +724,7 @@ STDMETHODIMP Ball::put_Color(OLE_COLOR newVal)
 
 STDMETHODIMP Ball::get_Image(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szImage.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
+   *pVal = MakeWideBSTR(m_d.m_szImage);
    return S_OK;
 }
 
@@ -743,9 +741,7 @@ STDMETHODIMP Ball::put_Image(BSTR newVal)
 
 STDMETHODIMP Ball::get_FrontDecal(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_imageDecal.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
+   *pVal = MakeWideBSTR(m_d.m_imageDecal);
    return S_OK;
 }
 

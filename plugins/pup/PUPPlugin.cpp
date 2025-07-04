@@ -136,17 +136,12 @@ VPXTexture CreateTexture(SDL_Surface* surf)
    return texture;
 }
 
-VPXTexture CreateTexture(uint8_t* rawData, int size)
+VPXTextureInfo* GetTextureInfo(VPXTexture texture)
 {
    if (vpxApi)
-      return vpxApi->CreateTexture(rawData, size);
-   return nullptr;
-}
-
-void GetTextureInfo(VPXTexture texture, int* width, int* height)
-{
-   if (vpxApi)
-      vpxApi->GetTextureInfo(texture, width, height);
+      return vpxApi->GetTextureInfo(texture);
+   else
+      return nullptr;
 }
 
 void DeleteTexture(VPXTexture texture)

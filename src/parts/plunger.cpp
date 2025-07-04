@@ -1076,10 +1076,7 @@ STDMETHODIMP Plunger::put_Type(PlungerType newVal)
 
 STDMETHODIMP Plunger::get_Material(BSTR *pVal)
 {
-   WCHAR wz[MAXNAMEBUFFER];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szMaterial.c_str(), -1, wz, MAXNAMEBUFFER);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szMaterial);
    return S_OK;
 }
 
@@ -1091,10 +1088,7 @@ STDMETHODIMP Plunger::put_Material(BSTR newVal)
 
 STDMETHODIMP Plunger::get_Image(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szImage.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szImage);
    return S_OK;
 }
 
@@ -1126,10 +1120,7 @@ STDMETHODIMP Plunger::put_AnimFrames(int newVal)
 
 STDMETHODIMP Plunger::get_TipShape(BSTR *pVal)
 {
-   WCHAR wz[MAXTIPSHAPE];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szTipShape.c_str(), -1, wz, MAXTIPSHAPE);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szTipShape);
    return S_OK;
 }
 
@@ -1305,10 +1296,7 @@ STDMETHODIMP Plunger::put_ZAdjust(float newVal)
 
 STDMETHODIMP Plunger::get_Surface(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szSurface.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szSurface);
    return S_OK;
 }
 

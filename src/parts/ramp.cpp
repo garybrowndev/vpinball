@@ -1588,10 +1588,7 @@ STDMETHODIMP Ramp::put_WidthTop(float newVal)
 
 STDMETHODIMP Ramp::get_Material(BSTR *pVal)
 {
-   WCHAR wz[MAXNAMEBUFFER];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szMaterial.c_str(), -1, wz, MAXNAMEBUFFER);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szMaterial);
    return S_OK;
 }
 
@@ -1620,10 +1617,7 @@ STDMETHODIMP Ramp::put_Type(RampType newVal)
 
 STDMETHODIMP Ramp::get_Image(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szImage.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szImage);
    return S_OK;
 }
 
@@ -1930,10 +1924,7 @@ STDMETHODIMP Ramp::put_WireDistanceY(float newVal)
 
 STDMETHODIMP Ramp::get_PhysicsMaterial(BSTR *pVal)
 {
-   WCHAR wz[MAXNAMEBUFFER];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szPhysicsMaterial.c_str(), -1, wz, MAXNAMEBUFFER);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szPhysicsMaterial);
    return S_OK;
 }
 
@@ -2319,7 +2310,8 @@ void Ramp::GenerateVertexBuffer()
    Vertex3D_NoTex2 *tmpBuffer = nullptr;
    GenerateRampMesh(&tmpBuffer);
 
-   delete m_meshBuffer;
+   const MeshBuffer *meshBuffer = m_meshBuffer;
+   m_rd->AddEndOfFrameCmd([meshBuffer]() { delete meshBuffer; });
    VertexBuffer* dynamicVertexBuffer = new VertexBuffer(m_rd, m_numVertices * 3, (float*) tmpBuffer); //!! use USAGE_DYNAMIC if it would actually be "really" dynamic
    IndexBuffer* dynamicIndexBuffer = new IndexBuffer(m_rd, m_meshIndices);
    m_meshBuffer = new MeshBuffer(m_wzName, dynamicVertexBuffer, dynamicIndexBuffer, true);

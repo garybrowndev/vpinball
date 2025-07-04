@@ -14,7 +14,6 @@ class BaseTexture;
 enum SamplerFilter : unsigned int
 {
    SF_NONE, // No filtering at all. DX: MIPFILTER = NONE; MAGFILTER = POINT; MINFILTER = POINT; / OpenGL Nearest/Nearest
-   SF_POINT, // Point sampled (aka nearest mipmap) texture filtering.
    SF_BILINEAR, // Bilinar texture filtering (linear min/mag, no mipmapping). DX: MIPFILTER = NONE; MAGFILTER = LINEAR; MINFILTER = LINEAR;
    SF_TRILINEAR, // Trilinar texture filtering (linear min/mag, with mipmapping). DX: MIPFILTER = LINEAR; MAGFILTER = LINEAR; MINFILTER = LINEAR;
    SF_ANISOTROPIC, // Anisotropic texture filtering.
@@ -34,17 +33,6 @@ enum SurfaceType
    RT_DEFAULT, // Default single layer surface
    RT_STEREO, // Texture array with 2 layers
    RT_CUBEMAP // Cubemap texture (6 layers)
-};
-
-class Sampler;
-struct SamplerBinding
-{
-   int unit;
-   int use_rank;
-   std::shared_ptr<const Sampler> sampler;
-   SamplerFilter filter;
-   SamplerAddressMode clamp_u;
-   SamplerAddressMode clamp_v;
 };
 
 class Sampler final
@@ -98,6 +86,15 @@ private:
    GLuint m_texture = 0;
    GLuint CreateTexture(std::shared_ptr<const BaseTexture> surf, unsigned int Levels, colorFormat Format, int stereo);
 public:
+   struct SamplerBinding
+   {
+      int unit;
+      int use_rank;
+      std::shared_ptr<const Sampler> sampler;
+      SamplerFilter filter;
+      SamplerAddressMode clamp_u;
+      SamplerAddressMode clamp_v;
+   };
    mutable ankerl::unordered_dense::set<SamplerBinding*> m_bindings;
 #elif defined(ENABLE_DX9)
    IDirect3DTexture9* m_texture = nullptr;

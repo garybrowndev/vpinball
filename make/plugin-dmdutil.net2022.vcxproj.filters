@@ -7,7 +7,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="../../plugins/dmdutil/dmdutil.cpp">
+    <ClCompile Include="../../plugins/dmdutil/DMDUtilPlugin.cpp">
       <Filter>source</Filter>
     </ClCompile>
   </ItemGroup>

@@ -159,19 +159,6 @@ static const char* glErrorToString(const int error)
    default: return "unknown";
    }
 }
-#if 0 // not used anymore
-void checkGLErrors(const char *file, const int line) {
-   GLenum err;
-   unsigned int count = 0;
-   while ((err = glGetError()) != GL_NO_ERROR) {
-      count++;
-      ReportFatalError(err, file, line);
-   }
-   /*if (count>0) {
-      exit(-1);
-   }*/
-}
-#endif
 
 // Callback function for printing debug statements
 #if defined(_DEBUG) && !defined(__OPENGLES__)
@@ -211,14 +198,10 @@ void APIENTRY GLDebugMessageCallback(GLenum source, GLenum type, GLuint id, GLen
    case GL_DEBUG_SEVERITY_NOTIFICATION: _severity = (LPSTR) "NOTIFICATION"; break;
    default: _severity = (LPSTR) "UNHANDLED"; break;
    }
-   if (severity != GL_DEBUG_SEVERITY_NOTIFICATION)
+   //if (severity != GL_DEBUG_SEVERITY_NOTIFICATION)
+   if (type != GL_DEBUG_TYPE_MARKER && type != GL_DEBUG_TYPE_PUSH_GROUP && type != GL_DEBUG_TYPE_POP_GROUP)
    {
-      // FIXME this will crash if the drivers performs the call on the wrong thread (nvogl does...)
-      /* assert(false);
-      PLOGE << "OpenGL Error #" << id << ": " << _type << " of " << _severity << "severity, raised from " << _source << ": " << msg;
-      fprintf(stderr, "%d: %s of %s severity, raised from %s: %s\n", id, _type, _severity, _source, msg);
-      if (type == GL_DEBUG_TYPE_ERROR || type == GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR || severity == GL_DEBUG_SEVERITY_HIGH)
-         ShowError(msg);*/
+      PLOGE << "OpenGL Msg #" << id << " [" << _severity << "/" << _type << " from " << _source  << "]: " << msg;
    }
 }
 #endif
@@ -332,6 +315,7 @@ string RenderDevice::s_screenshotFilename = string();
 
 void RenderDevice::RenderThread(RenderDevice* rd, const bgfx::Init& initReq)
 {
+   SetThreadName("RenderThread");
    bgfx::Init init = initReq;
 
    // If using OpenGl on a WCG display, then create the OpenGL WCG context through SDL since BGFX does not support HDR10 under OpenGl
@@ -950,7 +934,7 @@ RenderDevice::RenderDevice(VPX::Window* const wnd, const bool isVR, const int nE
    int n_tex_units = min(max_frag_unit, max_combined_unit);
    for (int i = 0; i < n_tex_units; i++)
    {
-      SamplerBinding* binding = new SamplerBinding();
+      Sampler::SamplerBinding* binding = new Sampler::SamplerBinding();
       binding->unit = i;
       binding->use_rank = i;
       binding->sampler = nullptr;
@@ -1591,11 +1575,10 @@ void RenderDevice::Flip()
 void RenderDevice::UploadAndSetSMAATextures()
 {
    // TODO use standard BaseTexture / Sampler code instead
-   /* BaseTexture* searchBaseTex = BaseTexture::Create(SEARCHTEX_WIDTH, SEARCHTEX_HEIGHT, BaseTexture::BW);
+   /* std::shared_ptr<BaseTexture> searchBaseTex = BaseTexture::Create(SEARCHTEX_WIDTH, SEARCHTEX_HEIGHT, BaseTexture::BW);
    memcpy(searchBaseTex->data(), searchTexBytes, SEARCHTEX_SIZE);
    m_SMAAsearchTexture = std::make_shared<Sampler>(this, "SMAA Search"s, searchBaseTex, true);
-   m_SMAAsearchTexture->SetName("SMAA Search"s);
-   delete searchBaseTex;*/
+   m_SMAAsearchTexture->SetName("SMAA Search"s); */
 
 #if defined(ENABLE_BGFX)
    bgfx::TextureHandle smaaAreaTex = bgfx::createTexture2D(AREATEX_WIDTH, AREATEX_HEIGHT, false, 1, bgfx::TextureFormat::RG8, BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP, bgfx::makeRef(areaTexBytes, AREATEX_SIZE));
@@ -1722,11 +1705,6 @@ void RenderDevice::SetSamplerState(int unit, SamplerFilter filter, SamplerAddres
          glSamplerParameteri(sampler_state, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
          glSamplerParameterf(sampler_state, GL_TEXTURE_MAX_ANISOTROPY, 1.0f);
          break;
-      case SF_POINT: // Point sampled (aka nearest mipmap) texture filtering.
-         glSamplerParameteri(sampler_state, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
-         glSamplerParameteri(sampler_state, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-         glSamplerParameterf(sampler_state, GL_TEXTURE_MAX_ANISOTROPY, 1.0f);
-         break;
       case SF_BILINEAR: // Bilinear texture filtering.
          glSamplerParameteri(sampler_state, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
          glSamplerParameteri(sampler_state, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -1758,14 +1736,6 @@ void RenderDevice::SetSamplerState(int unit, SamplerFilter filter, SamplerAddres
          CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_MINFILTER, D3DTEXF_POINT));
          CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_MIPFILTER, D3DTEXF_NONE));
          m_curStateChanges+=3;
-         break;
-
-      case SF_POINT:
-         // Point sampled (aka nearest mipmap) texture filtering.
-         CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_MAGFILTER, D3DTEXF_POINT));
-         CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_MINFILTER, D3DTEXF_POINT));
-         CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_MIPFILTER, D3DTEXF_POINT));
-         m_curStateChanges += 3;
          break;
 
       case SF_BILINEAR:
@@ -2133,13 +2103,4 @@ void RenderDevice::DrawGaussianBlur(RenderTarget* source, RenderTarget* tmp, Ren
    CopyRenderStates(false, initial_state);
    SetRenderTarget(initial_rt->m_name, initial_rt->m_rt, true);
    initial_rt->m_name += '-';
-}
-
-void RenderDevice::SetMainTextureDefaultFiltering(const SamplerFilter filter)
-{
-   Shader::SetDefaultSamplerFilter(SHADER_tex_sprite, filter);
-   Shader::SetDefaultSamplerFilter(SHADER_tex_flasher_A, filter);
-   Shader::SetDefaultSamplerFilter(SHADER_tex_flasher_B, filter);
-   Shader::SetDefaultSamplerFilter(SHADER_tex_base_color, filter);
-   Shader::SetDefaultSamplerFilter(SHADER_tex_base_normalmap, filter);
 }

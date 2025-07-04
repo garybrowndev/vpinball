@@ -4,6 +4,8 @@
 namespace PUP {
 
 PUPMediaManager::PUPMediaManager(PUPScreen* pScreen)
+   : m_player1("PUP.Screen #"s.append(std::to_string(pScreen->GetScreenNum())).append(" Player #1"))
+   , m_player2("PUP.Screen #"s.append(std::to_string(pScreen->GetScreenNum())).append(" Player #2"))
 {
    m_pMainPlayer = &m_player1;
    m_pBackgroundPlayer = nullptr;
@@ -90,7 +92,14 @@ void PUPMediaManager::Stop(PUPPlaylist* pPlaylist, const string& szPlayFile)
    }
 }
 
-void PUPMediaManager::Render(VPXRenderContext2D* const ctx, const SDL_Rect& destRect)
+void PUPMediaManager::SetBounds(const SDL_Rect& rect)
+{
+   m_bounds = rect;
+   m_player1.player.SetBounds(rect);
+   m_player2.player.SetBounds(rect);
+}
+
+void PUPMediaManager::Render(VPXRenderContext2D* const ctx)
 {
    bool mainPlayerPlaying = m_pMainPlayer->player.IsPlaying();
    bool backgroundPlaying = false;
@@ -98,11 +107,11 @@ void PUPMediaManager::Render(VPXRenderContext2D* const ctx, const SDL_Rect& dest
    if (m_pBackgroundPlayer) {
       backgroundPlaying = m_pBackgroundPlayer->player.IsPlaying();
       if (backgroundPlaying || (!m_pop && !mainPlayerPlaying))
-          m_pBackgroundPlayer->player.Render(ctx, destRect);
+         m_pBackgroundPlayer->player.Render(ctx, m_bounds);
    }
 
    if (mainPlayerPlaying || (!m_pop && !backgroundPlaying)) {
-      m_pMainPlayer->player.Render(ctx, destRect);
+      m_pMainPlayer->player.Render(ctx, m_bounds);
    }
 
    if (m_pBackgroundPlayer)

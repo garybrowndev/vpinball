@@ -187,7 +187,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="../../plugins/dmdutil/dmdutil.cpp" />
+    <ClCompile Include="../../plugins/dmdutil/DMDUtilPlugin.cpp" />
   </ItemGroup>
   <ItemGroup>
     <CopyFileToFolders Include="../../plugins/dmdutil/plugin.cfg">
