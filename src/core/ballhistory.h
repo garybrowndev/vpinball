@@ -359,6 +359,8 @@ public:
 
    PhysicsVarianceSpreadModeType m_FlipperFrictionSpreadMode;
 
+   static const std::size_t PhysicsVariancePreviewRunCount = 6;
+
    static const int32_t TotalRunsMinimum = 1;
    static const int32_t TotalRunsMaximum = 100;
    int32_t m_TotalRuns;
@@ -530,6 +532,13 @@ private:
       static void Init();
       static void UnInit();
       static void TransformAspectRatio(float &positionX, float &positionY);
+
+      static void Text(const char *name, float positionX, float positionY, const std::string &message);
+      static void MenuTitleText(const std::string &message);
+      static void MenuText(bool selected, const std::string &message);
+      static void ActiveMenuText(const std::string &message);
+      static void ErrorText(const std::string &message);
+
       static void Text(const char *name, float positionX, float positionY, const char *format, ...);
       static void MenuTitleText(const char *format, ...);
       static void MenuText(bool selected, const char *format, ...);
@@ -655,7 +664,7 @@ private:
       ModeType m_ModeType;
       std::string m_MenuError;
 
-      int32_t m_CreateZ;
+      float m_CreateZ;
 
       NormalOptions m_NormalOptions;
       TrainerOptions m_TrainerOptions;
@@ -693,7 +702,7 @@ private:
    static const float DrawAngleVelocityLengthMultiplier;
    static const float DrawAngleVelocityHeightOffset;
 
-   static const int DrawBallBlinkMs;
+   static const int ShouldDrawBlinkMs;
 
    static const char *DescriptionSectionTitle;
    static const char *SummarySectionTitle;
@@ -821,6 +830,7 @@ private:
    bool ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallPasses(std::size_t index, int currentTimeMs);
    bool ShouldDrawTrainerBallFails(std::size_t index, int currentTimeMs);
+   bool ShouldDrawTrainerBallCorridor(int currentTimeMs);
    bool ShouldDrawActiveBallKickers(int currentTimeMs);
    void DrawTrainerBallCorridorPass(Player &player, const char * name, TrainerOptions::BallCorridorOptionsRecord &bcor, Vertex3Ds *overridePosition = nullptr);
    void DrawTrainerBallCorridorOpeningLeft(Player &player, TrainerOptions::BallCorridorOptionsRecord &bcor);
@@ -840,9 +850,15 @@ private:
    void ShowRemainingRunInfo();
    void ShowPreviousRunRecord();
    void ShowCurrentRunRecord(int currentTimeMs);
-   void ShowBallStartOptionsRecord(TrainerOptions::BallStartOptionsRecord &bsor);
-   void ShowBallEndOptionsRecord(TrainerOptions::BallEndOptionsRecord &beor);
-   void ShowBallCorridorOptionsRecord(TrainerOptions::BallCorridorOptionsRecord &bcor);
+   TrainerOptions::BallStartAngleVelocityModeType GetBallStartAngleVelocityMode(TrainerOptions::BallStartOptionsRecord& bsor);
+   void GetBallStartOptionsConfigs(std::vector<std::pair<std::string, std::string>> &ballStartOptionsConfig);
+   void GetBallStartOptionsConfig(TrainerOptions::BallStartOptionsRecord& bsor, std::size_t bsorIndex, std::vector<std::pair<std::string, std::string>> &ballStartOptionsConfig);
+   void GetBallPassOptionsConfigs(std::vector<std::pair<std::string, std::string>> &ballPassOptionsConfig);
+   void GetBallPassOptionsConfig(TrainerOptions::BallEndOptionsRecord &beor, std::size_t beorIndex, std::vector<std::pair<std::string, std::string>> &ballPassOptionsConfig);
+   void GetBallFailOptionsConfigs(std::vector<std::pair<std::string, std::string>> &ballFailOptionsConfig);
+   void GetBallFailOptionsConfig(TrainerOptions::BallEndOptionsRecord &beor, std::size_t beorIndex, std::vector<std::pair<std::string, std::string>> &ballFailOptionsConfig);
+   void GetBallEndOptionsConfig(TrainerOptions::BallEndOptionsRecord &beor, std::vector<std::pair<std::string, std::string>> &ballEndOptionsConfig);
+   void GetBallCorridorOptionsConfigs(std::vector<std::pair<std::string, std::string>> &ballCorridorOptionsConfig);
    void ShowSection(const char *title, const std::vector<std::string> &description);
    void GetGameplayDifficultyConfigValues(std::vector<std::pair<std::string, std::string>> &difficultySpreadConfig);
    void GetPhysicsVarianceVolatilityConfig(std::vector<std::pair<std::string, std::string>> &physicsVarianceVolatilityConfig);
@@ -858,17 +874,18 @@ private:
    template <class T> float CalculateStandardDeviation(std::vector<T> &values);
    float CalculatePhysicsVarianceSpread(Player &player, float initial, float current, int32_t spread, TrainerOptions::PhysicsVarianceSpreadModeType spreadMode, bool useRand);
    void InitBallStartOptionRecords();
+   std::size_t GetTotalPermutations();
    void ProcessMenu(Player &player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs);
    void ProcessMode(Player &player, int currentTimeMs);
    void ProcessModeNormal(Player &player);
    void ProcessModeTrainer(Player &player, int currentTimeMs);
    int32_t ProcessMenuChangeValue(int32_t value, int32_t delta, int32_t min, int32_t max, bool skip);
-   template <class T> void ProcessMenuChangeValueInc(T &value, int32_t min, int32_t max);
-   template <class T> void ProcessMenuChangeValueIncSkip(T &value, int32_t min, int32_t max);
-   template <class T> void ProcessMenuChangeValueDec(T &value, int32_t min, int32_t max);
-   template <class T> void ProcessMenuChangeValueDecSkip(T &value, int32_t min, int32_t max);
-   template <class T> void ProcessMenuChangeValueSkip(T &value, int32_t min, int32_t max, int currentTimeMs);
-   template <class T> void ProcessMenuAction(MenuOptionsRecord::MenuActionType menuAction, MenuOptionsRecord::MenuStateType enterMenuState, T &value, int32_t minimum, int32_t maximum, int currentTimeMs);
+   template <class T, class S> void ProcessMenuChangeValueInc(T &value, S min, S max);
+   template <class T, class S> void ProcessMenuChangeValueIncSkip(T &value, S min, S max);
+   template <class T, class S> void ProcessMenuChangeValueDec(T &value, S min, S max);
+   template <class T, class S> void ProcessMenuChangeValueDecSkip(T &value, S min, S max);
+   template <class T, class S> void ProcessMenuChangeValueSkip(T &value, S min, S max, int currentTimeMs);
+   template <class T, class S> void ProcessMenuAction(MenuOptionsRecord::MenuActionType menuAction, MenuOptionsRecord::MenuStateType enterMenuState, T &value, S minimum, S maximum, int currentTimeMs);
 
    void Add(std::vector<HitBall *> &controlVBalls, int currentTimeMsec);
    BallHistoryRecord &Get(std::size_t index);
