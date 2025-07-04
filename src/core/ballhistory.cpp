@@ -2160,7 +2160,7 @@ void BallHistory::DrawBallHistory(Player& player)
             drawBallHistoryRecords[ballHistoryStateIndex].LastDrawnBallHistoryRecord = &tempCurrentBhr;
             drawBallHistoryRecords[ballHistoryStateIndex].TotalToRender++;
             std::string drawLineName = "DrawBallHistoryLine" + std::to_string(drawLineIndex++);
-            DrawLine(player, drawLineName, ballHistoryState.m_Position, lastDrawnPos, m_AutoControlBallColor, 1);
+            DrawLine(player, drawLineName, ballHistoryState.m_Position, lastDrawnPos, m_AutoControlBallColor, 10);
          }
       }
 
