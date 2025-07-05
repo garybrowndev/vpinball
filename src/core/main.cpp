@@ -506,12 +506,11 @@ public:
 #ifdef _MSC_VER
       // disable auto-rotate on tablets
 #if (_WIN32_WINNT <= 0x0601)
-      SetDisplayAutoRotationPreferences = (pSDARP)GetProcAddress(GetModuleHandle(TEXT("user32.dll")),
-         "SetDisplayAutoRotationPreferences");
+      SetDisplayAutoRotationPreferences = (pSDARP)GetProcAddress(GetModuleHandle(TEXT("user32.dll")), "SetDisplayAutoRotationPreferences");
       if (SetDisplayAutoRotationPreferences)
-         SetDisplayAutoRotationPreferences(ORIENTATION_PREFERENCE_LANDSCAPE);
+         SetDisplayAutoRotationPreferences(static_cast<ORIENTATION_PREFERENCE>(ORIENTATION_PREFERENCE_LANDSCAPE | ORIENTATION_PREFERENCE_LANDSCAPE_FLIPPED));
 #else
-      SetDisplayAutoRotationPreferences(ORIENTATION_PREFERENCE_LANDSCAPE);
+      SetDisplayAutoRotationPreferences(static_cast<ORIENTATION_PREFERENCE>(ORIENTATION_PREFERENCE_LANDSCAPE | ORIENTATION_PREFERENCE_LANDSCAPE_FLIPPED));
 #endif
 
       //!! max(2u, std::thread::hardware_concurrency()) ??
@@ -998,12 +997,10 @@ public:
       }
 
       if (m_listSnd) {
-         vector<VPX::AudioPlayer::AudioDevice> allAudioDevices;
-         VPX::AudioPlayer::EnumerateAudioDevices(allAudioDevices);
          PLOGI << "Available sound devices:";
-         for (VPX::AudioPlayer::AudioDevice audioDevice : allAudioDevices)
+         for (VPX::AudioPlayer::AudioDevice audioDevice : VPX::AudioPlayer::EnumerateAudioDevices())
          {
-            PLOGI << "  id " << audioDevice.id << ": name=" << audioDevice.name << ", channels=" << audioDevice.channels;
+            PLOGI << ". " << audioDevice.name << ", channels=" << audioDevice.channels;
          }
       }
 

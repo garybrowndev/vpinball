@@ -196,14 +196,36 @@ LocalStringW::LocalStringW(const int resid)
 WCHAR *MakeWide(const char* const sz)
 {
    const int len = MultiByteToWideChar(CP_ACP, 0, sz, -1, nullptr, 0); //(int)strlen(sz) + 1; // include null termination
+   if (len <= 1)
+   {
+      WCHAR * const wzT = new WCHAR[1];
+      wzT[0] = L'\0';
+      return wzT;
+   }
    WCHAR * const wzT = new WCHAR[len];
    MultiByteToWideChar(CP_ACP, 0, sz, -1, wzT, len);
+   return wzT;
+}
+
+BSTR MakeWideBSTR(const string& sz)
+{
+   const int len = MultiByteToWideChar(CP_ACP, 0, sz.c_str(), -1, nullptr, 0); //(int)sz.length() + 1; // include null termination
+   if (len <= 1)
+      return SysAllocString(L"");
+   BSTR wzT = SysAllocStringLen(nullptr, len - 1);
+   MultiByteToWideChar(CP_ACP, 0, sz.c_str(), -1, wzT, len);
    return wzT;
 }
 
 WCHAR *MakeWide(const string& sz)
 {
    const int len = MultiByteToWideChar(CP_ACP, 0, sz.c_str(), -1, nullptr, 0); //(int)sz.length() + 1; // include null termination
+   if (len <= 1)
+   {
+      WCHAR * const wzT = new WCHAR[1];
+      wzT[0] = L'\0';
+      return wzT;
+   }
    WCHAR * const wzT = new WCHAR[len];
    MultiByteToWideChar(CP_ACP, 0, sz.c_str(), -1, wzT, len);
    return wzT;
@@ -212,6 +234,8 @@ WCHAR *MakeWide(const string& sz)
 string MakeString(const wstring &wz)
 {
    const int len = WideCharToMultiByte(CP_ACP, 0, wz.c_str(), -1, nullptr, 0, nullptr, nullptr); //(int)wz.length() + 1; // include null termination
+   if (len <= 1)
+      return string();
    string result(len - 1, '\0');
    WideCharToMultiByte(CP_ACP, 0, wz.c_str(), -1, result.data(), len, nullptr, nullptr);
    return result;
@@ -220,6 +244,8 @@ string MakeString(const wstring &wz)
 string MakeString(const WCHAR* const wz)
 {
    const int len = WideCharToMultiByte(CP_ACP, 0, wz, -1, nullptr, 0, nullptr, nullptr); //(int)wcslen(wz) + 1; // include null termination
+   if (len <= 1)
+      return string();
    string result(len - 1, '\0');
    WideCharToMultiByte(CP_ACP, 0, wz, -1, result.data(), len, nullptr, nullptr);
    return result;
@@ -228,6 +254,8 @@ string MakeString(const WCHAR* const wz)
 string MakeString(const BSTR wz)
 {
    const int len = WideCharToMultiByte(CP_ACP, 0, wz, -1, nullptr, 0, nullptr, nullptr); //(int)SysStringLen(wz) + 1; // include null termination
+   if (len <= 1)
+      return string();
    string result(len - 1, '\0');
    WideCharToMultiByte(CP_ACP, 0, wz, -1, result.data(), len, nullptr, nullptr);
    return result;
@@ -236,6 +264,8 @@ string MakeString(const BSTR wz)
 wstring MakeWString(const string &sz)
 {
    const int len = MultiByteToWideChar(CP_ACP, 0, sz.c_str(), -1, nullptr, 0); //(int)sz.length() + 1; // include null termination
+   if (len <= 1)
+      return wstring();
    wstring result(len - 1, L'\0');
    MultiByteToWideChar(CP_ACP, 0, sz.c_str(), -1, result.data(), len);
    return result;
@@ -244,6 +274,8 @@ wstring MakeWString(const string &sz)
 wstring MakeWString(const char * const sz)
 {
    const int len = MultiByteToWideChar(CP_ACP, 0, sz, -1, nullptr, 0); //(int)strlen(sz) + 1; // include null termination
+   if (len <= 1)
+      return wstring();
    wstring result(len - 1, L'\0');
    MultiByteToWideChar(CP_ACP, 0, sz, -1, result.data(), len);
    return result;
@@ -252,6 +284,8 @@ wstring MakeWString(const char * const sz)
 char *MakeChar(const WCHAR* const wz)
 {
    const int len = WideCharToMultiByte(CP_ACP, 0, wz, -1, nullptr, 0, nullptr, nullptr); //(int)wcslen(wz) + 1; // include null termination
+   if (len <= 1)
+      return nullptr;
    char * const szT = new char[len];
    WideCharToMultiByte(CP_ACP, 0, wz, -1, szT, len, nullptr, nullptr);
    return szT;
@@ -289,6 +323,21 @@ HRESULT OpenURL(const string& szURL)
    return 0L;
 #endif
 }
+
+#ifdef _WIN32
+void SetThreadName(const std::string& name)
+{
+   const int size_needed = MultiByteToWideChar(CP_UTF8, 0, name.c_str(), -1, nullptr, 0);
+   if (size_needed <= 1)
+      return;
+   std::wstring wstr(size_needed - 1, L'\0');
+   if (MultiByteToWideChar(CP_UTF8, 0, name.c_str(), -1, wstr.data(), size_needed) == 0)
+      return;
+   HRESULT hr = SetThreadDescription(GetCurrentThread(), wstr.c_str());
+}
+#else
+void SetThreadName(const std::string& name) { }
+#endif
 
 // Helper function for IsOnWine
 //
@@ -545,11 +594,11 @@ string find_case_insensitive_directory_path(const string& szPath)
    return string();
 }
 
+// returns file extension in lower case (e.g. "png" or "hdr")
 string extension_from_path(const string& path)
 {
-   const string lowerPath = lowerCase(path);
    const size_t pos = path.find_last_of('.');
-   return pos != string::npos ? lowerPath.substr(pos + 1) : string();
+   return pos != string::npos ? lowerCase(path.substr(pos + 1)) : string();
 }
 
 bool path_has_extension(const string& path, const string& ext)

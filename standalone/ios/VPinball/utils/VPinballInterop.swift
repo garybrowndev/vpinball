@@ -25,13 +25,14 @@ enum VPinballSettingsSection: String {
     case tableOption = "TableOption"
     case pluginAlphaDMD = "Plugin.AlphaDMD"
     case pluginB2S = "Plugin.B2S"
+    case pluginDMDUtil = "Plugin.DMDUtil"
+    case pluginDOF = "Plugin.DOF"
     case pluginFlexDMD = "Plugin.FlexDMD"
     case pluginPinMAME = "Plugin.PinMAME"
     case pluginPUP = "Plugin.PUP"
     case pluginRemoteControl = "Plugin.RemoteControl"
     case pluginSerum = "Plugin.Serum"
     case pluginScoreView = "Plugin.ScoreView"
-    case pluginDMDUtil = "Plugin.DMDUtil"
 }
 
 enum VPinballViewMode: CInt {
@@ -341,6 +342,10 @@ enum VPinballEvent: CInt {
     case stopped
     case webServer
     case captureScreenshot
+    case tableList
+    case tableImport
+    case tableRename
+    case tableDelete
 
     var name: String? {
         switch self {
@@ -506,6 +511,24 @@ struct VPinballCaptureScreenshotData {
     var success: CBool
 }
 
+struct VPinballTableInfo {
+    var tableId: UnsafeMutablePointer<CChar>?
+    var name: UnsafeMutablePointer<CChar>?
+}
+
+struct VPinballTablesData {
+    var tables: UnsafeMutablePointer<VPinballTableInfo>?
+    var tableCount: CInt
+    var success: CBool
+}
+
+struct VPinballTableEventData {
+    var tableId: UnsafePointer<CChar>?
+    var newName: UnsafePointer<CChar>?
+    var path: UnsafePointer<CChar>?
+    var success: CBool
+}
+
 struct VPinballTableOptions {
     var globalEmissionScale: Float = 0.0
     var globalDifficulty: Float = 0.0
@@ -561,6 +584,9 @@ func VPinballLog(_ level: CInt, _ pMessage: UnsafePointer<CChar>)
 
 @_silgen_name("VPinballResetLog")
 func VPinballResetLog()
+
+@_silgen_name("VPinballSetWebServerUpdated")
+func VPinballSetWebServerUpdated()
 
 @_silgen_name("VPinballLoadValueInt")
 func VPinballLoadValueInt(_ section: UnsafePointer<CChar>, _ pKey: UnsafePointer<CChar>, _ defaultValue: CInt) -> CInt

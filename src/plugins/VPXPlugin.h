@@ -54,6 +54,14 @@ typedef enum
    VPXTEXFMT_sRGB565,
 } VPXTextureFormat;
 
+typedef struct VPXTextureInfo
+{
+   unsigned int width;
+   unsigned int height;
+   VPXTextureFormat format;
+   uint8_t* data;
+} VPXTextureInfo;
+
 typedef enum
 {
    VPXWINDOW_Backglass,
@@ -98,11 +106,13 @@ typedef struct VPXRenderContext2D
    VPXAnciliaryWindow window; // Target window
    float srcWidth;            // Source surface width, used in DrawImage call, default to target surface width
    float srcHeight;           // Source surface height, used in DrawImage call, default to target surface height
-   float outWidth;            // Target surface width, mostly to be used for apsect ratio computation, LOD and layout
-   float outHeight;           // Target surface height, mostly to be used for apsect ratio computation, LOD and layout
+   int is2D;                  // If true, the rendering is done in 2D mode, otherwise in 3D mode
+   float outWidth;            // Target surface width for 2D render, otherwise hint to be used for aspect ratio computation, LOD and layout
+   float outHeight;           // Target surface height for 2D render, otherwise hint to be used for apsect ratio computation, LOD and layout
    void(MSGPIAPI* DrawImage)(VPXRenderContext2D* ctx, VPXTexture texture,
       const float tintR, const float tintG, const float tintB, const float alpha, // tint color and alpha (0..1)
       const float texX, const float texY, const float texW, const float texH,  // coordinates in texture surface (0..tex.width, 0..tex.height)
+      const float pivotX, const float pivotY, const float rotation, // pivot point in texture surface & rotation in degrees
       const float srcX, const float srcY, const float srcW, const float srcH); // coordinates in source surface (0..srcWidth, 0..srcHeight)
    void(MSGPIAPI* DrawDisplay)(VPXRenderContext2D* ctx, VPXDisplayRenderStyle style,
       // First layer is an optional tinted glass
@@ -271,7 +281,7 @@ typedef struct VPXPluginAPI
    void(MSGPIAPI* UpdateTexture)(VPXTexture* texture, int width, int height, VPXTextureFormat format, const uint8_t* image);
    // Give access to texture informations.
    // NOT Thread safe
-   void(MSGPIAPI* GetTextureInfo)(VPXTexture texture, int* width, int* height);
+   VPXTextureInfo*(MSGPIAPI* GetTextureInfo)(VPXTexture texture);
    // Destroy a texture created through this API.
    // Thread safe
    void(MSGPIAPI* DeleteTexture)(VPXTexture texture);

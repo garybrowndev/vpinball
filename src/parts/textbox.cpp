@@ -103,10 +103,7 @@ void Textbox::SetDefaults(const bool fromMouseClick)
          fd.lpstrName = (LPOLESTR)(L"Arial");
       else
       {
-         const int len = (int)tmp.length() + 1;
-         fd.lpstrName = (LPOLESTR)malloc(len*sizeof(WCHAR));
-         MultiByteToWideCharNull(CP_ACP, 0, tmp.c_str(), -1, fd.lpstrName, len);
-
+         fd.lpstrName = (LPOLESTR)MakeWide(tmp);
          free_lpstrName = true;
       }
 
@@ -126,7 +123,7 @@ void Textbox::SetDefaults(const bool fromMouseClick)
    SAFE_RELEASE(m_pIFont);
    OleCreateFontIndirect(&fd, IID_IFont, (void **)&m_pIFont);
    if (free_lpstrName)
-      free(fd.lpstrName);
+      delete [] fd.lpstrName;
 #endif
 #undef regKey
 }
@@ -441,7 +438,6 @@ void Textbox::RenderSetup(RenderDevice *device)
 void Textbox::RenderRelease()
 {
    assert(m_rd != nullptr);
-   delete m_texture;
    m_texture = nullptr;
    SAFE_RELEASE(m_pIFontPlay);
    m_rd = nullptr;
@@ -520,7 +516,7 @@ void Textbox::Render(const unsigned int renderMask)
       ResURIResolver::DisplayState dmd = g_pplayer->m_resURIResolver.GetDisplayState("ctrl://default/display");
       if (dmd.state.frame == nullptr)
          return;
-      BaseTexture::Update(&m_texture, dmd.source->width, dmd.source->height, 
+      BaseTexture::Update(m_texture, dmd.source->width, dmd.source->height, 
               dmd.source->frameFormat == CTLPI_DISPLAY_FORMAT_LUM8    ? BaseTexture::BW
             : dmd.source->frameFormat == CTLPI_DISPLAY_FORMAT_SRGB565 ? BaseTexture::SRGB565
                                                                       : BaseTexture::SRGB,
@@ -675,12 +671,12 @@ void Textbox::Render(const unsigned int renderMask)
             SDL_DestroySurface(pSurface);
          }
 #endif
-         m_rd->m_texMan.SetDirty(m_texture);
+         m_rd->m_texMan.SetDirty(m_texture.get());
       }
 
       m_rd->ResetRenderState();
       m_rd->m_DMDShader->SetFloat(SHADER_alphaTestValue, (float)(128.0 / 255.0));
-      g_pplayer->m_renderer->DrawSprite(x, y, w, h, 0xFFFFFFFF, m_rd->m_texMan.LoadTexture(m_texture, false), m_d.m_intensity_scale);
+      g_pplayer->m_renderer->DrawSprite(x, y, w, h, 0xFFFFFFFF, m_rd->m_texMan.LoadTexture(m_texture.get(), false), m_d.m_intensity_scale);
       m_rd->m_DMDShader->SetFloat(SHADER_alphaTestValue, 1.0f);
    }
 }
@@ -716,10 +712,7 @@ STDMETHODIMP Textbox::put_FontColor(OLE_COLOR newVal)
 
 STDMETHODIMP Textbox::get_Text(BSTR *pVal)
 {
-   WCHAR wz[MAXSTRING];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_text.c_str(), -1, wz, MAXSTRING);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_text);
    return S_OK;
 }
 

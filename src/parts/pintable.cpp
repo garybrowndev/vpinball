@@ -216,7 +216,8 @@ STDMETHODIMP ScriptGlobalTable::PlayMusic(BSTR str, float volume)
             case 4: path = PATH_MUSIC; break;
             }
             path = find_case_insensitive_file_path(path + musicNameStr);
-            success = g_pplayer->m_audioPlayer->PlayMusic(path);
+            if (!path.empty())
+               success = g_pplayer->m_audioPlayer->PlayMusic(path);
          }
          if (success)
          {
@@ -380,9 +381,7 @@ bool ScriptGlobalTable::GetTextFileFromDirectory(const string& filename, const s
          string content = buffer.str();
          if (filename.ends_with(".vbs"))
             content = VPXPluginAPIImpl::GetInstance().ApplyScriptCOMObjectOverrides(content);
-         const WCHAR * const wz = MakeWide(content);
-         *pContents = SysAllocString(wz);
-         delete[] wz;
+         *pContents = MakeWideBSTR(content);
          return true;
       }
    }
@@ -406,11 +405,7 @@ STDMETHODIMP ScriptGlobalTable::get_Setting(BSTR Section, BSTR SettingName, BSTR
    string value;
    if (g_pvp->m_settings.LoadValue(sectionId, settingSz, value))
    {
-      const int len = (int)value.length() + 1;
-      WCHAR *const wzT = new WCHAR[len];
-      MultiByteToWideCharNull(CP_ACP, 0, value.c_str(), -1, wzT, len);
-      *param = SysAllocString(wzT);
-      delete [] wzT;
+      *param = MakeWideBSTR(value);
       return S_OK;
    }
    return E_FAIL;
@@ -442,9 +437,7 @@ STDMETHODIMP ScriptGlobalTable::get_UserDirectory(BSTR *pVal)
             return E_FAIL;
       }
    }
-   const WCHAR *const wzPath = MakeWide(szPath);
-   *pVal = SysAllocString(wzPath);
-   delete [] wzPath;
+   *pVal = MakeWideBSTR(szPath);
 
    return S_OK;
 }
@@ -462,9 +455,7 @@ STDMETHODIMP ScriptGlobalTable::get_TablesDirectory(BSTR *pVal)
             return E_FAIL;
       }
    }
-   const WCHAR *const wzPath = MakeWide(szPath);
-   *pVal = SysAllocString(wzPath);
-   delete [] wzPath;
+   *pVal = MakeWideBSTR(szPath);
 
    return S_OK;
 }
@@ -487,9 +478,7 @@ STDMETHODIMP ScriptGlobalTable::get_MusicDirectory(VARIANT pSubDir, BSTR *pVal)
             return E_FAIL;
       }
    }
-   const WCHAR *const wzPath = MakeWide(szPath);
-   *pVal = SysAllocString(wzPath);
-   delete[] wzPath;
+   *pVal = MakeWideBSTR(szPath);
 
    return S_OK;
 }
@@ -507,37 +496,26 @@ STDMETHODIMP ScriptGlobalTable::get_ScriptsDirectory(BSTR *pVal)
             return E_FAIL;
       }
    }
-   const WCHAR *const wzPath = MakeWide(szPath);
-   *pVal = SysAllocString(wzPath);
-   delete [] wzPath;
+   *pVal = MakeWideBSTR(szPath);
 
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_PlatformOS(BSTR *pVal)
 {
-   const WCHAR *const wzPath = MakeWide(GET_PLATFORM_OS);
-   *pVal = SysAllocString(wzPath);
-   delete [] wzPath;
-
+   *pVal = MakeWideBSTR(GET_PLATFORM_OS);
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_PlatformCPU(BSTR *pVal)
 {
-   const WCHAR *const wzPath = MakeWide(GET_PLATFORM_CPU);
-   *pVal = SysAllocString(wzPath);
-   delete [] wzPath;
-
+   *pVal = MakeWideBSTR(GET_PLATFORM_CPU);
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_PlatformBits(BSTR *pVal)
 {
-   const WCHAR *const wzPath = MakeWide(GET_PLATFORM_BITS);
-   *pVal = SysAllocString(wzPath);
-   delete [] wzPath;
-
+   *pVal = MakeWideBSTR(GET_PLATFORM_BITS);
    return S_OK;
 }
 
@@ -716,7 +694,7 @@ STDMETHODIMP ScriptGlobalTable::LoadValue(BSTR TableName, BSTR ValueName, VARIAN
 
    const int size = statstg.cbSize.LowPart / sizeof(WCHAR);
 
-   WCHAR *wzT = new WCHAR[size + 1];
+   BSTR wzT = SysAllocStringLen(nullptr,size);
 
    DWORD read;
    hr = pstmValue->Read(wzT, size * (int)sizeof(WCHAR), &read);
@@ -730,9 +708,7 @@ STDMETHODIMP ScriptGlobalTable::LoadValue(BSTR TableName, BSTR ValueName, VARIAN
    pstgRoot->Commit(STGC_DEFAULT);
    pstgRoot->Release();
 
-   SetVarBstr(Value, SysAllocString(wzT));
-
-   delete[] wzT;
+   SetVarBstr(Value, wzT);
 #else
    Settings* const pSettings = &g_pplayer->m_ptable->m_settings;
 
@@ -754,9 +730,7 @@ STDMETHODIMP ScriptGlobalTable::LoadValue(BSTR TableName, BSTR ValueName, VARIAN
    string szValueName = MakeString(ValueName);
 
    if (ini.has(szTableName) && ini[szTableName].has(szValueName)) {
-      const WCHAR * const wz = MakeWide(ini[szTableName][szValueName]);
-      SetVarBstr(Value, SysAllocString(wz));
-      delete[] wz;
+      SetVarBstr(Value, MakeWideBSTR(ini[szTableName][szValueName]));
    }
    else
       SetVarBstr(Value, SysAllocString(L""));
@@ -1045,10 +1019,7 @@ STDMETHODIMP ScriptGlobalTable::put_DMDPixels(VARIANT pVal) // assumes VT_UI1 as
        || g_pplayer->m_dmdFrame->m_format != BaseTexture::BW)
    {
       if (g_pplayer->m_dmdFrame)
-      {
-         g_pplayer->m_renderer->m_renderDevice->m_texMan.UnloadTexture(g_pplayer->m_dmdFrame);
-         delete g_pplayer->m_dmdFrame;
-      }
+         g_pplayer->m_renderer->m_renderDevice->m_texMan.UnloadTexture(g_pplayer->m_dmdFrame.get());
       g_pplayer->m_dmdFrame = BaseTexture::Create(g_pplayer->m_dmdSize.x * scale, g_pplayer->m_dmdSize.y * scale, BaseTexture::BW);
    }
    const int size = g_pplayer->m_dmdSize.x * g_pplayer->m_dmdSize.y;
@@ -1074,7 +1045,7 @@ STDMETHODIMP ScriptGlobalTable::put_DMDPixels(VARIANT pVal) // assumes VT_UI1 as
    }
    SafeArrayUnaccessData(psa);
    g_pplayer->m_dmdFrameId++;
-   g_pplayer->m_renderer->m_renderDevice->m_texMan.SetDirty(g_pplayer->m_dmdFrame);
+   g_pplayer->m_renderer->m_renderDevice->m_texMan.SetDirty(g_pplayer->m_dmdFrame.get());
    return S_OK;
 }
 
@@ -1101,10 +1072,7 @@ STDMETHODIMP ScriptGlobalTable::put_DMDColoredPixels(VARIANT pVal) //!! assumes 
        || g_pplayer->m_dmdFrame->m_format != BaseTexture::SRGBA)
    {
       if (g_pplayer->m_dmdFrame)
-      {
-         g_pplayer->m_renderer->m_renderDevice->m_texMan.UnloadTexture(g_pplayer->m_dmdFrame);
-         delete g_pplayer->m_dmdFrame;
-      }
+         g_pplayer->m_renderer->m_renderDevice->m_texMan.UnloadTexture(g_pplayer->m_dmdFrame.get());
       g_pplayer->m_dmdFrame = BaseTexture::Create(g_pplayer->m_dmdSize.x * scale, g_pplayer->m_dmdSize.y * scale, BaseTexture::SRGBA);
    }
    const int size = g_pplayer->m_dmdSize.x * g_pplayer->m_dmdSize.y;
@@ -1117,7 +1085,7 @@ STDMETHODIMP ScriptGlobalTable::put_DMDColoredPixels(VARIANT pVal) //!! assumes 
    if (g_pplayer->m_scaleFX_DMD)
       upscale(data, g_pplayer->m_dmdSize, false);
    g_pplayer->m_dmdFrameId++;
-   g_pplayer->m_renderer->m_renderDevice->m_texMan.SetDirty(g_pplayer->m_dmdFrame);
+   g_pplayer->m_renderer->m_renderDevice->m_texMan.SetDirty(g_pplayer->m_dmdFrame.get());
    return S_OK;
 }
 
@@ -2829,11 +2797,8 @@ HRESULT PinTable::WriteInfoValue(IStorage* pstg, const WCHAR * const wzName, con
       ULONG writ;
       BiffWriter bw(pstm, hcrypthash);
 
-      const int len = (int)szValue.length();
-      WCHAR * const wzT = new WCHAR[len + 1];
-      MultiByteToWideCharNull(CP_ACP, 0, szValue.c_str(), -1, wzT, len + 1);
-
-      bw.WriteBytes(wzT, len*(int)sizeof(WCHAR), &writ);
+      WCHAR * const wzT = MakeWide(szValue);
+      bw.WriteBytes(wzT, (ULONG)(wcslen(wzT)*(int)sizeof(WCHAR)), &writ);
       delete[] wzT;
       pstm->Release();
       pstm = nullptr;
@@ -2904,12 +2869,8 @@ HRESULT PinTable::SaveCustomInfo(IStorage* pstg, IStream *pstmTags, HCRYPTHASH h
 
    for (size_t i = 0; i < m_vCustomInfoTag.size(); i++)
    {
-      const int len = (int)m_vCustomInfoTag[i].length() + 1; // incl. zero terminator
-      WCHAR * const wzName = new WCHAR[len];
-      MultiByteToWideCharNull(CP_ACP, 0, m_vCustomInfoTag[i].c_str(), -1, wzName, len);
-
+      WCHAR * const wzName = MakeWide(m_vCustomInfoTag[i]);
       WriteInfoValue(pstg, wzName, m_vCustomInfoContent[i], hcrypthash);
-
       delete[] wzName;
    }
 
@@ -2937,7 +2898,6 @@ HRESULT PinTable::ReadInfoValue(IStorage* pstg, const WCHAR * const wzName, stri
 #endif
       WCHAR * const wzT = new WCHAR[len + 1];
       memset(wzT, 0, sizeof(WCHAR) * (len + 1));
-      char* pszValue = new char[len + 1];
 
       ULONG read;
       BiffReader br(pstm, NULL, NULL, 0, hcrypthash, NULL);
@@ -2951,16 +2911,9 @@ HRESULT PinTable::ReadInfoValue(IStorage* pstg, const WCHAR * const wzName, stri
       }
 #endif
       wzT[len] = L'\0';
-
-      WideCharToMultiByteNull(CP_ACP, 0, wzT, -1, pszValue, len + 1, nullptr, nullptr);
-
-      //delete br;
-      //pstm->Read(pszValue, ss.cbSize.LowPart, &read);
-
-      output = pszValue;
-      delete[] pszValue;
-
+      output = MakeString(wzT);
       delete[] wzT;
+
       pstm->Release();
    }
 
@@ -3016,9 +2969,7 @@ HRESULT PinTable::LoadCustomInfo(IStorage* pstg, IStream *pstmTags, HCRYPTHASH h
 
    for (size_t i = 0; i < m_vCustomInfoTag.size(); i++)
    {
-      const int len = (int)m_vCustomInfoTag[i].length() + 1; // incl. zero terminator
-      WCHAR * const wzName = new WCHAR[len];
-      MultiByteToWideCharNull(CP_ACP, 0, m_vCustomInfoTag[i].c_str(), -1, wzName, len);
+      WCHAR * const wzName = MakeWide(m_vCustomInfoTag[i]);
 
       string customInfo;
       ReadInfoValue(pstg, wzName, customInfo, hcrypthash);
@@ -3701,8 +3652,7 @@ HRESULT PinTable::LoadGameFromFilename(const string& filename, VPXFileFeedback& 
                         if (lowerCase(MakeString(m_vcollection.ElementAt(i)->m_wzName)) == shortNameLCase)
                            return; // Conflict with a collection name
                      }
-                     const int len = (int)shortName.length() + 1;
-                     MultiByteToWideCharNull(CP_ACP, 0, shortName.c_str(), -1, editable->GetScriptable()->m_wzName, min(len, (int)std::size(editable->GetScriptable()->m_wzName)));
+                     MultiByteToWideCharNull(CP_ACP, 0, shortName.c_str(), -1, editable->GetScriptable()->m_wzName, (int)std::size(editable->GetScriptable()->m_wzName));
                   });
          }
          
@@ -3964,7 +3914,7 @@ bool PinTable::LoadToken(const int id, BiffReader * const pbr)
    case FID(IMCG): pbr->GetString(m_imageColorGrade); break;
    case FID(EIMG): pbr->GetString(m_envImage); break;
    case FID(PLMA): pbr->GetString(m_playfieldMaterial); break;
-   case FID(NOTX): {string txt;  pbr->GetString(txt); m_notesText = CString(txt.c_str()); break; }
+   case FID(NOTX): pbr->GetString(m_notesText); break;
    case FID(LZAM): pbr->GetInt(m_lightAmbient); break;
    case FID(LZDI): pbr->GetInt(m_Light[0].emission); break;
    case FID(LZHI): pbr->GetFloat(m_lightHeight); break;
@@ -4270,7 +4220,7 @@ bool PinTable::ExportSound(VPX::Sound *const pps, const char *const szfilename)
    return false;
 }
 
-void PinTable::ReImportSound(const HWND hwndListView, VPX::Sound *const pps, const string &filename)
+void PinTable::ReImportSound(VPX::Sound *const pps, const string &filename)
 {
 #ifndef __STANDALONE__
    FILE *f;
@@ -4291,66 +4241,16 @@ void PinTable::ReImportSound(const HWND hwndListView, VPX::Sound *const pps, con
 }
 
 
-void PinTable::ImportSound(const HWND hwndListView, const string& filename)
+VPX::Sound *PinTable::ImportSound(const string &filename)
 {
 #ifndef __STANDALONE__
    VPX::Sound *const pps = VPX::Sound::CreateFromFile(filename);
-
    if (pps == nullptr)
-      return;
-
+      return nullptr;
    m_vsound.push_back(pps);
-
-   const int index = AddListSound(hwndListView, pps);
-
-   ListView_SetItemState(hwndListView, index, LVIS_SELECTED, LVIS_SELECTED);
-#endif
-}
-
-void PinTable::ListSounds(HWND hwndListView)
-{
-#ifndef __STANDALONE__
-	ListView_DeleteAllItems(hwndListView);
-	for (size_t i = 0; i < m_vsound.size(); i++)
-		AddListSound(hwndListView, m_vsound[i]);
-#endif
-}
-
-
-int PinTable::AddListSound(HWND hwndListView, VPX::Sound *const pps)
-{
-#ifndef __STANDALONE__
-   LVITEM lvitem;
-   lvitem.mask = LVIF_DI_SETITEM | LVIF_TEXT | LVIF_PARAM;
-   lvitem.iItem = 0;
-   lvitem.iSubItem = 0;
-   lvitem.pszText = (LPSTR)pps->m_name.c_str();
-   lvitem.lParam = (size_t)pps;
-
-   const int index = ListView_InsertItem(hwndListView, &lvitem);
-
-   ListView_SetItemText(hwndListView, index, 1, (LPSTR)pps->m_path.c_str());
-
-   switch (pps->GetOutputTarget())
-   {
-   case VPX::SNDOUT_BACKGLASS:
-	   ListView_SetItemText(hwndListView, index, 2, (LPSTR)"Backglass");
-	   break;
-   case VPX::SNDOUT_TABLE:
-	   ListView_SetItemText(hwndListView, index, 2, (LPSTR)"Table");
-	   break;
-   default:
-      assert(false);
-      ListView_SetItemText(hwndListView, index, 2, (LPSTR)"Table");
-      break;
-   }
-   ListView_SetItemText(hwndListView, index, 3, (LPSTR)f2sz(dequantizeSignedPercent(pps->GetPan())).c_str());
-   ListView_SetItemText(hwndListView, index, 4, (LPSTR)f2sz(dequantizeSignedPercent(pps->GetFrontRearFade())).c_str());
-   ListView_SetItemText(hwndListView, index, 5, (LPSTR)f2sz(dequantizeSignedPercent(pps->GetVolume())).c_str());
-
-   return index;
+   return pps;
 #else
-   return 0L;
+   return nullptr;
 #endif
 }
 
@@ -4455,8 +4355,7 @@ void PinTable::NewCollection(const HWND hwndListView, const bool fromSelection)
 int PinTable::AddListCollection(HWND hwndListView, CComObject<Collection> *pcol)
 {
 #ifndef __STANDALONE__
-   char szT[sizeof(pcol->m_wzName)/sizeof(pcol->m_wzName[0])];
-   WideCharToMultiByteNull(CP_ACP, 0, pcol->m_wzName, -1, szT, sizeof(szT), nullptr, nullptr);
+   char * const szT = MakeChar(pcol->m_wzName);
 
    LVITEM lvitem;
    lvitem.mask = LVIF_DI_SETITEM | LVIF_TEXT | LVIF_PARAM;
@@ -4466,11 +4365,12 @@ int PinTable::AddListCollection(HWND hwndListView, CComObject<Collection> *pcol)
    lvitem.lParam = (size_t)pcol;
 
    const int index = ListView_InsertItem(hwndListView, &lvitem);
+   delete [] szT;
 
    ListView_SetItemText(hwndListView, index, 1, (char*)std::to_string(pcol->m_visel.size()).c_str());
    return index;
 #else
-   return 0L;
+   return 0;
 #endif
 }
 
@@ -4598,14 +4498,14 @@ void PinTable::MoveCollectionDown(CComObject<Collection> *pcol)
 void PinTable::SetCollectionName(Collection *pcol, const char *szName, HWND hwndList, int index)
 {
 #ifndef __STANDALONE__
-   WCHAR wzT[MAXSTRING];
-   MultiByteToWideCharNull(CP_ACP, 0, szName, -1, wzT, MAXSTRING);
+   WCHAR * const wzT = MakeWide(szName);
    if (m_pcv->ReplaceName((IScriptable *)pcol, wzT) == S_OK)
    {
       if (hwndList)
          ListView_SetItemText(hwndList, index, 0, (char*)szName);
       wcscpy_s(pcol->m_wzName, wzT);
    }
+   delete [] wzT;
 #endif
 }
 
@@ -4809,14 +4709,14 @@ void PinTable::FillCollectionContextMenu(CMenu &mainMenu, CMenu &colSubMenu, ISe
     {
         BSTR bstr;
         m_vcollection[i].get_Name(&bstr);
-        char szT[MAXNAMEBUFFER*2]; // Names can only be 32 characters (plus terminator)
-        WideCharToMultiByteNull(CP_ACP, 0, bstr, -1, szT, MAXNAMEBUFFER*2, nullptr, nullptr);
+        char * const szT = MakeChar(bstr);
         SysFreeString(bstr);
 
         UINT flags = MF_POPUP | MF_UNCHECKED;
         if ((maxItems-i) % 32 == 0) // add new column each 32 entries
            flags |= MF_MENUBREAK;
         colSubMenu.AppendMenu(flags, 0x40000 + i, szT);
+        delete [] szT;
     }
     if (m_vmultisel.size() == 1)
     {
@@ -6626,10 +6526,7 @@ HRESULT PinTable::GetTypeName(BSTR *pVal) const
 
 STDMETHODIMP PinTable::get_FileName(BSTR *pVal)
 {
-   const WCHAR * const wz = MakeWide(m_title);
-   *pVal = SysAllocString(wz);
-   delete[] wz;
-
+   *pVal = MakeWideBSTR(m_title);
    return S_OK;
 }
 
@@ -7280,6 +7177,15 @@ string PinTable::AuditTable(bool log) const
    if (!hasPulseTimer && (FindIndexOf(identifiers, "vpmTimer"s) != -1))
       ss << ". Warning: script uses 'vpmTimer' but table is missing a Timer object named 'PulseTimer'. vpmTimer will not work as expected.\r\n";
 
+   std::unique_ptr<VPX::AudioPlayer> audioPlayer = std::make_unique<VPX::AudioPlayer>(g_pvp->m_settings);
+   for (auto sound : m_vsound)
+   {
+      auto specs = audioPlayer->GetSoundInformations(sound);
+      if (specs.nChannels > 1 && sound->GetOutputTarget() == VPX::SNDOUT_TABLE)
+         ss << ". Error: sound '" << sound->m_name << "' is used for playfield physical sound but has multiple channels (not mono).\r\n ";
+   }
+   audioPlayer = nullptr;
+
    if (ss.str().empty())
       ss << "No issue identified.\r\n";
 
@@ -7349,10 +7255,7 @@ int PinTable::AddListItem(HWND hwndListView, const string& szName, const string&
 
 STDMETHODIMP PinTable::get_Image(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_image.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_image);
    return S_OK;
 }
 
@@ -7505,7 +7408,10 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
          if (rgstr[ivar + 1] == nullptr)
             ShowError("DISPID_Collection alloc failed (1)");
          else
-            memcpy(rgstr[ivar + 1], m_vcollection[(int)ivar].m_wzName, cwch);
+         {
+            memset(rgstr[ivar + 1], 0, cwch);
+            memcpy(rgstr[ivar + 1], m_vcollection[(int)ivar].m_wzName, sizeof(m_vcollection[(int)ivar].m_wzName));
+         }
          rgdw[ivar + 1] = (uint32_t)ivar;
       }
       cvar++;
@@ -7556,7 +7462,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
             const size_t cwch = wcslen(sname) + 1;
             //wzDst = ::SysAllocString(bstr);
 
-            wzDst = (WCHAR *)CoTaskMemAlloc(cwch * sizeof(WCHAR));
+            wzDst = (WCHAR *)CoTaskMemAlloc(cwch*sizeof(WCHAR));
             if (wzDst == nullptr)
                ShowError("DISPID_Surface alloc failed (1)");
 
@@ -7630,10 +7536,9 @@ STDMETHODIMP PinTable::GetPredefinedValue(DISPID dispID, DWORD dwCookie, VARIANT
       }
       else
       {
-         const int cwch = (int)m_vimage[dwCookie]->m_name.length() + 1;
+         const int cwch = MultiByteToWideChar(CP_ACP, 0, m_vimage[dwCookie]->m_name.c_str(), -1, nullptr, 0); //(int)m_vimage[dwCookie]->m_name.length() + 1;
          wzDst = (WCHAR *)CoTaskMemAlloc(cwch*sizeof(WCHAR));
-
-         MultiByteToWideCharNull(CP_ACP, 0, m_vimage[dwCookie]->m_name.c_str(), -1, wzDst, cwch);
+         MultiByteToWideChar(CP_ACP, 0, m_vimage[dwCookie]->m_name.c_str(), -1, wzDst, cwch);
       }
    }
    break;
@@ -7649,10 +7554,9 @@ STDMETHODIMP PinTable::GetPredefinedValue(DISPID dispID, DWORD dwCookie, VARIANT
       }
       else
       {
-         const int cwch = (int)m_materials[dwCookie]->m_name.length() + 1;
+         const int cwch = MultiByteToWideChar(CP_ACP, 0, m_materials[dwCookie]->m_name.c_str(), -1, nullptr, 0); //(int)m_materials[dwCookie]->m_name.length() + 1;
          wzDst = (WCHAR *)CoTaskMemAlloc(cwch*sizeof(WCHAR));
-
-         MultiByteToWideCharNull(CP_ACP, 0, m_materials[dwCookie]->m_name.c_str(), -1, wzDst, cwch);
+         MultiByteToWideChar(CP_ACP, 0, m_materials[dwCookie]->m_name.c_str(), -1, wzDst, cwch);
       }
       break;
    }
@@ -7667,11 +7571,11 @@ STDMETHODIMP PinTable::GetPredefinedValue(DISPID dispID, DWORD dwCookie, VARIANT
       }
       else
       {
-         const int cwch = (int)m_vsound[dwCookie]->m_name.length() + 1;
+         const int cwch = MultiByteToWideChar(CP_ACP, 0, m_vsound[dwCookie]->m_name.c_str(), -1, nullptr, 0); //(int)m_vsound[dwCookie]->m_name.length() + 1;
          wzDst = (WCHAR *)CoTaskMemAlloc(cwch*sizeof(WCHAR));
          if (wzDst == nullptr)
              ShowError("DISPID_Sound alloc failed");
-         MultiByteToWideCharNull(CP_ACP, 0, m_vsound[dwCookie]->m_name.c_str(), -1, wzDst, cwch);
+         MultiByteToWideChar(CP_ACP, 0, m_vsound[dwCookie]->m_name.c_str(), -1, wzDst, cwch);
       }
    }
    break;
@@ -7942,10 +7846,7 @@ STDMETHODIMP PinTable::put_Height(float newVal)
 
 STDMETHODIMP PinTable::get_PlayfieldMaterial(BSTR *pVal)
 {
-   WCHAR wz[MAXNAMEBUFFER];
-   MultiByteToWideCharNull(CP_ACP, 0, m_playfieldMaterial.c_str(), -1, wz, MAXNAMEBUFFER);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_playfieldMaterial);
    return S_OK;
 }
 
@@ -8444,10 +8345,7 @@ STDMETHODIMP PinTable::get_ShowFSS(VARIANT_BOOL *pVal)
 
 STDMETHODIMP PinTable::get_BackdropImage_DT(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_BG_image[0].c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_BG_image[0]);
    return S_OK;
 }
 
@@ -8462,10 +8360,7 @@ STDMETHODIMP PinTable::put_BackdropImage_DT(BSTR newVal) //!! HDR??
 
 STDMETHODIMP PinTable::get_BackdropImage_FS(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_BG_image[1].c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_BG_image[1]);
    return S_OK;
 }
 
@@ -8480,10 +8375,7 @@ STDMETHODIMP PinTable::put_BackdropImage_FS(BSTR newVal) //!! HDR??
 
 STDMETHODIMP PinTable::get_BackdropImage_FSS(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_BG_image[2].c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_BG_image[2]);
    return S_OK;
 }
 
@@ -8498,10 +8390,7 @@ STDMETHODIMP PinTable::put_BackdropImage_FSS(BSTR newVal) //!! HDR??
 
 STDMETHODIMP PinTable::get_ColorGradeImage(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_imageColorGrade.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_imageColorGrade);
    return S_OK;
 }
 
@@ -8917,10 +8806,7 @@ STDMETHODIMP PinTable::put_SlopeMin(float newVal)
 
 STDMETHODIMP PinTable::get_BallImage(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_ballImage.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_ballImage);
    return S_OK;
 }
 
@@ -8935,10 +8821,7 @@ STDMETHODIMP PinTable::put_BallImage(BSTR newVal)
 
 STDMETHODIMP PinTable::get_EnvironmentImage(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_envImage.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_envImage);
    return S_OK;
 }
 
@@ -9536,10 +9419,7 @@ STDMETHODIMP PinTable::put_TiltTriggerTime(int newVal)
 
 STDMETHODIMP PinTable::get_BallFrontDecal(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_ballImageDecal.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_ballImageDecal);
    return S_OK;
 }
 

@@ -3,10 +3,204 @@
 #include "core/stdafx.h"
 #include "AudioPlayer.h"
 #include "AudioStreamPlayer.h"
-#include "MusicPlayer.h"
 #include "SoundPlayer.h"
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_audio.h>
 
-#include <SDL3_mixer/SDL_mixer.h>
+#define MA_ENABLE_ONLY_SPECIFIC_BACKENDS
+#define MA_ENABLE_CUSTOM
+#include "miniaudio/extras/stb_vorbis.c"
+#include "miniaudio/miniaudio.h"
+#include "miniaudio/miniaudio.c"
+
+// Simple SDL3 backend for miniaudio, derived from miniaudio's backend example
+
+struct ma_device_ex
+{
+   ma_device device; // Make this the first member so we can cast between ma_device and ma_device_ex.
+   SDL_AudioDeviceID deviceID;
+   SDL_AudioStream* stream;
+   vector<uint8_t> buffer;
+};
+
+static ma_result ma_context_enumerate_devices__sdl(ma_context* pContext, ma_enum_devices_callback_proc callback, void* pUserData)
+{
+   int count;
+   SDL_AudioDeviceID* pAudioList = SDL_GetAudioPlaybackDevices(&count);
+   if (pAudioList == nullptr)
+      return MA_ERROR;
+   for (int i = 0; i < count; ++i)
+   {
+      ma_device_info deviceInfo;
+      MA_ZERO_OBJECT(&deviceInfo);
+      deviceInfo.id.custom.i = pAudioList[i];
+      ma_strncpy_s(deviceInfo.name, sizeof(deviceInfo.name), SDL_GetAudioDeviceName(pAudioList[i]), (size_t)-1);
+      ma_bool32 cbResult = callback(pContext, ma_device_type_playback, &deviceInfo, pUserData);
+      if (cbResult == MA_FALSE)
+         break;
+   }
+   return MA_SUCCESS;
+}
+
+static ma_result ma_context_get_device_info__sdl(ma_context* pContext, ma_device_type deviceType, const ma_device_id* pDeviceID, ma_device_info* pDeviceInfo)
+{
+   if (deviceType != ma_device_type_playback)
+      return MA_DEVICE_TYPE_NOT_SUPPORTED;
+
+   if (pDeviceID == NULL)
+   {
+      pDeviceInfo->id.custom.i = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
+      ma_strncpy_s(pDeviceInfo->name, sizeof(pDeviceInfo->name), MA_DEFAULT_PLAYBACK_DEVICE_NAME, (size_t)-1);
+   }
+   else
+   {
+      pDeviceInfo->id.custom.i = pDeviceID->custom.i;
+      ma_strncpy_s(pDeviceInfo->name, sizeof(pDeviceInfo->name), SDL_GetAudioDeviceName(pDeviceID->custom.i), (size_t)-1);
+   }
+   if (pDeviceInfo->id.custom.i == SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK)
+      pDeviceInfo->isDefault = MA_TRUE;
+
+   SDL_AudioSpec specs;
+   if (pDeviceInfo->isDefault)
+   {
+      SDL_AudioDeviceID tempDeviceID = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, nullptr);
+      if (tempDeviceID == 0)
+      {
+         PLOGE << "Failed to open default SDL device.";
+         return MA_FAILED_TO_OPEN_BACKEND_DEVICE;
+      }
+      SDL_GetAudioDeviceFormat(tempDeviceID, &specs, nullptr);
+      SDL_CloseAudioDevice(tempDeviceID);
+   }
+   else
+   {
+      SDL_GetAudioDeviceFormat(pDeviceInfo->id.custom.i, &specs, nullptr);
+   }
+
+   pDeviceInfo->nativeDataFormatCount = 1;
+   pDeviceInfo->nativeDataFormats[0].format = ma_format_f32;
+   pDeviceInfo->nativeDataFormats[0].channels = specs.channels;
+   pDeviceInfo->nativeDataFormats[0].sampleRate = specs.freq;
+   pDeviceInfo->nativeDataFormats[0].flags = 0;
+
+   return MA_SUCCESS;
+}
+
+void ma_audio_callback_playback__sdl(void* pUserData, SDL_AudioStream* stream, int additional_amount, int total_amount)
+{
+   ma_device_ex* pDevice = static_cast<ma_device_ex*>(pUserData);
+   if (pDevice->buffer.size() < total_amount)
+      pDevice->buffer.resize(total_amount);
+   const int sizePerMAFrame = ma_get_bytes_per_frame(pDevice->device.playback.internalFormat, pDevice->device.playback.internalChannels);
+   const int nFrames = total_amount / sizePerMAFrame;
+   ma_device__read_frames_from_client(&pDevice->device, nFrames, pDevice->buffer.data());
+   SDL_PutAudioStreamData(stream, pDevice->buffer.data(), nFrames * sizePerMAFrame);
+}
+
+static ma_result ma_device_init__sdl(ma_device* pDevice, const ma_device_config* pConfig, ma_device_descriptor* pDescriptorPlayback, ma_device_descriptor* pDescriptorCapture)
+{
+   if (pConfig->deviceType != ma_device_type_playback)
+      return MA_DEVICE_TYPE_NOT_SUPPORTED;
+
+   ma_device_ex* pDeviceEx = reinterpret_cast<ma_device_ex*>(pDevice);
+
+   SDL_AudioDeviceID requestedDeviceId = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
+   if (pConfig->playback.pDeviceID)
+      requestedDeviceId = pConfig->playback.pDeviceID->custom.i;
+
+   pDeviceEx->stream = SDL_OpenAudioDeviceStream(requestedDeviceId, nullptr, ma_audio_callback_playback__sdl, pDeviceEx);
+   if (pDeviceEx->stream == nullptr)
+   {
+      PLOGE << "Failed to open SDL audio device (Error: " << SDL_GetError() << ")";
+      return MA_FAILED_TO_OPEN_BACKEND_DEVICE;
+   }
+   pDeviceEx->deviceID = SDL_GetAudioStreamDevice(pDeviceEx->stream);
+   int periodSizeInFrames;
+   SDL_AudioSpec specs;
+   SDL_GetAudioDeviceFormat(pDeviceEx->deviceID, &specs, &periodSizeInFrames);
+   
+   // Convert SDL format to miniaudio format
+   ma_format deviceFormat = ma_format_f32; // default fallback
+   switch (specs.format)
+   {
+      case SDL_AUDIO_U8: deviceFormat = ma_format_u8; break;
+      case SDL_AUDIO_S16: deviceFormat = ma_format_s16; break;
+      case SDL_AUDIO_S32: deviceFormat = ma_format_s32; break;
+      case SDL_AUDIO_F32: deviceFormat = ma_format_f32; break;
+      default:
+         PLOGI << "Unsupported SDL audio format " << SDL_GetAudioFormatName(specs.format) << " (0x" << std::hex << specs.format << std::dec << "), forcing to F32";
+         specs.format = SDL_AUDIO_F32;
+         if (!SDL_SetAudioStreamFormat(pDeviceEx->stream, nullptr, &specs))
+         {
+            PLOGE << "Failed to set audio stream format to F32";
+            SDL_DestroyAudioStream(pDeviceEx->stream);
+            return MA_FAILED_TO_OPEN_BACKEND_DEVICE;
+         }
+         deviceFormat = ma_format_f32;
+         break;
+   }
+
+   // Update miniaudio descriptor with actual device settings
+   pDescriptorPlayback->format = deviceFormat;
+   pDescriptorPlayback->channels = specs.channels;
+   pDescriptorPlayback->sampleRate = static_cast<ma_uint32>(specs.freq);
+   pDescriptorPlayback->periodSizeInFrames = periodSizeInFrames;
+   pDescriptorPlayback->periodCount = 1; // SDL doesn't use the notion of period counts, so just set to 1.
+
+   // TODO check that the default channel map matches SDL channel map
+   ma_channel_map_init_standard(ma_standard_channel_map_default, pDescriptorPlayback->channelMap, ma_countof(pDescriptorPlayback->channelMap), pDescriptorPlayback->channels);
+   
+   PLOGI << "Audio device initialized. Device: '" << SDL_GetAudioDeviceName(pDeviceEx->deviceID) << "', Freq : " << specs.freq << ", Format: " << SDL_GetAudioFormatName(specs.format) << ", Channels: " << specs.channels << ", Driver: " << SDL_GetCurrentAudioDriver();
+   return MA_SUCCESS;
+}
+
+static ma_result ma_device_uninit__sdl(ma_device* pDevice)
+{
+   ma_device_ex* pDeviceEx = (ma_device_ex*)pDevice;
+   if (pDeviceEx->stream)
+      SDL_DestroyAudioStream(pDeviceEx->stream);
+   return MA_SUCCESS;
+}
+
+static ma_result ma_device_start__sdl(ma_device* pDevice)
+{
+   ma_device_ex* pDeviceEx = (ma_device_ex*)pDevice;
+   if (pDeviceEx->stream)
+      SDL_ResumeAudioStreamDevice(pDeviceEx->stream);
+   return MA_SUCCESS;
+}
+
+static ma_result ma_device_stop__sdl(ma_device* pDevice)
+{
+   ma_device_ex* pDeviceEx = (ma_device_ex*)pDevice;
+   if (pDeviceEx->stream)
+      SDL_PauseAudioStreamDevice(pDeviceEx->stream);
+   return MA_SUCCESS;
+}
+
+static ma_result ma_context_uninit__sdl(ma_context* pContext)
+{
+   SDL_QuitSubSystem(SDL_INIT_AUDIO);
+   return MA_SUCCESS;
+}
+
+static ma_result ma_context_init__sdl(ma_context* pContext, const ma_context_config* pConfig, ma_backend_callbacks* pCallbacks)
+{
+   (void)pConfig;
+   if (!SDL_InitSubSystem(SDL_INIT_AUDIO))
+      return MA_ERROR;
+   pCallbacks->onContextInit = ma_context_init__sdl;
+   pCallbacks->onContextUninit = ma_context_uninit__sdl;
+   pCallbacks->onContextEnumerateDevices = ma_context_enumerate_devices__sdl;
+   pCallbacks->onContextGetDeviceInfo = ma_context_get_device_info__sdl;
+   pCallbacks->onDeviceInit = ma_device_init__sdl;
+   pCallbacks->onDeviceUninit = ma_device_uninit__sdl;
+   pCallbacks->onDeviceStart = ma_device_start__sdl;
+   pCallbacks->onDeviceStop = ma_device_stop__sdl;
+   return MA_SUCCESS;
+}
+
+
 
 namespace VPX
 {
@@ -15,90 +209,128 @@ AudioPlayer::AudioPlayer(const Settings& settings)
    : m_music(nullptr)
 {
    if (!SDL_InitSubSystem(SDL_INIT_AUDIO))
-   {
-      PLOGE << "Failed to initialize SDL Audio: " << SDL_GetError();
       return;
-   }
 
-   string soundDeviceName;
-   string soundDeviceBGName;
-   const bool good = settings.LoadValue(Settings::Player, "SoundDevice"s, soundDeviceName);
-   const bool good2 = settings.LoadValue(Settings::Player, "SoundDeviceBG"s, soundDeviceBGName);
-   if (!good && !good2)
-   { // use the default SDL audio device
-      PLOGI << "Sound Device not set.  Using default";
-      m_tableAudioDevice = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
-      m_backglassAudioDevice = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
-   }
-   else
-   { // this is all because the device id's are random: https://github.com/libsdl-org/SDL/issues/12278
-      vector<AudioDevice> allAudioDevices;
-      AudioPlayer::EnumerateAudioDevices(allAudioDevices);
-      for (size_t i = 0; i < allAudioDevices.size(); ++i)
-      {
-         const AudioDevice& audioDevice = allAudioDevices[i];
-         if (audioDevice.name == soundDeviceName)
-            m_tableAudioDevice = audioDevice.id;
-         if (audioDevice.name == soundDeviceBGName)
-            m_backglassAudioDevice = audioDevice.id;
+   string soundDeviceName, soundDeviceBGName;
+   const bool hasTableSoundDevice = settings.LoadValue(Settings::Player, "SoundDevice"s, soundDeviceName);
+   const bool hasBackglassSOundDevice = settings.LoadValue(Settings::Player, "SoundDeviceBG"s, soundDeviceBGName);
+   {
+      int count;
+      SDL_AudioDeviceID* pAudioList = SDL_GetAudioPlaybackDevices(&count);
+      for (int i = 0; i < count; ++i)
+      { // We identify by name as this is the only stable property (see https://github.com/libsdl-org/SDL/issues/12278)
+         string name = SDL_GetAudioDeviceName(pAudioList[i]);
+         if (hasTableSoundDevice && name == soundDeviceName)
+            m_playfieldAudioDevice = pAudioList[i];
+         if (hasBackglassSOundDevice && name == soundDeviceBGName)
+            m_backglassAudioDevice = pAudioList[i];
       }
-
-      if (m_tableAudioDevice == SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK)
-      { // we didn't find a matching name
-         PLOGE << "No sound device by that name found in VPinball.ini. " << "SoundDevice:\"" << soundDeviceName << "\" SoundDeviceBG:\"" << soundDeviceBGName << "\" Using default.";
-         m_tableAudioDevice = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
+      if (m_playfieldAudioDevice == SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK)
+      {
+         PLOGE << "Table sound device was not found (" << soundDeviceName << "), using default.";
+         m_playfieldAudioDevice = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
+      }
+      if (m_backglassAudioDevice == SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK)
+      {
+         PLOGE << "Backglass sound device was not found (" << soundDeviceBGName << "), using default.";
          m_backglassAudioDevice = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
       }
    }
 
-   // Initialize for Wav and Ogg Vorbis formats
-   MIX_InitFlags initialized = Mix_Init(MIX_INIT_OGG);
-   if ((initialized & MIX_INIT_OGG) == 0)
-   {
-      PLOGE << "Failed to initialize SDL Mixer for OGG decoding";
-   }
-
-   // Initialize the SDL mixer library on the playfield audio device
-   SDL_AudioSpec spec;
-   SDL_GetAudioDeviceFormat(m_tableAudioDevice, &spec, nullptr);
-   SDL_AudioSpec* reqSpec = ((spec.format != SDL_AUDIO_S16LE) && (spec.format != SDL_AUDIO_F32LE) && (spec.format != SDL_AUDIO_S32LE)) ? &spec : nullptr;
-   spec.format = SDL_AUDIO_F32LE; // If we don't support device's native format, request one we support
-   if (!Mix_OpenAudio(m_tableAudioDevice, reqSpec))
-   {
-      PLOGE << "Failed to initialize SDL Mixer: " << SDL_GetError();
-      return;
-   }
-
    m_soundMode3D = static_cast<SoundConfigTypes>(settings.LoadValueUInt(Settings::Player, "Sound3D"s));
-   if ((m_soundMode3D == SNDCFG_SND3DALLREAR) && (m_audioSpecOutput.channels < 4))
+
+   ma_result result;
+   ma_context_config contextConfig;
+   contextConfig = ma_context_config_init();
+   contextConfig.custom.onContextInit = ma_context_init__sdl;
+
+   m_maContext = std::make_unique<ma_context>();
+   ma_backend backends[] = { ma_backend_custom };
+   ma_context_init(backends, std::size(backends), &contextConfig, m_maContext.get());
+   m_maContext->pUserData = this;
+
+   struct SDLDeviceInfo
    {
-      PLOGE << "Your sound device does not have the required number of channels (4+) to support this mode. <SND3DALLREAR>";
-      m_soundMode3D = SNDCFG_SND3D2CH;
-   }
-   else if (((m_soundMode3D == SNDCFG_SND3D6CH) || (m_soundMode3D == SNDCFG_SND3DSSF)) && (m_audioSpecOutput.channels != 8))
+      int id;
+      ma_device_info dev;
+   };
+   auto selectDevice = [](ma_context* pContext, ma_device_type deviceType, const ma_device_info* pInfo, void* pUserData) {
+      SDLDeviceInfo* info = (SDLDeviceInfo*)pUserData;
+      if (pInfo->id.custom.i == info->id)
+      {
+         info->dev = *pInfo;
+         return (ma_bool32)MA_FALSE;
+      }
+      return (ma_bool32)MA_TRUE;
+   };
+
    {
-      PLOGE << "Your sound device does not have the required number of channels (8) to support this mode. <SNDCFG_SND3D6CH/SNDCFG_SND3DSSF>";
-      m_soundMode3D = SNDCFG_SND3D2CH;
-   }
-   else if (m_soundMode3D == SNDCFG_SND3DFRONTISREAR)
-   {
-      PLOGI << "Sound Mode SNDCFG_SND3DFRONTISREAR not implemented yet."; return;
-      m_soundMode3D = SNDCFG_SND3D2CH;
-   }
-   else if (m_soundMode3D == SNDCFG_SND3DFRONTISFRONT)
-   {
-      PLOGI << "Sound Mode SNDCFG_SND3DFRONTISFRONT not implemented yet.";
-      m_soundMode3D = SNDCFG_SND3D2CH;
+      SDLDeviceInfo deviceInfo { m_backglassAudioDevice, { 0 } };
+      ma_context_get_device_info(m_maContext.get(), ma_device_type_playback, nullptr, &deviceInfo.dev);
+      ma_context_enumerate_devices(m_maContext.get(), selectDevice, &deviceInfo);
+
+      m_backglassDevice = std::make_unique<ma_device_ex>();
+      ma_device_config deviceConfig;
+      deviceConfig = ma_device_config_init(ma_device_type_playback);
+      deviceConfig.playback.pDeviceID = &deviceInfo.dev.id;
+      deviceConfig.playback.format = ma_format_f32;
+      deviceConfig.noPreSilencedOutputBuffer = MA_TRUE; // We'll always be outputting to every frame in the callback so there's no need for a pre-silenced buffer.
+      deviceConfig.noClip = MA_TRUE; // The engine will do clipping itself.
+      result = ma_device_init(m_maContext.get(), &deviceConfig, reinterpret_cast<ma_device*>(m_backglassDevice.get()));
+
+      if (result == MA_SUCCESS)
+      {
+         ma_engine_config engineConfig;
+         engineConfig = ma_engine_config_init();
+         engineConfig.pContext = m_maContext.get();
+         engineConfig.pDevice = reinterpret_cast<ma_device*>(m_backglassDevice.get());
+         engineConfig.noAutoStart = MA_TRUE;
+         m_backglassEngine = std::make_unique<ma_engine>();
+         result = ma_engine_init(&engineConfig, m_backglassEngine.get());
+         m_backglassDevice->device.onData = ma_engine_data_callback_internal;
+         m_backglassDevice->device.pUserData = m_backglassEngine.get();
+         ma_engine_start(m_backglassEngine.get());
+      }
+      else
+      {
+         PLOGE << "Failed to initialize miniaudio for backglass sounds";
+         m_backglassDevice = nullptr;
+      }
    }
 
-   Mix_QuerySpec(&m_audioSpecOutput.freq, &m_audioSpecOutput.format, &m_audioSpecOutput.channels);
+   {
+      SDLDeviceInfo deviceInfo { m_playfieldAudioDevice, { 0 } };
+      ma_context_get_device_info(m_maContext.get(), ma_device_type_playback, nullptr, &deviceInfo.dev);
+      ma_context_enumerate_devices(m_maContext.get(), selectDevice, &deviceInfo);
 
-   // Default is 8 channels which is usually enough but add some margin anyway for tables with lots of sounds playing simultaneously
-   Mix_AllocateChannels(32);
+      m_playfieldDevice = std::make_unique<ma_device_ex>();
+      ma_device_config deviceConfig;
+      deviceConfig = ma_device_config_init(ma_device_type_playback);
+      deviceConfig.playback.pDeviceID = &deviceInfo.dev.id;
+      deviceConfig.playback.format = ma_format_f32;
+      deviceConfig.noPreSilencedOutputBuffer = MA_TRUE; // We'll always be outputting to every frame in the callback so there's no need for a pre-silenced buffer.
+      deviceConfig.noClip = MA_TRUE; // The engine will do clipping itself.
+      result = ma_device_init(m_maContext.get(), &deviceConfig, reinterpret_cast<ma_device*>(m_playfieldDevice.get()));
 
-   const char* pdriverName = SDL_GetCurrentAudioDriver();
-   PLOGI << "Output Device Settings: " << "Freq: " << m_audioSpecOutput.freq << " Format (SDL_AudioFormat): " << m_audioSpecOutput.format
-         << " channels: " << m_audioSpecOutput.channels << ", driver: " << (pdriverName ? pdriverName : "NULL") ;
+      if (result == MA_SUCCESS)
+      {
+         ma_engine_config engineConfig;
+         engineConfig = ma_engine_config_init();
+         engineConfig.pContext = m_maContext.get();
+         engineConfig.pDevice = reinterpret_cast<ma_device*>(m_playfieldDevice.get());
+         engineConfig.noAutoStart = MA_TRUE;
+         m_playfieldEngine = std::make_unique<ma_engine>();
+         result = ma_engine_init(&engineConfig, m_playfieldEngine.get());
+         m_playfieldDevice->device.onData = ma_engine_data_callback_internal;
+         m_playfieldDevice->device.pUserData = m_playfieldEngine.get();
+         ma_engine_start(m_playfieldEngine.get());
+      }
+      else
+      {
+         PLOGE << "Failed to initialize miniaudio for playfield sounds";
+         m_playfieldDevice = nullptr;
+      }
+   }
 }
 
 AudioPlayer::~AudioPlayer()
@@ -106,8 +338,16 @@ AudioPlayer::~AudioPlayer()
    m_soundPlayers.clear();
    m_audioStreams.clear();
    m_music = nullptr;
-   Mix_CloseAudio();
-   Mix_Quit();
+   if (m_backglassEngine)
+      ma_engine_uninit(m_backglassEngine.get());
+   if (m_playfieldEngine)
+      ma_engine_uninit(m_playfieldEngine.get());
+   if (m_playfieldDevice)
+      ma_device_uninit(&m_playfieldDevice->device);
+   if (m_backglassDevice)
+      ma_device_uninit(&m_backglassDevice->device);
+   if (m_maContext)
+      ma_context_uninit(m_maContext.get());
    SDL_QuitSubSystem(SDL_INIT_AUDIO);
 }
 
@@ -116,7 +356,7 @@ void AudioPlayer::SetMainVolume(float backglassVolume, float playfieldVolume)
    m_backglassVolume = backglassVolume;
    m_playfieldVolume = playfieldVolume;
    if (m_music)
-      m_music->SetMainVolume(backglassVolume);
+      m_music->SetMainVolume(backglassVolume, playfieldVolume);
    for (auto& players : m_soundPlayers)
       for (auto& player : players.second)
          player->SetMainVolume(backglassVolume, playfieldVolume);
@@ -165,11 +405,11 @@ void AudioPlayer::CloseAudioStream(AudioStreamID stream)
 
 bool AudioPlayer::PlayMusic(const string& filename)
 {
-   m_music = std::unique_ptr<MusicPlayer>(MusicPlayer::Create(filename));
+   m_music = std::unique_ptr<SoundPlayer>(SoundPlayer::Create(this, filename));
    if (m_music)
    {
-      m_music->SetMusicVolume(m_musicVolume);
-      m_music->SetMainVolume(m_backglassVolume);
+      m_music->SetVolume(m_musicVolume);
+      m_music->SetMainVolume(m_backglassVolume, m_playfieldVolume);
    }
    return m_music != nullptr;
 }
@@ -184,12 +424,12 @@ void AudioPlayer::UnpauseMusic()
    if (m_music) m_music->Unpause();
 }
 
-double AudioPlayer::GetMusicPosition() const
+float AudioPlayer::GetMusicPosition() const
 {
-   return m_music ? m_music->GetPosition() : 0.0;
+   return m_music ? m_music->GetPosition() : 0.f;
 }
    
-void AudioPlayer::SetMusicPosition(double seconds)
+void AudioPlayer::SetMusicPosition(float seconds)
 {
    if (m_music) m_music->SetPosition(seconds);
 }
@@ -197,7 +437,7 @@ void AudioPlayer::SetMusicPosition(double seconds)
 void AudioPlayer::SetMusicVolume(const float volume)
 {
    m_musicVolume = volume;
-   if (m_music) m_music->SetMusicVolume(volume);
+   if (m_music) m_music->SetVolume(volume);
 }
 
 bool AudioPlayer::IsMusicPlaying() const
@@ -253,65 +493,48 @@ void AudioPlayer::StopSound(Sound* sound)
       player->Stop();
 }
 
-/**
- * (Static)
- * @brief Enumerates available audio playback devices and stores their details.
- *
- * This function initializes the SDL audio subsystem and retrieves a list of available
- * audio playback devices. It populates the provided vector with information about each device,
- * including its ID, name, and channel count.
- *
- * @param[out] audioDevices A vector to store the discovered audio playback devices.
- *
- * @note This function clears the provided vector before populating it with device information.
- * @note SDL must be properly initialized before calling this function.
- */ 
-void AudioPlayer::EnumerateAudioDevices(vector<AudioDevice>& audioDevices)
+SoundSpec AudioPlayer::GetSoundInformations(Sound* sound) const
+{
+   SoundSpec specs { 0 };
+   ma_decoder decoder;
+   ma_decoder_config decoderConfig = ma_decoder_config_init(ma_format_unknown, 0, 0);
+   if (ma_decoder_init_memory(sound->GetFileRaw(), sound->GetFileSize(), &decoderConfig, &decoder) != MA_SUCCESS)
+      return specs;
+   specs.nChannels = decoder.outputChannels;
+   specs.sampleFrequency = decoder.outputSampleRate;
+
+   ma_sound maSound;
+   ma_sound_config config = ma_sound_config_init_2(m_backglassEngine.get());
+   config.pDataSource = &decoder;
+   if (ma_sound_init_ex(m_backglassEngine.get(), &config, &maSound))
+      return specs;
+   float length;
+   ma_sound_get_length_in_seconds(&maSound, &length);
+   specs.lengthInSeconds = length;
+   ma_sound_uninit(&maSound);
+
+   ma_decoder_uninit(&decoder);
+   return specs;
+}
+
+vector<AudioPlayer::AudioDevice> AudioPlayer::EnumerateAudioDevices()
 {
    if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) {
       PLOGE << "SDL Init Audio failed: " << SDL_GetError();
-      return;
+      return vector<AudioDevice>();
    }
-
-   //output name of audio driver
-   const char *pdriverName;
-   if ((pdriverName = SDL_GetCurrentAudioDriver()) != nullptr) {
-      PLOGI << "Current Audio Driver: " << pdriverName;
-   }
-   else {
-      PLOGE << "SDL Get Audio Driver failed: " << SDL_GetError();
-   }
-
-   // log default audio device
-   SDL_AudioDeviceID devid = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, nullptr);
-   const char *pDefaultDeviceName = SDL_GetAudioDeviceName(devid);
-   if (pDefaultDeviceName) {
-      PLOGI << "Default Audio Device: " << pDefaultDeviceName;
-   }
-   else {
-      const char* pError = SDL_GetError();
-      // workaround for https://github.com/libsdl-org/SDL/issues/12977
-      if (pError && pError[0] != '\0') {
-         PLOGE << "Failed to get name for Default Audio Device: " << pError;
-      }
-   }
-   SDL_CloseAudioDevice(devid);
-
-   audioDevices.clear();
    int count;
    SDL_AudioDeviceID* pAudioList = SDL_GetAudioPlaybackDevices(&count);
-   for (int i = 0; i < count; ++i) {
-      AudioDevice audioDevice = {};
-      audioDevice.id = pAudioList[i];
-      audioDevice.name = SDL_GetAudioDeviceName(pAudioList[i]);
+   vector<AudioDevice> audioDevices;
+   for (int i = 0; i < count; ++i)
+   {
       SDL_AudioSpec spec;
       SDL_GetAudioDeviceFormat(pAudioList[i], &spec, nullptr);
-      audioDevice.channels = spec.channels;
-      SDL_CloseAudioDevice(pAudioList[i]);
+      const AudioDevice audioDevice = { SDL_GetAudioDeviceName(pAudioList[i]), static_cast<unsigned int>(spec.channels) };
       audioDevices.push_back(audioDevice);
    }
-
    SDL_QuitSubSystem(SDL_INIT_AUDIO);
+   return audioDevices;
 }
 
 }

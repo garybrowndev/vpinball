@@ -301,9 +301,7 @@ void DispReel::UpdateAnimation(const float diff_time_msec)
             // play the sound (if any) for each click of the reel
             if (!m_d.m_szSound.empty() && (m_d.m_szSound != "<None>"))
             {
-               WCHAR mySound[MAXTOKEN];
-               MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szSound.c_str(), -1, mySound, MAXTOKEN);
-               const BSTR mySoundBSTR = SysAllocString(mySound);
+               const BSTR mySoundBSTR = MakeWideBSTR(m_d.m_szSound);
                m_ptable->PlaySound(mySoundBSTR, 0, 1.0f, 0.f, 0.f, 0, VARIANT_FALSE, VARIANT_TRUE, 0.f);
                SysFreeString(mySoundBSTR);
             }
@@ -681,10 +679,7 @@ STDMETHODIMP DispReel::put_IsTransparent(VARIANT_BOOL newVal)
 
 STDMETHODIMP DispReel::get_Image(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szImage.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szImage);
    return S_OK;
 }
 
@@ -716,10 +711,7 @@ STDMETHODIMP DispReel::put_Spacing(float newVal)
 
 STDMETHODIMP DispReel::get_Sound(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szSound.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szSound);
    return S_OK;
 }
 

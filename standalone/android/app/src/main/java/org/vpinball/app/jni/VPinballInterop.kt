@@ -30,19 +30,19 @@ enum class VPinballSettingsSection(val value: String) {
     TABLE_OPTION("TableOption"),
     PLUGIN_ALPHA_DMD("Plugin.AlphaDMD"),
     PLUGIN_B2S("Plugin.B2S"),
+    PLUGIN_DOF("Plugin.DOF"),
+    PLUGIN_DMD_UTIL("Plugin.DMDUtil"),
     PLUGIN_FLEX_DMD("Plugin.FlexDMD"),
     PLUGIN_PINMAME("Plugin.PinMAME"),
     PLUGIN_PUP("Plugin.PUP"),
     PLUGIN_REMOTE_CONTROL("Plugin.RemoteControl"),
     PLUGIN_SERUM("Plugin.Serum"),
-    PLUGIN_SCORE_VIEW("Plugin.ScoreView"),
-    PLUGIN_DMD_UTIL("Plugin.DMDUtil");
+    PLUGIN_SCORE_VIEW("Plugin.ScoreView");
 
     companion object {
         @JvmStatic
         fun fromValue(value: String): VPinballSettingsSection =
-            entries.firstOrNull { it.value == value }
-                ?: throw IllegalArgumentException("Unknown value: $value")
+            entries.firstOrNull { it.value == value } ?: throw IllegalArgumentException("Unknown value: $value")
     }
 }
 
@@ -214,7 +214,11 @@ enum class VPinballEvent(val value: Int) {
     PLAYER_CLOSED(16),
     STOPPED(17),
     WEB_SERVER(18),
-    CAPTURE_SCREENSHOT(19);
+    CAPTURE_SCREENSHOT(19),
+    TABLE_LIST(20),
+    TABLE_IMPORT(21),
+    TABLE_RENAME(22),
+    TABLE_DELETE(23);
 
     val text: String?
         get() =
@@ -318,6 +322,12 @@ data class VPinballRumbleData(val lowFrequencyRumble: Int, val highFrequencyRumb
 data class VPinballWebServerData(val url: String)
 
 data class VPinballCaptureScreenshotData(val success: Boolean)
+
+data class VPinballTableInfo(val tableId: String, val name: String)
+
+data class VPinballTablesData(var tables: List<VPinballTableInfo>, var success: Boolean)
+
+data class VPinballTableEventData(val tableId: String?, val newName: String?, val path: String?, var success: Boolean = false)
 
 data class VPinballCustomTableOption(
     var sectionName: String,

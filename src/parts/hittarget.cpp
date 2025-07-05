@@ -913,10 +913,7 @@ HRESULT HitTarget::InitPostLoad()
 
 STDMETHODIMP HitTarget::get_Image(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szImage.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szImage);
    return S_OK;
 }
 
@@ -942,10 +939,7 @@ float HitTarget::GetDepth(const Vertex3Ds& viewDir) const
 
 STDMETHODIMP HitTarget::get_Material(BSTR *pVal)
 {
-   WCHAR wz[MAXNAMEBUFFER];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szMaterial.c_str(), -1, wz, MAXNAMEBUFFER);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szMaterial);
    return S_OK;
 }
 
@@ -1296,10 +1290,7 @@ STDMETHODIMP HitTarget::put_DrawStyle(TargetType newVal)
 
 STDMETHODIMP HitTarget::get_PhysicsMaterial(BSTR *pVal)
 {
-   WCHAR wz[MAXNAMEBUFFER];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szPhysicsMaterial.c_str(), -1, wz, MAXNAMEBUFFER);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szPhysicsMaterial);
    return S_OK;
 }
 

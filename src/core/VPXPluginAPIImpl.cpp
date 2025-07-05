@@ -8,7 +8,7 @@
 
 void VPXPluginAPIImpl::GetVpxInfo(VPXInfo* info)
 {
-   if (g_pplayer != nullptr)
+   if (g_pvp != nullptr)
    {
       info->path = g_pvp->m_myPath.c_str();
       info->prefPath = g_pvp->m_myPrefPath.c_str();
@@ -152,53 +152,81 @@ void VPXPluginAPIImpl::SetInputState(const uint64_t keyState, const float nudgeX
 ///////////////////////////////////////////////////////////////////////////////
 // Rendering
 
+// We define VPXTexture as a pointer to a VPXTextureBlock holding a reference counted BaseTexture pointer
+// This is needed since BaseTexture are referenced both wy their creator and by the pending GPU update (to avoid needing an expensive data copy)
+struct VPXTextureBlock
+{
+   std::shared_ptr<BaseTexture> tex;
+   VPXTextureInfo info;
+};
+
+static void UpdateVPXTextureInfo(VPXTextureBlock* tex)
+{
+   tex->info.width = tex->tex->width();
+   tex->info.height = tex->tex->height();
+   switch (tex->tex->m_format)
+   {
+   case BaseTexture::BW: tex->info.format = VPXTextureFormat::VPXTEXFMT_BW; break;
+   case BaseTexture::SRGB: tex->info.format = VPXTextureFormat::VPXTEXFMT_sRGB8; break;
+   case BaseTexture::SRGBA: tex->info.format = VPXTextureFormat::VPXTEXFMT_sRGBA8; break;
+   case BaseTexture::SRGB565: tex->info.format = VPXTextureFormat::VPXTEXFMT_sRGB565; break;
+   default: break; // FIXME what should we do ? reject texture ? have an unknown data format ?
+   }
+   tex->info.data = tex->tex->data();
+}
+
+std::shared_ptr<BaseTexture> VPXPluginAPIImpl::GetTexture(VPXTexture texture) const
+{
+   VPXTextureBlock* tex = reinterpret_cast<VPXTextureBlock*>(texture);
+   return tex->tex;
+}
+
 void VPXPluginAPIImpl::UpdateTexture(VPXTexture* texture, int width, int height, VPXTextureFormat format, const uint8_t* image)
 {
-   BaseTexture** tex = reinterpret_cast<BaseTexture**>(texture);
+   VPXTextureBlock** tex = reinterpret_cast<VPXTextureBlock**>(texture);
+   if (*tex == nullptr)
+      *tex = new VPXTextureBlock();
    switch (format)
    {
-   case VPXTextureFormat::VPXTEXFMT_BW: BaseTexture::Update(tex, width, height, BaseTexture::BW, image); break;
-   case VPXTextureFormat::VPXTEXFMT_sRGB8: BaseTexture::Update(tex, width, height, BaseTexture::SRGB, image); break;
-   case VPXTextureFormat::VPXTEXFMT_sRGBA8: BaseTexture::Update(tex, width, height, BaseTexture::SRGBA, image); break;
-   case VPXTextureFormat::VPXTEXFMT_sRGB565: BaseTexture::Update(tex, width, height, BaseTexture::SRGB565, image); break;
+   case VPXTextureFormat::VPXTEXFMT_BW: BaseTexture::Update((*tex)->tex, width, height, BaseTexture::BW, image); break;
+   case VPXTextureFormat::VPXTEXFMT_sRGB8: BaseTexture::Update((*tex)->tex, width, height, BaseTexture::SRGB, image); break;
+   case VPXTextureFormat::VPXTEXFMT_sRGBA8: BaseTexture::Update((*tex)->tex, width, height, BaseTexture::SRGBA, image); break;
+   case VPXTextureFormat::VPXTEXFMT_sRGB565: BaseTexture::Update((*tex)->tex, width, height, BaseTexture::SRGB565, image); break;
    default: assert(false);
    }
+   UpdateVPXTextureInfo(*tex);
 }
 
 VPXTexture VPXPluginAPIImpl::CreateTexture(uint8_t* rawData, int size)
 {
-   // BGFX allows to create texture from any thread
+   // BGFX allows to create texture from any thread and other rendering backends are single threaded
    // assert(std::this_thread::get_id() == VPXPluginAPIImpl::GetInstance().m_apiThread);
-   return BaseTexture::CreateFromData(rawData, size);
+   VPXTextureBlock* tex = new VPXTextureBlock();
+   tex->tex = BaseTexture::CreateFromData(rawData, size);
+   UpdateVPXTextureInfo(tex);
+   return reinterpret_cast<VPXTexture>(tex);
 }
 
-void VPXPluginAPIImpl::GetTextureInfo(VPXTexture texture, int* width, int* height)
+VPXTextureInfo* VPXPluginAPIImpl::GetTextureInfo(VPXTexture texture)
 {
-   assert(std::this_thread::get_id() == VPXPluginAPIImpl::GetInstance().m_apiThread);
-   *width = static_cast<BaseTexture*>(texture)->width();
-   *height = static_cast<BaseTexture*>(texture)->height();
+   //assert(std::this_thread::get_id() == VPXPluginAPIImpl::GetInstance().m_apiThread);
+   VPXTextureBlock* tex = reinterpret_cast<VPXTextureBlock*>(texture);
+   return tex ? &tex->info : nullptr;
 }
 
 void VPXPluginAPIImpl::DeleteTexture(VPXTexture texture)
 {
-   if (std::this_thread::get_id() != VPXPluginAPIImpl::GetInstance().m_apiThread)
-   {
-      MsgPluginManager::GetInstance().GetMsgAPI().RunOnMainThread(0, [](void* context) { delete static_cast<BaseTexture*>(context); }, texture);
-   }
-   else
-   {
-      // Delay texture deletion since it may be used by the render frame which is processed asynchronously. If so, deleting would cause a deadlock & invalid access
-      BaseTexture* tex = static_cast<BaseTexture*>(texture);
-      if (tex && g_pplayer && g_pplayer->GetCloseState() != Player::CS_CLOSED)
-         g_pplayer->m_renderer->m_renderDevice->AddEndOfFrameCmd(
-            [tex]
-            {
-               g_pplayer->m_renderer->m_renderDevice->m_texMan.UnloadTexture(tex);
-               delete tex;
-            });
-      else
-         delete static_cast<BaseTexture*>(texture);
-   }
+   MsgPluginManager::GetInstance().GetMsgAPI().RunOnMainThread(0, 
+      [](void* context) {
+      VPXTextureBlock* tex = reinterpret_cast<VPXTextureBlock*>(context);
+      if (tex)
+      {
+         if (tex->tex && g_pplayer && g_pplayer->GetCloseState() != Player::CS_CLOSED)
+            g_pplayer->m_renderer->m_renderDevice->m_texMan.UnloadTexture(tex->tex.get());
+         tex->tex = nullptr;
+         delete tex;
+      }
+   }, texture);
 }
 
 
