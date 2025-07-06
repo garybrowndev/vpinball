@@ -1,15 +1,17 @@
 # Ball History for Visual Pinball
 Fork of Visual Pinball for development of Ball History feature
 
-To build:
+To build (and merge):
 - Sync code
-- Run .\make\create_vs_solution.bat
-- Select 2022
 - Extract VPinballX-<VERSION>-<BUILD>-<HASH>-dev-third-party-windows-x64-Debug to .\third-party and overwrite all files
 - Revert all changes from above overwrite of files
+- (If merging) Merge changes from branch
+- Run .\make\create_vs_solution.bat
+- Select 2022
 - Open .\.build\vsproject\VisualPinball.sln in Visual Studio 2022
-- Build Debug / x64
-- Build Release / x64
+- Set VPinball as the Startup Project
+- Build VPinball Debug / x64
+- Build VPinball Release / x64
 
 To try out
 - Hit "C" button while playing
@@ -47,8 +49,6 @@ All releases are available on the [releases page](https://github.com/vpinball/vp
 ## Documentation
 
 Documentation is currently sparse. Check the [docs](docs) directory for various guides and references.
-
-An [unofficial wiki](https://github.com/dekay/vpinball-wiki) is currently being developed. Community contributions, suggestions, and help are welcome to improve the resource for all users.
 
 ## How to build
 
