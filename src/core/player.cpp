@@ -440,6 +440,7 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    m_PlaySound = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "PlaySound"s, true);
    m_MusicVolume = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "MusicVolume"s, 100);
    m_SoundVolume = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "SoundVolume"s, 100);
+   UpdateVolume();
 
    //
 
@@ -700,6 +701,10 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
                         const char *name = node->GetText();
                         if (name != nullptr && image->m_name == name && node->QueryBoolAttribute("linear", &linearRGB) == tinyxml2::XML_SUCCESS)
                         {
+                           #ifdef ENABLE_OPENGL
+                           // Uploading texture in OpenGL uses the state machine which will be wrong if done concurrently
+                           const std::lock_guard<std::mutex> lock(mutex);
+                           #endif
                            m_renderer->m_renderDevice->UploadTexture(image, linearRGB);
                            uploaded = true;
                            break;
@@ -777,8 +782,12 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    }
 
    // Setup anisotropic filtering
-   const bool forceAniso = m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "ForceAnisotropicFiltering"s, true);
-   RenderDevice::SetMainTextureDefaultFiltering(forceAniso ? SF_ANISOTROPIC : SF_TRILINEAR);
+   const bool forceAniso = m_ptable->m_settings.LoadValueBool(Settings::Player, "ForceAnisotropicFiltering"s);
+   Shader::SetDefaultSamplerFilter(SHADER_tex_sprite, forceAniso ? SF_ANISOTROPIC : SF_TRILINEAR);
+   Shader::SetDefaultSamplerFilter(SHADER_tex_base_color, forceAniso ? SF_ANISOTROPIC : SF_TRILINEAR);
+   Shader::SetDefaultSamplerFilter(SHADER_tex_base_normalmap, forceAniso ? SF_ANISOTROPIC : SF_TRILINEAR);
+   Shader::SetDefaultSamplerFilter(SHADER_tex_flasher_A, forceAniso ? SF_ANISOTROPIC : SF_TRILINEAR);
+   Shader::SetDefaultSamplerFilter(SHADER_tex_flasher_B, forceAniso ? SF_ANISOTROPIC : SF_TRILINEAR);
 
    #if defined(EXT_CAPTURE)
    if (m_renderer->m_stereo3D == STEREO_VR)
@@ -860,13 +869,6 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    m_progressDialog.SetProgress("Starting..."s, 100);
    if (!IsEditorMode())
       m_ptable->FireVoidEvent(DISPID_GameEvents_UnPaused);
-
-#ifdef __STANDALONE__
-#ifndef __LIBVPINBALL__
-   if (g_pvp->m_settings.LoadValueWithDefault(Settings::Standalone, "WebServer"s, false))
-      g_pvp->m_webServer.Start();
-#endif
-#endif
 
    PLOGI << "Startup done"; // For profiling
 
@@ -1108,8 +1110,7 @@ Player::~Player()
    m_renderer->m_renderDevice->m_DMDShader->SetTextureNull(SHADER_tex_dmd);
    if (m_dmdFrame)
    {
-      m_renderer->m_renderDevice->m_texMan.UnloadTexture(m_dmdFrame);
-      delete m_dmdFrame;
+      m_renderer->m_renderDevice->m_texMan.UnloadTexture(m_dmdFrame.get());
       m_dmdFrame = nullptr;
    }
 
@@ -2315,17 +2316,19 @@ RenderTarget *Player::RenderAnciliaryWindow(VPXAnciliaryWindow window, RenderTar
       {
          window,
          static_cast<float>(m_outputW), static_cast<float>(m_outputH),
+         1, // 2D render
          static_cast<float>(m_outputW), static_cast<float>(m_outputH),
          // Draw an image
          [](VPXRenderContext2D *ctx, VPXTexture texture,
             const float tintR, const float tintG, const float tintB, const float alpha,
             const float texX, const float texY, const float texW, const float texH,
+            const float pivotX, const float pivotY, const float rotation,
             const float srcX, const float srcY, const float srcW, const float srcH)
             {
                if (alpha <= 0.f) // Alpha blended, so alpha = 0 means not visible
                   return;
                PlayerRenderContext2D *context = reinterpret_cast<PlayerRenderContext2D *>(ctx);
-               BaseTexture *const tex = static_cast<BaseTexture *>(texture);
+               std::shared_ptr<BaseTexture> const tex = VPXPluginAPIImpl::GetInstance().GetTexture(texture);
                RenderDevice * const rd = g_pplayer->m_renderer->m_renderDevice;
                rd->ResetRenderState();
                rd->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
@@ -2338,7 +2341,9 @@ RenderTarget *Player::RenderAnciliaryWindow(VPXAnciliaryWindow window, RenderTar
                rd->m_basicShader->SetVector(SHADER_cBase_Alpha, tintR, tintG, tintB, alpha);
                // We force to linear (no sRGB decoding) when rendering in sRGB colorspace, this suppose that the texture is in sRGB colorspace to get correct gamma (other situations would need dedicated shaders to handle them efficiently)
                assert(tex->m_format == BaseTexture::SRGB || tex->m_format == BaseTexture::SRGBA || tex->m_format == BaseTexture::SRGB565);
-               rd->m_basicShader->SetTexture(SHADER_tex_base_color, tex, !context->isLinearOutput);
+               // Disable filtering and mipmap generation if they are not needed
+               const SamplerFilter sf = (ctx->is2D && (srcW == ctx->srcWidth) && (srcH == ctx->srcHeight)) ? SamplerFilter::SF_NONE : SamplerFilter::SF_UNDEFINED;
+               rd->m_basicShader->SetTexture(SHADER_tex_base_color, tex.get(), !context->isLinearOutput, sf);
                const float vx1 = srcX / ctx->srcWidth;
                const float vy1 = srcY / ctx->srcHeight;
                const float vx2 = vx1 + srcW / ctx->srcWidth;
@@ -2347,11 +2352,21 @@ RenderTarget *Player::RenderAnciliaryWindow(VPXAnciliaryWindow window, RenderTar
                const float ty1 = 1.f - texY / tex->height();
                const float tx2 = (texX + texW) / tex->width();
                const float ty2 = 1.f - (texY + texH) / tex->height();
-               const Vertex3D_NoTex2 vertices[4] = {
+               Vertex3D_NoTex2 vertices[4] = {
                   { vx2, vy1, 0.f, 0.f, 0.f, 1.f, tx2, ty2 },
                   { vx1, vy1, 0.f, 0.f, 0.f, 1.f, tx1, ty2 },
                   { vx2, vy2, 0.f, 0.f, 0.f, 1.f, tx2, ty1 },
                   { vx1, vy2, 0.f, 0.f, 0.f, 1.f, tx1, ty1 } };
+               if (rotation)
+               {
+                  const float px = lerp(vx1, vx2, (pivotX - texX) / tex->width());
+                  const float py = lerp(vy1, vy2, (pivotY - texY) / tex->height());
+                  Matrix3D matRot = 
+                       Matrix3D::MatrixTranslate(-px, -py, 0.f)
+                     * Matrix3D::MatrixRotateZ(rotation * (float)(M_PI / 180.0)) 
+                     * Matrix3D::MatrixTranslate(px, py, 0.f);
+                  matRot.TransformPositions(vertices, vertices, 4);
+               }
                rd->DrawTexturedQuad(rd->m_basicShader, vertices, true, 0.f);
             },
          // Draw a display (DMD, CRT, ...)
@@ -2364,8 +2379,9 @@ RenderTarget *Player::RenderAnciliaryWindow(VPXAnciliaryWindow window, RenderTar
             const float srcX, const float srcY, const float srcW, const float srcH)
             {
                PlayerRenderContext2D *context = reinterpret_cast<PlayerRenderContext2D *>(ctx);
-               BaseTexture *const gTex = static_cast<BaseTexture *>(glassTex);
-               BaseTexture *const dTex = static_cast<BaseTexture *>(dispTex);
+               VPXPluginAPIImpl &vxpApi = VPXPluginAPIImpl::GetInstance();
+               std::shared_ptr<BaseTexture> const gTex = vxpApi.GetTexture(glassTex);
+               std::shared_ptr<BaseTexture> const dTex = vxpApi.GetTexture(dispTex);
                RenderDevice *const rd = g_pplayer->m_renderer->m_renderDevice;
                rd->ResetRenderState();
                rd->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
@@ -2377,7 +2393,7 @@ RenderTarget *Player::RenderAnciliaryWindow(VPXAnciliaryWindow window, RenderTar
                   context->isLinearOutput ? Renderer::ColorSpace::Reinhard_sRGB : Renderer::ColorSpace::Reinhard_sRGB,
                   nullptr, // No parallax
                   vec4(dispPadL, dispPadT, dispPadR, dispPadB),
-                  vec3(glassTintR, glassTintG, glassTintB), glassRoughness, gTex,
+                  vec3(glassTintR, glassTintG, glassTintB), glassRoughness, gTex.get(),
                   vec4(glassAreaX, glassAreaY, glassAreaW, glassAreaH),
                   vec3(glassAmbientR, glassAmbientG, glassAmbientB));
                const float vx1 = srcX / ctx->srcWidth;
@@ -2401,7 +2417,8 @@ RenderTarget *Player::RenderAnciliaryWindow(VPXAnciliaryWindow window, RenderTar
             const float srcX, const float srcY, const float srcW, const float srcH)
             {
                PlayerRenderContext2D *context = reinterpret_cast<PlayerRenderContext2D *>(ctx);
-               BaseTexture *const gTex = static_cast<BaseTexture *>(glassTex);
+               VPXPluginAPIImpl &vxpApi = VPXPluginAPIImpl::GetInstance();
+               std::shared_ptr<BaseTexture> const gTex = vxpApi.GetTexture(glassTex);
                RenderDevice *const rd = g_pplayer->m_renderer->m_renderDevice;
                // Use max blending as segment may overlap in the glass diffuse: we retain the most lighted one which is wrong but looks ok (otherwise we would have to deal with colorspace conversions and layering between glass and emitter)
                rd->ResetRenderState();
@@ -2418,7 +2435,7 @@ RenderTarget *Player::RenderAnciliaryWindow(VPXAnciliaryWindow window, RenderTar
                   context->isLinearOutput ? Renderer::ColorSpace::Reinhard_sRGB : Renderer::ColorSpace::Reinhard_sRGB, 
                   nullptr, // No parallax
                   vec4(dispPadL, dispPadT, dispPadR, dispPadB),
-                  vec3(glassTintR, glassTintG, glassTintB), glassRoughness, gTex,
+                  vec3(glassTintR, glassTintG, glassTintB), glassRoughness, gTex.get(),
                   vec4(glassAreaX, glassAreaY, glassAreaW, glassAreaH),
                   vec3(glassAmbientR, glassAmbientG, glassAmbientB));
                const float vx1 = srcX / ctx->srcWidth;

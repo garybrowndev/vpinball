@@ -1339,10 +1339,7 @@ STDMETHODIMP Surface::put_Threshold(float newVal)
 
 STDMETHODIMP Surface::get_Image(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szImage.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szImage);
    return S_OK;
 }
 
@@ -1362,10 +1359,7 @@ STDMETHODIMP Surface::put_Image(BSTR newVal)
 
 STDMETHODIMP Surface::get_SideMaterial(BSTR *pVal)
 {
-   WCHAR wz[MAXNAMEBUFFER];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szSideMaterial.c_str(), -1, wz, MAXNAMEBUFFER);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szSideMaterial);
    return S_OK;
 }
 
@@ -1377,10 +1371,7 @@ STDMETHODIMP Surface::put_SideMaterial(BSTR newVal)
 
 STDMETHODIMP Surface::get_SlingshotMaterial(BSTR *pVal)
 {
-   WCHAR wz[MAXNAMEBUFFER];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szSlingShotMaterial.c_str(), -1, wz, MAXNAMEBUFFER);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szSlingShotMaterial);
    return S_OK;
 }
 
@@ -1429,10 +1420,7 @@ STDMETHODIMP Surface::put_HeightTop(float newVal)
 
 STDMETHODIMP Surface::get_TopMaterial(BSTR *pVal)
 {
-   WCHAR wz[MAXNAMEBUFFER];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szTopMaterial.c_str(), -1, wz, MAXNAMEBUFFER);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szTopMaterial);
    return S_OK;
 }
 
@@ -1444,10 +1432,7 @@ STDMETHODIMP Surface::put_TopMaterial(BSTR newVal)
 
 STDMETHODIMP Surface::get_PhysicsMaterial(BSTR *pVal)
 {
-   WCHAR wz[MAXNAMEBUFFER];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szPhysicsMaterial.c_str(), -1, wz, MAXNAMEBUFFER);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szPhysicsMaterial);
    return S_OK;
 }
 
@@ -1621,10 +1606,7 @@ STDMETHODIMP Surface::put_Visible(VARIANT_BOOL newVal)
 
 STDMETHODIMP Surface::get_SideImage(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szSideImage.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szSideImage);
    return S_OK;
 }
 

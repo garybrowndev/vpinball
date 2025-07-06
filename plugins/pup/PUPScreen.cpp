@@ -323,6 +323,8 @@ void PUPScreen::SetSize(int w, int h)
    else
       m_rect = { 0, 0, w, h };
 
+   m_pMediaPlayerManager->SetBounds(m_rect);
+
    for (auto pChildren : { &m_defaultChildren, &m_backChildren, &m_topChildren }) {
       for (PUPScreen* pScreen : *pChildren)
           pScreen->SetSize(w, h);
@@ -615,7 +617,7 @@ void PUPScreen::Render(VPXRenderContext2D* const ctx)
 
    Render(ctx, &m_background);
 
-   m_pMediaPlayerManager->Render(ctx, m_rect);
+   m_pMediaPlayerManager->Render(ctx);
 
    for (auto pChildren : { &m_defaultChildren, &m_backChildren, &m_topChildren }) {
       for (PUPScreen* pScreen : *pChildren)
@@ -671,10 +673,10 @@ void PUPScreen::Render(VPXRenderContext2D* const ctx, PUPScreenRenderable* pRend
    // Render image
    if (pRenderable->pTexture)
    {
-      int texWidth, texHeight;
-      GetTextureInfo(pRenderable->pTexture, &texWidth, &texHeight);
+      VPXTextureInfo* texInfo = GetTextureInfo(pRenderable->pTexture);
       ctx->DrawImage(ctx, pRenderable->pTexture, 1.f, 1.f, 1.f, 1.f,
-         0.f, 0.f, static_cast<float>(texWidth), static_cast<float>(texHeight),
+         0.f, 0.f, static_cast<float>(texInfo->width), static_cast<float>(texInfo->height),
+         0.f, 0.f, 0.f, 
          static_cast<float>(m_rect.x), static_cast<float>(m_rect.y), static_cast<float>(m_rect.w), static_cast<float>(m_rect.h));
    }
 }

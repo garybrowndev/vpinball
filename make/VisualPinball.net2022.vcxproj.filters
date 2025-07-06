@@ -133,15 +133,18 @@
     <Filter Include="third-party\simple-uri-parser">
       <UniqueIdentifier>{d2ad50dc-81bf-4ece-9513-85e36260bc19}</UniqueIdentifier>
     </Filter>
+    <Filter Include="third-party\miniaudio">
+      <UniqueIdentifier>{99dcce75-7f07-46a0-a199-04e24e50d34b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third-party\miniaudio\extras">
+      <UniqueIdentifier>{639b99e7-a3d2-4e7f-b399-259f9be7e694}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="../../src/audio/AudioPlayer.cpp">
       <Filter>audio</Filter>
     </ClCompile>
     <ClCompile Include="../../src/audio/AudioStreamPlayer.cpp">
-      <Filter>audio</Filter>
-    </ClCompile>
-    <ClCompile Include="../../src/audio/MusicPlayer.cpp">
       <Filter>audio</Filter>
     </ClCompile>
     <ClCompile Include="../../src/audio/SoundPlayer.cpp">
@@ -373,6 +376,9 @@
       <Filter>ui</Filter>
     </ClCompile>
     <ClCompile Include="../../src/ui/LiveUI.cpp">
+      <Filter>ui</Filter>
+    </ClCompile>
+    <ClCompile Include="../../src/ui/PerfUI.cpp">
       <Filter>ui</Filter>
     </ClCompile>
     <ClCompile Include="../../src/ui/codeview.cpp">
@@ -720,6 +726,12 @@
     <ClCompile Include="../../src\ui\properties\PartGroupVisualsProperty.cpp">
       <Filter>ui\properties</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\third-party\include\miniaudio\miniaudio.c">
+      <Filter>third-party\miniaudio</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\third-party\include\miniaudio\extras\stb_vorbis.c">
+      <Filter>third-party\miniaudio\extras</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="../gen/vpinball.h">
@@ -729,9 +741,6 @@
       <Filter>audio</Filter>
     </ClInclude>
     <ClInclude Include="../../src/audio/AudioStreamPlayer.h">
-      <Filter>audio</Filter>
-    </ClInclude>
-    <ClInclude Include="../../src/audio/MusicPlayer.h">
       <Filter>audio</Filter>
     </ClInclude>
     <ClInclude Include="../../src/audio/SoundPlayer.h">
@@ -1101,6 +1110,9 @@
       <Filter>ui</Filter>
     </ClInclude>
     <ClInclude Include="../../src/ui/LiveUI.h">
+      <Filter>ui</Filter>
+    </ClInclude>
+    <ClInclude Include="../../src/ui/PerfUI.h">
       <Filter>ui</Filter>
     </ClInclude>
     <ClInclude Include="../../src/ui/Debugger.h">
@@ -1876,6 +1888,15 @@
     </ClInclude>
     <ClInclude Include="../../src\ui\properties\PartGroupVisualsProperty.h">
       <Filter>ui\properties</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\third-party\include\miniaudio\miniaudio.h">
+      <Filter>third-party\miniaudio</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\third-party\include\miniaudio\extras\miniaudio_libopus.h">
+      <Filter>third-party\miniaudio\extras</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\third-party\include\miniaudio\extras\miniaudio_libvorbis.h">
+      <Filter>third-party\miniaudio\extras</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

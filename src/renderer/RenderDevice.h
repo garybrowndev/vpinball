@@ -38,17 +38,12 @@
 void ReportFatalError(const HRESULT hr, const char *file, const int line);
 void ReportError(const char *errorText, const HRESULT hr, const char *file, const int line);
 
-#if 1//defined(_DEBUG)
 #if defined(ENABLE_BGFX)
 #define CHECKD3D(s) { s; } 
 #elif defined(ENABLE_OPENGL)
-//void checkGLErrors(const char *file, const int line);
-#define CHECKD3D(s) { s; } //checkGLErrors(__FILE__, __LINE__); } // by now the callback is used instead
+#define CHECKD3D(s) { s; }
 #elif defined(ENABLE_DX9)
 #define CHECKD3D(s) { const HRESULT hrTmp = (s); if (FAILED(hrTmp)) ReportFatalError(hrTmp, __FILE__, __LINE__); }
-#endif
-#else //_DEBUG
-#define CHECKD3D(s) { s; }
 #endif
 
 class Shader;
@@ -177,8 +172,6 @@ public:
    void ApplyRenderStates();
    RenderState& GetActiveRenderState() { return m_current_renderstate; }
 
-   static void SetMainTextureDefaultFiltering(const SamplerFilter filter);
-
    void UploadTexture(ITexManCacheable* texture, const bool linearRGB);
    void SetSamplerState(int unit, SamplerFilter filter, SamplerAddressMode clamp_u, SamplerAddressMode clamp_v);
    std::shared_ptr<Sampler> m_nullTexture = nullptr;
@@ -301,7 +294,7 @@ private:
 public:
    int getGLVersion() const { return m_GLversion; }
    vector<MeshBuffer::SharedVAO*> m_sharedVAOs;
-   vector<SamplerBinding*> m_samplerBindings;
+   vector<Sampler::SamplerBinding*> m_samplerBindings;
    GLuint m_curVAO = 0;
    SDL_GLContext m_sdl_context = nullptr;
    #ifndef __STANDALONE__

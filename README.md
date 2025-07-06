@@ -9,6 +9,7 @@ To build (and merge):
 - Run .\make\create_vs_solution.bat
 - Select 2022
 - Open .\.build\vsproject\VisualPinball.sln in Visual Studio 2022
+- Set VPinball as the Startup Project
 - Build VPinball Debug / x64
 - Build VPinball Release / x64
 

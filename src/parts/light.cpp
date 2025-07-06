@@ -1284,10 +1284,7 @@ void Light::InitShape()
 
 STDMETHODIMP Light::get_BlinkPattern(BSTR *pVal)
 {
-   WCHAR wz[NUM_RGB_BLINK_PATTERN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_rgblinkpattern.c_str(), -1, wz, NUM_RGB_BLINK_PATTERN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_rgblinkpattern);
    return S_OK;
 }
 
@@ -1381,10 +1378,7 @@ STDMETHODIMP Light::put_IntensityScale(float newVal)
 
 STDMETHODIMP Light::get_Surface(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szSurface.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szSurface);
    return S_OK;
 }
 
@@ -1397,10 +1391,7 @@ STDMETHODIMP Light::put_Surface(BSTR newVal)
 
 STDMETHODIMP Light::get_Image(BSTR *pVal)
 {
-   WCHAR wz[MAXTOKEN];
-   MultiByteToWideCharNull(CP_ACP, 0, m_d.m_szImage.c_str(), -1, wz, MAXTOKEN);
-   *pVal = SysAllocString(wz);
-
+   *pVal = MakeWideBSTR(m_d.m_szImage);
    return S_OK;
 }
 
