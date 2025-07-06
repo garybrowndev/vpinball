@@ -843,7 +843,6 @@ BallHistory::BallHistory(PinTable& pinTable)
    , m_UseTrailsForBallsInitialValue(0)
 {
    m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyTableDefault = int32_t(pinTable.GetGlobalDifficulty());
-   m_MenuOptions.m_TrainerOptions.m_GameplayDifficulty = m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyTableDefault;
    pinTable.get_Gravity(&m_MenuOptions.m_TrainerOptions.m_GravityTableDefault);
    pinTable.get_Friction((&m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionTableDefault));
    InitFlippers(pinTable);
@@ -6793,14 +6792,14 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
             PrintScreenRecord::MenuText(
                m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode == TrainerOptions::BallEndAssociationModeType::BallEndAssociationModeType_Select &&
                   m_MenuOptions.m_CurrentAssociationIndex == bsorIndex,
-               std::format("Ball %zu", bsorIndex + 1));
+               std::format("Ball {}", bsorIndex + 1));
          }
          else
          {
             PrintScreenRecord::MenuText(
                m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode == TrainerOptions::BallEndAssociationModeType::BallEndAssociationModeType_Select &&
                   m_MenuOptions.m_CurrentAssociationIndex == bsorIndex,
-               std::format("(X) Ball %zu", bsorIndex + 1));
+               std::format("(X) Ball {}", bsorIndex + 1));
          }
       }
 
