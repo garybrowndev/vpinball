@@ -159,6 +159,9 @@
     <ClCompile Include="$(SolutionDir)/../../src/core/pinundo.cpp">
       <Filter>core</Filter>
     </ClCompile>
+    <ClCompile Include="$(SolutionDir)/../../src/core/ballhistory.cpp">
+      <Filter>core</Filter>
+    </ClCompile>
     <ClCompile Include="$(SolutionDir)/../../src/core/player.cpp">
       <Filter>core</Filter>
     </ClCompile>
@@ -762,6 +765,9 @@
       <Filter>core</Filter>
     </ClInclude>
     <ClInclude Include="$(SolutionDir)/../../src/core/vpinball_h.h">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="$(SolutionDir)/../../src/core/ballhistory.h">
       <Filter>core</Filter>
     </ClInclude>
     <ClInclude Include="$(SolutionDir)/../../src/core/player.h">
