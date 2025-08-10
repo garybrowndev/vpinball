@@ -1,5 +1,7 @@
 # Ball History for Visual Pinball
-Fork of Visual Pinball for development of Ball History feature
+Fork of Visual Pinball for development of Ball History feature.
+Ball History allows for historical ball control and training sessions for the purpose of improving pinball skill.
+Only tested on Windows x64 with DirectX 3D graphics engine.
 
 To build (and merge):
 - Sync code

@@ -8485,7 +8485,7 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
       }
    }
 
-   if (m_MenuOptions.m_TrainerOptions.m_RunRecords.size() > 0 && m_MenuOptions.m_TrainerOptions.m_RunRecords.size() < m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord)
+   if (m_MenuOptions.m_TrainerOptions.m_RunRecords.size() > 0 && m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord < m_MenuOptions.m_TrainerOptions.m_RunRecords.size())
    {
       TrainerOptions::RunRecord& currentRunRecord = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord];
       if (currentRunRecord.m_StartPositions.size() == 0 || currentRunRecord.m_StartVelocities.size() == 0 || currentRunRecord.m_StartAngularMomentums.size() == 0)
