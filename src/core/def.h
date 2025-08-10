@@ -713,7 +713,15 @@ CONSTEXPR inline string upperCase(string input)
    return input;
 }
 
-void SetThreadName(const std::string& name);
+// Find strB within strA, case-insensitive, returns the position of strB in strA or string::npos if not found
+inline string::size_type StrFindNoCase(string strA, string strB)
+{
+   StrToLower(strA);
+   StrToLower(strB);
+   return strA.find(strB);
+}
+
+void SetThreadName(const string& name);
 
 /**
  * @brief Detect whether the program is running on the Wine compatibility layer
@@ -721,6 +729,10 @@ void SetThreadName(const std::string& name);
 bool IsOnWine();
 bool IsWindowsVistaOr7();
 bool IsWindows10_1803orAbove();
+
+#ifndef __STANDALONE__
+string GetExecutablePath();
+#endif
 
 vector<uint8_t> read_file(const string& filename, const bool binary = true);
 void write_file(const string& filename, const vector<uint8_t>& data, const bool binary = true);

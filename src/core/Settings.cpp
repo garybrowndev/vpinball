@@ -250,6 +250,7 @@ void Settings::Validate(const bool addDefaults)
 
    SettingFloat(Section::Player, "EmissionScale"s, 0.5f, 0.f, 1.f, ""s);
    SettingBool(Section::Player, "ForceAnisotropicFiltering"s, true, "Force anisotropic filtering for better rendering quality at the cost of a bit of performance"s);
+   SettingBool(Section::Player, "ForceBloomOff"s, false, "Disable bloom for better performance"s);
 
 #ifndef __LIBVPINBALL__
    SettingInt(Section::Player, "MaxTexDimension"s, 0, 0, 16384, "Maximum texture dimension. Images sized above this limit will be automatically scaled down on load."s);
@@ -257,11 +258,53 @@ void Settings::Validate(const bool addDefaults)
    SettingInt(Section::Player, "MaxTexDimension"s, 1536, 0, 16384, "Maximum texture dimension. Images sized above this limit will be automatically scaled down on load."s);
 #endif
 
+
+   //////////////////////////////////////////////////////////////////////////
+   // Stereo 3D section
+
+   SettingBool(Section::Player, "Stereo3DEnabled"s, true, "Allow to temporarily disable stereo rendering"s);
+   SettingInt(Section::Player, "Stereo3D"s, STEREO_OFF, STEREO_OFF, STEREO_ANAGLYPH_10, "Stereo rendering mode"s);
+
+   //////////////////////////////////////////////////////////////////////////
+   // Plugin.B2SLegacy
+
+#ifdef __STANDALONE__
+   SettingBool(GetSection("Plugin.B2SLegacy"), "Enable"s, true, ""s);
+#endif
+
+   //////////////////////////////////////////////////////////////////////////
+   // Plugin.FlexDMD
+
+#ifdef __STANDALONE__
+   SettingBool(GetSection("Plugin.FlexDMD"), "Enable"s, true, ""s);
+#endif
+
+   //////////////////////////////////////////////////////////////////////////
+   // Plugin.PinMAME
+
+#ifdef __STANDALONE__
+   SettingBool(GetSection("Plugin.PinMAME"), "Enable"s, true, ""s);
+#endif
+
+   //////////////////////////////////////////////////////////////////////////
+   // Plugin.PUP
+
+#ifdef __LIBVPINBALL__
+   SettingBool(GetSection("Plugin.PUP"), "Enable"s, true, ""s);
+#endif
+
    //////////////////////////////////////////////////////////////////////////
    // Plugin.ScoreView
 
-#ifdef __LIBVPINBALL__
+#ifdef __STANDALONE__
    SettingBool(GetSection("Plugin.ScoreView"), "Enable"s, true, ""s);
+#endif
+
+   //////////////////////////////////////////////////////////////////////////
+   // Plugin.WMP
+
+#ifdef __STANDALONE__
+   SettingBool(GetSection("Plugin.WMP"), "Enable"s, true, ""s);
 #endif
 
    //////////////////////////////////////////////////////////////////////////
@@ -334,7 +377,7 @@ void Settings::Validate(const bool addDefaults)
       case 5: dotColor = 0x0023FFFF; break; // Yellow Led
       case 6: dotColor = 0x00FFFFFF; break; // Generic Plasma
       case 7: dotColor = 0x00FFFFFF; break; // Generic Led
-      default: assert(false);
+      default: dotColor = 0; assert(false);
       }
       SettingBool(Section::DMD, prefix + "Legacy",       i == 1, ""s);
       SettingBool(Section::DMD, prefix + "ScaleFX",      false, ""s);
@@ -366,7 +409,7 @@ void Settings::Validate(const bool addDefaults)
       case 6: color = 0x0023FFFF; break; // Yellow Led
       case 7: color = 0x00FFFFFF; break; // Generic Plasma
       case 8: color = 0x00FFFFFF; break; // Generic Led
-      default: assert(false);
+      default: color = 0; assert(false);
       }
       SettingInt(Section::Alpha, prefix + "Color", color, 0x00000000, 0x00FFFFFF, ""s);
       SettingInt(Section::Alpha, prefix + "Unlit", 0x00404040, 0x00000000, 0x00FFFFFF, ""s);
@@ -483,24 +526,14 @@ bool Settings::LoadFromFile(const string& path, const bool createDefault)
             if (strcmp((char *)pvalue, "Dock Settings") == 0) // should not happen, as a folder, not value.. BUT also should save these somehow and restore for Win32++, or not ?
                continue;
 
-            char *copy;
+            string copy;
             if (type == REG_SZ)
-            {
-               const size_t size = strlen((char *)pvalue);
-               copy = new char[size + 1];
-               memcpy(copy, pvalue, size);
-               copy[size] = '\0';
-            }
+               copy = reinterpret_cast<char*>(pvalue);
             else if (type == REG_DWORD)
-            {
-               const string tmp = std::to_string(*(uint32_t *)pvalue);
-               const size_t len = tmp.length() + 1;
-               copy = new char[len];
-               strcpy_s(copy, len, tmp.c_str());
-            }
+               copy = std::to_string(*reinterpret_cast<uint32_t *>(pvalue));
             else
             {
-               copy = nullptr;
+               continue;
                assert(!"Bad Registry Key");
             }
 

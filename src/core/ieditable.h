@@ -42,15 +42,15 @@ public:
    { \
       if (fNew && !wzName) /* setup a default unique name */ \
       { \
-         WCHAR wzUniqueName[128]; \
-         GetPTable()->GetUniqueName(ItemType, wzUniqueName, 128); \
+         WCHAR wzUniqueName[std::size(m_wzName)]; \
+         GetPTable()->GetUniqueName(ItemType, wzUniqueName, std::size(m_wzName)); \
          wcscpy_s(m_wzName, wzUniqueName); \
       } \
       if (GetScriptable() != nullptr) \
       { \
          if (GetScriptable()->m_wzName[0] == '\0') \
             /* Just in case something screws up - not good having a null script name */ \
-            swprintf_s(GetScriptable()->m_wzName, sizeof(GetScriptable()->m_wzName), L"%Id", reinterpret_cast<uintptr_t>(this)); \
+            wcscpy_s(GetScriptable()->m_wzName, std::to_wstring(reinterpret_cast<uintptr_t>(this)).c_str()); \
          GetPTable()->m_pcv->AddItem(GetScriptable(), false); \
       } \
       return S_OK; \
@@ -80,25 +80,22 @@ public:
 #define _STANDARD_DISPATCH_EDITABLE_DECLARES(itemType) \
 	inline IFireEvents *GetIFireEvents() {return (IFireEvents *)this;} \
 	virtual EventProxyBase *GetEventProxyBase() {return (EventProxyBase *)this;} \
+	virtual const WCHAR *get_Name() const { return m_wzName; } \
 	STDMETHOD(get_Name)(/*[out, retval]*/ BSTR *pVal) \
-		{ \
+	{ \
 		*pVal = SysAllocString(m_wzName); \
 		return S_OK; \
-		} \
+	} \
 	STDMETHOD(put_Name)(/*[in]*/ BSTR newVal) \
-		{ \
-		const size_t len = /*wcslen*/ SysStringLen(newVal); \
-		if (len > MAXNAMEBUFFER || len < 1) \
-			{ \
+	{ \
+		wstring newName = newVal; \
+		if (newName.empty() || newName.length() >= MAXNAMEBUFFER) \
 			return E_FAIL; \
-			} \
-		if (GetPTable()->m_pcv->ReplaceName(this, newVal) == S_OK) \
-			{ \
-			wcscpy_s(m_wzName, newVal); \
-			return S_OK; \
-			} \
-		return E_FAIL; \
-		} \
+		if (GetPTable()->m_pcv->ReplaceName(this, newName) != S_OK) \
+			return E_FAIL; \
+		wcscpy_s(m_wzName, newName.c_str()); \
+		return S_OK; \
+	} \
 	STDMETHOD(get_TimerInterval)(/*[out, retval]*/ LONG *pVal) {*pVal = m_d.m_tdr.m_TimerInterval; return S_OK;} \
 	STDMETHOD(put_TimerInterval)(/*[in]*/ LONG newVal) {return IEditable::put_TimerInterval(newVal, &m_d.m_tdr.m_TimerInterval);} \
 	STDMETHOD(get_TimerEnabled)(/*[out, retval]*/ VARIANT_BOOL *pVal) {*pVal = FTOVB(m_d.m_tdr.m_TimerEnabled); return S_OK;} \
@@ -115,9 +112,9 @@ public:
     { \
         CComObject<T> *obj = nullptr; \
         if (FAILED(CComObject<T>::CreateInstance(&obj))) \
-                { \
-            MessageBox(0, "Failed to create COM object.", "Visual Pinball", MB_ICONEXCLAMATION); \
-                } \
+        { \
+            MessageBox(0, "Failed to create COM object.", "Visual Pinball", MB_OK | MB_ICONEXCLAMATION); \
+        } \
         obj->AddRef(); \
         return obj; \
     } \
@@ -280,7 +277,7 @@ public:
    void MarkForUndo();
    void MarkForDelete();
    void Undelete();
-   const char *GetName() const;
+   string GetName() const;
    void SetName(const string& name);
    virtual void Delete();
    virtual void Uncreate();
@@ -288,7 +285,7 @@ public:
    bool m_backglass = false; // if the light/decal (+dispreel/textbox is always true) is on the table (false) or a backglass view
 
    void SetPartGroup(class PartGroup *partGroup);
-   class PartGroup* GetPartGroup() const { return m_partGroup; } 
+   class PartGroup* GetPartGroup() const { return m_partGroup; }
    string GetPathString(const bool isDirOnly) const;
    bool IsChild(const PartGroup* group) const;
 

@@ -38,9 +38,8 @@ public:
       #ifdef _WIN32
       // Convert from wchar* to char* on Win32
       auto msg = record.getMessage();
-      char * const szT = MakeChar(msg);
+      const string szT = MakeString(msg);
       table->m_pcv->AddToDebugOutput(szT);
-      delete [] szT;
       #else
       table->m_pcv->AddToDebugOutput(record.getMessage());
       #endif
@@ -66,23 +65,24 @@ public:
 
       std::string level;
       switch (record.getSeverity()) {
-         case plog::fatal:   level = "FATAL"; break;
-         case plog::error:   level = "ERROR"; break;
-         case plog::warning: level = "WARN"; break;
-         case plog::info:    level = "INFO"; break;
-         case plog::debug:   level = "DEBUG"; break;
-         case plog::verbose: level = "VERBOSE"; break;
-         default:            level = "UNKNOWN"; break;
+         case plog::fatal:   level = "FATAL"s; break;
+         case plog::error:   level = "ERROR"s; break;
+         case plog::warning: level = "WARN"s; break;
+         case plog::info:    level = "INFO"s; break;
+         case plog::debug:   level = "DEBUG"s; break;
+         case plog::verbose: level = "VERBOSE"s; break;
+         default:            level = "UNKNOWN"s; break;
       }
 
       std::string message;
       #ifdef _WIN32
       auto msg = record.getMessage();
-      const int len = (int)wcslen(msg) + 1;
-      char *const szT = new char[len];
-      WideCharToMultiByteNull(CP_UTF8, 0, msg, -1, szT, len, nullptr, nullptr);
-      message = std::string(szT);
-      delete [] szT;
+      const int len = WideCharToMultiByte(CP_UTF8, 0, msg, -1, nullptr, 0, nullptr, nullptr); //(int)wcslen(msg) + 1;
+      if (len > 1)
+      {
+         message.resize(len - 1, '\0');
+         WideCharToMultiByte(CP_UTF8, 0, msg, -1, message.data(), len, nullptr, nullptr);
+      }
       #else
       message = std::string(record.getMessage());
       #endif
@@ -94,15 +94,62 @@ public:
                static_cast<int>(record.getTime().millitm));
 
       std::stringstream ss;
-      ss << timeBuffer << " " << std::left << std::setw(5) << level << " ";
-      ss << "[" << record.getTid() << "] ";
-      ss << "[" << record.getFunc() << "@" << record.getLine() << "] ";
+      ss << timeBuffer << ' ' << std::left << std::setw(5) << level << ' ';
+      ss << '[' << record.getTid() << "] ";
+      ss << '[' << record.getFunc() << '@' << record.getLine() << "] ";
       ss << message;
 
       WebServer::LogAppender(ss.str());
    }
 };
 #endif
+
+template <bool useUtcTime> class ThreadAwareTxtFormatter
+{
+public:
+   static plog::util::nstring header() { return plog::util::nstring(); }
+
+   static plog::util::nstring format(const plog::Record& record)
+   {
+      tm t;
+      useUtcTime ? plog::util::gmtime_s(&t, &record.getTime().time) : plog::util::localtime_s(&t, &record.getTime().time);
+
+      plog::util::nostringstream ss;
+      ss << t.tm_year + 1900 << "-" << std::setfill(PLOG_NSTR('0')) << std::setw(2) << t.tm_mon + 1 << PLOG_NSTR("-") << std::setfill(PLOG_NSTR('0')) << std::setw(2) << t.tm_mday
+         << PLOG_NSTR(" ");
+      ss << std::setfill(PLOG_NSTR('0')) << std::setw(2) << t.tm_hour << PLOG_NSTR(":") << std::setfill(PLOG_NSTR('0')) << std::setw(2) << t.tm_min << PLOG_NSTR(":")
+         << std::setfill(PLOG_NSTR('0')) << std::setw(2) << t.tm_sec << PLOG_NSTR(".") << std::setfill(PLOG_NSTR('0')) << std::setw(3) << static_cast<int>(record.getTime().millitm)
+         << PLOG_NSTR(" ");
+      ss << std::setfill(PLOG_NSTR(' ')) << std::setw(5) << std::left << severityToString(record.getSeverity()) << PLOG_NSTR(" ");
+      #ifdef _WIN32
+         bool logged = false;
+         HANDLE hThread = OpenThread(THREAD_QUERY_INFORMATION, FALSE, record.getTid());
+         if (hThread != nullptr)
+         {
+            PWSTR data;
+            HRESULT hr = GetThreadDescription(hThread, &data);
+            if (SUCCEEDED(hr))
+            {
+               if (data[0] != 0)
+               {
+                  ss << PLOG_NSTR("[") << data << PLOG_NSTR("] ");
+                  logged = true;
+               }
+               LocalFree(data);
+            }
+            CloseHandle(hThread);
+         }
+         if (!logged)
+            ss << PLOG_NSTR("[") << record.getTid() << PLOG_NSTR("] ");
+      #else
+         ss << PLOG_NSTR("[") << record.getTid() << PLOG_NSTR("] ");
+      #endif
+      ss << PLOG_NSTR("[") << record.getFunc() << PLOG_NSTR("@") << record.getLine() << PLOG_NSTR("] ");
+      ss << record.getMessage() << PLOG_NSTR("\n");
+
+      return ss.str();
+   }
+};
 
 Logger* Logger::m_pInstance = nullptr;
 
@@ -124,7 +171,7 @@ void Logger::SetupLogger(const bool enable)
       {
          initialized = true;
          const string szLogPath = g_pvp->m_myPrefPath + "vpinball.log";
-         static plog::RollingFileAppender<plog::TxtFormatter> fileAppender(szLogPath.c_str(), 1024 * 1024 * 5, 1);
+         static plog::RollingFileAppender<ThreadAwareTxtFormatter<false>> fileAppender(szLogPath.c_str(), 1024 * 1024 * 5, 1);
          static DebugAppender debugAppender;
          plog::Logger<PLOG_DEFAULT_INSTANCE_ID>::getInstance()->addAppender(&debugAppender);
          plog::Logger<PLOG_DEFAULT_INSTANCE_ID>::getInstance()->addAppender(&fileAppender);

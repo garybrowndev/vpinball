@@ -81,7 +81,8 @@ void DecalVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
 
         if (decal->m_pIFont)
         {
-            m_fontDialogButton.SetWindowText(decal->GetFontName());
+            m_fontDialogButton.SetWindowText(decal->GetFontName().c_str());
+            delete m_font;
             m_font = new CFont(decal->GetFont());
         }
 
@@ -204,7 +205,7 @@ BOOL DecalVisualsProperty::OnInitDialog()
     m_materialCombo.AttachItem(IDC_MATERIAL_COMBO);
     m_baseMaterialCombo = &m_materialCombo;
     m_typeCombo.AttachItem(IDC_FONT_TYPE_COMBO);
-    m_hVerticalTextCheck = ::GetDlgItem(GetHwnd(), IDC_DECAL_VERTICAL_TEXT_CHECK);
+    m_hVerticalTextCheck = GetDlgItem(IDC_DECAL_VERTICAL_TEXT_CHECK);
     AttachItem(IDC_COLOR_BUTTON1, m_fontColorButton);
     AttachItem(IDC_FONT_DIALOG_BUTTON, m_fontDialogButton);
     m_imageCombo.AttachItem(DISPID_Image);
@@ -220,7 +221,7 @@ BOOL DecalVisualsProperty::OnInitDialog()
     m_surfaceCombo.AttachItem(IDC_SURFACE_COMBO);
     UpdateVisuals();
 
-    m_resizer.Initialize(*this, CRect(0, 0, 0, 0));
+    m_resizer.Initialize(GetHwnd(), CRect(0, 0, 0, 0));
     m_resizer.AddChild(GetDlgItem(IDC_STATIC1), CResizer::topleft, 0);
     m_resizer.AddChild(GetDlgItem(IDC_STATIC2), CResizer::topleft, 0);
     m_resizer.AddChild(GetDlgItem(IDC_STATIC3), CResizer::topleft, 0);

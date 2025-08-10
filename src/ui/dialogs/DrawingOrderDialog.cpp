@@ -58,12 +58,12 @@ BOOL DrawingOrderDialog::OnInitDialog()
       IEditable * const pedit = m_drawingOrderSelect ? selection[i]->GetIEditable() : pt->m_allHitElements[i]->GetIEditable();
       if (pedit)
       {
-         const char * const szTemp = PinTable::GetElementName(pedit);
-         if (szTemp)
+         const string szTemp = PinTable::GetElementName(pedit);
+         if (!szTemp.empty())
          {
             lv.iItem = (int)i;
             lv.iSubItem = 0;
-            lv.pszText = (char*)szTemp;
+            lv.pszText = (char*)szTemp.c_str();
             ListView_InsertItem(hOrderList, &lv);
             if (pedit->GetItemType() == eItemSurface)
             {
@@ -184,9 +184,9 @@ void DrawingOrderDialog::UpdateDrawingOrder(IEditable *ptr, bool up)
    {
       if (idx > 0)
       {
-         ListView_GetItemText(hOrderList, idx, 0, text0, 256);
-         ListView_GetItemText(hOrderList, idx, 1, text1, 256);
-         ListView_GetItemText(hOrderList, idx, 2, text2, 256);
+         ListView_GetItemText(hOrderList, idx, 0, text0, std::size(text0));
+         ListView_GetItemText(hOrderList, idx, 1, text1, std::size(text1));
+         ListView_GetItemText(hOrderList, idx, 2, text2, std::size(text2));
          ListView_DeleteItem(hOrderList, idx);
          lv.iItem = idx - 1;
          lv.iSubItem = 0;
@@ -246,9 +246,9 @@ void DrawingOrderDialog::UpdateDrawingOrder(IEditable *ptr, bool up)
       {
          if (idx < pt->m_vmultisel.size() - 1)
          {
-            ListView_GetItemText(hOrderList, idx, 0, text0, 256);
-            ListView_GetItemText(hOrderList, idx, 1, text1, 256);
-            ListView_GetItemText(hOrderList, idx, 2, text2, 256);
+            ListView_GetItemText(hOrderList, idx, 0, text0, std::size(text0));
+            ListView_GetItemText(hOrderList, idx, 1, text1, std::size(text1));
+            ListView_GetItemText(hOrderList, idx, 2, text2, std::size(text2));
             ListView_DeleteItem(hOrderList, idx);
             lv.iItem = idx + 1;
             lv.iSubItem = 0;
@@ -285,9 +285,9 @@ void DrawingOrderDialog::UpdateDrawingOrder(IEditable *ptr, bool up)
       {
          if (idx < (int)pt->m_allHitElements.size() - 1)
          {
-            ListView_GetItemText(hOrderList, idx, 0, text0, 256);
-            ListView_GetItemText(hOrderList, idx, 1, text1, 256);
-            ListView_GetItemText(hOrderList, idx, 2, text2, 256);
+            ListView_GetItemText(hOrderList, idx, 0, text0, std::size(text0));
+            ListView_GetItemText(hOrderList, idx, 1, text1, std::size(text1));
+            ListView_GetItemText(hOrderList, idx, 2, text2, std::size(text2));
             ListView_DeleteItem(hOrderList, idx);
             lv.iItem = idx + 1;
             lv.iSubItem = 0;

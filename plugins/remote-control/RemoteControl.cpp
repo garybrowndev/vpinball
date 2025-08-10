@@ -85,9 +85,7 @@ protected:
    {
       #ifdef _WIN32
          #ifdef UNICODE
-            WCHAR wsz[64];
-            swprintf_s(wsz, L"%S", host);
-            InetPton(AF_INET, wsz, &(saddr_in.sin_addr.s_addr));
+            InetPtonA(AF_INET, host, &(saddr_in.sin_addr.s_addr));
          #else
             InetPton(AF_INET, host, &(saddr_in.sin_addr.s_addr));
          #endif
@@ -476,9 +474,9 @@ LPI_IMPLEMENT // Implement shared login support
 
 using namespace RemoteControl;
 
-MSGPI_EXPORT void MSGPIAPI RemoteControlPluginLoad(const uint32_t sessionId, MsgPluginAPI* api)
+MSGPI_EXPORT void MSGPIAPI RemoteControlPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api)
 {
-   msgApi = api;
+   msgApi = const_cast<MsgPluginAPI*>(api);
    endpointId = sessionId;
    runMode = RunMode::RunModeNone;
    LPISetup(endpointId, msgApi); // Request and setup shared login API

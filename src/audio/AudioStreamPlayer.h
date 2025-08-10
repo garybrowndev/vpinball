@@ -3,6 +3,7 @@
 #pragma once
 
 #include <SDL3/SDL_audio.h>
+#include "../plugins/MsgPluginManager.h"
 
 namespace VPX
 {
@@ -11,63 +12,29 @@ namespace VPX
 class AudioStreamPlayer
 {
 public:
-   static AudioStreamPlayer* Create(int sdlDevice, int frequency, int channels)
-   {
-      SDL_AudioSpec audioSpec;
-      audioSpec.freq = frequency;
-      audioSpec.format = SDL_AUDIO_S16LE;
-      audioSpec.channels = channels;
+   static std::unique_ptr<AudioStreamPlayer> Create(SDL_AudioDeviceID sdlDevice, int frequency, int channels, bool isFloat);
+   explicit AudioStreamPlayer(SDL_AudioStream* stream);
+   ~AudioStreamPlayer();
 
-      SDL_AudioStream* stream = SDL_OpenAudioDeviceStream(sdlDevice, &audioSpec, nullptr, nullptr);
-      if (stream)
-      {
-         SDL_ResumeAudioStreamDevice(stream);
-         return new AudioStreamPlayer(stream);
-      }
-      else
-      {
-         PLOGE << "Failed to create stream: " << SDL_GetError();
-         return nullptr;
-      }
-   }
-
-   AudioStreamPlayer(SDL_AudioStream* stream)
-      : m_stream(stream)
-   {
-      assert(stream != nullptr);
-   }
-
-   ~AudioStreamPlayer()
-   {
-      SDL_DestroyAudioStream(m_stream);
-   }
-
-   void Enqueue(void* buffer, int length)
-   {
-      SDL_PutAudioStreamData(m_stream, buffer, length);
-   }
-
-   int GetQueued() const
-   {
-      return SDL_GetAudioStreamQueued(m_stream);
-   }
-
-   void SetStreamVolume(const float volume)
-   {
-      m_streamVolume = volume;
-      SDL_SetAudioStreamGain(m_stream, m_streamVolume * m_mainVolume);
-   }
-
-   void SetMainVolume(const float volume)
-   {
-      m_mainVolume = volume;
-      SDL_SetAudioStreamGain(m_stream, m_streamVolume * m_mainVolume);
-   }
+   void Enqueue(const uint8_t* buffer, int length);
+   void FlushStream();
+   int GetQueuedSize() const;
+   void SetName(string name) { m_name = std::move(name); }
+   void SetStreamVolume(const float volume);
+   void SetMainVolume(const float volume);
 
 private:
+   static void AudioStreamCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount);
+
    SDL_AudioStream* const m_stream = nullptr;
+   SDL_AudioSpec m_audioSpec;
    float m_mainVolume = 1.f;
    float m_streamVolume = 1.f;
+   float m_throttling = 1.f;
+   uint64_t m_streamedTotal = 0;
+   uint64_t m_startTimestamp = 0;
+   string m_name;
+   bool m_resync = false;
 };
 
 }

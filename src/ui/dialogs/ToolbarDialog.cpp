@@ -58,7 +58,7 @@ BOOL ToolbarDialog::OnInitDialog()
     AttachItem(ID_INSERT_FLASHER, m_flasherButton);
     AttachItem(ID_INSERT_RUBBER, m_rubberButton);
 
-    m_tooltip.Create(*this);
+    m_tooltip.Create(GetHwnd());
     m_tooltip.AddTool(m_magnifyButton, _T("Zoom in/out"));
     m_tooltip.AddTool(m_selectButton, _T("Select Element"));
     m_tooltip.AddTool(m_scriptButton, _T("Toggle Script Editor"));
@@ -167,7 +167,7 @@ BOOL ToolbarDialog::OnInitDialog()
     m_rubberButton.SetIcon((HICON)hIcon);
 
 
-    m_resizer.Initialize(this->GetHwnd(), CRect(0, 0, 90, 600));
+    m_resizer.Initialize(GetHwnd(), CRect(0, 0, 90, 600));
     m_resizer.AddChild(m_magnifyButton.GetHwnd(), CResizer::center, RD_STRETCH_WIDTH | RD_STRETCH_HEIGHT);
     m_resizer.AddChild(m_selectButton.GetHwnd(), CResizer::center, RD_STRETCH_WIDTH | RD_STRETCH_HEIGHT);
     m_resizer.AddChild(m_scriptButton.GetHwnd(), CResizer::center, RD_STRETCH_WIDTH | RD_STRETCH_HEIGHT);
@@ -210,7 +210,7 @@ INT_PTR ToolbarDialog::DialogProc(UINT msg, WPARAM wparam, LPARAM lparam)
 
     switch (msg)
     {
-        case WM_MOUSEACTIVATE:      return OnMouseActivate(msg, wparam, lparam);
+        case WM_MOUSEACTIVATE: return OnMouseActivate(msg, wparam, lparam);
     }
 
     // Pass unhandled messages on to parent DialogProc
@@ -291,23 +291,6 @@ void ToolbarDialog::EnableButtons()
     }
 }
 
-BOOL ToolbarDialog::PreTranslateMessage(MSG& msg)
-{
-   if (!IsWindow())
-      return FALSE;
-
-   // only pre-translate mouse and keyboard input events
-   if ((msg.message >= WM_KEYFIRST && msg.message <= WM_KEYLAST) || (msg.message >= WM_MOUSEFIRST && msg.message <= WM_MOUSELAST))
-   {
-      const int keyPressed = LOWORD(msg.wParam);
-      // only pass F1-F12 to the main VPinball class to open subdialogs from everywhere
-      if (keyPressed >= VK_F1 && keyPressed <= VK_F12 && TranslateAccelerator(g_pvp->GetHwnd(), g_haccel, &msg))
-         return TRUE;
-   }
-
-   return IsDialogMessage(msg);
-}
-
 BOOL ToolbarDialog::OnCommand(WPARAM wParam, LPARAM lParam)
 {
     UNREFERENCED_PARAMETER(lParam);
@@ -376,12 +359,12 @@ BOOL ToolbarDialog::OnCommand(WPARAM wParam, LPARAM lParam)
         }
         case ID_TABLE_PLAY:
         {
-            g_pvp->DoPlay(false); 
+            g_pvp->DoPlay(0);
             break;
         }
         case ID_TABLE_PLAY_CAMERA:
         {
-            g_pvp->DoPlay(true);  
+            g_pvp->DoPlay(1);
             break;
         }
     }

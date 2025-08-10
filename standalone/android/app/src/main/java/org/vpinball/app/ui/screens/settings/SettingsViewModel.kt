@@ -18,6 +18,7 @@ import org.vpinball.app.jni.VPinballReflectionMode
 import org.vpinball.app.jni.VPinballSettingsSection.PLAYER
 import org.vpinball.app.jni.VPinballSettingsSection.PLUGIN_ALPHA_DMD
 import org.vpinball.app.jni.VPinballSettingsSection.PLUGIN_B2S
+import org.vpinball.app.jni.VPinballSettingsSection.PLUGIN_B2S_LEGACY
 import org.vpinball.app.jni.VPinballSettingsSection.PLUGIN_DMD_UTIL
 import org.vpinball.app.jni.VPinballSettingsSection.PLUGIN_DOF
 import org.vpinball.app.jni.VPinballSettingsSection.PLUGIN_FLEX_DMD
@@ -26,6 +27,7 @@ import org.vpinball.app.jni.VPinballSettingsSection.PLUGIN_PUP
 import org.vpinball.app.jni.VPinballSettingsSection.PLUGIN_REMOTE_CONTROL
 import org.vpinball.app.jni.VPinballSettingsSection.PLUGIN_SCORE_VIEW
 import org.vpinball.app.jni.VPinballSettingsSection.PLUGIN_SERUM
+import org.vpinball.app.jni.VPinballSettingsSection.PLUGIN_WMP
 import org.vpinball.app.jni.VPinballSettingsSection.STANDALONE
 import org.vpinball.app.jni.VPinballSettingsSection.TABLE_OVERRIDE
 import org.vpinball.app.jni.VPinballSharpen
@@ -159,6 +161,9 @@ class SettingsViewModel : ViewModel() {
     var pluginB2S by mutableStateOf(false)
         private set
 
+    var pluginB2SLegacy by mutableStateOf(false)
+        private set
+
     var pluginDMDUtil by mutableStateOf(false)
         private set
 
@@ -181,6 +186,9 @@ class SettingsViewModel : ViewModel() {
         private set
 
     var pluginSerum by mutableStateOf(false)
+        private set
+
+    var pluginWMP by mutableStateOf(false)
         private set
 
     fun loadSettings() {
@@ -269,6 +277,7 @@ class SettingsViewModel : ViewModel() {
 
         pluginAlphaDMD = VPinballManager.loadValue(PLUGIN_ALPHA_DMD, "Enable", false)
         pluginB2S = VPinballManager.loadValue(PLUGIN_B2S, "Enable", false)
+        pluginB2SLegacy = VPinballManager.loadValue(PLUGIN_B2S_LEGACY, "Enable", false)
         pluginDMDUtil = VPinballManager.loadValue(PLUGIN_DMD_UTIL, "Enable", false)
         pluginDOF = VPinballManager.loadValue(PLUGIN_DOF, "Enable", false)
         pluginFlexDMD = VPinballManager.loadValue(PLUGIN_FLEX_DMD, "Enable", false)
@@ -277,6 +286,7 @@ class SettingsViewModel : ViewModel() {
         pluginRemoteControl = VPinballManager.loadValue(PLUGIN_REMOTE_CONTROL, "Enable", false)
         pluginScoreView = VPinballManager.loadValue(PLUGIN_SCORE_VIEW, "Enable", true)
         pluginSerum = VPinballManager.loadValue(PLUGIN_SERUM, "Enable", false)
+        pluginWMP = VPinballManager.loadValue(PLUGIN_WMP, "Enable", false)
     }
 
     // General
@@ -481,6 +491,11 @@ class SettingsViewModel : ViewModel() {
         VPinballManager.saveValue(PLUGIN_B2S, "Enable", pluginB2S)
     }
 
+    fun handlePluginB2SLegacy(value: Boolean) {
+        pluginB2SLegacy = value
+        VPinballManager.saveValue(PLUGIN_B2S_LEGACY, "Enable", pluginB2SLegacy)
+    }
+
     fun handlePluginDMDUtil(value: Boolean) {
         pluginDMDUtil = value
         VPinballManager.saveValue(PLUGIN_DMD_UTIL, "Enable", pluginDMDUtil)
@@ -519,6 +534,11 @@ class SettingsViewModel : ViewModel() {
     fun handlePluginSerum(value: Boolean) {
         pluginSerum = value
         VPinballManager.saveValue(PLUGIN_SERUM, "Enable", pluginSerum)
+    }
+
+    fun handlePluginWMP(value: Boolean) {
+        pluginWMP = value
+        VPinballManager.saveValue(PLUGIN_WMP, "Enable", pluginWMP)
     }
 
     // Reset

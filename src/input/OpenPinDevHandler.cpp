@@ -326,7 +326,7 @@ OpenPinDevHandler::OpenPinDevHandler(PinInput &pininput)
 
 // Terminate the Open Pinball Device subsystem.  Closes all open
 // devices and discards associated memory structures.
-OpenPinDevHandler ::~OpenPinDevHandler()
+OpenPinDevHandler::~OpenPinDevHandler()
 {
    // discard the context object
    delete m_OpenPinDevContext;
@@ -334,7 +334,7 @@ OpenPinDevHandler ::~OpenPinDevHandler()
 }
 
 // Read input from the Open Pinball Device inputs
-void OpenPinDevHandler::Update()
+void OpenPinDevHandler::Update(const HWND foregroundWindow)
 {
    // Combined report.  In keeping with Visual Pinball's treatment of
    // multiple gamepads, we merge the input across devices if there are

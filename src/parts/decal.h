@@ -56,7 +56,8 @@ public:
    void Rotate(const float ang, const Vertex2D &pvCenter, const bool useElementCenter) final;
 
    STDMETHOD(get_Name)(BSTR *pVal) final { return E_FAIL; }
-   char *GetFontName();
+   const WCHAR *get_Name() const final { return L"Decal"; }
+   string GetFontName();
    HFONT GetFont();
 
    void WriteRegDefaults() final;

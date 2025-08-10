@@ -3,7 +3,6 @@
 #include "PUPManager.h"
 #include "LibAv.h"
 #include "ThreadPool.h"
-// #include "parts/Sound.h"
 
 namespace PUP {
 
@@ -14,7 +13,7 @@ public:
    ~PUPMediaPlayer();
 
    void Play(const string& filename);
-   bool IsPlaying();
+   bool IsPlaying() const;
    void Pause(bool pause);
    const string& GetFilename() const { return m_filename; }
    int GetPriority() const { return m_priority; }
@@ -24,17 +23,22 @@ public:
    void SetLength(int length);
    void Render(VPXRenderContext2D* const ctx, const SDL_Rect& destRect);
 
+   void SetName(const string& name);
+   void SetOnEndCallback(std::function<void(PUPMediaPlayer*)> onEndCallback) { std::lock_guard lock(m_mutex); m_onEndCallback = onEndCallback; }
    void SetBounds(const SDL_Rect& rect);
+   void SetMask(std::shared_ptr<SDL_Surface> mask);
 
 private:
    void StopBlocking();
    void Run();
    AVCodecContext* OpenStream(AVFormatContext* pInputFormatContext, int stream);
-   void HandleAudioFrame(AVFrame* pFrame);
-   void HandleVideoFrame(AVFrame* pFrame);
+   void HandleAudioFrame(AVFrame* pFrame, bool sync);
+   void HandleVideoFrame(AVFrame* pFrame, bool sync);
 
-   const string m_name;
+   string m_name;
    SDL_Rect m_bounds;
+
+   std::function<void(PUPMediaPlayer*)> m_onEndCallback = [](PUPMediaPlayer*) { };
 
    string m_filename;
    uint64_t m_startTimestamp = 0; // timestamp in ms when the play command was called
@@ -58,6 +62,9 @@ private:
    vector<VPXTexture> m_videoTextures;
    SwsContext* m_swsContext = nullptr;
 
+   std::shared_ptr<SDL_Surface> m_mask = nullptr;
+   std::unique_ptr<SDL_Surface, void (*)(SDL_Surface*)> m_scaledMask;
+
    VPXTexture m_videoTexture = nullptr;
    unsigned int m_videoTextureId = 0xFFFFFF;
 
@@ -65,7 +72,9 @@ private:
    AVCodecContext* m_pAudioContext = nullptr;
    struct SwrContext* m_pAudioConversionContext = nullptr;
    AVSampleFormat m_audioFormat = AV_SAMPLE_FMT_NONE;
-   //Sound* m_pSound = nullptr;
+   void* m_pAudioLoop = nullptr;
+   int m_audioFreq = 0;
+   CtlResId m_audioResId { 0 };
 
    std::mutex m_mutex;
    std::thread m_thread;

@@ -1,6 +1,8 @@
 
 # common CMakeLists file shared by all build targets
 
+add_compile_definitions($<$<CONFIG:Release>:IMGUI_DISABLE_DEBUG_TOOLS>)
+
 set(VPX_SOURCES
    src/audio/AudioPlayer.cpp
    src/audio/AudioPlayer.h
@@ -38,6 +40,8 @@ set(VPX_SOURCES
    src/core/Settings.h
    src/core/TableDB.cpp
    src/core/TableDB.h
+   src/core/VPApp.h
+   src/core/VPApp.cpp
    src/core/vpversion.h
    src/core/VPXPluginAPIImpl.h
    src/core/VPXPluginAPIImpl.cpp

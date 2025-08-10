@@ -162,12 +162,12 @@ static void vpx_node_process_pcm_frames(ma_node* pNode, const float** ppFramesIn
    }
 }
 
-static ma_node_vtable vpx_node_vtable = { vpx_node_process_pcm_frames, NULL, 1, 1, 0 };
+static ma_node_vtable vpx_node_vtable = { vpx_node_process_pcm_frames, nullptr, 1, 1, 0 };
 
 MA_API ma_result vpx_node_init(ma_node_graph* pNodeGraph, const vpx_node_config* pConfig, const ma_allocation_callbacks* pAllocationCallbacks, vpx_node* pNode)
 {
    ma_node_config baseConfig;
-   if (pNode == NULL)
+   if (pNode == nullptr)
       return MA_INVALID_ARGS;
    memset(pNode, 0, sizeof(vpx_node));
    baseConfig = pConfig->nodeConfig;
@@ -179,7 +179,7 @@ MA_API ma_result vpx_node_init(ma_node_graph* pNodeGraph, const vpx_node_config*
 
 MA_API void vpx_node_uninit(ma_delay_node* pNode, const ma_allocation_callbacks* pAllocationCallbacks)
 {
-   if (pNode == NULL)
+   if (pNode == nullptr)
       return;
    ma_node_uninit(pNode, pAllocationCallbacks);
 }
@@ -205,7 +205,7 @@ SoundPlayer* SoundPlayer::Create(const AudioPlayer* audioPlayer, const string& f
    return new SoundPlayer(audioPlayer, filename);
 }
 
-SoundPlayer::SoundPlayer(const AudioPlayer* audioPlayer, string filename)
+SoundPlayer::SoundPlayer(const AudioPlayer* audioPlayer, const string& filename)
    : m_audioPlayer(audioPlayer)
    , m_outputTarget(SoundOutTypes::SNDOUT_BACKGLASS)
    , m_commandQueue(1)
@@ -222,7 +222,7 @@ SoundPlayer::SoundPlayer(const AudioPlayer* audioPlayer, string filename)
       customNodeConfig.nodeConfig = ma_node_config_init();
       customNodeConfig.inChannels = 2;
       customNodeConfig.outChannels = ma_engine_get_channels(engine);
-      ma_result result = vpx_node_init(ma_engine_get_node_graph(engine), &customNodeConfig, nullptr, m_vpxMixNode.get());
+      const ma_result result = vpx_node_init(ma_engine_get_node_graph(engine), &customNodeConfig, nullptr, m_vpxMixNode.get());
       if (result != MA_SUCCESS)
       {
          PLOGE << "Failed to initialize custom mixer.";
@@ -249,6 +249,9 @@ SoundPlayer::SoundPlayer(const AudioPlayer* audioPlayer, string filename)
          m_sound = nullptr;
          return;
       }
+
+      if (!IsPlaying())
+         ma_sound_start(m_sound.get());
    });
 }
 
@@ -259,7 +262,7 @@ SoundPlayer::SoundPlayer(const AudioPlayer* audioPlayer, Sound* sound)
 {
    m_commandQueue.enqueue([this, sound]()
    {
-      SetThreadName("VPX.SoundPlayer ["s.append(sound->m_name).append(1, ']'));
+      SetThreadName("VPX.SoundPlayer ["s.append(sound->GetName()).append(1, ']'));
 
       ma_engine* engine = m_audioPlayer->GetEngine(m_outputTarget);
 
@@ -269,7 +272,7 @@ SoundPlayer::SoundPlayer(const AudioPlayer* audioPlayer, Sound* sound)
       customNodeConfig.nodeConfig = ma_node_config_init();
       customNodeConfig.inChannels = m_outputTarget == SNDOUT_BACKGLASS ? 2 : 1;
       customNodeConfig.outChannels = ma_engine_get_channels(engine);
-      ma_result result = vpx_node_init(ma_engine_get_node_graph(engine), &customNodeConfig, nullptr, m_vpxMixNode.get());
+      const ma_result result = vpx_node_init(ma_engine_get_node_graph(engine), &customNodeConfig, nullptr, m_vpxMixNode.get());
       if (result != MA_SUCCESS)
       {
          PLOGE << "Failed to initialize custom mixer.";
@@ -294,7 +297,7 @@ SoundPlayer::SoundPlayer(const AudioPlayer* audioPlayer, Sound* sound)
          return;
       }
       m_monoCompensation = static_cast<float>(m_decoder->outputChannels); // When converting to mono, we average additional channel instead of summing them as this used to be done before, so multiply back
-      
+
       m_sound = std::make_unique<ma_sound>();
       ma_sound_config config = ma_sound_config_init_2(engine);
       config.channelsOut = m_outputTarget == SNDOUT_BACKGLASS ? 2 : 1;
@@ -311,6 +314,9 @@ SoundPlayer::SoundPlayer(const AudioPlayer* audioPlayer, Sound* sound)
          m_sound = nullptr;
          return;
       }
+
+      if (!IsPlaying())
+         ma_sound_start(m_sound.get());
    });
 }
 
@@ -391,15 +397,17 @@ void SoundPlayer::Play(float volume, const float randompitch, const int pitch, f
          //case SNDCFG_SND3D6CH: ma_sound_set_position(m_sound.get(), PanTo3D(pan), 0.0f, -(PanTo3D(frontRearFade) + 3.f) / 2.f); break;
          //case SNDCFG_SND3DSSF: ma_sound_set_position(m_sound.get(), PanSSF(pan), 0.0f, -FadeSSF(frontRearFade)); break;
       }
-      
-      m_loopCount = loopcount;
+
+      m_loopCount = loopcount <  0 ? -1 // Negative value is loop indefenitely
+                  : loopcount <= 1 ?  0 // 0 is no loop, and 1 is play once (so no loop either)
+                  : (loopcount - 1);    // >= 2 is the number of times to play the sound, so loop once less as we are already playing once
 
       ma_format format;
       ma_uint32 channels;
       ma_uint32 sampleRate;
       ma_sound_get_data_format(m_sound.get(), &format, &channels, &sampleRate, nullptr, 0);
       const float sampleFreq = static_cast<float>(sampleRate);
-      float newFreq = sampleFreq + pitch;
+      float newFreq = sampleFreq + (float)pitch;
       if (randompitch > 0.f)
       {
          const float rndh = rand_mt_01();

@@ -159,8 +159,8 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    , m_scoreviewOutput("Visual Pinball - Score"s, live_table->m_settings, Settings::ScoreView, "ScoreView"s)
    , m_backglassOutput("Visual Pinball - Backglass"s, live_table->m_settings, Settings::Backglass, "Backglass"s)
    , m_topperOutput("Visual Pinball - Topper"s, live_table->m_settings, Settings::Topper, "Topper"s)
-   , m_resURIResolver(MsgPluginManager::GetInstance().GetMsgAPI(), VPXPluginAPIImpl::GetInstance().GetVPXEndPointId(), true, true, true, true)
    , m_audioPlayer(std::make_unique<VPX::AudioPlayer>(live_table->m_settings))
+   , m_resURIResolver(MsgPluginManager::GetInstance().GetMsgAPI(), VPXPluginAPIImpl::GetInstance().GetVPXEndPointId(), true, true, true, true)
    , m_BallHistory(*m_ptable)
 {
    // For the time being, lots of access are made through the global singleton, so ensure we are unique, and define it as soon as needed
@@ -174,6 +174,11 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
 
    m_progressDialog.Create(g_pvp->GetHwnd());
    m_progressDialog.ShowWindow(g_pvp->m_open_minimized ? SW_HIDE : SW_SHOWNORMAL);
+
+#ifdef __LIBVPINBALL__
+   VPinballLib::VPinball::SendEvent(VPinballLib::Event::CreatingPlayer, nullptr);
+#endif
+
    m_progressDialog.SetProgress("Creating Player..."s, 1);
 
 #if !(defined(_M_IX86) || defined(_M_X64) || defined(_M_AMD64) || defined(__i386__) || defined(__i386) || defined(__i486__) || defined(__i486) || defined(i386) || defined(__ia64__) || defined(__x86_64__))
@@ -250,7 +255,7 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
          m_vrDevice = useVR ? new VRDevice() : nullptr;
       #endif
    #endif
-   const StereoMode stereo3D = useVR ? STEREO_VR : (StereoMode)m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "Stereo3D"s, (int)STEREO_OFF);
+   const StereoMode stereo3D = useVR ? STEREO_VR : (StereoMode)m_ptable->m_settings.LoadValueInt(Settings::Player, "Stereo3D"s);
    assert(useVR == (stereo3D == STEREO_VR));
 
    m_capExtDMD = (stereo3D == STEREO_VR) && m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "CaptureExternalDMD"s, false);
@@ -838,7 +843,6 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
 
    const MsgPluginAPI *msgApi = &MsgPluginManager::GetInstance().GetMsgAPI();
 
-   m_onGameStartMsgId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_GAME_START);
    m_onPrepareFrameMsgId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_PREPARE_FRAME);
    m_onAudioUpdatedMsgId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_AUDIO_ON_UPDATE_MSG);
    msgApi->SubscribeMsg(VPXPluginAPIImpl::GetInstance().GetVPXEndPointId(), m_onAudioUpdatedMsgId, OnAudioUpdated, this);
@@ -849,7 +853,7 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    OnAuxRendererChanged(m_onAuxRendererChgId, this, nullptr);
 
    // Signal plugins before performing static prerendering. The only thing not fully initialized is the physics (is this ok ?)
-   VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(m_onGameStartMsgId, nullptr);
+   VPXPluginAPIImpl::GetInstance().OnGameStart();
 
    // Open UI if requested (this also disables static prerendering, so must be done before performing it)
    if (playMode == 1)
@@ -938,8 +942,7 @@ Player::~Player()
 #endif
 
    // Signal plugins early since most fields will become invalid
-   const unsigned int onGameEndMsgId = VPXPluginAPIImpl::GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_GAME_END);
-   VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(onGameEndMsgId, nullptr);
+   VPXPluginAPIImpl::GetInstance().OnGameEnd();
 
    // signal the script that the game is now exited to allow any cleanup
    if (!IsEditorMode())
@@ -956,8 +959,6 @@ Player::~Player()
    const MsgPluginAPI *msgApi = &MsgPluginManager::GetInstance().GetMsgAPI();
    msgApi->UnsubscribeMsg(m_onAudioUpdatedMsgId, OnAudioUpdated);
    msgApi->ReleaseMsgID(m_onAudioUpdatedMsgId);
-   msgApi->ReleaseMsgID(m_onGameStartMsgId);
-   msgApi->ReleaseMsgID(onGameEndMsgId);
    msgApi->ReleaseMsgID(m_onPrepareFrameMsgId);
    msgApi->UnsubscribeMsg(m_onAuxRendererChgId, OnAuxRendererChanged);
    msgApi->ReleaseMsgID(m_getAuxRendererId);
@@ -2342,7 +2343,7 @@ RenderTarget *Player::RenderAnciliaryWindow(VPXAnciliaryWindow window, RenderTar
                // We force to linear (no sRGB decoding) when rendering in sRGB colorspace, this suppose that the texture is in sRGB colorspace to get correct gamma (other situations would need dedicated shaders to handle them efficiently)
                assert(tex->m_format == BaseTexture::SRGB || tex->m_format == BaseTexture::SRGBA || tex->m_format == BaseTexture::SRGB565);
                // Disable filtering and mipmap generation if they are not needed
-               const SamplerFilter sf = (ctx->is2D && (srcW == ctx->srcWidth) && (srcH == ctx->srcHeight)) ? SamplerFilter::SF_NONE : SamplerFilter::SF_UNDEFINED;
+               const SamplerFilter sf = (ctx->is2D && (srcW * ctx->outWidth == ctx->srcWidth * tex->width()) && (srcH * ctx->outHeight == ctx->srcHeight * tex->height())) ? SamplerFilter::SF_NONE : SamplerFilter::SF_UNDEFINED;
                rd->m_basicShader->SetTexture(SHADER_tex_base_color, tex.get(), !context->isLinearOutput, sf);
                const float vx1 = srcX / ctx->srcWidth;
                const float vy1 = srcY / ctx->srcHeight;
@@ -2548,11 +2549,14 @@ void Player::OnAudioUpdated(const unsigned int msgId, void* userData, void* msgD
    {
       if (msg.buffer != nullptr)
       {
+         MsgEndpointInfo info;
+         MsgPluginManager::GetInstance().GetMsgAPI().GetEndpointInfo(msg.id.endpointId, &info);
          const int nChannels = (msg.type == CTLPI_AUDIO_SRC_BACKGLASS_MONO) ? 1 : 2;
-         VPX::AudioPlayer::AudioStreamID const stream = me->m_audioPlayer->OpenAudioStream(static_cast<int>(msg.sampleRate), nChannels);
+         VPX::AudioPlayer::AudioStreamID const stream = me->m_audioPlayer->OpenAudioStream("Plugin."s + info.name + '.' + std::to_string(msg.id.resId), static_cast<int>(msg.sampleRate), nChannels, msg.format == CTLPI_AUDIO_FORMAT_SAMPLE_FLOAT);
          if (stream)
          {
             me->m_audioStreams[msg.id.id] = stream;
+            me->m_audioPlayer->SetStreamVolume(stream, msg.volume);
             me->m_audioPlayer->EnqueueStream(stream, msg.buffer, msg.bufferSize);
          }
       }
@@ -2560,23 +2564,14 @@ void Player::OnAudioUpdated(const unsigned int msgId, void* userData, void* msgD
    else
    {
       VPX::AudioPlayer::AudioStreamID const stream = entry->second; 
-      if (msg.buffer != nullptr)
+      if (msg.buffer != nullptr && msg.bufferSize != 0)
       {
-         int pending = me->m_audioPlayer->GetStreamQueueSize(stream);
-         if (pending >= 0 && static_cast<unsigned int>(pending) >= msg.bufferSize)
-         {
-            double delay = 1000.0 * msg.bufferSize / (msg.sampleRate * ((msg.type == CTLPI_AUDIO_SRC_BACKGLASS_MONO) ? 1 : 2));
-            PLOGI << "Dropping 1 sound frame (" << delay << "ms) as lag is exceeding 1 frame (" << msg.bufferSize << "bytes of " << ((msg.type == CTLPI_AUDIO_SRC_BACKGLASS_MONO)
-               ? "mono" : "stereo") << " data at " << msg.sampleRate << "Hz)";
-         }
-         else
-         {
-            me->m_audioPlayer->EnqueueStream(stream, msg.buffer, msg.bufferSize);
-         }
+         me->m_audioPlayer->SetStreamVolume(stream, msg.volume);
+         me->m_audioPlayer->EnqueueStream(stream, msg.buffer, msg.bufferSize);
       }
       else
       {
-         me->m_audioPlayer->CloseAudioStream(stream);
+         me->m_audioPlayer->CloseAudioStream(stream, false);
          me->m_audioStreams.erase(entry);
       }
    }

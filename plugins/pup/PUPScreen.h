@@ -6,101 +6,62 @@
 
 #include "PUPPlaylist.h"
 
-#include <queue>
-#include <mutex>
-#include <condition_variable>
-#include <thread>
+#include "PUPImage.h"
+
+#include "PUPCustomPos.h"
 
 namespace PUP {
 
-class PUPCustomPos;
 class PUPMediaManager;
 class PUPLabel;
-
-typedef enum
-{
-   PUP_SCREEN_MODE_OFF,
-   PUP_SCREEN_MODE_SHOW,            // This will use whatever settings are set for this screen’s “default” settings.
-   PUP_SCREEN_MODE_FORCE_ON,        // Forces the window to be the Top most window, and it stays on. A video is always going to be playing in this mode. When a new video starts or the current video restarts, the ForceON action happens and will force the window to be the Top window again.
-   PUP_SCREEN_MODE_FORCE_POP,       // Similar to ForceOn, except the vlc window opens and closes with each video played
-   PUP_SCREEN_MODE_FORCE_BACK,      // Keeps the video window always open, but under the other PuP screens. This can cause any PuP screen with this setting to get pushed behind your game window.
-   PUP_SCREEN_MODE_FORCE_POP_BACK,  // Similar to ForceBack, except the vlc window opens and closes with each video played
-   PUP_SCREEN_MODE_MUSIC_ONLY
-} PUP_SCREEN_MODE;
-
-typedef enum
-{
-   PUP_PINDISPLAY_REQUEST_TYPE_NORMAL,
-   PUP_PINDISPLAY_REQUEST_TYPE_LOOP,
-   PUP_PINDISPLAY_REQUEST_TYPE_SET_BG,
-   PUP_PINDISPLAY_REQUEST_TYPE_STOP
-} PUP_PINDISPLAY_REQUEST_TYPE;
-
-const char* PUP_SCREEN_MODE_TO_STRING(PUP_SCREEN_MODE value);
-const char* PUP_PINDISPLAY_REQUEST_TYPE_TO_STRING(PUP_PINDISPLAY_REQUEST_TYPE value);
-
-struct PUPScreenRequest
-{
-   virtual ~PUPScreenRequest() = default;
-};
-
-struct PUPPinDisplayRequest final : PUPScreenRequest
-{
-   PUP_PINDISPLAY_REQUEST_TYPE type = PUP_PINDISPLAY_REQUEST_TYPE_NORMAL;
-   PUPPlaylist* pPlaylist = nullptr;
-   string szPlayFile;
-   float volume = 0.f;
-   int priority = 0;
-   int value = 0;
-
-   PUPPinDisplayRequest()
-   {
-   }
-};
-
-struct PUPTriggerRequest final : PUPScreenRequest
-{
-   PUPTrigger* pTrigger;
-   int value;
-};
-
-struct PUPScreenRenderable
-{
-   SDL_Surface* pSurface = nullptr;
-   VPXTexture pTexture = nullptr;
-   bool dirty = true;
-};
 
 class PUPScreen final
 {
 public:
+   enum class Mode
+   {
+      Off,
+      Show, // This will use whatever settings are set for this screen's "default" settings.
+      ForceOn, // Forces the window to be the Top most window, and it stays on. A video is always going to be playing in this mode. When a new video starts or the current video restarts, the ForceON action happens and will force the window to be the Top window again.
+      ForcePop, // Similar to ForceOn, except the vlc window opens and closes with each video played
+      ForceBack, // Keeps the video window always open, but under the other PuP screens. This can cause any PuP screen with this setting to get pushed behind your game window.
+      ForcePopBack, // Similar to ForceBack, except the vlc window opens and closes with each video played
+      MusicOnly
+   };
+
+   PUPScreen(PUPManager* manager, PUPScreen::Mode mode, int screenNum, const string& screenDes, bool transparent,
+      float volume, std::unique_ptr<PUPCustomPos> pCustomPos, const std::vector<PUPPlaylist*>& playlists);
    ~PUPScreen();
 
-   static PUPScreen* CreateFromCSV(PUPManager* manager, const string& line, const std::vector<PUPPlaylist*>& playlists);
-   static PUPScreen* CreateDefault(PUPManager* manager, int screenNum, const std::vector<PUPPlaylist*>& playlists);
-   PUP_SCREEN_MODE GetMode() const { return m_mode; }
-   void SetMode(PUP_SCREEN_MODE mode) { m_mode = mode; }
+   static std::unique_ptr<PUPScreen> CreateFromCSV(PUPManager* manager, const string& line, const std::vector<PUPPlaylist*>& playlists);
+   static std::unique_ptr<PUPScreen> CreateDefault(PUPManager* manager, int screenNum, const std::vector<PUPPlaylist*>& playlists);
+
+   PUPManager* GetManager() const { return m_pManager; }
    int GetScreenNum() const { return m_screenNum; }
    const string& GetScreenDes() const { return m_screenDes; }
-   const string& GetBackgroundPlaylist() const { return m_backgroundPlaylist; }
-   const string& GetBackgroundFilename() const { return m_backgroundFilename; }
+   string ToString(bool full = true) const;
+
+   Mode GetMode() const { return m_mode; }
+   void SetMode(Mode mode) { m_mode = mode; }
+   bool IsPop() const { return m_mode == PUPScreen::Mode::ForcePopBack || m_mode == PUPScreen::Mode::ForcePop; }
+
    bool IsTransparent() const { return m_transparent; }
+
    float GetVolume() const { return m_volume; }
-   void SetVolume(float volume) { m_volume = volume; }
-   PUPCustomPos* GetCustomPos() const { return m_pCustomPos; }
-   void AddChild(PUPScreen* pScreen);
-   void SetParent(PUPScreen* pParent) { m_pParent = pParent; }
-   PUPScreen* GetParent() const { return m_pParent; }
-   bool HasParent() const { return m_pParent != nullptr;}
-   void AddPlaylist(PUPPlaylist* pPlaylist);
-   PUPPlaylist* GetPlaylist(const string& szFolder);
+   void SetVolume(float volume); // Set default, and apply it to played media
+   void SetVolumeCurrent(float volume); // Only modifiy volume of currently playing medias
+
+   const std::unique_ptr<PUPCustomPos>& GetCustomPos() const { return m_pCustomPos; }
+   void SetCustomPos(const string& szCustomPos);
+   void SetSize(int w, int h);
+
+   void AddChild(std::shared_ptr<PUPScreen> pScreen);
+   void SendToFront();
+
    void AddTrigger(PUPTrigger* pTrigger);
    vector<PUPTrigger*>* GetTriggers(const string& szTrigger);
    const ankerl::unordered_dense::map<string, vector<PUPTrigger*>>& GetTriggers() const { return m_triggerMap; }
-   void SendToFront();
-   void SetSize(int w, int h);
-   void Init();
-   void Start();
+
    bool IsLabelInit() const { return m_labelInit; }
    void SetLabelInit() { m_labelInit = true; }
    void AddLabel(PUPLabel* pLabel);
@@ -108,71 +69,60 @@ public:
    void SendLabelToFront(PUPLabel* pLabel);
    void SendLabelToBack(PUPLabel* pLabel);
    void SetPage(int pagenum, int seconds);
-   void Render(VPXRenderContext2D* const ctx);
-   const SDL_Rect& GetRect() const { return m_rect; }
-   void SetBackground(PUPPlaylist* pPlaylist, const std::string& szPlayFile);
-   void SetCustomPos(const string& szCustomPos);
-   void SetOverlay(PUPPlaylist* pPlaylist, const std::string& szPlayFile);
-   void SetMedia(PUPPlaylist* pPlaylist, const std::string& szPlayFile, float volume, int priority, bool skipSamePriority, int length);
-   void StopMedia();
-   void StopMedia(int priority);
-   void StopMedia(PUPPlaylist* pPlaylist, const std::string& szPlayFile);
-   void SetLoop(int state);
-   void SetBG(int mode);
-   void QueuePlay(const string& szPlaylist, const string& szPlayFile, float volume, int priority);
-   void QueueStop();
-   void QueueLoop(int state);
-   void QueueBG(int mode);
-   void QueueTriggerRequest(PUPTriggerRequest* pRequest);
-   string ToString(bool full = true) const;
 
-   void SetActive(bool active) { m_active = active; }
-   bool IsActive() const { return m_active; }
+   void AddPlaylist(PUPPlaylist* pPlaylist);
+   PUPPlaylist* GetPlaylist(const string& szFolder);
+
+   void SetMask(const string& path);
+
+   void Play(const string& szPlaylist, const string& szPlayFile, float volume, int priority);
+   void Play(PUPPlaylist* playlist, const string& szPlayFile, float volume, int priority, bool skipSamePriority, int length);
+   void Stop();
+   void Stop(int priority);
+   void Stop(PUPPlaylist* pPlaylist, const std::string& szPlayFile);
+   void Pause();
+   void Resume();
+   void SetLoop(int state);
+   void SetLength(int length);
+   void SetAsBackGround(int mode);
+
+   bool IsPlaying();
+
+   const SDL_Rect& GetRect() const { return m_rect; }
+   void Render(VPXRenderContext2D* const ctx);
+
+   static const string& ToString(Mode mode);
 
 private:
-   PUPScreen(PUPManager* manager, PUP_SCREEN_MODE mode, int screenNum, const string& screenDes, const string& backgroundPlaylist, const string& backgroundFilename, bool transparent, float volume, PUPCustomPos* pCustomPos, const std::vector<PUPPlaylist*>& playlists);
-
    void LoadTriggers();
-   void ProcessQueue();
-   void ProcessPinDisplayRequest(PUPPinDisplayRequest* pRequest);
-   void ProcessTriggerRequest(PUPTriggerRequest* pRequest);
-   void LoadRenderable(PUPScreenRenderable* pRenderable, const string& szFile);
-   void Render(VPXRenderContext2D* const ctx, PUPScreenRenderable* pRenderable);
-   void FreeRenderable(PUPScreenRenderable* pRenderable);
+
    static uint32_t PageTimerElapsed(void* param, SDL_TimerID timerID, uint32_t interval);
 
    PUPManager* const m_pManager = nullptr;
-   bool m_active = false;
-   PUP_SCREEN_MODE m_mode;
    const int m_screenNum;
-   string m_screenDes;
-   string m_backgroundPlaylist;
-   string m_backgroundFilename;
+   const string m_screenDes;
+
+   Mode m_mode;
    bool m_transparent;
    float m_volume;
-   PUPCustomPos* m_pCustomPos;
+   std::unique_ptr<PUPCustomPos> m_pCustomPos;
    SDL_Rect m_rect;
    vector<PUPLabel*> m_labels;
    ankerl::unordered_dense::map<string, PUPLabel*> m_labelMap;
    ankerl::unordered_dense::map<string, PUPPlaylist*> m_playlistMap;
    ankerl::unordered_dense::map<string, vector<PUPTrigger*>> m_triggerMap;
-   PUPScreenRenderable m_background;
-   PUPScreenRenderable m_overlay;
+   PUPImage m_background;
+   PUPImage m_overlay;
    std::unique_ptr<PUPMediaManager> m_pMediaPlayerManager;
-   bool m_labelInit;
-   int m_pagenum;
-   int m_defaultPagenum;
+   bool m_labelInit = false;
+   int m_pagenum = 0;
+   int m_defaultPagenum = 0;
    SDL_TimerID m_pageTimer = 0;
-   PUPScreen* m_pParent;
-   vector<PUPScreen*> m_topChildren;
-   vector<PUPScreen*> m_backChildren;
-   vector<PUPScreen*> m_defaultChildren;
-   std::queue<PUPScreenRequest*> m_queue;
-   std::mutex m_queueMutex;
-   std::condition_variable m_queueCondVar;
-   bool m_isRunning;
-   std::thread m_thread;
-   std::mutex m_renderMutex;
+   PUPScreen* m_pParent = nullptr;
+   vector<std::shared_ptr<PUPScreen>> m_topChildren;
+   vector<std::shared_ptr<PUPScreen>> m_backChildren;
+   vector<std::shared_ptr<PUPScreen>> m_defaultChildren;
+   const std::thread::id m_apiThread;
 };
 
 }

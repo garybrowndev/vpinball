@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "unordered_dense.h"
+
 #define MIN_TEXTURE_SIZE 8u
 
 class ITexManCacheable
@@ -68,12 +70,17 @@ public:
    void SetName(const string& name) { m_name = name; }
    const string& GetName() const override { return m_name; }
 
+   void FlipY();
+   bool Save(const string& filepath) const;
+
    unsigned int width() const  { return m_width; }
    unsigned int height() const { return m_height; }
    unsigned int pitch() const; // pitch in bytes
    uint8_t* data()             { return m_data; }
    const uint8_t* datac() const{ return m_data; }
    bool HasAlpha() const       { return m_format == RGBA || m_format == SRGBA || m_format == RGBA_FP16 || m_format == RGBA_FP32; }
+
+   std::shared_ptr<BaseTexture> GetAlias(Format format) const; // Get an alias of this texture in a different format. Alias share the texture life and update cycle
 
    std::shared_ptr<BaseTexture> Convert(Format format) const; // Always create a new instance, even if target format is source format are matching
    std::shared_ptr<BaseTexture> ToBGRA() const; // swap R and B channels, also tonemaps floating point buffers during conversion and adds an opaque alpha channel (if format with missing alpha)
@@ -111,6 +118,7 @@ private:
    mutable uint8_t m_md5Hash[16] = { 0 };
    mutable bool m_isOpaqueDirty = true;
    mutable bool m_isOpaque = true;
+   mutable ankerl::unordered_dense::map<Format, std::shared_ptr<BaseTexture>> m_aliases;
 };
 
 
@@ -432,13 +440,13 @@ inline void float2half_noF16MaxInfNaN(uint16_t* const __restrict dst, const floa
        const __m128 scaled[2] = { _mm_mul_ps(srco[0], magic), _mm_mul_ps(srco[1], magic) };
        const __m128 justsign[2] = { _mm_and_ps(srco[0], sign), _mm_and_ps(srco[1], sign) };
        const __m128i shifted[2] = { _mm_slli_epi32(_mm_castps_si128(scaled[0]), 3), _mm_slli_epi32(_mm_castps_si128(scaled[1]), 3) };
-       __m128i final[2] = { _mm_or_si128(shifted[0], _mm_castps_si128(justsign[0])), _mm_or_si128(shifted[1], _mm_castps_si128(justsign[1])) };
+       __m128i result[2] = { _mm_or_si128(shifted[0], _mm_castps_si128(justsign[0])), _mm_or_si128(shifted[1], _mm_castps_si128(justsign[1])) };
 
-       final[0] = _mm_shufflelo_epi16(final[0], _MM_SHUFFLE(3, 1, 3, 1));
-       final[1] = _mm_shufflelo_epi16(final[1], _MM_SHUFFLE(3, 1, 3, 1));
-       final[0] = _mm_shufflehi_epi16(final[0], _MM_SHUFFLE(3, 1, 3, 1));
-       final[1] = _mm_shufflehi_epi16(final[1], _MM_SHUFFLE(3, 1, 3, 1));
-       const __m128 finalc = _mm_shuffle_ps(_mm_castsi128_ps(final[0]), _mm_castsi128_ps(final[1]), _MM_SHUFFLE(2, 0, 2, 0));
+       result[0] = _mm_shufflelo_epi16(result[0], _MM_SHUFFLE(3, 1, 3, 1));
+       result[1] = _mm_shufflelo_epi16(result[1], _MM_SHUFFLE(3, 1, 3, 1));
+       result[0] = _mm_shufflehi_epi16(result[0], _MM_SHUFFLE(3, 1, 3, 1));
+       result[1] = _mm_shufflehi_epi16(result[1], _MM_SHUFFLE(3, 1, 3, 1));
+       const __m128 finalc = _mm_shuffle_ps(_mm_castsi128_ps(result[0]), _mm_castsi128_ps(result[1]), _MM_SHUFFLE(2, 0, 2, 0));
        _mm_store_ps((float*)(dst+o), finalc);
     }
     // leftover writes below
@@ -469,13 +477,13 @@ inline void float2half_pos_noF16MaxInfNaN(uint16_t* const __restrict dst, const 
        const __m128 srco[2] = { _mm_loadu_ps(src + o), _mm_loadu_ps(src + o + 4) };
 
        const __m128 scaled[2] = { _mm_mul_ps(srco[0], magic), _mm_mul_ps(srco[1], magic) };
-       __m128i final[2] = { _mm_slli_epi32(_mm_castps_si128(scaled[0]), 3), _mm_slli_epi32(_mm_castps_si128(scaled[1]), 3) };
+       __m128i result[2] = { _mm_slli_epi32(_mm_castps_si128(scaled[0]), 3), _mm_slli_epi32(_mm_castps_si128(scaled[1]), 3) };
 
-       final[0] = _mm_shufflelo_epi16(final[0], _MM_SHUFFLE(3, 1, 3, 1));
-       final[1] = _mm_shufflelo_epi16(final[1], _MM_SHUFFLE(3, 1, 3, 1));
-       final[0] = _mm_shufflehi_epi16(final[0], _MM_SHUFFLE(3, 1, 3, 1));
-       final[1] = _mm_shufflehi_epi16(final[1], _MM_SHUFFLE(3, 1, 3, 1));
-       const __m128 finalc = _mm_shuffle_ps(_mm_castsi128_ps(final[0]), _mm_castsi128_ps(final[1]), _MM_SHUFFLE(2, 0, 2, 0));
+       result[0] = _mm_shufflelo_epi16(result[0], _MM_SHUFFLE(3, 1, 3, 1));
+       result[1] = _mm_shufflelo_epi16(result[1], _MM_SHUFFLE(3, 1, 3, 1));
+       result[0] = _mm_shufflehi_epi16(result[0], _MM_SHUFFLE(3, 1, 3, 1));
+       result[1] = _mm_shufflehi_epi16(result[1], _MM_SHUFFLE(3, 1, 3, 1));
+       const __m128 finalc = _mm_shuffle_ps(_mm_castsi128_ps(result[0]), _mm_castsi128_ps(result[1]), _MM_SHUFFLE(2, 0, 2, 0));
        _mm_store_ps((float*)(dst+o), finalc);
     }
     // leftover writes below
