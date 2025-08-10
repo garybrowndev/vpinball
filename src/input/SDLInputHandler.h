@@ -49,7 +49,7 @@ public:
          SDL_PlayHapticRumble(haptic, saturate(max(lowFrequencySpeed, highFrequencySpeed)), ms_duration); //!! meh
    }
 
-   void Update() override
+   void Update(const HWND foregroundWindow) override
    {
       // When SDL Video is used, SDL events are processed during the main application message loop, so we do not do it again here
       #if defined(ENABLE_SDL_INPUT) && !defined(ENABLE_SDL_VIDEO)
@@ -152,7 +152,7 @@ private:
             {
                // Skip Apple Remote on iOS/tvOS devices
                #if defined(__APPLE__) && ((defined(TARGET_OS_IOS) && TARGET_OS_IOS) || (defined(TARGET_OS_TV) && TARGET_OS_TV))
-                  if (!lstrcmpi(SDL_GetGamepadNameForID(joystick_ids[idx]), "Remote"))
+                  if (StrCompareNoCase(SDL_GetGamepadNameForID(joystick_ids[idx]), "Remote"s))
                      continue;
                #endif
 

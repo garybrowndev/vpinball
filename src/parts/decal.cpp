@@ -99,18 +99,17 @@ void Decal::SetDefaults(const bool fromMouseClick)
 #undef regKey
 }
 
-char* Decal::GetFontName()
+string Decal::GetFontName()
 {
-    if(m_pIFont)
-    {
-        BSTR bstr;
-        /*HRESULT hr =*/ m_pIFont->get_Name(&bstr);
-        static char fontName[LF_FACESIZE];
-        WideCharToMultiByteNull(CP_ACP, 0, bstr, -1, fontName, std::size(fontName), nullptr, nullptr);
-        SysFreeString(bstr);
-        return fontName;
-    }
-    return nullptr;
+   if(m_pIFont)
+   {
+      BSTR bstr;
+      /*HRESULT hr =*/ m_pIFont->get_Name(&bstr);
+      const string fontName = MakeString(bstr);
+      SysFreeString(bstr);
+      return fontName;
+   }
+   return string();
 }
 
 void Decal::WriteRegDefaults()
@@ -391,15 +390,13 @@ bool Decal::LoadToken(const int id, BiffReader * const pbr)
 #else
       // https://github.com/freezy/VisualPinball.Engine/blob/master/VisualPinball.Engine/VPT/Font.cs#L25
 
-      char data[255];
-
-      ULONG read;
-      pbr->ReadBytes(data, 3, &read);
-      pbr->ReadBytes(data, 1, &read); // Italic
-      pbr->ReadBytes(data, 2, &read); // Weight
-      pbr->ReadBytes(data, 4, &read); // Size
-      pbr->ReadBytes(data, 1, &read); // nameLen
-      pbr->ReadBytes(data, (int)data[0], &read); // name
+      unsigned char data[255];
+      pbr->ReadBytes(data, 3);
+      pbr->ReadBytes(data, 1); // Italic
+      pbr->ReadBytes(data, 2); // Weight
+      pbr->ReadBytes(data, 4); // Size
+      pbr->ReadBytes(data, 1); // nameLen
+      pbr->ReadBytes(data, data[0]); // name
 #endif
       break;
    }

@@ -159,7 +159,7 @@ class InputHandler
 {
 public:
    virtual ~InputHandler() = default;
-   virtual void Update() = 0;
+   virtual void Update(const HWND foregroundWindow) = 0;
    virtual void PlayRumble(const float lowFrequencySpeed, const float highFrequencySpeed, const int ms_duration) { }
 };
 

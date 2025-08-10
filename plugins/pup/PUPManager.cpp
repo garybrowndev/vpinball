@@ -33,7 +33,6 @@ PUPManager::PUPManager(MsgPluginAPI* msgApi, uint32_t endpointId, const string& 
 
 PUPManager::~PUPManager()
 {
-   Stop();
    Unload();
    m_msgApi->UnsubscribeMsg(m_getAuxRendererId, OnGetRenderer);
    m_msgApi->BroadcastMsg(m_endpointId, m_onAuxRendererChgId, nullptr);
@@ -41,31 +40,73 @@ PUPManager::~PUPManager()
    m_msgApi->ReleaseMsgID(m_onAuxRendererChgId);
 }
 
-void PUPManager::LoadConfig(const string& szRomName)
+void PUPManager::SetGameDir(const string& szRomName)
 {
-   if (m_init)
-   {
-      LOGE("PUP already loaded");
-      return;
-   }
-
-   if (m_szRootPath.empty())
+   const string path = find_case_insensitive_directory_path(m_szRootPath + szRomName);
+   if (path.empty())
    {
       LOGI("No pupvideos folder found, not initializing PUP");
       return;
    }
-
-   m_szPath = find_case_insensitive_directory_path(m_szRootPath + szRomName);
-   if (m_szPath.empty())
+   if (path == m_szPath)
       return;
 
+   std::lock_guard<std::mutex> lock(m_queueMutex);
+
+   m_szPath = path;
    LOGI("PUP path: %s", m_szPath.c_str());
+
+   // Load Fonts
+   LoadFonts();
+}
+
+void PUPManager::LoadConfig(const string& szRomName)
+{
+   Unload();
+
+   // If root path is not defined, look next to table like we do for pinmame folder
+   if (m_szRootPath.empty()) {
+      VPXPluginAPI* vpxApi = nullptr;
+      unsigned int getVpxApiId = m_msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_API);
+      m_msgApi->BroadcastMsg(m_endpointId, getVpxApiId, &vpxApi);
+      m_msgApi->ReleaseMsgID(getVpxApiId);
+      if (vpxApi != nullptr)
+      {
+         VPXTableInfo tableInfo;
+         vpxApi->GetTableInfo(&tableInfo);
+         std::filesystem::path tablePath = tableInfo.path;
+         m_szRootPath = find_case_insensitive_directory_path(tablePath.parent_path().string() + PATH_SEPARATOR_CHAR + "pupvideos"s);
+
+         if (!m_szRootPath.empty()) {
+            LOGI("PUP folder was found at '%s'", m_szRootPath.c_str());
+         }
+      }
+   }
+
+   SetGameDir(szRomName);
 
    // Load playlists
 
    LoadPlaylists();
 
-   // Load screens
+   // Load Fonts
+
+   LoadFonts();
+
+   // Setup DMD triggers
+   m_dmd = std::make_unique<PUPDMD::DMD>();
+   m_dmd->Load(m_szRootPath.c_str(), szRomName.c_str());
+
+   m_dmd->SetLogCallback(
+      [](const char* format, va_list args, const void* userData)
+      {
+         char buffer[1024];
+         vsnprintf(buffer, sizeof(buffer), format, args);
+         LOGD(buffer);
+      },
+      this);
+
+   // Load screens and start them
 
    string szScreensPath = find_case_insensitive_file_path(m_szPath + "screens.pup");
    if (!szScreensPath.empty()) {
@@ -77,9 +118,9 @@ void PUPManager::LoadConfig(const string& szRomName)
          while (std::getline(screensFile, line)) {
             if (++i == 1)
                continue;
-            PUPScreen* pScreen = PUPScreen::CreateFromCSV(this, line, m_playlists);
+            std::unique_ptr<PUPScreen> pScreen = PUPScreen::CreateFromCSV(this, line, m_playlists);
             if (pScreen)
-               AddScreen(pScreen);
+               AddScreen(std::move(pScreen));
          }
       }
       else {
@@ -90,82 +131,18 @@ void PUPManager::LoadConfig(const string& szRomName)
       LOGI("No screens.pup file found");
    }
 
-   // Determine child screens, creating missing top screen if needed
-   
-   for (int i = 0; i < 6; i++)
-      if (!m_screenMap.contains(i)
-         && (std::ranges::find_if(m_screenMap, [i](auto& entry) { return entry.second->GetCustomPos() && entry.second->GetCustomPos()->GetSourceScreen() == i; }) != m_screenMap.end()))
-         switch (i)
-         {
-         case 0: AddScreen(PUPScreen::CreateFromCSV(this, "0,\"Topper\",\"\",,0,ForcePopBack,0,"s, m_playlists)); break;
-         case 1: AddScreen(PUPScreen::CreateFromCSV(this, "1,\"DMD\",\"\",,0,ForcePopBack,0,"s, m_playlists)); break;
-         case 2: AddScreen(PUPScreen::CreateFromCSV(this, "2,\"Backglass\",\"\",,0,ForcePopBack,0,"s, m_playlists)); break;
-         case 3: break; // Playfield
-         case 4: break; // Music
-         case 5: AddScreen(PUPScreen::CreateFromCSV(this, "5,\"FullDMD\",\"\",,0,ForcePopBack,0,"s, m_playlists)); break;
-         }
-   for (auto& [key, pScreen] : m_screenMap) {
-      PUPCustomPos* pCustomPos = pScreen->GetCustomPos();
-      if (pCustomPos) {
-         ankerl::unordered_dense::map<int, PUPScreen*>::const_iterator it = m_screenMap.find(pCustomPos->GetSourceScreen());
-         if (it == m_screenMap.end())
-            continue;
-         PUPScreen* const pParentScreen = it->second;
-         if (pParentScreen && pScreen != pParentScreen)
-            pParentScreen->AddChild(pScreen);
-      }
-   }
-
-   // Load Fonts
-
-   string szFontsPath = find_case_insensitive_directory_path(m_szPath + "FONTS");
-   if (!szFontsPath.empty()) {
-      for (const auto& entry : std::filesystem::directory_iterator(szFontsPath)) {
-         if (entry.is_regular_file()) {
-            string szFontPath = entry.path().string();
-            if (extension_from_path(szFontPath) == "ttf")
-            {
-               if (TTF_Font* pFont = TTF_OpenFont(szFontPath.c_str(), 8))
-               {
-                  AddFont(pFont, entry.path().filename().string());
-               }else{
-                  LOGE("Failed to load font: %s %s", szFontPath.c_str(), SDL_GetError());
-               }
-            }
-         }
-      }
-   }
-   else {
-      LOGI("No FONTS folder found");
-   }
-
-   // Setup DMD triggers
-   m_dmd = std::make_unique<PUPDMD::DMD>();
-   m_dmd->Load(m_szRootPath.c_str(), szRomName.c_str());
-   m_dmd->SetLogCallback([](const char* format, va_list args, const void* userData) {
-      char buffer[1024];
-      vsnprintf(buffer, sizeof(buffer), format, args);
-      LOGD(buffer);
-      }, this);
-   m_init = true;
+   // Queue initial event
 
    QueueTriggerData({ 'D', 0, 1 });
 }
 
 void PUPManager::Unload()
 {
-   if (!m_init)
-      return;
+   Stop();
 
-   for (auto& [key, pScreen] : m_screenMap)
-      delete pScreen;
    m_screenMap.clear();
 
-   for (auto& pFont : m_fonts)
-      TTF_CloseFont(pFont);
-   m_fonts.clear();
-   m_fontMap.clear();
-   m_fontFilenameMap.clear();
+   UnloadFonts();
 
    for (auto& playlist : m_playlists)
       delete playlist;
@@ -174,7 +151,46 @@ void PUPManager::Unload()
    m_dmd = nullptr;
 
    m_szPath.clear();
-   m_init = false;
+}
+
+void PUPManager::UnloadFonts()
+{
+   for (auto& pFont : m_fonts)
+      TTF_CloseFont(pFont);
+   m_fonts.clear();
+   m_fontMap.clear();
+   m_fontFilenameMap.clear();
+}
+
+void PUPManager::LoadFonts()
+{
+   UnloadFonts();
+   string szFontsPath = find_case_insensitive_directory_path(m_szPath + "FONTS");
+   if (!szFontsPath.empty())
+   {
+      for (const auto& entry : std::filesystem::directory_iterator(szFontsPath))
+      {
+         if (entry.is_regular_file())
+         {
+            string szFontPath = entry.path().string();
+            if (extension_from_path(szFontPath) == "ttf")
+            {
+               if (TTF_Font* pFont = TTF_OpenFont(szFontPath.c_str(), 8))
+               {
+                  AddFont(pFont, entry.path().filename().string());
+               }
+               else
+               {
+                  LOGE("Failed to load font: %s %s", szFontPath.c_str(), SDL_GetError());
+               }
+            }
+         }
+      }
+   }
+   else
+   {
+      LOGI("No FONTS folder found");
+   }
 }
 
 void PUPManager::LoadPlaylists()
@@ -205,15 +221,53 @@ void PUPManager::LoadPlaylists()
    }
 }
 
-bool PUPManager::AddScreen(PUPScreen* pScreen)
+bool PUPManager::AddScreen(std::shared_ptr<PUPScreen> pScreen)
 {
-   if (HasScreen(pScreen->GetScreenNum())) {
-      LOGE("Duplicate screen: screen={%s}", pScreen->ToString(false).c_str());
-      delete pScreen;
-      return false;
+   std::unique_lock<std::mutex> lock(m_queueMutex);
+
+   std::shared_ptr<PUPScreen> existing = GetScreen(pScreen->GetScreenNum());
+   if (existing)
+   {
+      LOGI("Warning redefinition of existing PUP screen: existing={%s} ne<={%s}", existing->ToString(false).c_str(), pScreen->ToString(false).c_str());
+      existing->SetMode(pScreen->GetMode());
+      existing->SetVolume(pScreen->GetVolume());
+      // existing->SetCustomPos(pScreen->GetCustomPos());
+      // copy triggers ?
+      // copy labels ?
+      // copy playlists ?
+      pScreen = existing;
+   }
+   m_screenMap[pScreen->GetScreenNum()] = pScreen;
+
+   const std::unique_ptr<PUPCustomPos>& pCustomPos = pScreen->GetCustomPos();
+   if (pCustomPos) {
+      const auto it = m_screenMap.find(pCustomPos->GetSourceScreen());
+      std::shared_ptr<PUPScreen> parent;
+      if (it != m_screenMap.end()) {
+         parent = it->second;
+      }
+      else {
+         lock.unlock();
+         switch (pCustomPos->GetSourceScreen()) {
+         case 0: parent = std::move(PUPScreen::CreateFromCSV(this, "0,\"Topper\",\"\",,0,ForceBack,0,"s, m_playlists)); break;
+         case 1: parent = std::move(PUPScreen::CreateFromCSV(this, "1,\"DMD\",\"\",,0,ForceBack,0,"s, m_playlists)); break;
+         case 2: parent = std::move(PUPScreen::CreateFromCSV(this, "2,\"Backglass\",\"\",,0,ForceBack,0,"s, m_playlists)); break;
+         case 3: parent = std::move(PUPScreen::CreateFromCSV(this, "3,\"Playfield\",\"\",,0,Off,0,"s, m_playlists)); break;
+         case 4: parent = std::move(PUPScreen::CreateFromCSV(this, "4,\"Music\",\"\",,0,MusicOnly,0,"s, m_playlists)); break;
+         case 5: parent = std::move(PUPScreen::CreateFromCSV(this, "5,\"FullDMD\",\"\",,0,ForceBack,0,"s, m_playlists)); break;
+         }
+         if (parent)
+            AddScreen(parent);
+         lock.lock();
+      }
+      if (parent && pScreen != parent)
+         parent->AddChild(pScreen);
    }
 
-   m_screenMap[pScreen->GetScreenNum()] = pScreen;
+   if (!m_isRunning) {
+      lock.unlock();
+      Start();
+   }
 
    LOGI("Screen added: screen={%s}", pScreen->ToString().c_str());
 
@@ -222,27 +276,23 @@ bool PUPManager::AddScreen(PUPScreen* pScreen)
 
 bool PUPManager::AddScreen(int screenNum)
 {
-   PUPScreen* pScreen = PUPScreen::CreateDefault(this, screenNum, m_playlists);
+   std::unique_ptr<PUPScreen> pScreen = PUPScreen::CreateDefault(this, screenNum, m_playlists);
    if (!pScreen)
       return false;
 
-   return AddScreen(pScreen);
+   return AddScreen(std::move(pScreen));
 }
 
-bool PUPManager::HasScreen(int screenNum)
+std::shared_ptr<PUPScreen> PUPManager::GetScreen(int screenNum, bool logMissing) const
 {
-   ankerl::unordered_dense::map<int, PUPScreen*>::const_iterator it = m_screenMap.find(screenNum);
-   return it != m_screenMap.end();
-}
-
-PUPScreen* PUPManager::GetScreen(int screenNum) const
-{
-   if (!m_init) {
-      LOGE("Getting screen before initialization");
+   const auto it = m_screenMap.find(screenNum);
+   if (it != m_screenMap.end())
+      return it->second;
+   if (logMissing)
+   {
+      LOGE("Screen not found: screenNum=%d", screenNum);
    }
-
-   ankerl::unordered_dense::map<int, PUPScreen*>::const_iterator it = m_screenMap.find(screenNum);
-   return it != m_screenMap.end() ? it->second : nullptr;
+   return nullptr;
 }
 
 bool PUPManager::AddFont(TTF_Font* pFont, const string& szFilename)
@@ -301,6 +351,8 @@ void PUPManager::QueueTriggerData(PUPTriggerData data)
 void PUPManager::ProcessQueue()
 {
    SetThreadName("PUPManager.ProcessQueue"s);
+   vector<AsyncCallback*> pendingCallbackList;
+   std::mutex pendingCallbackListMutex;
    while (m_isRunning)
    {
       std::unique_lock<std::mutex> lock(m_queueMutex);
@@ -319,10 +371,10 @@ void PUPManager::ProcessQueue()
       int dmdTrigger = -1;
       while (!m_triggerDmdQueue.empty())
       {
-         uint8_t* frame = m_triggerDmdQueue.front();
+         const uint8_t* const __restrict frame = m_triggerDmdQueue.front();
          m_triggerDmdQueue.pop();
 
-         uint8_t* palette;
+         const uint8_t* __restrict palette;
          if (m_dmdId.identifyFormat == CTLPI_DISPLAY_ID_FORMAT_BITPLANE2)
             palette = m_palette4;
          else if (m_dmdId.identifyFormat == CTLPI_DISPLAY_ID_FORMAT_BITPLANE4)
@@ -387,22 +439,24 @@ void PUPManager::ProcessQueue()
          }
          delete[] frame;
 
-         dmdTrigger = m_dmd->Match(m_rgbFrame, 128, 32, false);
+         dmdTrigger = m_dmd ? m_dmd->Match(m_rgbFrame, 128, 32, false) : -1;
          if (dmdTrigger == 0) // 0 is unmatched for libpupdmd, but D0 is init trigger for PUP
             dmdTrigger = -1;
          else
          {
-            // Broadcast event on plugin message bus
+            // Broadcast event on plugin message bus (avoid holding any reference as we don't know when this event will be processed and maybe the manager will be deleted by then)
             struct DmdEvent
             {
-               PUPManager* manager;
+               MsgPluginAPI* msgApi;
+               uint32_t endpointId;
+               unsigned int onDmdTriggerId;
                int dmdTrigger;
             };
             DmdEvent* event = new DmdEvent();
-            *event = { this, dmdTrigger };
+            *event = { m_msgApi, m_endpointId, m_onDmdTriggerId, dmdTrigger };
             m_msgApi->RunOnMainThread(0, [](void* userData) {
                DmdEvent* event = static_cast<DmdEvent*>(userData);
-               event->manager->m_msgApi->BroadcastMsg(event->manager->m_endpointId, event->manager->m_onDmdTriggerId, &event->dmdTrigger);
+               event->msgApi->BroadcastMsg(event->endpointId, event->onDmdTriggerId, &event->dmdTrigger);
                delete event;
             }, event);
          }
@@ -462,9 +516,8 @@ void PUPManager::ProcessQueue()
             {
                for (auto trigger : triggers)
                {
-                  PUPTriggerRequest* pRequest = new PUPTriggerRequest();
-                  pRequest->pTrigger = trigger;
-                  screen->QueueTriggerRequest(pRequest);
+                  // Dispatch trigger action to main thread
+                  AsyncCallback::DispatchOnMainThread(m_msgApi, pendingCallbackList, pendingCallbackListMutex, trigger->Trigger());
                }
             }
          }
@@ -473,20 +526,20 @@ void PUPManager::ProcessQueue()
       // Clear script triggers
       m_triggerDataQueue.clear();
    }
+
+   // Discard pending callbacks
+   AsyncCallback::InvalidateAllPending(pendingCallbackList, pendingCallbackListMutex);
 }
 
 void PUPManager::Start()
 {
-   if (!m_init || m_isRunning)
+   if (m_isRunning)
       return;
 
    LOGI("PUP start");
 
    m_isRunning = true;
    m_thread = std::thread(&PUPManager::ProcessQueue, this);
-
-   for (auto& [key, pScreen] : m_screenMap)
-      pScreen->Start();
 
    // Subscribe to message bus events
    m_getDmdSrcId = m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DISPLAY_GET_SRC_MSG);
@@ -508,13 +561,20 @@ void PUPManager::Start()
    OnDMDSrcChanged(m_onDmdSrcChangedId, this, nullptr);
    OnDevSrcChanged(m_onDevSrcChangedId, this, nullptr);
    OnInputSrcChanged(m_onInputSrcChangedId, this, nullptr);
-   OnPollDmd(this);
+   
+   assert(m_pollDmdContext == nullptr);
+   m_pollDmdContext = new PollDmdContext(this);
+   OnPollDmd(m_pollDmdContext);
 }
 
 void PUPManager::Stop()
 {
    if (!m_isRunning)
       return;
+
+   assert(m_pollDmdContext);
+   m_pollDmdContext->valid = false;
+   m_pollDmdContext = nullptr;
 
    {
       std::lock_guard<std::mutex> lock(m_queueMutex);
@@ -556,9 +616,8 @@ void PUPManager::Stop()
 int PUPManager::Render(VPXRenderContext2D* const renderCtx, void* context)
 {
    PUPManager* me = static_cast<PUPManager*>(context);
-   if (!me->m_init)
-      return false;
-   PUPScreen* screen = nullptr;
+
+   std::shared_ptr<PUPScreen> screen = nullptr;
    switch (renderCtx->window)
    {
    case VPXAnciliaryWindow::VPXWINDOW_Topper: screen = me->GetScreen(0); break;
@@ -573,7 +632,6 @@ int PUPManager::Render(VPXRenderContext2D* const renderCtx, void* context)
 
    renderCtx->srcWidth = renderCtx->outWidth;
    renderCtx->srcHeight = renderCtx->outHeight;
-   screen->SetActive(true);
    screen->SetSize(static_cast<int>(renderCtx->outWidth), static_cast<int>(renderCtx->outHeight));
    screen->Render(renderCtx);
    return true;
@@ -601,26 +659,29 @@ void PUPManager::OnGetRenderer(const unsigned int eventId, void* context, void* 
 //
 
 // Poll for an identify frame at least every 60 times per seconds
-// FIXME replace by event listening
 void PUPManager::OnPollDmd(void* userData)
 {
-   PUPManager* me = static_cast<PUPManager*>(userData);
-   if (me->m_dmdId.id.id != 0 && me->m_dmdId.GetIdentifyFrame)
+   PollDmdContext* ctx = static_cast<PollDmdContext*>(userData);
+   if (!ctx->valid)
    {
-      DisplayFrame idFrame = me->m_dmdId.GetIdentifyFrame(me->m_dmdId.id);
-      if (idFrame.frameId != me->m_lastFrameId && idFrame.frame)
+      // End of polling (we own the context object, so delete it)
+      delete ctx;
+      return;
+   }
+   std::lock_guard<std::mutex> lock(ctx->manager->m_queueMutex);
+   if (ctx->manager->m_dmdId.id.id != 0 && ctx->manager->m_dmdId.GetIdentifyFrame)
+   {
+      DisplayFrame idFrame = ctx->manager->m_dmdId.GetIdentifyFrame(ctx->manager->m_dmdId.id);
+      if (idFrame.frameId != ctx->manager->m_lastFrameId && idFrame.frame)
       {
-         me->m_lastFrameId = idFrame.frameId;
-         uint8_t* frame = new uint8_t[me->m_dmdId.width * me->m_dmdId.height];
-         memcpy(frame, idFrame.frame, me->m_dmdId.width * me->m_dmdId.height);
-         {
-            std::lock_guard<std::mutex> lock(me->m_queueMutex);
-            me->m_triggerDmdQueue.push(frame);
-         }
-         me->m_queueCondVar.notify_one();
+         ctx->manager->m_lastFrameId = idFrame.frameId;
+         uint8_t* frame = new uint8_t[ctx->manager->m_dmdId.width * ctx->manager->m_dmdId.height];
+         memcpy(frame, idFrame.frame, ctx->manager->m_dmdId.width * ctx->manager->m_dmdId.height);
+         ctx->manager->m_triggerDmdQueue.push(frame);
+         ctx->manager->m_queueCondVar.notify_one();
       }
    }
-   me->m_msgApi->RunOnMainThread(1.0 / 60.0, OnPollDmd, me);
+   ctx->manager->m_msgApi->RunOnMainThread(1.0 / 60.0, OnPollDmd, ctx);
 }
 
 // Broadcasted by Serum plugin when frame triggers are identified
@@ -634,6 +695,7 @@ void PUPManager::OnSerumTrigger(const unsigned int eventId, void* userData, void
 void PUPManager::OnDMDSrcChanged(const unsigned int eventId, void* userData, void* eventData)
 {
    PUPManager* me = static_cast<PUPManager*>(userData);
+   std::lock_guard<std::mutex> lock(me->m_queueMutex);
    me->m_dmdId.id.id = 0;
    unsigned int largest = 128;
    GetDisplaySrcMsg getSrcMsg = { 0, 0, nullptr };
@@ -654,7 +716,7 @@ void PUPManager::OnDMDSrcChanged(const unsigned int eventId, void* userData, voi
 void PUPManager::OnDevSrcChanged(const unsigned int eventId, void* userData, void* eventData)
 {
    PUPManager* me = static_cast<PUPManager*>(userData);
-   std::unique_lock<std::mutex> lock(me->m_queueMutex);
+   std::lock_guard<std::mutex> lock(me->m_queueMutex);
    delete[] me->m_pinmameDevSrc.deviceDefs;
    me->m_nPMSolenoids = 0;
    me->m_PMGIIndex = -1;
@@ -706,7 +768,7 @@ void PUPManager::OnDevSrcChanged(const unsigned int eventId, void* userData, voi
 void PUPManager::OnInputSrcChanged(const unsigned int eventId, void* userData, void* eventData)
 {
    PUPManager* me = static_cast<PUPManager*>(userData);
-   std::unique_lock<std::mutex> lock(me->m_queueMutex);
+   std::lock_guard<std::mutex> lock(me->m_queueMutex);
    delete[] me->m_pinmameInputSrc.inputDefs;
    memset(&me->m_pinmameInputSrc, 0, sizeof(me->m_pinmameInputSrc));
    delete[] me->m_b2sInputSrc.inputDefs;

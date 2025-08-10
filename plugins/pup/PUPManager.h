@@ -71,31 +71,32 @@ public:
    PUPManager(MsgPluginAPI* msgApi, uint32_t endpointId, const string& rootPath);
    ~PUPManager();
 
+   MsgPluginAPI* GetMsgAPI() const { return m_msgApi; }
    const string& GetRootPath() const { return m_szRootPath; }
 
-   bool IsInit() const { return m_init; }
+   void SetGameDir(const string& szRomName);
    void LoadConfig(const string& szRomName);
    void Unload();
    const string& GetPath() const { return m_szPath; }
-   bool AddScreen(PUPScreen* pScreen);
+   bool AddScreen(std::shared_ptr<PUPScreen> pScreen);
    bool AddScreen(int screenNum);
-   bool HasScreen(int screenNum);
-   PUPScreen* GetScreen(int screenNum) const;
+   std::shared_ptr<PUPScreen> GetScreen(int screenNum, bool logMissing = false) const;
    bool AddFont(TTF_Font* pFont, const string& szFilename);
    TTF_Font* GetFont(const string& szFont);
+
    void QueueTriggerData(PUPTriggerData data);
+
+private:
+   void ProcessQueue();
+   void UnloadFonts();
+   void LoadFonts();
+   void LoadPlaylists();
    void Start();
    void Stop();
 
-private:
-
-   void ProcessQueue();
-   void LoadPlaylists();
-
-   bool m_init = false;
-   const string m_szRootPath;
+   string m_szRootPath;
    string m_szPath;
-   ankerl::unordered_dense::map<int, PUPScreen*> m_screenMap;
+   ankerl::unordered_dense::map<int, std::shared_ptr<PUPScreen>> m_screenMap;
    vector<TTF_Font*> m_fonts;
    ankerl::unordered_dense::map<string, TTF_Font*> m_fontMap;
    ankerl::unordered_dense::map<string, TTF_Font*> m_fontFilenameMap;
@@ -122,6 +123,13 @@ private:
    InputSrcId m_pinmameInputSrc { 0 };
    InputSrcId m_b2sInputSrc { 0 };
 
+   struct PollDmdContext
+   {
+      PollDmdContext(PUPManager* mng) { manager = mng; }
+      bool valid = true;
+      PUPManager* manager;
+   };
+   PollDmdContext* m_pollDmdContext = nullptr;
    unsigned int m_lastFrameId = 0;
    DisplaySrcId m_dmdId { 0 };
    std::unique_ptr<PUPDMD::DMD> m_dmd;
@@ -129,7 +137,7 @@ private:
    uint8_t m_rgbFrame[128 * 32 * 3] { 0 };
    uint8_t m_palette4[4 * 3] { 0 };
    uint8_t m_palette16[16 * 3] { 0 };
-
+   
    static int Render(VPXRenderContext2D* const renderCtx, void* context);
    static void OnGetRenderer(const unsigned int eventId, void* userData, void* eventData);
    static void OnSerumTrigger(const unsigned int eventId, void* userData, void* eventData);

@@ -9,6 +9,7 @@
 
 #include <filesystem>
 #include <cassert>
+#include <charconv>
 
 using namespace std::string_literals;
 
@@ -22,6 +23,27 @@ using namespace std::string_literals;
 #include "Controller.h"
 
 namespace PinMAME {
+
+static string GetSettingString(MsgPluginAPI* pMsgApi, const char* section, const char* key, const string& def = string())
+{
+   char buf[256];
+   pMsgApi->GetSetting(section, key, buf, sizeof(buf));
+   return buf[0] ? string(buf) : def;
+}
+
+static int GetSettingInt(MsgPluginAPI* pMsgApi, const char* section, const char* key, int def = 0)
+{
+   const auto s = GetSettingString(pMsgApi, section, key, string());
+   int result;
+   return (s.empty() || (std::from_chars(s.c_str(), s.c_str() + s.length(), result).ec != std::errc{})) ? def : result;
+}
+
+static bool GetSettingBool(MsgPluginAPI* pMsgApi, const char* section, const char* key, bool def = false)
+{
+   const auto s = GetSettingString(pMsgApi, section, key, string());
+   int result;
+   return (s.empty() || (std::from_chars(s.c_str(), s.c_str() + s.length(), result).ec != std::errc{})) ? def : (result != 0);
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Scriptable object definitions
@@ -254,6 +276,7 @@ int PINMAMECALLBACK OnAudioAvailable(PinmameAudioInfo* p_audioInfo, void* const 
       && ((p_audioInfo->channels == 1) || (p_audioInfo->channels == 2)))
    {
       audioSrc = new AudioUpdateMsg();
+      audioSrc->volume = 1.0f;
       audioSrc->id = { endpointId, 0 };
       audioSrc->type = (p_audioInfo->channels == 1) ? CTLPI_AUDIO_SRC_BACKGLASS_MONO : CTLPI_AUDIO_SRC_BACKGLASS_STEREO;
       audioSrc->format = (p_audioInfo->format == PINMAME_AUDIO_FORMAT_INT16) ? CTLPI_AUDIO_FORMAT_SAMPLE_INT16 : CTLPI_AUDIO_FORMAT_SAMPLE_FLOAT;
@@ -317,11 +340,11 @@ static void OnControllerDestroyed(Controller*)
 
 using namespace PinMAME;
 
-MSGPI_EXPORT void MSGPIAPI PinMAMEPluginLoad(const uint32_t sessionId, MsgPluginAPI* api)
+MSGPI_EXPORT void MSGPIAPI PinMAMEPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api)
 {
    controller = nullptr;
    endpointId = sessionId;
-   msgApi = api;
+   msgApi = const_cast<MsgPluginAPI*>(api);
 
    // Request and setup shared login API
    LPISetup(endpointId, msgApi);
@@ -351,6 +374,8 @@ MSGPI_EXPORT void MSGPIAPI PinMAMEPluginLoad(const uint32_t sessionId, MsgPlugin
    {
       assert(controller == nullptr); // We do not support having multiple instance running concurrently
 
+      bool enableSound = GetSettingBool(msgApi, "PinMAME", "Sound", true);
+
       PinmameConfig config = {
          PINMAME_AUDIO_FORMAT_INT16,
          44100,
@@ -358,8 +383,8 @@ MSGPI_EXPORT void MSGPIAPI PinMAMEPluginLoad(const uint32_t sessionId, MsgPlugin
          NULL, // State update => prefer update on request
          NULL, // Display available => prefer state block
          NULL, // Display updated => prefer update on request
-         &OnAudioAvailable,
-         &OnAudioUpdated,
+         enableSound ? &OnAudioAvailable : NULL,
+         enableSound ? &OnAudioUpdated : NULL,
          NULL, // Mech available
          NULL, // Mech updated
          NULL, // Solenoid updated => prefer update on request
@@ -410,7 +435,9 @@ MSGPI_EXPORT void MSGPIAPI PinMAMEPluginLoad(const uint32_t sessionId, MsgPlugin
       pController->SetOnDestroyHandler(OnControllerDestroyed);
       pController->SetOnGameStartHandler(OnControllerGameStart);
       pController->SetOnGameEndHandler(OnControllerGameEnd);
+      pController->SetCheat(GetSettingInt(msgApi, "PinMAME", "Cheat", 0));
       controller = pController;
+
       return static_cast<void*>(pController);
    };
    scriptApi->SubmitTypeLibrary();

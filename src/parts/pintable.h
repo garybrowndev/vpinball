@@ -49,12 +49,12 @@ struct ProtectionData
 
 struct WhereUsedInfo
 {
-   string searchObjectName; //Source object to search for (images, materials etc)
-   wstring whereUsedObjectname; //Table object (Bumpers, Lights, Ramps, Walls etc) found to be using the source object
-   string whereUsedPropertyName; //Property name where used (If searching for images this could be 'Image', 'Side Image' etc.  If search for materials this could be 'Material', 'Cap Material, 'Base Material' etc.
+   string searchObjectName;      // Source object to search for (images, materials etc)
+   string whereUsedObjectname;   // Table object (Bumpers, Lights, Ramps, Walls etc) found to be using the source object
+   string whereUsedPropertyName; // Property name where used (If searching for images this could be 'Image', 'Side Image' etc.  If search for materials this could be 'Material', 'Cap Material, 'Base Material' etc.
 };
 
-enum EnumWhereUsedSource //The 'Where Used' button appears on both the 'Image Manager' and the 'Materials Manager'.  The 'WhereUsed' dialog has a property of this enum type to 'remember' whether it's to display a list of images or materials.
+enum EnumWhereUsedSource // The 'Where Used' button appears on both the 'Image Manager' and the 'Materials Manager'.  The 'WhereUsed' dialog has a property of this enum type to 'remember' whether it's to display a list of images or materials.
 {
    IMAGES,
    MATERIALS
@@ -237,6 +237,7 @@ public:
 
    STDMETHOD(get_FileName)(/*[out, retval]*/ BSTR *pVal);
 
+   const WCHAR *get_Name() const final;
    STDMETHOD(get_Name)(/*[out, retval]*/ BSTR *pVal);
    STDMETHOD(put_Name)(/*[in]*/ BSTR newVal);
    STDMETHOD(get_EnableAntialiasing)(/*[out, retval]*/ UserDefaultOnOff *pVal);
@@ -379,9 +380,9 @@ public:
 
    VPX::Sound *ImportSound(const string &filename);
    void ReImportSound(VPX::Sound *const pps, const string &filename);
-   bool ExportSound(VPX::Sound *const pps, const char *const filename);
+   bool ExportSound(VPX::Sound *const pps, const string &filename);
    void RemoveSound(VPX::Sound *const pps);
-   bool ExportImage(const Texture *const ppi, const char *const filename);
+   bool ExportImage(const Texture *const ppi, const string &filename);
    Texture* ImportImage(const string &filename, const string &imageName);
    void RemoveImage(Texture *const ppi);
    Texture *GetImage(const string &szName) const;
@@ -444,7 +445,7 @@ public:
 
    PinTable *GetPTable() final { return this; }
    const PinTable *GetPTable() const final { return this; }
-   static const char *GetElementName(IEditable *pedit);
+   static string GetElementName(IEditable *pedit);
 
    IEditable *GetElementByName(const char *const name) const;
    void OnDelete();
@@ -475,14 +476,13 @@ public:
 
    HRESULT TableSave();
    HRESULT SaveAs();
-   virtual HRESULT ApcProject_Save();
    HRESULT Save(const bool saveAs);
    HRESULT SaveToStorage(IStorage *pstg);
    HRESULT SaveToStorage(IStorage *pstg, VPXFileFeedback& feedback);
    HRESULT SaveInfo(IStorage *pstg, HCRYPTHASH hcrypthash);
    HRESULT SaveCustomInfo(IStorage *pstg, IStream *pstmTags, HCRYPTHASH hcrypthash);
-   static HRESULT WriteInfoValue(IStorage *pstg, const WCHAR *const wzName, const string &szValue, HCRYPTHASH hcrypthash);
-   static HRESULT ReadInfoValue(IStorage *pstg, const WCHAR *const wzName, string &output, HCRYPTHASH hcrypthash);
+   static HRESULT WriteInfoValue(IStorage *pstg, const wstring& wzName, const string &szValue, HCRYPTHASH hcrypthash);
+   static HRESULT ReadInfoValue(IStorage *pstg, const wstring& wzName, string &output, HCRYPTHASH hcrypthash);
    HRESULT SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool saveForUndo) final;
    HRESULT LoadGameFromFilename(const string &filename);
    HRESULT LoadGameFromFilename(const string &filename, VPXFileFeedback& feedback);
@@ -495,7 +495,7 @@ public:
    void Uncreate() final { }
    bool LoadToken(const int id, BiffReader *const pbr) final;
 
-   virtual IDispatch *GetPrimary() { return this->GetDispatch(); }
+   virtual IDispatch *GetPrimary() { return GetDispatch(); }
    IDispatch *GetDispatch() final { return (IDispatch *)this; }
    const IDispatch *GetDispatch() const final { return (const IDispatch *)this; }
    IFireEvents *GetIFireEvents() final { return (IFireEvents *)this; }
@@ -526,9 +526,9 @@ public:
    void SetDefaultView();
    void GetViewRect(FRect *pfrect) const;
 
-   bool IsNameUnique(const WCHAR *const wzName) const;
+   bool IsNameUnique(const wstring& wzName) const;
    void GetUniqueName(const ItemTypeEnum type, WCHAR *const wzUniqueName, const size_t wzUniqueName_maxlength) const;
-   void GetUniqueName(const WCHAR *const wzRoot, WCHAR *const wzUniqueName, const size_t wzUniqueName_maxlength) const;
+   void GetUniqueName(const wstring& wzRoot, WCHAR *const wzUniqueName, const size_t wzUniqueName_maxlength) const;
    void GetUniqueNamePasting(const int type, WCHAR *const wzUniqueName, const size_t wzUniqueName_maxlength) const;
 
    float GetSurfaceHeight(const string &name, float x, float y) const;
@@ -850,7 +850,7 @@ public:
    void SetMDITable(PinTableMDI *const table) { m_mdiTable = table; }
    PinTableMDI *GetMDITable() const { return m_mdiTable; }
 
-   WCHAR *GetCollectionNameByElement(const ISelect *const element);
+   const WCHAR *GetCollectionNameByElement(const ISelect *const element) const;
    void RefreshProperties();
 
    void SetNotesText(const string &text)
@@ -972,6 +972,7 @@ public:
    STDMETHOD(NudgeSensorStatus)(VARIANT *XNudge, VARIANT *YNudge);
    STDMETHOD(NudgeTiltStatus)(VARIANT *XPlumb, VARIANT *YPlumb, VARIANT *Tilt);
 
+   const WCHAR *get_Name() const final;
    STDMETHOD(get_Name)(BSTR *pVal);
    STDMETHOD(get_MechanicalTilt)(/*[out, retval]*/ LONG *pVal);
    STDMETHOD(get_LeftMagnaSave)(/*[out, retval]*/ LONG *pVal);

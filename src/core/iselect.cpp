@@ -68,7 +68,7 @@ void ISelect::DoCommand(int icmd, int x, int y)
 {
 #ifndef __STANDALONE__
    // Commands that are handled by the table element
-   if (  ((icmd & 0x000FFFFF) >= 0x40000) && ((icmd & 0x000FFFFF) < 0x40020) // Assign to collection
+   if ( (((icmd & 0x000FFFFF) >= 0x40000) && ((icmd & 0x000FFFFF) < 0x40020)) // Assign to collection
       || ((icmd >= ID_ASSIGN_TO_LAYER1) && (icmd <= ID_ASSIGN_TO_LAYER1+NUM_ASSIGN_LAYERS-1)) // Assign to layer
       || (icmd == ID_EDIT_DRAWINGORDER_HIT)
       || (icmd == ID_EDIT_DRAWINGORDER_SELECT)
@@ -268,19 +268,15 @@ static void SetPartGroup(ISelect* const me, const string& layerName)
             legacyPartGroup->Release();
          }
       }*/
-      auto partGroupF = std::ranges::find_if(me->GetPTable()->m_vedit,
-         [layerName](IEditable *editable)
-         {
-            return (editable->GetItemType() == ItemTypeEnum::eItemPartGroup) && editable->GetName() == layerName;
-         });
+      auto partGroupF = std::ranges::find_if(me->GetPTable()->m_vedit, [layerName](IEditable *editable) {
+         return (editable->GetItemType() == ItemTypeEnum::eItemPartGroup) && editable->GetName() == layerName;
+      });
       if (partGroupF == me->GetPTable()->m_vedit.end())
       {
          PartGroup *const newGroup = static_cast<PartGroup *>(EditableRegistry::CreateAndInit(eItemPartGroup, me->GetPTable(), 0, 0));
-         const int len = (int)(sizeof(newGroup->GetScriptable()->m_wzName)/sizeof(newGroup->GetScriptable()->m_wzName[0]));
-         WCHAR newName[len];
-         MultiByteToWideCharNull(CP_ACP, 0, layerName.c_str(), -1, newName, len);
+         const wstring newName = MakeWString(layerName);
          me->GetPTable()->m_pcv->ReplaceName(newGroup->GetIEditable()->GetScriptable(), newName);
-         wcscpy_s(newGroup->GetScriptable()->m_wzName, newName);
+         wcscpy_s(newGroup->GetScriptable()->m_wzName, newName.c_str());
          me->GetPTable()->m_vedit.push_back(newGroup);
          me->GetIEditable()->SetPartGroup(newGroup);
       }

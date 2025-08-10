@@ -18,8 +18,7 @@
 #endif
 #endif
 
-#define MAX_FIND_LENGTH 81
-#define MAX_LINE_LENGTH 2048
+#define MAX_FIND_LENGTH 81 // from MS docs: The buffer should be at least 80 characters long (for find/replace)
 
 enum SecurityLevelEnum
 {
@@ -33,9 +32,10 @@ enum SecurityLevelEnum
 class IScriptable
 {
 public:
-   IScriptable();
+   IScriptable() { m_wzName[0] = '\0'; }
 
-   STDMETHOD(get_Name)(BSTR *pVal) = 0;
+   STDMETHOD(get_Name)(BSTR *pVal) = 0;       // fails for Decals, returns m_wzName or something custom for everything else
+   virtual const WCHAR *get_Name() const = 0; // dto (and returns "Decal" for Decals, so always non-nullptr returned), but without going through BSTR conversion (necessary for COM)
    virtual IDispatch *GetDispatch() = 0;
    virtual const IDispatch *GetDispatch() const = 0;
    virtual ISelect *GetISelect() = 0;
@@ -77,7 +77,8 @@ public:
    ISelect *GetISelect() final { return nullptr; }
    const ISelect *GetISelect() const final { return nullptr; }
 
-   STDMETHOD(get_Name)(BSTR *pVal);
+   const WCHAR *get_Name() const final { return L"Debug"; }
+   STDMETHOD(get_Name)(BSTR *pVal) { *pVal = SysAllocString(L"Debug"); return S_OK; }
 
    CodeViewer *m_pcv;
 };
@@ -97,14 +98,9 @@ public:
    ~CodeViewDispatch() {}
 
    wstring m_wName;
-   IUnknown *m_punk;
-   IDispatch *m_pdisp;
-   IScriptable *m_piscript;
-   bool m_global;
-
-   // for VectorSortString
-   int SortAgainst(const CodeViewDispatch * const pcvd/*void *pvoid*/) const { return SortAgainstValue(pcvd->m_wName); }
-   int SortAgainstValue(const wstring &pv) const;
+   IUnknown *m_punk = nullptr;
+   IDispatch *m_pdisp = nullptr;
+   bool m_global = false;
 };
 
 class CodeViewer :
@@ -136,7 +132,7 @@ public:
 
    HRESULT AddItem(IScriptable * const piscript, const bool global);
    void RemoveItem(IScriptable * const piscript);
-   HRESULT ReplaceName(IScriptable * const piscript, const WCHAR * const wzNew);
+   HRESULT ReplaceName(IScriptable * const piscript, const wstring& wzNew);
    void SelectItem(IScriptable * const piscript);
 
    void Compile(const bool message);
@@ -146,8 +142,7 @@ public:
 
    HRESULT AddTemporaryItem(const BSTR bstr, IDispatch * const pdisp);
 
-   STDMETHOD(GetItemInfo)(LPCOLESTR pstrName, DWORD dwReturnMask,
-      IUnknown **ppiunkItem, ITypeInfo **ppti);
+   STDMETHOD(GetItemInfo)(LPCOLESTR pstrName, DWORD dwReturnMask, IUnknown **ppiunkItem, ITypeInfo **ppti);
 
    STDMETHOD(OnScriptError)(IActiveScriptError *pscripterror);
 
@@ -173,7 +168,7 @@ public:
 
    STDMETHOD(OnEnterScript)();
 
-   STDMETHODIMP OnLeaveScript();
+   STDMETHODIMP OnLeaveScript() override;
 
    STDMETHODIMP GetWindow(HWND *phwnd) override
    {
@@ -214,37 +209,37 @@ public:
 
    // Internet Security interface
 
-   virtual HRESULT STDMETHODCALLTYPE GetSecurityId(
+   HRESULT STDMETHODCALLTYPE GetSecurityId(
       /* [size_is][out] */ BYTE *pbSecurityId,
       /* [out][in] */ DWORD *pcbSecurityId,
-      /* [in] */ DWORD_PTR dwReserved);
+      /* [in] */ DWORD_PTR dwReserved) override;
 
-   virtual HRESULT STDMETHODCALLTYPE ProcessUrlAction(
+   HRESULT STDMETHODCALLTYPE ProcessUrlAction(
       /* [in] */ DWORD dwAction,
       /* [size_is][out] */ BYTE __RPC_FAR *pPolicy,
       /* [in] */ DWORD cbPolicy,
       /* [in] */ BYTE __RPC_FAR *pContext,
       /* [in] */ DWORD cbContext,
       /* [in] */ DWORD dwFlags,
-      /* [in] */ DWORD dwReserved);
+      /* [in] */ DWORD dwReserved) override;
 
-   virtual HRESULT STDMETHODCALLTYPE QueryCustomPolicy(
+   HRESULT STDMETHODCALLTYPE QueryCustomPolicy(
       /* [in] */ REFGUID guidKey,
       /* [size_is][size_is][out] */ BYTE __RPC_FAR *__RPC_FAR *ppPolicy,
       /* [out] */ DWORD __RPC_FAR *pcbPolicy,
       /* [in] */ BYTE __RPC_FAR *pContext,
       /* [in] */ DWORD cbContext,
-      /* [in] */ DWORD dwReserved);
+      /* [in] */ DWORD dwReserved) override;
 
    bool FControlAlreadyOkayed(const CONFIRMSAFETY *pcs);
    void AddControlToOkayedList(const CONFIRMSAFETY *pcs);
    bool FControlMarkedSafe(const CONFIRMSAFETY *pcs);
    bool FUserManuallyOkaysControl(const CONFIRMSAFETY *pcs);
 
-   virtual HRESULT STDMETHODCALLTYPE QueryService(
+   HRESULT STDMETHODCALLTYPE QueryService(
       REFGUID guidService,
       REFIID riid,
-      void **ppv);
+      void **ppv) override;
 
    // Use CComObject to implement AddRef/Release/QI
    BEGIN_COM_MAP(CodeViewer)
@@ -275,7 +270,7 @@ public:
    void UpdateRegWithPrefs();
    void UpdatePrefsfromReg();
 
-   void GetWordUnderCaret();
+   size_t GetWordUnderCaret(char *buf);
 
    void ListEventsFromItem();
    void FindCodeFromEvent();
@@ -288,7 +283,7 @@ public:
 #endif
 
    void EvaluateScriptStatement(const char * const szScript);
-   void AddToDebugOutput(const char * const szText);
+   void AddToDebugOutput(const string& szText);
 
    BOOL PreTranslateMessage(MSG& msg) OVERRIDE;
 
@@ -308,6 +303,8 @@ public:
 
    SaveDirtyState m_sdsDirty;
    bool m_ignoreDirty;
+
+   bool m_warn_on_dupes = false;
 
    bool m_scriptError; // Whether a script error has occured - used for polling from the game
 
@@ -345,7 +342,9 @@ public:
    string external_script_name;  // loaded from external .vbs?
    vector<char> original_table_script; // if yes, then this one stores the original table script
 
+#ifdef __STANDALONE__ // otherwise Scintilla owns the text
    string m_script_text;
+#endif
 
 protected:
    void PreCreate(CREATESTRUCT& cs) final;
@@ -361,7 +360,6 @@ private:
    BOOL ParseClickEvents(const int id, const SCNotification *pSCN);
    BOOL ParseSelChangeEvent(const int id, const SCNotification *pSCN);
 
-   bool ParseOKLineLength(const size_t LineLen);
    string ParseDelimtByColon(string &wholeline);
    void ParseFindConstruct(size_t &Pos, const string &UCLine, WordType &Type, int &ConstructSize);
    bool ParseStructureName(fi_vector<UserData> &ListIn, const UserData &ud, const string &UCline, const string &line, const int Lineno);
@@ -382,7 +380,7 @@ private:
 
    void InitPreferences();
 
-   void GetParamsFromEvent(const UINT iEvent, char * const szParams, const size_t maxlength);
+   string GetParamsFromEvent(const UINT iEvent);
 
    /**
     * Resizes the Scintilla widget (the text editor) and the last error widget (if it's visible)
@@ -414,6 +412,11 @@ private:
    FINDREPLACE m_findreplacestruct;
    char szFindString[MAX_FIND_LENGTH];
    char szReplaceString[MAX_FIND_LENGTH];
+   char szCaretTextBuff[MAX_FIND_LENGTH];
+
+#ifndef __STANDALONE__
+   UINT m_findMsgString; // Windows message for the FindText dialog
+#endif
 
    VectorSortString<CodeViewDispatch*> m_vcvdTemp; // Objects added through script
 
@@ -440,9 +443,6 @@ private:
    fi_vector<UserData> m_currentMembers;
    string m_autoCompString;
    string m_autoCompMembersString;
-#ifndef __STANDALONE__
-   Sci_TextRange m_currentConstruct;
-#endif
 
    HWND m_hwndItemList;
    HWND m_hwndItemText;
@@ -492,7 +492,8 @@ public:
    Collection();
 
    // IScriptable
-   STDMETHOD(get_Name)(BSTR *pVal);
+   const WCHAR *get_Name() const final { return m_wzName; }
+   STDMETHOD(get_Name)(BSTR *pVal) { *pVal = SysAllocString(m_wzName); return S_OK; }
    IDispatch *GetDispatch() final { return (IDispatch *)this; }
    const IDispatch *GetDispatch() const final { return (const IDispatch *)this; }
 

@@ -336,7 +336,7 @@ BOOL VideoOptionPropPage::OnInitDialog()
    m_appSettingBtn.SetCheck(BST_CHECKED);
    m_tableSettingBtn.EnableWindow(g_pvp->m_ptableActive != nullptr);
    m_editedSettings = &m_appSettings;
-   m_tooltip.Create(*this);
+   m_tooltip.Create(GetHwnd());
    m_tooltip.SetMaxTipWidth(320);
    //m_tooltip.SetWindowTheme(L" ", L" "); // Turn XP themes off
    return TRUE;
@@ -511,7 +511,7 @@ void VideoOptionPropPage::UpdateFullscreenModesList()
       }
    }
    
-   VPX::Window::GetDisplayModes((int)display, m_allVideoModes);
+   VPX::Window::GetDisplayModes(display, m_allVideoModes);
 
    const int depthcur = GetEditedSettings().LoadValueWithDefault(m_wndSection, m_wndSettingPrefix + "ColorDepth", 32);
    const float refreshrate = GetEditedSettings().LoadValueWithDefault(m_wndSection, m_wndSettingPrefix + "RefreshRate", 0.f);
@@ -931,7 +931,7 @@ BOOL RenderOptPage::OnInitDialog()
    m_rampDetail.SetTicFreq(1);
    m_rampDetail.SetLineSize(1);
    m_rampDetail.SetPageSize(1);
-   ::SendMessage(m_rampDetail.GetHwnd(), TBM_SETTHUMBLENGTH, 10, 0);
+   m_rampDetail.SendMessage(TBM_SETTHUMBLENGTH, 10, 0);
 
    AttachItem(IDC_GLOBAL_TRAIL_CHECK, m_ballTrails);
    AttachItem(IDC_BALL_TRAIL_STRENGTH, m_ballTrailStrength);
@@ -966,12 +966,12 @@ BOOL RenderOptPage::OnInitDialog()
       GetDlgItem(IDC_MSAA_LABEL).ShowWindow(false);
       m_msaaSamples.ShowWindow(false);
       m_msaaSamples.EnableWindow(false);
-      #define SHIFT_WND(id, amount)                              \
-         {                                                       \
-            CRect rc = GetDlgItem(id).GetClientRect();           \
-            GetDlgItem(id).MapWindowPoints(this->GetHwnd(), rc); \
-            rc.OffsetRect(0, amount);                            \
-            GetDlgItem(id).MoveWindow(rc);                       \
+      #define SHIFT_WND(id, amount)                        \
+         {                                                 \
+            CRect rc = GetDlgItem(id).GetClientRect();     \
+            GetDlgItem(id).MapWindowPoints(GetHwnd(), rc); \
+            rc.OffsetRect(0, amount);                      \
+            GetDlgItem(id).MoveWindow(rc);                 \
          }
       SHIFT_WND(IDC_SUPER_SAMPLING_LABEL, -14)
       SHIFT_WND(IDC_SUPER_SAMPLING_COMBO, -14)
@@ -1153,7 +1153,7 @@ void RenderOptPage::LoadSettings(Settings& settings)
       #endif
          m_stereoFake.SetCheck(fakeStereo ? BST_CHECKED : BST_UNCHECKED);
 
-      const int stereo3D = settings.LoadValueWithDefault(Settings::Player, "Stereo3D"s, 0);
+      const int stereo3D = settings.LoadValueInt(Settings::Player, "Stereo3D"s);
       SetupCombo(m_stereoMode, 5, "Disabled", "Top / Bottom", "Interlaced (e.g. LG TVs)", "Flipped Interlaced (e.g. LG TVs)", "Side by Side");
       static const string defaultNames[] = { "Red/Cyan"s, "Green/Magenta"s, "Blue/Amber"s, "Cyan/Red"s, "Magenta/Green"s, "Amber/Blue"s, "Custom 1"s, "Custom 2"s, "Custom 3"s, "Custom 4"s };
       string name[std::size(defaultNames)];
@@ -1277,7 +1277,7 @@ void RenderOptPage::SaveSettings(Settings& settings, bool saveAll)
       int anaglyphFilter = m_stereoFilter.GetCurSel();
       if (anaglyphFilter < 0)
          anaglyphFilter = 4;
-      settings.SaveValue(Settings::Player, "Anaglyph"s.append(std::to_string(glassesIndex + 1)).append("Filter"s), (int)anaglyphFilter, !saveAll);
+      settings.SaveValue(Settings::Player, "Anaglyph"s.append(std::to_string(glassesIndex + 1)).append("Filter"s), anaglyphFilter, !saveAll);
    }
 
    settings.SaveValue(Settings::Player, "BallTrail"s, m_ballTrails.GetCheck() == BST_CHECKED, !saveAll);

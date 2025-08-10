@@ -472,6 +472,7 @@ static void HelpSplash(const string &text, int rotation)
    constexpr float padding = 60.f;
    const float maxWidth = win_size.x - padding;
    ImFont *const font = ImGui::GetFont();
+   ImFontBaked *const fontBaked = ImGui::GetFontBaked();
 
    string line;
    std::istringstream iss(text);
@@ -484,14 +485,14 @@ static void HelpSplash(const string &text, int rotation)
        while (*textEnd)
        {
           const char *nextLineTextEnd = ImGui::FindRenderedTextEnd(textEnd, nullptr);
-          ImVec2 lineSize = font->CalcTextSizeA(font->FontSize, FLT_MAX, 0.0f, textEnd, nextLineTextEnd);
+          ImVec2 lineSize = font->CalcTextSizeA(fontBaked->Size, FLT_MAX, 0.0f, textEnd, nextLineTextEnd);
           if (lineSize.x > maxWidth)
           {
              const char *wrapPoint = font->CalcWordWrapPositionA(font->Scale, textEnd, nextLineTextEnd, maxWidth);
              if (wrapPoint == textEnd)
                 wrapPoint++;
              nextLineTextEnd = wrapPoint;
-             lineSize = font->CalcTextSizeA(font->FontSize, FLT_MAX, 0.0f, textEnd, wrapPoint);
+             lineSize = font->CalcTextSizeA(fontBaked->Size, FLT_MAX, 0.0f, textEnd, wrapPoint);
           }
 
           string newLine(textEnd, nextLineTextEnd);
@@ -519,9 +520,9 @@ static void HelpSplash(const string &text, int rotation)
    ImGui::SetCursorPosY(padding / 4.f);
    for (const string& curline : lines)
    {
-      const ImVec2 lineSize = font->CalcTextSizeA(font->FontSize, FLT_MAX, 0.0f, curline.c_str());
+      const ImVec2 lineSize = font->CalcTextSizeA(fontBaked->Size, FLT_MAX, 0.0f, curline.c_str());
       ImGui::SetCursorPosX((text_size.x - lineSize.x) / 2.f);
-      ImGui::Text("%s", curline.c_str());
+      ImGui::TextUnformatted(curline.c_str());
    }
    ImGui::End();
 }
@@ -608,7 +609,7 @@ static void HelpEditableHeader(bool is_live, IEditable *editable, IEditable *liv
    }
    HelpTextCentered(title);
    ImGui::BeginDisabled(is_live); // Do not edit name of live objects, it would likely break the script
-   string name = select_editable ? string(select_editable->GetName()) : string();
+   string name = select_editable ? select_editable->GetName() : string();
    if (ImGui::InputText("Name", &name))
    {
       editable->SetName(name);
@@ -765,7 +766,7 @@ void LiveUI::MarkdownFormatCallback(const ImGui::MarkdownFormatInfo &markdownFor
       else
       { // strong emphasis
          if (start)
-            ImGui::PushFont(ui->m_overlayBoldFont);
+            ImGui::PushFont(ui->m_overlayBoldFont, ui->m_overlayBoldFont->LegacySize);
          else
             ImGui::PopFont();
       }
@@ -780,7 +781,7 @@ void LiveUI::MarkdownFormatCallback(const ImGui::MarkdownFormatInfo &markdownFor
       if (start)
       {
          if (fmt.font)
-            ImGui::PushFont(fmt.font);
+            ImGui::PushFont(fmt.font, fmt.font->LegacySize);
          if (ImGui::GetItemID() != ui->markdown_start_id)
             ImGui::NewLine();
       }
@@ -1024,8 +1025,8 @@ void LiveUI::Update(const int width, const int height)
    ImGuiIO &io = ImGui::GetIO();
    const bool isInteractiveUI = m_ShowUI || m_ShowSplashModal || m_ShowBAMModal;
    const bool isVR = m_renderer->m_stereo3D == STEREO_VR;
-   io.DisplaySize.x = static_cast<float>(width);
-   io.DisplaySize.y = static_cast<float>(height);
+   io.DisplaySize.x = static_cast<float>(width) / io.DisplayFramebufferScale.x;
+   io.DisplaySize.y = static_cast<float>(height) / io.DisplayFramebufferScale.y;
    // If we are only showing overlays (no mouse interaction), apply main camera rotation
    m_rotate = (isInteractiveUI || isVR) ? 0 : ((int)(m_player->m_ptable->mViewSetups[m_player->m_ptable->m_BG_current_set].GetRotation((int)io.DisplaySize.x, (int)io.DisplaySize.y) / 90.0f));
    if (m_rotate == 1 || m_rotate == 3)
@@ -1046,13 +1047,13 @@ void LiveUI::Update(const int width, const int height)
    ImGuizmo::SetOrthographic(m_orthoCam);
    ImGuizmo::BeginFrame();
    ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
-   ImGui::PushFont(m_baseFont);
+   ImGui::PushFont(m_baseFont, m_baseFont->LegacySize);
 
    // Display notification (except when script has an unaligned rotation)
    const uint32_t tick = msec();
    float notifY = io.DisplaySize.y * 0.25f;
    const bool showNotifications = isVR || ((float)m_rotate * 90.0f == m_player->m_ptable->mViewSetups[m_player->m_ptable->m_BG_current_set].GetRotation(m_player->m_playfieldWnd->GetWidth(), m_player->m_playfieldWnd->GetHeight()));
-   ImGui::PushFont(m_overlayFont);
+   ImGui::PushFont(m_overlayFont, m_overlayFont->LegacySize);
    for (int i = (int)m_notifications.size() - 1; i >= 0; i--)
    {
       if (tick > m_notifications[i].disappearTick)
@@ -1062,6 +1063,7 @@ void LiveUI::Update(const int width, const int height)
       else if (showNotifications)
       {
           ImFont *const font = ImGui::GetFont();
+          ImFontBaked *const fontBaked = ImGui::GetFontBaked();
 
           constexpr float padding = 50.f;
           const float maxWidth = io.DisplaySize.x - padding;
@@ -1079,14 +1081,14 @@ void LiveUI::Update(const int width, const int height)
               const char *textEnd = line.c_str();
               while (*textEnd) {
                  const char *nextLineTextEnd = ImGui::FindRenderedTextEnd(textEnd, nullptr);
-                 ImVec2 lineSize = font->CalcTextSizeA(font->FontSize, FLT_MAX, 0.0f, textEnd, nextLineTextEnd);
+                 ImVec2 lineSize = font->CalcTextSizeA(fontBaked->Size, FLT_MAX, 0.0f, textEnd, nextLineTextEnd);
                  if (lineSize.x > maxWidth)
                  {
                     const char *wrapPoint = font->CalcWordWrapPositionA(font->Scale, textEnd, nextLineTextEnd, maxWidth);
                     if (wrapPoint == textEnd)
                        wrapPoint++;
                     nextLineTextEnd = wrapPoint;
-                    lineSize = font->CalcTextSizeA(font->FontSize, FLT_MAX, 0.0f, textEnd, wrapPoint);
+                    lineSize = font->CalcTextSizeA(fontBaked->Size, FLT_MAX, 0.0f, textEnd, wrapPoint);
                  }
 
                  string newLine(textEnd, nextLineTextEnd);
@@ -1110,9 +1112,9 @@ void LiveUI::Update(const int width, const int height)
           ImGui::SetNextWindowSize(text_size);
           ImGui::Begin(("Notification" + std::to_string(i)).c_str(), nullptr, window_flags);
           for (const string& lline : lines) {
-             ImVec2 lineSize = font->CalcTextSizeA(font->FontSize, FLT_MAX, 0.0f, lline.c_str());
+             ImVec2 lineSize = font->CalcTextSizeA(fontBaked->Size, FLT_MAX, 0.0f, lline.c_str());
              ImGui::SetCursorPosX(((text_size.x - lineSize.x) / 2));
-             ImGui::Text("%s", lline.c_str());
+             ImGui::TextUnformatted(lline.c_str());
           }
           ImGui::End();
           notifY += text_size.y + 10.f;
@@ -1440,7 +1442,6 @@ void LiveUI::HandleTweakInput()
    for (int i = 0; i < eCKeys; i++)
    {
       const EnumAssignKeys keycode = static_cast<EnumAssignKeys>(i);
-      const uint64_t mask = static_cast<uint64_t>(1) << i;
       int keyEvent;
       if (state.IsKeyPressed(keycode, prevState))
          keyEvent = 1;
@@ -1455,7 +1456,7 @@ void LiveUI::HandleTweakInput()
       if ((m_tweakPages[m_activeTweakPageIndex] == TP_Rules || m_tweakPages[m_activeTweakPageIndex] == TP_Info)
          && (keycode == eRightMagnaSave || keycode == eLeftMagnaSave) && (keyEvent != 2))
       {
-         const float speed = m_overlayFont->FontSize * 0.5f;
+         const float speed = ImGui::GetFontBaked()->Size * 0.5f;
          if (keycode == eLeftMagnaSave)
             m_tweakScroll -= speed;
          else if (keycode == eRightMagnaSave)
@@ -1475,7 +1476,7 @@ void LiveUI::HandleTweakInput()
             continue;
          const bool up = keycode == eRightFlipperKey;
          const float step = up ? 1.f : -1.f;
-         const float absIncSpeed = sinceLastInputHandleMs * 0.001f * min(50.f, 0.75f + (float)(now - startOfPress) / 300.0f);
+         const float absIncSpeed = (float)sinceLastInputHandleMs * 0.001f * min(50.f, 0.75f + (float)(now - startOfPress) / 300.0f);
          const float incSpeed = up ? absIncSpeed : -absIncSpeed;
 
          // Since we need less than 1 int per frame for eg volume, we need to keep track of the float value
@@ -1485,7 +1486,7 @@ void LiveUI::HandleTweakInput()
          if (floatFraction >= 1.f)
          {
             absIntStep = static_cast<int>(floatFraction);
-            floatFraction = floatFraction - absIntStep;
+            floatFraction = floatFraction - (float)absIntStep;
          }
          const int intStep = up ? absIntStep : -absIntStep;
 
@@ -1501,7 +1502,7 @@ void LiveUI::HandleTweakInput()
             if (keyEvent != 1) // Only keydown
                continue;
             int stepi = up ? 1 : (int)m_tweakPages.size() - 1;
-            m_activeTweakPageIndex = ((m_activeTweakPageIndex + stepi) % m_tweakPages.size());
+            m_activeTweakPageIndex = ((m_activeTweakPageIndex + stepi) % (int)m_tweakPages.size());
             m_activeTweakIndex = 0;
             m_tweakScroll = 0.f;
             UpdateTweakPage();
@@ -1970,14 +1971,15 @@ void LiveUI::UpdateTweakModeUI()
 {
    HandleTweakInput();
 
-   ImGui::PushFont(m_overlayFont);
+   ImGui::PushFont(m_overlayFont, m_overlayFont->LegacySize);
    PinTable *const table = m_live_table;
    constexpr ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
-   ImVec2 minSize(min(m_overlayFont->FontSize * (m_tweakPages[m_activeTweakPageIndex] == TP_Rules ? 35.0f
-                                               : m_tweakPages[m_activeTweakPageIndex] == TP_Info  ? 45.0f
-                                                                                                  : 30.0f),
+   const float FontSize = ImGui::GetFontBaked()->Size;
+   ImVec2 minSize(min(FontSize * (m_tweakPages[m_activeTweakPageIndex] == TP_Rules ? 35.0f
+                                : m_tweakPages[m_activeTweakPageIndex] == TP_Info  ? 45.0f
+                                                                                   : 30.0f),
                   min(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y)),0.f);
-   ImVec2 maxSize(ImGui::GetIO().DisplaySize.x - 2.f * m_overlayFont->FontSize, 0.8f * ImGui::GetIO().DisplaySize.y - 1.f * m_overlayFont->FontSize);
+   ImVec2 maxSize(ImGui::GetIO().DisplaySize.x - 2.f * FontSize, 0.8f * ImGui::GetIO().DisplaySize.y - 1.f * FontSize);
    ImGui::SetNextWindowBgAlpha(0.5f);
    if (m_player->m_vrDevice)
       ImGui::SetNextWindowPos(ImVec2(0.5f * ImGui::GetIO().DisplaySize.x, 0.5f * ImGui::GetIO().DisplaySize.y), 0, ImVec2(0.5f, 0.5f));
@@ -2003,12 +2005,12 @@ void LiveUI::UpdateTweakModeUI()
       #define CM_ROW(id, label, format, value, unit) \
       { \
          char buf[1024]; snprintf(buf, sizeof(buf), format, value); \
-         ImGui::TableNextColumn(); ImGui::Text("%s",label); ImGui::TableNextColumn(); \
+         ImGui::TableNextColumn(); ImGui::TextUnformatted(label); ImGui::TableNextColumn(); \
          float textWidth = ImGui::CalcTextSize(buf).x; vWidth = max(vWidth, textWidth); \
          if (textWidth < vWidth) ImGui::SameLine(vWidth - textWidth); \
-         ImGui::Text("%s", buf); ImGui::TableNextColumn(); \
-         ImGui::Text("%s", unit); ImGui::TableNextColumn(); \
-         ImGui::Text("%s", m_tweakState[id] == 0 ? "  " : m_tweakState[id] == 1 ? " **" : " *"); ImGui::TableNextRow(); \
+         ImGui::TextUnformatted(buf); ImGui::TableNextColumn(); \
+         ImGui::TextUnformatted(unit); ImGui::TableNextColumn(); \
+         ImGui::TextUnformatted(m_tweakState[id] == 0 ? "  " : m_tweakState[id] == 1 ? " **" : " *"); ImGui::TableNextRow(); \
       }
       #define CM_SKIP_LINE {ImGui::TableNextColumn(); ImGui::Dummy(ImVec2(0.f, m_dpi * 3.f)); ImGui::TableNextRow();}
       const float realToVirtual = viewSetup.GetRealToVirtualScale(table);
@@ -2051,7 +2053,7 @@ void LiveUI::UpdateTweakModeUI()
             if (page >= TP_Plugin00)
             {
                const string& sectionName = Settings::GetSectionName((Settings::Section)(Settings::Plugin00 + page - TP_Plugin00));
-               const std::shared_ptr<MsgPlugin> plugin = sectionName.length() > 7 ? MsgPluginManager::GetInstance().GetPlugin(sectionName.substr(7)) : nullptr;
+               const std::shared_ptr<MsgPlugin> plugin = sectionName.length() > 7 ? MsgPluginManager::GetInstance().GetPlugin(std::string_view(sectionName).substr(7)) : nullptr;
                if (plugin)
                   title = plugin->m_name + " Plugin";
                else
@@ -2143,8 +2145,8 @@ void LiveUI::UpdateTweakModeUI()
          if (m_live_table->m_settings.LoadValueFloat(Settings::Player, "ScreenWidth"s) <= 1.f)
          {
             ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 0, 0, 255));
-            ImGui::Text("You are using 'Window' mode but haven't defined your display physical size.");
-            ImGui::Text("This will break the overall scale as well as the stereo rendering.");
+            ImGui::TextUnformatted("You are using 'Window' mode but haven't defined your display physical size.");
+            ImGui::TextUnformatted("This will break the overall scale as well as the stereo rendering.");
             ImGui::NewLine();
             ImGui::PopStyleColor();
          }
@@ -2324,11 +2326,11 @@ void LiveUI::UpdateMainUI()
          ImGui::OpenPopup("Overlay Popup");
       if (ImGui::BeginPopup("Overlay Popup"))
       {
-         ImGui::Text("Overlays:");
+         ImGui::TextUnformatted("Overlays:");
          ImGui::Separator();
          ImGui::Checkbox("Overlay selection", &m_selectionOverlay);
          ImGui::Separator();
-         ImGui::Text("Physic Overlay:");
+         ImGui::TextUnformatted("Physic Overlay:");
          if (ImGui::RadioButton("None", m_physOverlay == PO_NONE))
             m_physOverlay = PO_NONE;
          if (ImGui::RadioButton("Selected", m_physOverlay == PO_SELECTED))
@@ -2346,7 +2348,7 @@ void LiveUI::UpdateMainUI()
          bool prims = m_selectionFilter & SelectionFilter::SF_Primitives;
          bool lights = m_selectionFilter & SelectionFilter::SF_Lights;
          bool flashers = m_selectionFilter & SelectionFilter::SF_Flashers;
-         ImGui::Text("Selection filters:");
+         ImGui::TextUnformatted("Selection filters:");
          ImGui::Separator();
          if (ImGui::Checkbox("Playfield", &pf))
             m_selectionFilter = (m_selectionFilter & ~SelectionFilter::SF_Playfield) | (pf ? SelectionFilter::SF_Playfield : 0x0000);
@@ -2367,10 +2369,10 @@ void LiveUI::UpdateMainUI()
       ImGui::Begin("text overlay", NULL, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav);
       switch (m_gizmoOperation)
       {
-      case ImGuizmo::NONE: ImGui::Text("Select"); break;
-      case ImGuizmo::TRANSLATE: ImGui::Text("Grab"); break;
-      case ImGuizmo::ROTATE: ImGui::Text("Rotate"); break;
-      case ImGuizmo::SCALE: ImGui::Text("Scale"); break;
+      case ImGuizmo::NONE: ImGui::TextUnformatted("Select"); break;
+      case ImGuizmo::TRANSLATE: ImGui::TextUnformatted("Grab"); break;
+      case ImGuizmo::ROTATE: ImGui::TextUnformatted("Rotate"); break;
+      case ImGuizmo::SCALE: ImGui::TextUnformatted("Scale"); break;
       default: break;
       }
       ImGui::End();
@@ -3125,7 +3127,7 @@ void LiveUI::UpdateOutlinerUI()
                      if (edit->GetPartGroup() == nullptr && edit->GetItemType() != eItemPartGroup)
                      {
                         Selection sel(is_live, edit);
-                        if (IsOutlinerFiltered(edit->GetName()) && ImGui::Selectable(edit->GetName(), m_selection == sel))
+                        if (IsOutlinerFiltered(edit->GetName()) && ImGui::Selectable(edit->GetName().c_str(), m_selection == sel))
                            m_selection = sel;
                      }
                   }
@@ -3153,12 +3155,12 @@ void LiveUI::UpdateOutlinerUI()
                   {
                      stack.push_back({
                         static_cast<PartGroup*>(edit), 
-                        (stack.empty() || stack.back().opened) ? ImGui::TreeNodeEx(edit->GetName(), ImGuiTreeNodeFlags_None) : false});
+                        (stack.empty() || stack.back().opened) ? ImGui::TreeNodeEx(edit->GetName().c_str(), ImGuiTreeNodeFlags_None) : false});
                   }
                   else if (stack.back().opened)
                   {
                      Selection sel(is_live, edit);
-                     if (IsOutlinerFiltered(edit->GetName()) && ImGui::Selectable(edit->GetName(), m_selection == sel))
+                     if (IsOutlinerFiltered(edit->GetName()) && ImGui::Selectable(edit->GetName().c_str(), m_selection == sel))
                         m_selection = sel;
                   }
                }
@@ -3360,7 +3362,7 @@ void LiveUI::UpdateVideoOptionsModal()
                // ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
                // ImGui::Checkbox("Use Fake Stereo", &m_renderer->m_stereo3DfakeStereo);
                // ImGui::PopItemFlag();
-               ImGui::Text(m_renderer->m_stereo3DfakeStereo ? "Renderer uses 'fake' stereo from single render" : "Renderer performs real stereo rendering");
+               ImGui::TextUnformatted(m_renderer->m_stereo3DfakeStereo ? "Renderer uses 'fake' stereo from single render" : "Renderer performs real stereo rendering");
                if (m_renderer->m_stereo3DfakeStereo)
                {
                   float stereo3DEyeSep = g_pvp->m_settings.LoadValueWithDefault(Settings::Player, "Stereo3DMaxSeparation"s, 0.03f);
@@ -3437,8 +3439,8 @@ void LiveUI::UpdateVideoOptionsModal()
                ImGui::SameLine();
                ImGui::ColorButton("RightFilter", ImVec4(eyeR.x, eyeR.y, eyeR.z, 1.f), ImGuiColorEditFlags_NoAlpha);
                ImGui::SameLine();
-               ImGui::Text(anaglyph.IsReversedColorPair() ? colors == Anaglyph::RED_CYAN ? "Cyan/Red" : colors == Anaglyph::GREEN_MAGENTA ? "Magenta/Green" : "Amber/Blue"
-                                                          : colors == Anaglyph::RED_CYAN ? "Red/Cyan" : colors == Anaglyph::GREEN_MAGENTA ? "Green/Magenta" : "Blue/Amber");
+               ImGui::TextUnformatted(anaglyph.IsReversedColorPair() ? colors == Anaglyph::RED_CYAN ? "Cyan/Red" : colors == Anaglyph::GREEN_MAGENTA ? "Magenta/Green" : "Amber/Blue"
+                                                                     : colors == Anaglyph::RED_CYAN ? "Red/Cyan" : colors == Anaglyph::GREEN_MAGENTA ? "Green/Magenta" : "Blue/Amber");
                ImGui::SameLine();
                ImGui::Text("Gamma %3.2f", anaglyph.GetDisplayGamma());
                ImGui::SameLine();
@@ -3474,7 +3476,7 @@ void LiveUI::UpdateVideoOptionsModal()
       }
       ImGui::EndPopup();
    }
-   if (popup_anaglyph_calibration && IsAnaglyphStereoMode(g_pvp->m_settings.LoadValueWithDefault(Settings::Player, "Stereo3D"s, 0)))
+   if (popup_anaglyph_calibration && IsAnaglyphStereoMode(g_pvp->m_settings.LoadValueInt(Settings::Player, "Stereo3D"s)))
       ImGui::OpenPopup(ID_ANAGLYPH_CALIBRATION);
 }
 
@@ -3545,7 +3547,7 @@ void LiveUI::UpdateAnaglyphCalibrationModal()
          g_pvp->m_settings.SaveValue(Settings::Player, prefKey + fields[calibrationStep], calibrationBrightness);
       }
 
-      ImGui::PushFont(m_overlayFont);
+      ImGui::PushFont(m_overlayFont, m_overlayFont->LegacySize);
       const ImVec2 win_size = ImGui::GetWindowSize();
       ImDrawList *draw_list = ImGui::GetWindowDrawList();
       const float s = min(win_size.x, win_size.y) / 5.f, t = 1.f * s;
@@ -3601,7 +3603,7 @@ void LiveUI::UpdateAnaglyphCalibrationModal()
       }
 
       float line_height = ImGui::CalcTextSize("A").y * 1.2f;
-      #define CENTERED_TEXT(y, t) ImGui::SetCursorPos(ImVec2((win_size.x - ImGui::CalcTextSize(t).x) * 0.5f, y));ImGui::Text("%s", t);
+      #define CENTERED_TEXT(y, t) ImGui::SetCursorPos(ImVec2((win_size.x - ImGui::CalcTextSize(t).x) * 0.5f, y));ImGui::TextUnformatted(t);
       float y = win_size.y * 0.5f + t + line_height;
       string step_info = "Anaglyph glasses calibration step #"s.append(std::to_string(calibrationStep + 1)).append("/6");
       CENTERED_TEXT(y + 0 * line_height, step_info.c_str());
@@ -3715,7 +3717,7 @@ void LiveUI::UpdatePlumbWindow()
 
       ImGui::Separator();
 
-      ImGui::Text("Nudge & Plumb State");
+      ImGui::TextUnformatted("Nudge & Plumb State");
       constexpr int panelSize = 100;
       if (ImGui::BeginTable("PlumbInfo", 2, ImGuiTableFlags_Borders))
       {
@@ -3723,9 +3725,9 @@ void LiveUI::UpdatePlumbWindow()
          ImGui::TableSetupColumn("Col2", ImGuiTableColumnFlags_WidthFixed, panelSize * m_dpi);
       
          ImGui::TableNextColumn();
-         ImGui::Text("Cab. Sensor");
+         ImGui::TextUnformatted("Cab. Sensor");
          ImGui::TableNextColumn();
-         ImGui::Text("Plumb Position");
+         ImGui::TextUnformatted("Plumb Position");
          ImGui::TableNextRow();
 
          const ImVec2 fullSize = ImVec2(panelSize * m_dpi, panelSize * m_dpi);
@@ -3763,9 +3765,9 @@ void LiveUI::UpdatePlumbWindow()
          ImGui::TableNextRow();
 
          ImGui::TableNextColumn();
-         ImGui::Text("Table Acceleration");
+         ImGui::TextUnformatted("Table Acceleration");
          ImGui::TableNextColumn();
-         ImGui::Text("Plumb Angle");
+         ImGui::TextUnformatted("Plumb Angle");
          ImGui::TableNextRow();
 
          ImGui::TableNextColumn();
@@ -3822,7 +3824,7 @@ void LiveUI::UpdateRendererInspectionModal()
    ImGui::SetNextWindowSize(ImVec2(350.f * m_dpi, 0));
    if (ImGui::Begin(ID_RENDERER_INSPECTION, &m_RendererInspection))
    {
-      ImGui::Text("Display single render pass:");
+      ImGui::TextUnformatted("Display single render pass:");
       static int pass_selection = IF_FPS;
       ImGui::RadioButton("Disabled", &pass_selection, IF_FPS);
       #if defined(ENABLE_DX9) // No GPU profiler for OpenGL or BGFX for the time being
@@ -3856,7 +3858,7 @@ void LiveUI::UpdateRendererInspectionModal()
          ImGui::TableSetupColumn("Avg", ImGuiTableColumnFlags_WidthFixed);
          ImGui::TableHeadersRow();
          #define PROF_ROW(name, section) \
-         ImGui::TableNextColumn(); ImGui::Text("%s", name); \
+         ImGui::TableNextColumn(); ImGui::TextUnformatted(name); \
          ImGui::TableNextColumn(); ImGui::Text("%4.1fms", m_player->m_logicProfiler.GetSlidingMin(section) * 1e-3); \
          ImGui::TableNextColumn(); ImGui::Text("%4.1fms", m_player->m_logicProfiler.GetSlidingMax(section) * 1e-3); \
          ImGui::TableNextColumn(); ImGui::Text("%4.1fms", m_player->m_logicProfiler.GetSlidingAvg(section) * 1e-3);
@@ -3867,12 +3869,12 @@ void LiveUI::UpdateRendererInspectionModal()
          ImGui::NewLine();
       }
 
-      ImGui::Text("Press F11 to reset min/max/average timings");
+      ImGui::TextUnformatted("Press F11 to reset min/max/average timings");
       if (ImGui::IsKeyPressed(dikToImGuiKeys[m_player->m_rgKeys[eFrameCount]]))
          m_player->InitFPS();
 
       // Other detailed information
-      ImGui::Text("%s", m_player->GetPerfInfo().c_str());
+      ImGui::TextUnformatted(m_player->GetPerfInfo().c_str());
    }
    ImGui::End();
 }
@@ -4141,9 +4143,9 @@ void LiveUI::CameraProperties(bool is_live)
 
    switch (m_selection.camera)
    {
-   case 0: ImGui::Text("Camera: Desktop"); break;
-   case 1: ImGui::Text("Camera: Full Single Screen"); break;
-   case 2: ImGui::Text("Camera: Cabinet"); break;
+   case 0: ImGui::TextUnformatted("Camera: Desktop"); break;
+   case 1: ImGui::TextUnformatted("Camera: Full Single Screen"); break;
+   case 2: ImGui::TextUnformatted("Camera: Cabinet"); break;
    default: return; // unsupported
    }
    ImGui::Separator();
@@ -4290,7 +4292,7 @@ void LiveUI::RenderProbeProperties(bool is_live)
          if (psel != nullptr && psel->GetItemType() == eItemPrimitive 
             && ((probe->GetType() == RenderProbe::PLANE_REFLECTION && ((Primitive *)psel)->m_d.m_szReflectionProbe == probe->GetName())
              || (probe->GetType() == RenderProbe::SCREEN_SPACE_TRANSPARENCY  && ((Primitive *)psel)->m_d.m_szRefractionProbe == probe->GetName()))
-            && ImGui::Selectable(((Primitive *)psel)->GetName()))
+            && ImGui::Selectable(((Primitive *)psel)->GetName().c_str()))
             m_selection = Selection(is_live, table->m_vedit[t]);
       }
    }
@@ -4792,7 +4794,7 @@ void LiveUI::PropSeparator(const char *label)
    PROP_TABLE_SETUP
    ImGui::TableNextColumn();
    if (label)
-      ImGui::Text("%s", label);
+      ImGui::TextUnformatted(label);
    ImGui::TableNextColumn();
 }
 
@@ -4950,7 +4952,7 @@ void LiveUI::PropVec3(const char *label, IEditable *undo_obj, bool is_live, Vert
 void LiveUI::PropCombo(const char *label, IEditable *undo_obj, bool is_live, int *startup_v, int *live_v, size_t n_values, const string labels[], const OnIntPropChange &chg_callback)
 {
    PROP_HELPER_BEGIN(int)
-   const char * const preview_value = labels[clamp(*v, 0, static_cast<int>(n_values) - 1)].c_str();
+   const char *const preview_value = labels[clamp(*v, 0, static_cast<int>(n_values) - 1)].c_str();
    if (ImGui::BeginCombo(label, preview_value))
    {
       for (int i = 0; i < (int)n_values; i++)
@@ -5028,10 +5030,10 @@ void LiveUI::PropLightmapCombo(const char *label, IEditable *undo_obj, bool is_l
    const char *const preview_value = v->c_str();
    if (ImGui::BeginCombo(label, preview_value))
    {
-      const std::function<string(IEditable *)> map = [](IEditable *pe) -> string { return pe->GetItemType() == ItemTypeEnum::eItemLight ? pe->GetName() : ""s; };
+      const std::function<string(IEditable *)> map = [](IEditable *pe) -> string { return pe->GetItemType() == ItemTypeEnum::eItemLight ? pe->GetName() : string(); };
       for (IEditable *pe : SortedCaseInsensitive(table->m_vedit, map))
       {
-         if (pe->GetItemType() == ItemTypeEnum::eItemLight && ImGui::Selectable(pe->GetName()))
+         if (pe->GetItemType() == ItemTypeEnum::eItemLight && ImGui::Selectable(pe->GetName().c_str()))
          {
             *v = pe->GetName();
             if (chg_callback)

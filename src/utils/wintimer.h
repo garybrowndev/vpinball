@@ -179,7 +179,7 @@ public:
          }
          for (int i = 0; i < PROFILE_COUNT; i++)
          {
-            unsigned int data = m_profileData[m_profileIndex][i];
+            const unsigned int data = m_profileData[m_profileIndex][i];
             m_profileMinData[i] = min(m_profileMinData[i], data);
             m_profileMaxData[i] = max(m_profileMaxData[i], data);
             m_profileTotalData[i] += data;
@@ -240,22 +240,22 @@ public:
       SetProfileSection(m_profileSectionStack[m_profileSectionStackPos]);
    }
 
-   void EnterScriptSection(DISPID id, const char* timer_name = nullptr)
+   void EnterScriptSection(DISPID id, const string& timer_name)
    {
       assert(m_threadLock == std::this_thread::get_id());
       EnterProfileSection(PROFILE_SCRIPT);
       m_scriptEventDispID = id;
       // For the time being, just store a list of the timer called during the script profile section
-      if (timer_name)
+      if (!timer_name.empty())
       {
          m_profileTimerTimeStamp = m_profileTimeStamp;
-         size_t len = strlen(timer_name) + 1;
+         const size_t len = timer_name.length() + 1;
          if (m_profileTimersPos + len < MAX_TIMER_LOG - 8)
          {
-            strcpy_s(&m_profileTimers[m_profileTimersPos], len, timer_name);
+            strcpy_s(&m_profileTimers[m_profileTimersPos], len, timer_name.c_str());
             m_profileTimersPos += len;
          }
-         else if (m_profileTimersPos + 8 < MAX_TIMER_LOG)
+         else if (m_profileTimersPos < MAX_TIMER_LOG - 8)
          {
             strcpy_s(&m_profileTimers[m_profileTimersPos], 4, "...");
             m_profileTimersPos += 4;
@@ -263,7 +263,7 @@ public:
       }
    }
 
-   void ExitScriptSection(const char* timer_name = nullptr)
+   void ExitScriptSection(const string& timer_name)
    {
       assert(m_threadLock == std::this_thread::get_id());
       const uint64_t profileTimeStamp = m_profileTimeStamp;
@@ -272,7 +272,7 @@ public:
       et.totalLength += (unsigned int)(m_profileTimeStamp - profileTimeStamp);
       if (m_profileSection != PROFILE_SCRIPT)
          et.callCount++;
-      if (timer_name && (m_profileTimersPos + 4 < MAX_TIMER_LOG))
+      if (!timer_name.empty() && (m_profileTimersPos + 4 < MAX_TIMER_LOG))
       {
          *((uint32_t*)(&m_profileTimers[m_profileTimersPos])) = (uint32_t)(m_profileTimeStamp - m_profileTimerTimeStamp);
          m_profileTimersPos += 4;
@@ -399,10 +399,8 @@ public:
       unsigned int pos = (m_processInputIndex + N_SAMPLES - 1) % N_SAMPLES; // Start from last frame
       unsigned int latency = 0u;
       unsigned int sum = 0u;
-      unsigned int count = 0u;
       for (unsigned int i = 0u; i < N_SAMPLES; i++)
       {
-         count++;
          pos = (pos + N_SAMPLES - 1) % N_SAMPLES;
          const unsigned int period = m_profileData[pos][PROFILE_INPUT_POLL_PERIOD];
          sum += period;

@@ -75,7 +75,7 @@ BOOL SoundDialog::OnInitDialog()
     AddToolTip("Set the volume, left/right (pan) and front/back (fade) sound position for the selected sound(s).", GetHwnd(), toolTipHwnd, GetDlgItem(IDC_SNDPOSITION).GetHwnd());
     AddToolTip("The 'Name' value from the list will be used when exporting instead of the file name from the 'Import Path'.", GetHwnd(), toolTipHwnd, GetDlgItem(IDC_CHECK_RENAME_ON_EXPORT).GetHwnd());
     AddToolTip("Click 'OK' to close this window.", GetHwnd(), toolTipHwnd, GetDlgItem(IDC_OK).GetHwnd());
-    m_resizer.Initialize(this->GetHwnd(), CRect(0, 0, 514, 231));
+    m_resizer.Initialize(GetHwnd(), CRect(0, 0, 514, 231));
     m_resizer.AddChild(hSoundList, CResizer::topleft, RD_STRETCH_WIDTH | RD_STRETCH_HEIGHT);
     m_resizer.AddChild(GetDlgItem(IDC_IMPORT).GetHwnd(), CResizer::topright, 0);
     m_resizer.AddChild(GetDlgItem(IDC_REIMPORT).GetHwnd(), CResizer::topright, 0);
@@ -149,23 +149,23 @@ void SoundDialog::ListSounds()
    ListView_DeleteAllItems(hSoundList);
    CCO(PinTable) *const pt = g_pvp->GetActiveTable();
    if (pt)
-      for (auto& sound : pt->m_vsound)
+      for (const auto sound : pt->m_vsound)
          AddListSound(sound);
 }
 
 
-int SoundDialog::AddListSound(VPX::Sound *const pps)
+int SoundDialog::AddListSound(const VPX::Sound *const pps)
 {
    LVITEM lvitem;
    lvitem.mask = LVIF_DI_SETITEM | LVIF_TEXT | LVIF_PARAM;
    lvitem.iItem = 0;
    lvitem.iSubItem = 0;
-   lvitem.pszText = (LPSTR)pps->m_name.c_str();
+   lvitem.pszText = (LPSTR)pps->GetName().c_str();
    lvitem.lParam = (size_t)pps;
 
    const int index = ListView_InsertItem(hSoundList, &lvitem);
 
-   ListView_SetItemText(hSoundList, index, 1, (LPSTR)pps->m_path.c_str());
+   ListView_SetItemText(hSoundList, index, 1, (LPSTR)pps->GetImportPath().c_str());
 
    const string pan = f2sz(dequantizeSignedPercent(pps->GetPan()));
    ListView_SetItemText(hSoundList, index, 3, (LPSTR)pan.c_str());
@@ -239,7 +239,7 @@ INT_PTR SoundDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                     lvitem.iSubItem = 0;
                     ListView_GetItem( hSoundList, &lvitem );
                     VPX::Sound *const pps = (VPX::Sound *)lvitem.lParam;
-                    pps->m_name = pinfo->item.pszText;
+                    pps->SetName(pinfo->item.pszText);
                     if (pt)
                         pt->SetNonUndoableDirty( eSaveDirty );
                     return TRUE;
@@ -365,8 +365,8 @@ void SoundDialog::Import()
       for (const string &file : szFileName)
       {
          VPX::Sound* sound = pt->ImportSound(file);
-         const int index = AddListSound(sound);
-         ListView_SetItemState(hSoundList, index, LVIS_SELECTED, LVIS_SELECTED);
+         const int indexs = AddListSound(sound);
+         ListView_SetItemState(hSoundList, indexs, LVIS_SELECTED, LVIS_SELECTED);
       }
 
       pt->SetNonUndoableDirty(eSaveDirty);
@@ -395,18 +395,18 @@ void SoundDialog::ReImport()
                 ListView_GetItem( hSoundList, &lvitem );
                 VPX::Sound *const pps = (VPX::Sound *)lvitem.lParam;
 
-                const HANDLE hFile = CreateFile( pps->m_path.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                const HANDLE hFile = CreateFile(pps->GetImportPath().c_str(), GENERIC_READ, FILE_SHARE_READ,
                                                  nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr );
 
                 if (hFile != INVALID_HANDLE_VALUE)
                 {
                     CloseHandle( hFile );
 
-                    pt->ReImportSound(pps, pps->m_path );
+                    pt->ReImportSound(pps, pps->GetImportPath());
                     pt->SetNonUndoableDirty( eSaveDirty );
                 }
                 else
-                    MessageBox( pps->m_path.c_str(), "FILE NOT FOUND!", MB_OK );
+                   MessageBox(pps->GetImportPath().c_str(), "FILE NOT FOUND!", MB_OK);
 
                 sel = ListView_GetNextItem( hSoundList, sel, LVNI_SELECTED );
             }
@@ -460,10 +460,10 @@ void SoundDialog::Export()
 
     if (selectedItemsCount)
     {
-        LVITEM lvitem;
         int sel = ListView_GetNextItem( hSoundList, -1, LVNI_SELECTED ); //next selected item 	
         if (sel != -1)
         {
+            LVITEM lvitem;
             lvitem.mask = LVIF_PARAM;
             lvitem.iItem = sel;
             lvitem.iSubItem = 0;
@@ -476,31 +476,26 @@ void SoundDialog::Export()
             ofn.hwndOwner = g_pvp->GetHwnd();
             ofn.lpstrFilter = "Sound Files (.wav/.ogg/.mp3)\0*.wav;*.ogg;*.mp3\0";
 
-            char filename[MAXSTRING] = {};
-
+            char filename[MAXSTRING];
+            filename[0] = '\0';
             if (!renameOnExport)
             {
-               const int len0 = (int)pps->m_path.length();
-               int begin; //select only file name from pathfilename
-               for (begin = len0; begin >= 0; begin--)
-               {
-                  if (pps->m_path[begin] == PATH_SEPARATOR_CHAR)
-                  {
-                     begin++;
-                     break;
-                  }
-               }
-               memcpy(filename, pps->m_path.c_str() + begin, len0 - begin);
+               string filename2 = pps->GetImportPath();
+               const size_t pos = filename2.find_last_of(PATH_SEPARATOR_CHAR);
+               if (pos != string::npos)
+                  filename2 = filename2.substr(pos + 1);
+               strncpy_s(filename, filename2.c_str(), sizeof(filename) - 1);
             }
             else
             {
-               strncat_s(filename, pps->m_name.c_str(), sizeof(filename)-strnlen_s(filename, sizeof(filename))-1);
-               const size_t idx = pps->m_path.find_last_of('.');
-               strncat_s(filename, pps->m_path.c_str() + idx, sizeof(filename)-strnlen_s(filename, sizeof(filename))-1);
+               string filename2 = pps->GetName();
+               const size_t pos = pps->GetImportPath().find_last_of('.');
+               filename2 += pos != string::npos ? pps->GetImportPath().substr(pos) : ".ogg"s;
+               strncpy_s(filename, filename2.c_str(), sizeof(filename) - 1);
             }
             ofn.lpstrFile = filename;
             ofn.nMaxFile = sizeof(filename);
-            ofn.lpstrDefExt = "mp3";
+            ofn.lpstrDefExt = "ogg";
 
             string initDir = g_pvp->m_settings.LoadValueWithDefault(Settings::RecentDir, "SoundDir"s, PATH_TABLES);
 
@@ -510,61 +505,52 @@ void SoundDialog::Export()
 
             if (GetSaveFileName( &ofn ))	//Get filename from user
             {
-                int begin;
-                for (begin = (int)strlen(ofn.lpstrFile); begin >= 0; begin--)
-                {
-                    if (ofn.lpstrFile[begin] == PATH_SEPARATOR_CHAR)
-                    {
-                        begin++;
-                        break;
-                    }
-                }
+               string pathName = ofn.lpstrFile;
+               const size_t pos = pathName.find_last_of(PATH_SEPARATOR_CHAR);
+               if (pos != string::npos)
+                  pathName = pathName.substr(0, pos + 1);
 
-                if (begin >= MAXSTRING)
-                    begin = MAXSTRING-1;
+               while (sel != -1 && pps != nullptr)
+               {
+                  string filen;
+                  if (selectedItemsCount > 1)
+                  {
+                     filen = pathName;
+                     if (!renameOnExport)
+                     {
+                        int begin;
+                        for (begin = (int)pps->GetImportPath().length(); begin >= 0; begin--)
+                        {
+                           if (pps->GetImportPath()[begin] == PATH_SEPARATOR_CHAR)
+                           {
+                              begin++;
+                              break;
+                           }
+                        }
+                        filen += pps->GetImportPath().c_str() + begin;
+                     }
+                     else
+                     {
+                        filen += pps->GetName();
+                        const size_t idx = pps->GetImportPath().find_last_of('.');
+                        filen += pps->GetImportPath().c_str() + idx;
+                     }
+                  }
 
-                char pathName[MAXSTRING];
-                if(begin > 0)
-                    memcpy( pathName, ofn.lpstrFile, begin );
-                pathName[begin] = '\0';
+                  if (!pt->ExportSound(pps, (selectedItemsCount > 1) ? filen : filename))
+                     ShowError("Could not export Sound");
+                  sel = ListView_GetNextItem( hSoundList, sel, LVNI_SELECTED ); //next selected item
+                  lvitem.iItem = sel;
+                  lvitem.iSubItem = 0;
+                  ListView_GetItem( hSoundList, &lvitem );
+                  pps = (VPX::Sound *)lvitem.lParam;
+               }
 
-                while(sel != -1)
-                {
-                    if (selectedItemsCount > 1)
-                    {
-                       strncpy_s(filename, pathName, sizeof(filename)-1);
-                       if (!renameOnExport)
-                       {
-                          for (begin = (int)pps->m_path.length(); begin >= 0; begin--)
-                          {
-                             if (pps->m_path[begin] == PATH_SEPARATOR_CHAR)
-                             {
-                                begin++;
-                                break;
-                             }
-                          }
-                          strncat_s(filename, pps->m_path.c_str()+begin, sizeof(filename)-strnlen_s(filename, sizeof(filename))-1);
-                       }
-                       else
-                       {
-                          strncat_s(filename, pps->m_name.c_str(), sizeof(filename)-strnlen_s(filename, sizeof(filename))-1);
-                          const size_t idx = pps->m_path.find_last_of('.');
-                          strncat_s(filename, pps->m_path.c_str() + idx, sizeof(filename)-strnlen_s(filename, sizeof(filename))-1);
-                       }
-                    }
-
-                    pt->ExportSound(pps, filename);
-                    sel = ListView_GetNextItem( hSoundList, sel, LVNI_SELECTED ); //next selected item
-                    lvitem.iItem = sel;
-                    lvitem.iSubItem = 0;
-                    ListView_GetItem( hSoundList, &lvitem );
-                    pps = (VPX::Sound *)lvitem.lParam;
-                }
-
-                g_pvp->m_settings.SaveValue(Settings::RecentDir, "SoundDir"s, string(pathName));
+               g_pvp->m_settings.SaveValue(Settings::RecentDir, "SoundDir"s, pathName);
             }
         }
     }
+
     SetFocus();
 }
 

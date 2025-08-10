@@ -48,98 +48,52 @@
 #include "standalone/VPinballLib.h"
 #endif
 
-#ifdef __STANDALONE__
-#include <SDL3_image/SDL_image.h>
-#endif
 
 #if defined(ENABLE_BGFX)
-struct tBGFXCallback : public bgfx::CallbackI
+void RenderDevice::tBGFXCallback::fatal(const char* _filePath, uint16_t _line, bgfx::Fatal::Enum _code, const char* _str)
 {
-   ~tBGFXCallback() override { }
-   void fatal(const char* _filePath, uint16_t _line, bgfx::Fatal::Enum _code, const char* _str) override
+   PLOGE << _filePath << ':' << _line << "BGFX FATAL " << _code << ": " << _str;
+   if (bgfx::Fatal::DebugCheck == _code)
+      bx::debugBreak();
+   else
+      abort();
+}
+
+void RenderDevice::tBGFXCallback::traceVargs(const char* _filePath, uint16_t _line, const char* _format, va_list _argList)
+{
+   char temp[2048];
+   char* out = temp;
+   va_list argListCopy;
+   va_copy(argListCopy, _argList);
+   int32_t len = bx::snprintf(out, sizeof(temp), "%s (%d): ", _filePath, _line);
+   int32_t total = len + bx::vsnprintf(out + len, sizeof(temp) - len, _format, argListCopy);
+   va_end(argListCopy);
+   if ((int32_t)sizeof(temp) < total)
    {
-      //bgfx::trace(_filePath, _line, "BGFX FATAL 0x%08x: %s\n", _code, _str);
-      PLOGE << _filePath << ':' << _line << "BGFX FATAL " << _code << ": " << _str;
-      if (bgfx::Fatal::DebugCheck == _code)
-         bx::debugBreak();
-      else
-         abort();
+      out = (char*)alloca(total + 1);
+      bx::memCopy(out, temp, len);
+      bx::vsnprintf(out + len, total - len, _format, _argList);
    }
-   void traceVargs(const char* _filePath, uint16_t _line, const char* _format, va_list _argList) override
+   out[total] = '\0';
+   bx::debugOutput(out);
+   if (total > 0 && out[total - 1] == '\n')
+      out[total - 1] = '\0';
+   PLOGI << out;
+}
+
+void RenderDevice::tBGFXCallback::screenShot(const char* _filePath, uint32_t _width, uint32_t _height, uint32_t _pitch, const void* _data, uint32_t _size, bool _yflip)
+{
+   bool success = false;
+   auto tex = BaseTexture::Create(_width, _height, BaseTexture::SRGBA);
+   if (tex)
    {
-      char temp[2048];
-      char* out = temp;
-      va_list argListCopy;
-      va_copy(argListCopy, _argList);
-      int32_t len = bx::snprintf(out, sizeof(temp), "%s (%d): ", _filePath, _line);
-      int32_t total = len + bx::vsnprintf(out + len, sizeof(temp) - len, _format, argListCopy);
-      va_end(argListCopy);
-      if ((int32_t)sizeof(temp) < total)
-      {
-         out = (char*)alloca(total + 1);
-         bx::memCopy(out, temp, len);
-         bx::vsnprintf(out + len, total - len, _format, _argList);
-      }
-      out[total] = '\0';
-      bx::debugOutput(out);
-      if (total > 0 && out[total - 1] == '\n')
-         out[total - 1] = '\0';
-      PLOGI << out;
+      memcpy(tex->data(), _data, _size);
+      if (_yflip)
+         tex->FlipY();
+      success = tex->Save(_filePath);
    }
-   void profilerBegin(const char* /*_name*/, uint32_t /*_abgr*/, const char* /*_filePath*/, uint16_t /*_line*/) override { }
-   void profilerBeginLiteral(const char* /*_name*/, uint32_t /*_abgr*/, const char* /*_filePath*/, uint16_t /*_line*/) override { }
-   void profilerEnd() override { }
-   uint32_t cacheReadSize(uint64_t /*_id*/) override { return 0; }
-   bool cacheRead(uint64_t /*_id*/, void* /*_data*/, uint32_t /*_size*/) override { return false; }
-   void cacheWrite(uint64_t /*_id*/, const void* /*_data*/, uint32_t /*_size*/) override { }
-   void screenShot(const char* _filePath, uint32_t _width, uint32_t _height, uint32_t _pitch, const void* _data, uint32_t _size, bool _yflip) override
-   {
-#ifdef __STANDALONE__
-      if (!_data || _size == 0) {
-         RenderDevice::s_screenshotCallback(false);
-         return;
-      }
-
-      SDL_Surface* pSurface = SDL_CreateSurfaceFrom(_width, _height, SDL_PIXELFORMAT_BGRA32, const_cast<void*>(_data), _pitch);
-      if (!pSurface) {
-         RenderDevice::s_screenshotCallback(false);
-         return;
-      }
-
-      if (_yflip) {
-         SDL_Surface* pFlipped = SDL_CreateSurface(_width, _height, SDL_PIXELFORMAT_BGRA32);
-         if (!pFlipped) {
-            SDL_DestroySurface(pSurface);
-            RenderDevice::s_screenshotCallback(false);
-            return;
-         }
-
-         const uint8_t* const srcPixels = static_cast<uint8_t*>(pSurface->pixels);
-               uint8_t* const dstPixels = static_cast<uint8_t*>(pFlipped->pixels);
-         for (uint32_t y = 0; y < _height; y++)
-            memcpy(dstPixels + (_height - 1 - y) * pFlipped->pitch, srcPixels + y * pSurface->pitch, _pitch);
-
-         SDL_DestroySurface(pSurface);
-         pSurface = pFlipped;
-      }
-
-      bool success = false;
-      if (extension_from_path(_filePath) == "png")
-         success = IMG_SavePNG(pSurface, _filePath);
-      else if (extension_from_path(_filePath) == "jpg" || extension_from_path(_filePath) == "jpeg")
-         success = IMG_SaveJPG(pSurface, _filePath, 75);
-
-      SDL_DestroySurface(pSurface);
-
-      RenderDevice::s_screenshotCallback(success);
-#else
-      RenderDevice::s_screenshotCallback(false);
-#endif
-   }
-   void captureBegin(uint32_t /*_width*/, uint32_t /*_height*/, uint32_t /*_pitch*/, bgfx::TextureFormat::Enum /*_format*/, bool /*_yflip*/) override { }
-   void captureEnd() override { }
-   void captureFrame(const void* /*_data*/, uint32_t /*_size*/) override { }
-} bgfxCallback;
+   m_rd.m_screenshotCallback(success);
+}
 
 #elif defined(ENABLE_OPENGL)
 GLuint RenderDevice::m_samplerStateCache[3 * 3 * 5];
@@ -201,10 +155,32 @@ void APIENTRY GLDebugMessageCallback(GLenum source, GLenum type, GLuint id, GLen
    //if (severity != GL_DEBUG_SEVERITY_NOTIFICATION)
    if (type != GL_DEBUG_TYPE_MARKER && type != GL_DEBUG_TYPE_PUSH_GROUP && type != GL_DEBUG_TYPE_POP_GROUP)
    {
-      PLOGE << "OpenGL Msg #" << id << " [" << _severity << "/" << _type << " from " << _source  << "]: " << msg;
+      PLOGE << "OpenGL Msg #" << id << " [" << _severity << '/' << _type << " from " << _source  << "]: " << msg;
    }
 }
 #endif
+
+void RenderDevice::CaptureGLScreenshot()
+{
+   m_screenshot = false;
+   bool success = false;
+   // OpenGL ES does not have GL_BGRA
+   #ifndef __OPENGLES__
+      int width = m_outputWnd[0]->GetWidth();
+      int height = m_outputWnd[0]->GetHeight();
+      auto tex = BaseTexture::Create(width, height, BaseTexture::SRGBA);
+      if (tex)
+      {
+         m_outputWnd[0]->GetBackBuffer()->Activate();
+         glPixelStorei(GL_PACK_ALIGNMENT, 1);
+         glReadBuffer(GL_BACK);
+         glReadPixels(0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, tex->data());
+         tex->FlipY();
+         success = tex->Save(m_screenshotFilename.c_str());
+      }
+   #endif
+   m_screenshotCallback(success);
+}
 
 #elif defined(ENABLE_DX9)
 #include <DxErr.h>
@@ -222,6 +198,58 @@ constexpr D3DVERTEXELEMENT9 VertexNormalTexelElement[] =
    { 0, 6 * sizeof(float), D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0 },  // tex0
    D3DDECL_END()
 };
+
+void RenderDevice::CaptureDX9Screenshot()
+{
+   bool success = false;
+   m_screenshot = false;
+   IDirect3DDevice9* pd3dDevice = GetCoreDevice();
+   IDirect3DSurface9* pBackBuffer = NULL;
+   if (FAILED(pd3dDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &pBackBuffer)))
+   {
+      m_screenshotCallback(false);
+      return;
+   }
+   D3DSURFACE_DESC desc;
+   pBackBuffer->GetDesc(&desc);
+   LPDIRECT3DSURFACE9 pSurface = NULL;
+   if (FAILED(pd3dDevice->CreateOffscreenPlainSurface(desc.Width, desc.Height, desc.Format, D3DPOOL_SYSTEMMEM, &pSurface, NULL)))
+   {
+      pBackBuffer->Release();
+      m_screenshotCallback(false);
+      return;
+   }
+   if (FAILED(pd3dDevice->GetRenderTargetData(pBackBuffer, pSurface)))
+   {
+      pSurface->Release();
+      pBackBuffer->Release();
+      m_screenshotCallback(false);
+      return;
+   }
+   D3DLOCKED_RECT lockedRect;
+   if (FAILED(pSurface->LockRect(&lockedRect, nullptr, D3DLOCK_READONLY)))
+   {
+      pSurface->Release();
+      pBackBuffer->Release();
+      m_screenshotCallback(false);
+      return;
+   }
+   auto tex = BaseTexture::Create(desc.Width, desc.Height, BaseTexture::SRGBA);
+   if (tex)
+   {
+      uint8_t* const __restrict bits = tex->data();
+      const uint8_t* const __restrict pixels = static_cast<uint8_t*>(lockedRect.pBits);
+      memcpy(bits, pixels, lockedRect.Pitch * desc.Height);
+      for (unsigned int i = 0; i < desc.Height; ++i)
+         for (unsigned int j = 0; j < desc.Width; ++j)
+            bits[i * lockedRect.Pitch + j * 4 + 3] = 0xFF; // Make the image opaque
+      success = tex->Save(m_screenshotFilename.c_str());
+   }
+   pSurface->Release();
+   pBackBuffer->Release();
+   m_screenshotCallback(success);
+}
+
 #endif
 
 static unsigned int ComputePrimitiveCount(const RenderDevice::PrimitiveTypes type, const int vertexCount)
@@ -309,13 +337,9 @@ marker_series series;
 #endif
 
 #if defined(ENABLE_BGFX)
-volatile bool RenderDevice::s_screenshot = false;
-std::function<void(bool)> RenderDevice::s_screenshotCallback = [](bool) {};
-string RenderDevice::s_screenshotFilename = string();
-
 void RenderDevice::RenderThread(RenderDevice* rd, const bgfx::Init& initReq)
 {
-   SetThreadName("RenderThread");
+   SetThreadName("RenderThread"s);
    bgfx::Init init = initReq;
 
    // If using OpenGl on a WCG display, then create the OpenGL WCG context through SDL since BGFX does not support HDR10 under OpenGl
@@ -590,9 +614,9 @@ void RenderDevice::RenderThread(RenderDevice* rd, const bgfx::Init& initReq)
                if (needsVSync && rd->m_dwm_enabled)
                   rd->WaitForVSync(false);
             #endif
-            if (s_screenshot) {
-               bgfx::requestScreenShot(BGFX_INVALID_HANDLE, s_screenshotFilename.c_str());
-               s_screenshot = false;
+            if (rd->m_screenshot) {
+               bgfx::requestScreenShot(BGFX_INVALID_HANDLE, rd->m_screenshotFilename.c_str());
+               rd->m_screenshot = false;
             }
             #ifdef MSVC_CONCURRENCY_VIEWER
             delete tagSpan;
@@ -613,25 +637,31 @@ void RenderDevice::RenderThread(RenderDevice* rd, const bgfx::Init& initReq)
    bgfx::shutdown();
 }
 
+#endif
+
 void RenderDevice::CaptureScreenshot(const string& filename, std::function<void(bool)> callback)
 {
-   if (s_screenshot) {
+   if (m_screenshot)
+   {
       PLOGE << "Screenshot capture already in progress.";
       callback(false);
       return;
    }
 
-   s_screenshotFilename = filename;
-   s_screenshotCallback = callback;
-   s_screenshot = true;
+   m_screenshotFilename = filename;
+   m_screenshotCallback = callback;
+   m_screenshot = true;
 }
-#endif
 
-RenderDevice::RenderDevice(VPX::Window* const wnd, const bool isVR, const int nEyes, const bool useNvidiaApi, const bool disableDWM, const bool compressTextures, int nMSAASamples, VideoSyncMode& syncMode)
+RenderDevice::RenderDevice(
+   VPX::Window* const wnd, const bool isVR, const int nEyes, const bool useNvidiaApi, const bool disableDWM, const bool compressTextures, int nMSAASamples, VideoSyncMode& syncMode)
    : m_texMan(*this)
    , m_compressTextures(compressTextures)
    , m_nEyes(nEyes)
    , m_isVR(isVR)
+   #ifdef ENABLE_BGFX
+   , m_bgfxCallback(*this)
+   #endif
 {
    m_outputWnd[0] = wnd;
 
@@ -680,8 +710,7 @@ RenderDevice::RenderDevice(VPX::Window* const wnd, const bool isVR, const int nE
    // Limit to VSYNC on/off
    syncMode = syncMode != VideoSyncMode::VSM_NONE ? VideoSyncMode::VSM_VSYNC : VideoSyncMode::VSM_NONE;
    
-   static const string bgfxRendererNames[bgfx::RendererType::Count + 1]
-      = { "Noop"s, "Agc"s, "Direct3D11"s, "Direct3D12"s, "Gnm"s, "Metal"s, "Nvn"s, "OpenGLES"s, "OpenGL"s, "Vulkan"s, "Default"s };
+   static const string bgfxRendererNames[bgfx::RendererType::Count + 1] = { "Noop"s, "Agc"s, "Direct3D11"s, "Direct3D12"s, "Gnm"s, "Metal"s, "Nvn"s, "OpenGLES"s, "OpenGL"s, "Vulkan"s, "Default"s };
 #ifdef __ANDROID__
    string gfxBackend = g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "GfxBackend"s, bgfxRendererNames[bgfx::RendererType::OpenGLES]);
 #elif defined(__APPLE__)
@@ -699,12 +728,6 @@ RenderDevice::RenderDevice(VPX::Window* const wnd, const bool isVR, const int nE
          init.type = supportedRenderers[i];
    }
    PLOGI << "Using graphics backend: " << bgfxRendererNames[init.type] << " (available: " << supportedRendererLog << ')';
-   //init.type = bgfx::RendererType::Metal;
-   //init.type = bgfx::RendererType::OpenGL;
-   //init.type = bgfx::RendererType::OpenGLES;
-   //init.type = bgfx::RendererType::Vulkan;
-   //init.type = bgfx::RendererType::Direct3D11; // Present with VSYNC & outputs on multiple displays will sequentially sync on each display causing massive framerate drop
-   //init.type = bgfx::RendererType::Direct3D12; // Flasher & Ball rendering fails on a call to CreateGraphicsPipelineState, rendering artefacts
 
    #ifndef __LIBVPINBALL__
    m_useLowPrecision = init.type == bgfx::RendererType::OpenGLES;
@@ -712,7 +735,7 @@ RenderDevice::RenderDevice(VPX::Window* const wnd, const bool isVR, const int nE
    m_useLowPrecision = true;
    #endif
 
-   init.callback = &bgfxCallback;
+   init.callback = &m_bgfxCallback;
 
    init.resolution.maxFrameLatency = maxPrerenderedFrames; // Maximum of Present operation queued (unrendered frame queued on GPU, waiting for an available backbuffer)
 
@@ -1245,7 +1268,7 @@ RenderDevice::RenderDevice(VPX::Window* const wnd, const bool isVR, const int nE
    m_stereoShader = new Shader(this, Shader::STEREO_SHADER, m_nEyes == 2);
    m_FBShader = new Shader(this, Shader::POSTPROCESS_SHADER, m_nEyes == 2);
 
-   if (m_basicShader->HasError() || m_DMDShader->HasError() || m_FBShader->HasError() || m_flasherShader->HasError() || m_lightShader->HasError() || m_stereoShader->HasError())
+   if (m_basicShader->HasError() || m_ballShader->HasError() || m_DMDShader->HasError() || m_FBShader->HasError() || m_flasherShader->HasError() || m_lightShader->HasError() || m_stereoShader->HasError())
    {
       ReportError("Fatal Error: shader compilation failed!", -1, __FILE__, __LINE__);
       throw(-1);
@@ -1323,6 +1346,13 @@ RenderDevice::~RenderDevice()
 #if defined(ENABLE_BGFX)
    delete m_pVertexTexelDeclaration;
    delete m_pVertexNormalTexelDeclaration;
+
+   if (bgfx::isValid(m_mipmapProgram))
+      bgfx::destroy(m_mipmapProgram);
+   if (bgfx::isValid(m_mipmapOpts))
+      bgfx::destroy(m_mipmapOpts);
+   if (bgfx::isValid(m_mipmapSource))
+      bgfx::destroy(m_mipmapSource);
 
    // Shutdown BGFX once all native resources have been cleaned up
    m_frameReadySem.post();
@@ -1453,7 +1483,8 @@ void RenderDevice::AddWindow(VPX::Window* wnd)
    bgfx::FrameBufferHandle fbh = bgfx::createFrameBuffer(nwh, uint16_t(wnd->GetPixelWidth()), uint16_t(wnd->GetPixelHeight()));
    m_outputWnd[m_nOutputWnd] = wnd;
    m_nOutputWnd++;
-   wnd->SetBackBuffer(new RenderTarget(this, SurfaceType::RT_DEFAULT, fbh, BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE, "BackBuffer #" + std::to_string(m_nOutputWnd), wnd->GetPixelWidth(), wnd->GetPixelHeight(), fmt));
+   wnd->SetBackBuffer(new RenderTarget(this, SurfaceType::RT_DEFAULT, fbh, BGFX_INVALID_HANDLE, bgfx::TextureFormat::Count, BGFX_INVALID_HANDLE, bgfx::TextureFormat::Count,
+      "BackBuffer #" + std::to_string(m_nOutputWnd), wnd->GetPixelWidth(), wnd->GetPixelHeight(), fmt));
 #endif
 }
 
@@ -1564,11 +1595,16 @@ void RenderDevice::Flip()
    SDL_GL_SwapWindow(m_outputWnd[0]->GetCore());
    if (!m_isVR)
       g_pplayer->m_logicProfiler.OnPresented(usec());
+   if (m_screenshot)
+      CaptureGLScreenshot();
 
    #elif defined(ENABLE_DX9)
    CHECKD3D(m_pD3DDevice->Present(nullptr, nullptr, nullptr, nullptr));
    if (!m_isVR)
       g_pplayer->m_logicProfiler.OnPresented(usec());
+   if (m_screenshot)
+      CaptureDX9Screenshot();
+
    #endif
 }
 
@@ -1582,10 +1618,10 @@ void RenderDevice::UploadAndSetSMAATextures()
 
 #if defined(ENABLE_BGFX)
    bgfx::TextureHandle smaaAreaTex = bgfx::createTexture2D(AREATEX_WIDTH, AREATEX_HEIGHT, false, 1, bgfx::TextureFormat::RG8, BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP, bgfx::makeRef(areaTexBytes, AREATEX_SIZE));
-   m_SMAAareaTexture = std::make_shared<Sampler>(this, "SMAA Area"s, SurfaceType::RT_DEFAULT, smaaAreaTex, AREATEX_WIDTH, AREATEX_HEIGHT, true);
+   m_SMAAareaTexture = std::make_shared<Sampler>(this, "SMAA Area"s, SurfaceType::RT_DEFAULT, smaaAreaTex, bgfx::TextureFormat::RG8, AREATEX_WIDTH, AREATEX_HEIGHT, true);
 
    bgfx::TextureHandle smaaSearchTex = bgfx::createTexture2D(SEARCHTEX_WIDTH, SEARCHTEX_HEIGHT, false, 1, bgfx::TextureFormat::R8, BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP, bgfx::makeRef(searchTexBytes, SEARCHTEX_SIZE));
-   m_SMAAsearchTexture = std::make_shared<Sampler>(this, "SMAA Search"s, SurfaceType::RT_DEFAULT, smaaSearchTex, SEARCHTEX_WIDTH, SEARCHTEX_HEIGHT, true);
+   m_SMAAsearchTexture = std::make_shared<Sampler>(this, "SMAA Search"s, SurfaceType::RT_DEFAULT, smaaSearchTex, bgfx::TextureFormat::R8, SEARCHTEX_WIDTH, SEARCHTEX_HEIGHT, true);
 
 #elif defined(ENABLE_OPENGL)
    auto tex_unit = m_samplerBindings.back();

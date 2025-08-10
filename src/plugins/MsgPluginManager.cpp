@@ -53,6 +53,7 @@ MsgPluginManager& MsgPluginManager::GetInstance()
 
 MsgPluginManager::MsgPluginManager()
 {
+   m_api.GetPluginEndpoint = GetPluginEndpoint;
    m_api.GetEndpointInfo = GetEndpointInfo;
    m_api.GetMsgID = GetMsgID;
    m_api.SubscribeMsg = SubscribeMsg;
@@ -87,9 +88,7 @@ unsigned int MsgPluginManager::GetPluginEndpoint(const char* id)
 void MsgPluginManager::GetEndpointInfo(const uint32_t endpointId, MsgEndpointInfo* info)
 {
    MsgPluginManager& pm = GetInstance();
-#ifndef __LIBVPINBALL__
    assert(std::this_thread::get_id() == pm.m_apiThread);
-#endif
    auto item = std::ranges::find_if(pm.m_plugins, [endpointId](std::shared_ptr<MsgPlugin>& plg) { return plg->IsLoaded() && plg->m_endpointId == endpointId; });
    if (item == pm.m_plugins.end())
       return;
@@ -104,9 +103,7 @@ void MsgPluginManager::GetEndpointInfo(const uint32_t endpointId, MsgEndpointInf
 unsigned int MsgPluginManager::GetMsgID(const char* name_space, const char* name)
 {
    MsgPluginManager& pm = GetInstance();
-#ifndef __LIBVPINBALL__
    assert(std::this_thread::get_id() == pm.m_apiThread);
-#endif
    MsgEntry* freeMsg = nullptr;
    for (MsgEntry& msg : pm.m_msgs)
       if (freeMsg == nullptr && msg.refCount == 0)
@@ -132,9 +129,7 @@ unsigned int MsgPluginManager::GetMsgID(const char* name_space, const char* name
 void MsgPluginManager::SubscribeMsg(const uint32_t endpointId, const unsigned int msgId, const msgpi_msg_callback callback, void* userData)
 {
    MsgPluginManager& pm = GetInstance();
-#ifndef __LIBVPINBALL__
    assert(std::this_thread::get_id() == pm.m_apiThread);
-#endif
    assert(callback != nullptr);
    assert(msgId < pm.m_msgs.size());
    assert(pm.m_msgs[msgId].refCount > 0);
@@ -153,9 +148,7 @@ void MsgPluginManager::SubscribeMsg(const uint32_t endpointId, const unsigned in
 void MsgPluginManager::UnsubscribeMsg(const unsigned int msgId, const msgpi_msg_callback callback)
 {
    MsgPluginManager& pm = GetInstance();
-#ifndef __LIBVPINBALL__
    assert(std::this_thread::get_id() == pm.m_apiThread);
-#endif
    assert(callback != nullptr);
    assert(msgId < pm.m_msgs.size());
    assert(pm.m_msgs[msgId].refCount > 0);
@@ -179,16 +172,13 @@ void MsgPluginManager::UnsubscribeMsg(const unsigned int msgId, const msgpi_msg_
 void MsgPluginManager::BroadcastMsg(const uint32_t endpointId, const unsigned int msgId, void* data)
 {
    MsgPluginManager& pm = GetInstance();
-#ifndef __LIBVPINBALL__
    assert(std::this_thread::get_id() == pm.m_apiThread);
-#endif
    assert(msgId < pm.m_msgs.size());
    assert(pm.m_msgs[msgId].refCount > 0);
    assert(1 <= endpointId && endpointId < pm.m_nextEndpointId);
    pm.m_broadcastInProgress++;
    for (const CallbackEntry entry : pm.m_msgs[msgId].callbacks)
-      if (entry.endpointId != endpointId) // Don't broadcast to sender's endpoint
-         entry.callback(msgId, entry.context, data);
+      entry.callback(msgId, entry.context, data);
    pm.m_broadcastInProgress--;
    if (pm.m_broadcastInProgress == 0 && !pm.m_deferredAfterBroadCastRunnables.empty())
    {
@@ -201,9 +191,7 @@ void MsgPluginManager::BroadcastMsg(const uint32_t endpointId, const unsigned in
 void MsgPluginManager::SendMsg(const uint32_t endpointId, const unsigned int msgId, const uint32_t targetEndpointId, void* data)
 {
    MsgPluginManager& pm = GetInstance();
-#ifndef __LIBVPINBALL__
    assert(std::this_thread::get_id() == pm.m_apiThread);
-#endif
    assert(msgId < pm.m_msgs.size());
    assert(pm.m_msgs[msgId].refCount > 0);
    assert(1 <= endpointId && endpointId < pm.m_nextEndpointId);
@@ -218,9 +206,7 @@ void MsgPluginManager::SendMsg(const uint32_t endpointId, const unsigned int msg
 void MsgPluginManager::ReleaseMsgID(const unsigned int msgId)
 {
    MsgPluginManager& pm = GetInstance();
-#ifndef __LIBVPINBALL__
    assert(std::this_thread::get_id() == pm.m_apiThread);
-#endif
    assert(msgId < pm.m_msgs.size());
    assert(pm.m_msgs[msgId].refCount > 0);
    pm.m_msgs[msgId].refCount--;
@@ -250,6 +236,10 @@ void MsgPluginManager::RunOnMainThread(const double delayInS, const msgpi_timer_
    if (delayInS < 0.)
    {
       pm.m_timers.insert(pm.m_timers.begin(), TimerEntry { callback, userData, std::chrono::high_resolution_clock::now() });
+      #ifdef _MSC_VER
+         // Wake up message loop
+         PostThreadMessage(GetCurrentThreadId(), WM_USER + 12345, 0, 0);
+      #endif
       // FIXME block cleanly until processed
       lock.unlock();
       while (!pm.m_timers.empty())
@@ -259,14 +249,16 @@ void MsgPluginManager::RunOnMainThread(const double delayInS, const msgpi_timer_
    {
       auto timer = TimerEntry { callback, userData, std::chrono::high_resolution_clock::now() + std::chrono::microseconds(static_cast<int64_t>(delayInS * 1000000)) };
       pm.m_timers.insert(std::ranges::upper_bound(pm.m_timers.begin(), pm.m_timers.end(), timer, [](const TimerEntry &a, const TimerEntry &b) { return a.time < b.time; }), timer);
+      #ifdef _MSC_VER
+         // Wake up message loop
+         PostThreadMessage(GetCurrentThreadId(), WM_USER + 12345, 0, 0);
+      #endif
    }
 }
 
 void MsgPluginManager::ProcessAsyncCallbacks()
 {
-#ifndef __LIBVPINBALL__
    assert(std::this_thread::get_id() == m_apiThread);
-#endif
    if (m_timers.empty())
       return;
    std::vector<TimerEntry> timers;
@@ -396,21 +388,16 @@ void MsgPluginManager::UnloadPlugins()
          plugin->Unload();
 }
 
-std::shared_ptr<MsgPlugin> MsgPluginManager::GetPlugin(const std::string& pluginId) const
+std::shared_ptr<MsgPlugin> MsgPluginManager::GetPlugin(std::string_view pluginId) const
 {
    for (auto plugin : m_plugins)
-      if (plugin->m_id.length() == pluginId.length()
-         && std::equal(plugin->m_id.begin(), plugin->m_id.end(), pluginId.begin(), [](char a, char b) { 
-            if (a >= 'A' && a <= 'Z') a ^= 32; //ASCII convention
-            if (b >= 'A' && b <= 'Z') b ^= 32; //ASCII convention
-            return a == b; 
-            }))
+      if(std::equal(plugin->m_id.begin(), plugin->m_id.end(), pluginId.begin(), pluginId.end(), [](char a, char b) { return std::tolower(a) == std::tolower(b); }))
          return plugin;
    return nullptr;
 }
 
 #if !(defined(ENABLE_SDL_VIDEO) || defined(ENABLE_SDL_INPUT)) && defined(_MSC_VER)
-std::string GetLastErrorAsString()
+static std::string GetLastErrorAsString()
 {
    DWORD errorMessageID = ::GetLastError();
    if (errorMessageID == 0)
@@ -481,7 +468,7 @@ void MsgPlugin::Load(const MsgPluginAPI* msgAPI)
                m_loadPlugin = nullptr;
                m_unloadPlugin = nullptr;
                m_module = nullptr;
-               PLOGE << "Plugin " << m_id << " invalid library " << m_library << ": required " << load << "/" << unload << " functions are not correct.";
+               PLOGE << "Plugin " << m_id << " invalid library " << m_library << ": required " << load << '/' << unload << " functions are not correct.";
                return;
             }
          #else

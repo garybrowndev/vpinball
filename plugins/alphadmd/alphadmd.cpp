@@ -15,6 +15,9 @@ using namespace std::string_literals;
 #include <sstream>
 #include <cassert>
 #include <cstdarg>
+#if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
+#include <pthread.h>
+#endif
 
 // Uses original bitplane rendering from DmdDevice for backward compatible colorization support
 #define LIBPINMAME
@@ -274,7 +277,14 @@ void SetThreadName(const std::string& name)
    HRESULT hr = SetThreadDescription(GetCurrentThread(), wstr.c_str());
 }
 #else
-void SetThreadName(const std::string& name) { }
+void SetThreadName(const std::string& name)
+{
+#ifdef __APPLE__
+   pthread_setname_np(name.c_str());
+#elif defined(__linux__) || defined(__ANDROID__)
+   pthread_setname_np(pthread_self(), name.c_str());
+#endif
+}
 #endif   
 
 static void RenderThread()
@@ -573,9 +583,9 @@ static void OnSegSrcChanged(const unsigned int eventId, void* userData, void* ms
 
 using namespace AlphaDMD;
 
-MSGPI_EXPORT void MSGPIAPI AlphaDMDPluginLoad(const uint32_t sessionId, MsgPluginAPI* api)
+MSGPI_EXPORT void MSGPIAPI AlphaDMDPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api)
 {
-   msgApi = api;
+   msgApi = const_cast<MsgPluginAPI*>(api);
    endpointId = sessionId;
    dmd128Id = {
       .id = { endpointId, 0 },

@@ -541,7 +541,7 @@ BOOL KeysConfigDialog::OnInitDialog()
     pksw->pi.SetFocusWindow(GetHwnd());
     pksw->pi.Init();
     pksw->m_timerid = 0;
-    ::SetWindowLongPtr(GetHwnd(), GWLP_USERDATA, (size_t)pksw);
+    SetWindowLongPtr(GWLP_USERDATA, (size_t)pksw);
 
     // Set buttons to ignore keyboard shortcuts when using DirectInput
     HWND hwndButton = GetDlgItem(IDC_LEFTFLIPPERBUTTON).GetHwnd();
@@ -621,7 +621,7 @@ INT_PTR KeysConfigDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         case WM_TIMER:
         {
-            KeyWindowStruct * const pksw = (KeyWindowStruct *)::GetWindowLongPtr(GetHwnd(), GWLP_USERDATA);
+            KeyWindowStruct * const pksw = (KeyWindowStruct *)GetWindowLongPtr(GWLP_USERDATA);
             const int key = GetNextKey();
             if (key != 0)
             {
@@ -643,7 +643,7 @@ INT_PTR KeysConfigDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                         ::SetWindowText(pksw->hwndKeyControl, rgszKeyName[key]);
                         ::SetWindowLongPtr(pksw->hwndKeyControl, GWLP_USERDATA, key);
                     }
-                    ::KillTimer(GetHwnd(), pksw->m_timerid);
+                    KillTimer(pksw->m_timerid);
                     pksw->m_timerid = 0;
                 }
             }
@@ -686,7 +686,7 @@ BOOL KeysConfigDialog::OnCommand(WPARAM wParam, LPARAM lParam)
    }
    case IDC_DEVICES_BUTTON:
    {
-      KeyWindowStruct *const pksw = (KeyWindowStruct *)::GetWindowLongPtr(GetHwnd(), GWLP_USERDATA);
+      KeyWindowStruct *const pksw = (KeyWindowStruct *)GetWindowLongPtr(GWLP_USERDATA);
       if (pksw->pi.GetDirectInputJoystickHandler() != nullptr)
       {
          CRect pos = GetWindowRect();
@@ -740,7 +740,7 @@ BOOL KeysConfigDialog::OnCommand(WPARAM wParam, LPARAM lParam)
        const size_t inputApi = SendDlgItemMessage(IDC_COMBO_INPUT_API, CB_GETCURSEL, 0, 0);
        GetDlgItem(IDC_COMBO_RUMBLE).EnableWindow(inputApi > 0); // No rumble for DirectInput
        GetDlgItem(IDC_DEVICES_BUTTON).EnableWindow(inputApi == 0); // Manage device is only available for DirectInput
-       KeyWindowStruct *const pksw = (KeyWindowStruct *)::GetWindowLongPtr(GetHwnd(), GWLP_USERDATA);
+       KeyWindowStruct *const pksw = (KeyWindowStruct *)GetWindowLongPtr(GWLP_USERDATA);
        pksw->pi.ReInit(); // Reinit on API change to have access to the underlying controllers
     }
 
@@ -862,17 +862,17 @@ void KeysConfigDialog::OnOK()
    for (unsigned int i = 0; i < eCKeys; ++i) if (regkey_idc[i] != -1)
       if (regkey_idc[i] != -1 && GetDlgItem(regkey_idc[i]) && GetDlgItem(regkey_idc[i]).IsWindow())
       {
-         const size_t key = ::GetWindowLongPtr(GetDlgItem(regkey_idc[i]).GetHwnd(), GWLP_USERDATA);
+         const size_t key = GetDlgItem(regkey_idc[i]).GetWindowLongPtr(GWLP_USERDATA);
          g_pvp->m_settings.SaveValue(Settings::Player, regkey_string[i], (int)key);
       }
 
-    size_t key = ::GetWindowLongPtr(GetDlgItem(IDC_JOYCUSTOM1).GetHwnd(), GWLP_USERDATA);
+    size_t key = GetDlgItem(IDC_JOYCUSTOM1).GetWindowLongPtr(GWLP_USERDATA);
     g_pvp->m_settings.SaveValue(Settings::Player, "JoyCustom1Key"s, (int)key);
-    key = ::GetWindowLongPtr(GetDlgItem(IDC_JOYCUSTOM2).GetHwnd(), GWLP_USERDATA);
+    key = GetDlgItem(IDC_JOYCUSTOM2).GetWindowLongPtr(GWLP_USERDATA);
     g_pvp->m_settings.SaveValue(Settings::Player, "JoyCustom2Key"s, (int)key);
-    key = ::GetWindowLongPtr(GetDlgItem(IDC_JOYCUSTOM3).GetHwnd(), GWLP_USERDATA);
+    key = GetDlgItem(IDC_JOYCUSTOM3).GetWindowLongPtr(GWLP_USERDATA);
     g_pvp->m_settings.SaveValue(Settings::Player, "JoyCustom3Key"s, (int)key);
-    key = ::GetWindowLongPtr(GetDlgItem(IDC_JOYCUSTOM4).GetHwnd(), GWLP_USERDATA);
+    key = GetDlgItem(IDC_JOYCUSTOM4).GetWindowLongPtr(GWLP_USERDATA);
     g_pvp->m_settings.SaveValue(Settings::Player, "JoyCustom4Key"s, (int)key);
 
     SetValue(IDC_DOF_CONTACTORS, Settings::Controller, "DOFContactors"s);
@@ -922,10 +922,10 @@ void KeysConfigDialog::OnOK()
 
 void KeysConfigDialog::OnDestroy()
 {
-    KeyWindowStruct * const pksw = (KeyWindowStruct *)::GetWindowLongPtr(GetHwnd(), GWLP_USERDATA);
+    KeyWindowStruct *const pksw = (KeyWindowStruct *)GetWindowLongPtr(GWLP_USERDATA);
     if (pksw->m_timerid)
     {
-        ::KillTimer(GetHwnd(), pksw->m_timerid);
+        KillTimer(pksw->m_timerid);
         pksw->m_timerid = 0;
     }
     pksw->pi.UnInit();
@@ -947,7 +947,7 @@ void KeysConfigDialog::SetValue(int nID, const Settings::Section& section, const
 
 void KeysConfigDialog::StartTimer(int nID)
 {
-    KeyWindowStruct * const pksw = (KeyWindowStruct *)::GetWindowLongPtr(GetHwnd(), GWLP_USERDATA);
+    KeyWindowStruct *const pksw = (KeyWindowStruct *)GetWindowLongPtr(GWLP_USERDATA);
     const HWND hwndKeyWindow = GetItemHwnd(nID);
     if (pksw->m_timerid == NULL) //add
     { //add
@@ -961,7 +961,7 @@ void KeysConfigDialog::StartTimer(int nID)
 
         GetNextKey(); // Clear the current buffer out
 
-        pksw->m_timerid = ::SetTimer(GetHwnd(), 100, 50, nullptr);
+        pksw->m_timerid = SetTimer(100, 50, nullptr);
         pksw->hwndKeyControl = hwndKeyWindow;
         ::SetWindowText(pksw->hwndKeyControl, "????");
         while (GetNextKey() != NULL) //clear entire keyboard buffer contents

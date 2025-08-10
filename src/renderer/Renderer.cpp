@@ -31,7 +31,7 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
    #endif
    , m_table(table)
 {
-   m_stereo3Denabled = m_table->m_settings.LoadValueWithDefault(Settings::Player, "Stereo3DEnabled"s, (m_stereo3D != STEREO_OFF));
+   m_stereo3Denabled = m_table->m_settings.LoadValueBool(Settings::Player, "Stereo3DEnabled"s);
    m_toneMapper = (ToneMapper)m_table->m_settings.LoadValueWithDefault(Settings::TableOverride, "ToneMapper"s, m_table->GetToneMapper());
    m_toneMapper = clamp(m_toneMapper, TM_REINHARD, TM_AGX_PUNCHY);
    m_HDRforceDisableToneMapper = m_table->m_settings.LoadValueWithDefault(Settings::Player, "HDRDisableToneMapper"s, true);
@@ -43,7 +43,7 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
    m_FXAA = m_table->m_settings.LoadValueWithDefault(Settings::Player, "FXAA"s, (int)Disabled);
    m_sharpen = m_table->m_settings.LoadValueWithDefault(Settings::Player, "Sharpen"s, 0);
    m_ss_refl = m_table->m_settings.LoadValueWithDefault(Settings::Player, "SSRefl"s, false);
-   m_bloomOff = m_table->m_settings.LoadValueWithDefault(Settings::Player, "ForceBloomOff"s, false);
+   m_bloomOff = m_table->m_settings.LoadValueBool(Settings::Player, "ForceBloomOff"s);
    m_motionBlurOff = m_table->m_settings.LoadValueWithDefault(Settings::Player, "ForceMotionBlurOff"s, false);
    const int maxReflection = m_table->m_settings.LoadValueWithDefault(Settings::Player, "PFReflection"s, -1);
    if (maxReflection != -1)
@@ -412,6 +412,11 @@ Renderer::~Renderer()
    delete m_pMotionBlurBufferTexture;
    delete m_pOffscreenVRLeft;
    delete m_pOffscreenVRRight;
+   #if defined(ENABLE_DX9) || defined(__OPENGLES__) || defined(__APPLE__)
+   m_envRadianceTexture.reset();
+   #else
+   delete m_envRadianceTexture;
+   #endif
    ReleaseAORenderTargets();
    m_ballEnvSampler = nullptr;
    m_envSampler = nullptr;
@@ -2124,7 +2129,8 @@ void Renderer::PrepareVideoBuffers(RenderTarget* outputBackBuffer)
    const bool useUpscaler = (m_renderWidth < GetBackBufferTexture()->GetWidth()) && !PostProcStereo && (SMAA || DLAA || NFAA || FXAA1 || FXAA2 || FXAA3 || sharpen);
    const InfoMode infoMode = g_pplayer->GetInfoMode();
    //const unsigned int jittertime = (unsigned int)((uint64_t)msec()*90/1000);
-   const float jitter = (float)((msec() & 2047) / 1000.0);
+   //const float jitter = (float)((msec() & 2047) / 1000.0);
+   const float jitter = (float)(radical_inverse(g_pplayer->m_overall_frames % 2048) / 1000.0); // Determinist jitter to ensure stable render for regression tests
 
    RenderTarget* renderedRT = GetBackBufferTexture();
    RenderTarget *outputRT = nullptr;

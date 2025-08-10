@@ -44,7 +44,7 @@ HRESULT Textbox::Init(PinTable *const ptable, const float x, const float y, cons
    m_d.m_v1.y = y;
    m_d.m_v2.x = x + width;
    m_d.m_v2.y = y + height;
-   return forPlay ? S_OK : InitVBA(fTrue, 0, nullptr); //ApcProjectItem.Define(ptable->ApcProject, GetDispatch(), axTypeHostProjectItem/*axTypeHostClass*/, L"Textbox", nullptr);
+   return forPlay ? S_OK : InitVBA(fTrue, 0, nullptr);
 }
 
 void Textbox::SetDefaults(const bool fromMouseClick)
@@ -247,27 +247,26 @@ bool Textbox::LoadToken(const int id, BiffReader * const pbr)
       ips->Load(pbr->m_pistream);
       SAFE_RELEASE_NO_RCC(ips);
 #else
-      ULONG read;
       BYTE buffer[255];
       BYTE attributes;
       short weight;
       int size;
       int len;
 
-      pbr->ReadBytes(buffer, 1, &read); // version
-      pbr->ReadBytes(buffer, sizeof(short), &read); // charset
-      pbr->ReadBytes(&attributes, sizeof(BYTE), &read); // attributes
+      pbr->ReadBytes(buffer, 1); // version
+      pbr->ReadBytes(buffer, 2); // charset
+      pbr->ReadBytes(&attributes, 1); // attributes
       m_fontItalic = (attributes & 0x02) > 0;
       m_fontUnderline = (attributes & 0x04) > 0;
       m_fontStrikeThrough = (attributes & 0x08) > 0;
-      pbr->ReadBytes(&weight, sizeof(short), &read); // weight
+      pbr->ReadBytes(&weight, 2); // weight
       m_fontBold = weight > 550;
-      pbr->ReadBytes(&size, sizeof(int), &read); // size
-      m_fontSize = (float)size / 10000;
-      pbr->ReadBytes(buffer, 1, &read); // name length
+      pbr->ReadBytes(&size, 4); // size
+      m_fontSize = (float)size / 10000.f;
+      pbr->ReadBytes(buffer, 1); // name length
       len = (int)buffer[0];
       if (len > 0) {
-         pbr->ReadBytes(buffer, len, &read); // name
+         pbr->ReadBytes(buffer, len); // name
          m_fontName = string(reinterpret_cast<char*>(buffer), len);
       }
       else
@@ -286,18 +285,17 @@ HRESULT Textbox::InitPostLoad()
    return S_OK;
 }
 
-char * Textbox::GetFontName()
+string Textbox::GetFontName()
 {
-    if (m_pIFont)
-    {
-        BSTR bstr;
-        /*HRESULT hr =*/ m_pIFont->get_Name(&bstr);
-        static char fontName[LF_FACESIZE];
-        WideCharToMultiByteNull(CP_ACP, 0, bstr, -1, fontName, std::size(fontName), nullptr, nullptr);
-        SysFreeString(bstr);
-        return fontName;
-    }
-    return nullptr;
+   if (m_pIFont)
+   {
+      BSTR bstr;
+      /*HRESULT hr =*/ m_pIFont->get_Name(&bstr);
+      const string fontName = MakeString(bstr);
+      SysFreeString(bstr);
+      return fontName;
+   }
+   return string();
 }
 
 HFONT Textbox::GetFont()
@@ -430,7 +428,7 @@ void Textbox::RenderSetup(RenderDevice *device)
    if (width > 0 && height > 0)
    {
       m_texture = BaseTexture::Create(width, height, BaseTexture::SRGBA);
-      m_texture->SetName("Textbox."s + GetName());
+      m_texture->SetName("Textbox." + GetName());
       m_textureDirty = true;
    }
 }
@@ -457,7 +455,7 @@ void Textbox::Render(const unsigned int renderMask)
    const bool isReflectionPass = renderMask & Renderer::REFLECTION_PASS;
    TRACE_FUNCTION();
 
-   const bool is_dmd = m_d.m_isDMD || StrStrI(m_d.m_text.c_str(), "DMD") != nullptr; //!! second part is VP10.0 legacy
+   const bool is_dmd = m_d.m_isDMD || StrFindNoCase(m_d.m_text, "DMD"s) != string::npos; //!! second part is VP10.0 legacy
    if (isStaticOnly
       || !m_d.m_visible
       || (!is_dmd && m_texture == nullptr))
@@ -475,6 +473,11 @@ void Textbox::Render(const unsigned int renderMask)
    float y = rect_top*ymult;
    float w = (rect_right - rect_left)*mult;
    float h = (rect_bottom - rect_top)*ymult;
+
+   #ifdef ENABLE_DX9
+      x -= 0.5f / m_rd->GetOutputBackBuffer()->GetWidth();
+      y -= 0.5f / m_rd->GetOutputBackBuffer()->GetHeight();
+   #endif
 
    if (is_dmd)
    {

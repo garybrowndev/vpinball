@@ -394,7 +394,7 @@ float PinInput::GetPlungerPos() const
 
 void PinInput::SetPlungerPos(float pos)
 {
-   constexpr uint64_t extPlungerId = static_cast<uint64_t>(0xF00000000);
+   constexpr uint64_t extPlungerId = 0xF00000000ull;
    m_plungerPosDirty = true;
    for (auto& aam : m_analogActionMappings)
       if (aam.output == AnalogAction::AM_PlungerPos && aam.joystickId == extPlungerId)
@@ -431,7 +431,7 @@ float PinInput::GetPlungerSpeed() const
 
 void PinInput::SetPlungerSpeed(float speed)
 {
-   constexpr uint64_t extPlungerId = static_cast<uint64_t>(0xF00000000);
+   constexpr uint64_t extPlungerId = 0xF00000000ull;
    m_plungerPosDirty = true;
    for (auto& aam : m_analogActionMappings)
       if (aam.output == AnalogAction::AM_PlungerSpeed && aam.joystickId == extPlungerId)
@@ -941,12 +941,17 @@ void PinInput::ProcessInput()
    const uint32_t now = msec();
 
    // Gather input from all handlers
+   #ifdef _WIN32
+   const HWND foregroundWindow = GetForegroundWindow();
+   #else
+   constexpr HWND foregroundWindow = NULL;
+   #endif
    for (const auto& handler : m_inputHandlers)
-      handler->Update();
+      handler->Update(foregroundWindow);
 
    // Wipe key state if we're not the foreground window as we miss key-up events
    #ifdef _WIN32
-   if (m_focusHWnd != GetForegroundWindow())
+   if (m_focusHWnd != foregroundWindow)
       memset(&m_inputState, 0, sizeof(m_inputState));
    #endif
 

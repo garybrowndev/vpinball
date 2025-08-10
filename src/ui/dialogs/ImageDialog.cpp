@@ -76,7 +76,7 @@ INT_PTR ImageDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
          AddToolTip("Delete the selected image(s).", GetHwnd(), toolTipHwnd, GetDlgItem(IDC_DELETE_IMAGE).GetHwnd());
          AddToolTip("Define an alpha mask for the selected image(s)", GetHwnd(), toolTipHwnd, GetDlgItem(IDC_ALPHA_MASK_EDIT).GetHwnd());
          AddToolTip("Click 'OK' to close this window.", GetHwnd(), toolTipHwnd, GetDlgItem(IDC_OK).GetHwnd());
-         m_resizer.Initialize(this->GetHwnd(), CRect(0, 0, 720, 450));
+         m_resizer.Initialize(GetHwnd(), CRect(0, 0, 720, 450));
          m_resizer.AddChild(hListView, CResizer::topleft, RD_STRETCH_WIDTH | RD_STRETCH_HEIGHT);
          m_resizer.AddChild(GetDlgItem(IDC_PICTUREPREVIEW).GetHwnd(), CResizer::topright, 0);
          m_resizer.AddChild(GetDlgItem(IDC_IMPORT).GetHwnd(), CResizer::topright, 0);
@@ -226,7 +226,7 @@ INT_PTR ImageDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                      GetDlgItem(IDC_STATIC_ALPHA).ShowWindow(!ppi->IsOpaque());
                   }
                }
-               ::InvalidateRect(GetDlgItem(IDC_PICTUREPREVIEW).GetHwnd(), nullptr, fTrue);
+               GetDlgItem(IDC_PICTUREPREVIEW).InvalidateRect(fTrue);
             }
          }
          break;
@@ -472,6 +472,7 @@ void ImageDialog::Import()
 
 void ImageDialog::Export()
 {
+   CCO(PinTable) *const pt = g_pvp->GetActiveTable();
    const HWND hSoundList = GetDlgItem(IDC_SOUNDLIST).GetHwnd();
    const int selectedItemsCount = ListView_GetSelectedCount(hSoundList);
 
@@ -512,46 +513,45 @@ void ImageDialog::Export()
                if (begin > 0)
                {
                   memcpy(g_filename, ppi->GetFilePath().c_str() + begin, len0 - begin);
-                  g_filename[len0 - begin] = 0;
+                  g_filename[len0 - begin] = '\0';
                }
             }
             else
             {
                strncat_s(g_filename, ppi->m_name.c_str(), sizeof(g_filename)-strnlen_s(g_filename, sizeof(g_filename))-1);
                const size_t idx = ppi->GetFilePath().find_last_of('.');
-               strncat_s(g_filename, ppi->GetFilePath().c_str() + idx, sizeof(g_filename) - strnlen_s(g_filename, sizeof(g_filename)) - 1);
+               strncat_s(g_filename, ppi->GetFilePath().c_str() + idx, sizeof(g_filename)-strnlen_s(g_filename, sizeof(g_filename))-1);
             }
             ofn.lpstrFile = g_filename;
             ofn.nMaxFile = sizeof(g_filename);
 
-            const string ext2(g_filename);
-            const size_t idx2 = ext2.find_last_of('.');
-            ofn.lpstrDefExt = ext2.c_str() + idx2 + 1;
+            const string defExt = extension_from_path(g_filename);
+            ofn.lpstrDefExt = defExt.c_str();
             // check which default file extension should be selected
             ofn.lpstrFilter = "PNG (.png)\0*.png;\0Bitmap (.bmp)\0*.bmp;\0JPEG (.jpg/.jpeg)\0*.jpg;*.jpeg;\0IFF (.iff)\0*.IFF;\0PCX (.pcx)\0*.PCX;\0PICT (.pict)\0*.PICT;\0Photoshop (.psd)\0*.psd;\0TGA (.tga)\0*.tga;\0TIFF (.tiff/.tif)\0*.tiff;*.tif;\0WEBP (.webp)\0*.webp;\0EXR (.exr)\0*.exr;\0HDR (.hdr)\0*.hdr\0";
-            if(!lstrcmpi(ofn.lpstrDefExt,"png"))
+            if (defExt == "png")
                ofn.nFilterIndex = 1;
-            else if (!lstrcmpi(ofn.lpstrDefExt, "bmp"))
+            else if (defExt == "bmp")
                ofn.nFilterIndex = 2;
-            else if (!lstrcmpi(ofn.lpstrDefExt, "jpg") || !lstrcmpi(ofn.lpstrDefExt, "jpeg"))
+            else if ((defExt == "jpg") || (defExt == "jpeg"))
                ofn.nFilterIndex = 3;
-            else if (!lstrcmpi(ofn.lpstrDefExt, "iff"))
+            else if (defExt == "iff")
                ofn.nFilterIndex = 4;
-            else if (!lstrcmpi(ofn.lpstrDefExt, "pcx"))
+            else if (defExt == "pcx")
                ofn.nFilterIndex = 5;
-            else if (!lstrcmpi(ofn.lpstrDefExt, "pict"))
+            else if (defExt == "pict")
                ofn.nFilterIndex = 6;
-            else if (!lstrcmpi(ofn.lpstrDefExt, "psd"))
+            else if (defExt == "psd")
                ofn.nFilterIndex = 7;
-            else if (!lstrcmpi(ofn.lpstrDefExt, "tga"))
+            else if (defExt == "tga")
                ofn.nFilterIndex = 8;
-            else if (!lstrcmpi(ofn.lpstrDefExt, "tif") || !lstrcmpi(ofn.lpstrDefExt, "tiff"))
+            else if ((defExt == "tif") || (defExt == "tiff"))
                ofn.nFilterIndex = 9;
-            else if (!lstrcmpi(ofn.lpstrDefExt, "webp"))
+            else if (defExt == "webp")
                ofn.nFilterIndex = 10;
-            else if (!lstrcmpi(ofn.lpstrDefExt, "exr"))
+            else if (defExt == "exr")
                ofn.nFilterIndex = 11;
-            else if (!lstrcmpi(ofn.lpstrDefExt, "hdr"))
+            else if (defExt == "hdr")
                ofn.nFilterIndex = 12;
 
             string g_initDir;
@@ -563,35 +563,22 @@ void ImageDialog::Export()
             //ofn.lpstrTitle = "SAVE AS";
             ofn.Flags = OFN_NOREADONLYRETURN | OFN_CREATEPROMPT | OFN_OVERWRITEPROMPT | OFN_EXPLORER;
 
-            g_initDir[ofn.nFileOffset] = 0;
-
             if (GetSaveFileName(&ofn))	//Get filename from user
             {
-               int begin; //select only file name from pathfilename
-               for (begin = (int)strlen(ofn.lpstrFile); begin >= 0; begin--)
-               {
-                  if (ofn.lpstrFile[begin] == PATH_SEPARATOR_CHAR)
-                  {
-                     begin++;
-                     break;
-                  }
-               }
-
-               if (begin >= MAXSTRING)
-                   begin = MAXSTRING - 1;
-
-               char pathName[MAXSTRING];
-               if (begin > 0)
-                  memcpy(pathName, ofn.lpstrFile, begin);
-               pathName[begin] = '\0';
+               string pathName = ofn.lpstrFile;
+               const size_t pos = pathName.find_last_of(PATH_SEPARATOR_CHAR);
+               if (pos != string::npos)
+                  pathName = pathName.substr(0, pos + 1);
 
                while (sel != -1 && ppi != nullptr)
                {
+                  string filename;
                   if (selectedItemsCount>1)
                   {
-                     strncpy_s(g_filename, pathName, sizeof(g_filename)-1);
+                     filename = pathName;
                      if (!renameOnExport)
                      {
+                        int begin;
                         for (begin = (int)ppi->GetFilePath().length(); begin >= 0; begin--)
                         {
                            if (ppi->GetFilePath()[begin] == PATH_SEPARATOR_CHAR)
@@ -600,18 +587,17 @@ void ImageDialog::Export()
                               break;
                            }
                         }
-                        strncat_s(g_filename, ppi->GetFilePath().c_str() + begin, sizeof(g_filename) - strnlen_s(g_filename, sizeof(g_filename)) - 1);
+                        filename += ppi->GetFilePath().c_str() + begin;
                      }
                      else
                      {
-                        strncat_s(g_filename, ppi->m_name.c_str(), sizeof(g_filename)-strnlen_s(g_filename, sizeof(g_filename))-1);
+                        filename += ppi->m_name;
                         const size_t idx = ppi->GetFilePath().find_last_of('.');
-                        strncat_s(g_filename, ppi->GetFilePath().c_str() + idx, sizeof(g_filename) - strnlen_s(g_filename, sizeof(g_filename)) - 1);
+                        filename += ppi->GetFilePath().c_str() + idx;
                      }
                   }
 
-                  CCO(PinTable) * const pt = g_pvp->GetActiveTable();
-                  if (!pt->ExportImage(ppi, g_filename)) //!! this will always export the image in its original format, no matter what was actually selected by the user
+                  if (!pt->ExportImage(ppi, (selectedItemsCount>1) ? filename : g_filename)) //!! this will always export the image in its original format, no matter what was actually selected by the user
                      ShowError("Could not export Image");
                   sel = ListView_GetNextItem(hSoundList, sel, LVNI_SELECTED);
                   lvitem.iItem = sel;
@@ -620,7 +606,7 @@ void ImageDialog::Export()
                   ppi = (Texture*)lvitem.lParam;
                }
 
-               g_pvp->m_settings.SaveValue(Settings::RecentDir, "ImageDir"s, string(pathName));
+               g_pvp->m_settings.SaveValue(Settings::RecentDir, "ImageDir"s, pathName);
             } // finished all selected items
          }
       }
@@ -719,7 +705,7 @@ void ImageDialog::Reimport()
          }
       }
       // Display new image
-      ::InvalidateRect(GetDlgItem(IDC_PICTUREPREVIEW).GetHwnd(), nullptr, fTrue);
+      GetDlgItem(IDC_PICTUREPREVIEW).InvalidateRect(fTrue);
    }
    SetFocus();
 }
@@ -759,7 +745,7 @@ void ImageDialog::UpdateAll()
             errorOccurred = true;
       }
       // Display new image
-      ::InvalidateRect(GetDlgItem(IDC_PICTUREPREVIEW).GetHwnd(), nullptr, fTrue);
+      GetDlgItem(IDC_PICTUREPREVIEW).InvalidateRect(fTrue);
    }
 
    if (errorOccurred)
@@ -817,7 +803,7 @@ void ImageDialog::ReimportFrom()
                pt->SetNonUndoableDirty(eSaveDirty);
                pt->UpdatePropertyImageList();
                // Display new image
-               ::InvalidateRect(GetDlgItem(IDC_PICTUREPREVIEW).GetHwnd(), nullptr, fTrue);
+               GetDlgItem(IDC_PICTUREPREVIEW).InvalidateRect(fTrue);
             }
          }
       }
@@ -853,14 +839,13 @@ void ImageDialog::ListImages(HWND hwndListView)
 {
    CCO(PinTable) *const pt = g_pvp->GetActiveTable();
    if (pt)
-      for (auto img : pt->m_vimage)
+      for (const auto img : pt->m_vimage)
          AddListImage(hwndListView, img);
 }
 
-int ImageDialog::AddListImage(HWND hwndListView, Texture *const ppi)
+int ImageDialog::AddListImage(HWND hwndListView, const Texture *const ppi)
 {
 #ifndef __STANDALONE__
-   char sizeString[MAXTOKEN];
    constexpr char usedStringYes[] = "X";
    constexpr char usedStringNo[] = " ";
 
@@ -871,18 +856,21 @@ int ImageDialog::AddListImage(HWND hwndListView, Texture *const ppi)
    lvitem.pszText = (LPSTR)ppi->m_name.c_str();
    lvitem.lParam = (LPARAM)ppi;
 
-   sprintf_s(sizeString, std::size(sizeString), "%ix%i", ppi->m_width, ppi->m_height);
    const int index = ListView_InsertItem(hwndListView, &lvitem);
 
    ListView_SetItemText(hwndListView, index, 1, (LPSTR)ppi->GetFilePath().c_str());
-   ListView_SetItemText(hwndListView, index, 2, sizeString);
+   const string sizeString = std::to_string(ppi->m_width) + 'x' + std::to_string(ppi->m_height);
+   ListView_SetItemText(hwndListView, index, 2, (LPSTR)sizeString.c_str());
    ListView_SetItemText(hwndListView, index, 3, (LPSTR)usedStringNo);
 
-   char *const sizeConv2 = StrFormatByteSize64((size_t)ppi->GetFileSize(), sizeString, MAXTOKEN);
+   {
+   char sizeString[MAXTOKEN];
+   char *const sizeConv2 = StrFormatByteSize64(ppi->GetFileSize(), sizeString, MAXTOKEN);
    ListView_SetItemText(hwndListView, index, 4, sizeConv2);
 
-   char *const sizeConv = StrFormatByteSize64((size_t)ppi->GetEstimatedGPUSize(), sizeString, MAXTOKEN);
+   char *const sizeConv = StrFormatByteSize64(ppi->GetEstimatedGPUSize(), sizeString, MAXTOKEN);
    ListView_SetItemText(hwndListView, index, 5, sizeConv);
+   }
 
    const char *format = ppi->IsHDR() ? (ppi->IsOpaque() ? "RGB_ HDR" : "RGBA HDR") : (ppi->IsOpaque() ? "RGB_" : "RGBA");
    ListView_SetItemText(hwndListView, index, 6, (LPSTR)format);

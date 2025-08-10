@@ -74,8 +74,10 @@ UltraDMD::~UltraDMD()
 void UltraDMD::Clear()
 {
    Flex::SurfaceGraphics* pGraphics = m_pFlexDMD->GetGraphics();
-   pGraphics->SetColor(RGB(0, 0, 0));
-   pGraphics->Clear();
+   if (pGraphics) {
+      pGraphics->SetColor(RGB(0, 0, 0));
+      pGraphics->Clear();
+   }
    m_pScoreBoard->SetVisible(false);
    if (m_pQueue->IsFinished())
       m_pQueue->SetVisible(false);
@@ -162,7 +164,7 @@ Actor* UltraDMD::ResolveImage(const string& filename, bool useFrame)
        else {
           AssetSrc* pAssetSrc = m_pFlexDMD->GetAssetManager()->ResolveSrc(path, nullptr);
           AssetType assetType = pAssetSrc->GetAssetType();
-          delete pAssetSrc;
+          pAssetSrc->Release();
 
           if (assetType == AssetType_Image)
              return Image::Create(m_pFlexDMD, m_pFlexDMD->GetAssetManager(), path, string());
@@ -357,7 +359,7 @@ void UltraDMD::DisplayText(const string& text, int textBrightness, int textOutli
       m_pQueue->SetVisible(false);
       Label* const pLabel = GetFittedLabel(text, textBrightness / 15.0f, textOutlineBrightness / 15.0f);
       pLabel->Draw(m_pFlexDMD->GetGraphics());
-      delete pLabel;
+      pLabel->Release();
    }
 }
 

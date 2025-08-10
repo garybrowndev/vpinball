@@ -10,6 +10,8 @@
 #include "PUPScreen.h"
 #include "PUPPinDisplay.h"
 
+#include "LibAv.h"
+
 ///////////////////////////////////////////////////////////////////////////////
 // PinUp Player plugin
 //
@@ -49,7 +51,6 @@ static VPXPluginAPI* vpxApi = nullptr;
 static ScriptablePluginAPI* scriptApi = nullptr;
 static uint32_t endpointId;
 static unsigned int onPinMAMEGameStartId, onGameEndId;
-static std::thread::id apiThread;
 
 // The pup manager holds the overall state. It may be automatically created due to a PinMAME start event, or explicitely created
 // through script interface. The script interface gives access to this context even when it has been created due to PinMAME.
@@ -152,6 +153,65 @@ void DeleteTexture(VPXTexture texture)
 
 
 ///////////////////////////////////////////////////////////////////////////////
+// Audio streaming
+//
+
+static unsigned int onAudioUpdateId;
+static vector<uint32_t> freeAudioStreamId;
+uint32_t nextAudioStreamId = 1;
+
+CtlResId UpdateAudioStream(AudioUpdateMsg* msg)
+{
+   if (msg->volume == 0.0f)
+   {
+      StopAudioStream(msg->id);
+      return { 0 };
+   }
+   CtlResId id = msg->id;
+   if (id.id == 0)
+   {
+      id.endpointId = endpointId;
+      if (freeAudioStreamId.empty())
+      {
+         id.resId = nextAudioStreamId;
+         nextAudioStreamId++;
+      }
+      else
+      {
+         id.resId = freeAudioStreamId.back();
+         freeAudioStreamId.pop_back();
+      }
+      msg->id = id;
+   }
+   msgApi->RunOnMainThread(0, [](void* userData) {
+      AudioUpdateMsg* msg = static_cast<AudioUpdateMsg*>(userData);
+      msgApi->BroadcastMsg(endpointId, onAudioUpdateId, msg);
+      LibAV::GetInstance()._av_free(msg->buffer);
+      delete msg;
+   }, msg);
+   return id;
+}
+
+void StopAudioStream(const CtlResId& id)
+{
+   if (id.id != 0)
+   {
+      // Recycle stream id
+      freeAudioStreamId.push_back(id.resId);
+      // Send an end of stream message
+      AudioUpdateMsg* pendingAudioUpdate = new AudioUpdateMsg();
+      memset(pendingAudioUpdate, 0, sizeof(AudioUpdateMsg));
+      pendingAudioUpdate->id.id = id.id;
+      msgApi->RunOnMainThread(0,[](void* userData) {
+         AudioUpdateMsg* msg = static_cast<AudioUpdateMsg*>(userData);
+         msgApi->BroadcastMsg(endpointId, onAudioUpdateId, msg);
+         delete msg;
+      }, pendingAudioUpdate);
+   }
+}
+
+
+///////////////////////////////////////////////////////////////////////////////
 // Game lifecycle
 //
 
@@ -159,20 +219,11 @@ void OnPinMAMEGameStart(const unsigned int eventId, void* userData, void* eventD
 {
    const CtlOnGameStartMsg* msg = static_cast<const CtlOnGameStartMsg*>(eventData);
    assert(msg != nullptr && msg->gameId != nullptr);
-   if (pupManager->IsInit())
-   {
-      LOGI("PinMAME started while Pup has already been directly initialized. Discarding initialization from PinMAME rom '%s'", msg->gameId);
-   }
-   else
-   {
-      pupManager->LoadConfig(msg->gameId);
-   }
-   pupManager->Start();
+   pupManager->LoadConfig(msg->gameId);
 }
 
 void OnGameEnd(const unsigned int eventId, void* userData, void* eventData)
 {
-   pupManager->Stop();
    pupManager->Unload();
 }
 
@@ -184,11 +235,10 @@ void OnGameEnd(const unsigned int eventId, void* userData, void* eventData)
 
 using namespace PUP;
 
-MSGPI_EXPORT void MSGPIAPI PUPPluginLoad(const uint32_t sessionId, MsgPluginAPI* api)
+MSGPI_EXPORT void MSGPIAPI PUPPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api)
 {
-   msgApi = api;
+   msgApi = const_cast<MsgPluginAPI*>(api);
    endpointId = sessionId;
-   apiThread = std::this_thread::get_id();
 
    TTF_Init();
 
@@ -201,6 +251,8 @@ MSGPI_EXPORT void MSGPIAPI PUPPluginLoad(const uint32_t sessionId, MsgPluginAPI*
 
    msgApi->SubscribeMsg(endpointId, onPinMAMEGameStartId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_EVT_ON_GAME_START), OnPinMAMEGameStart, nullptr);
    msgApi->SubscribeMsg(endpointId, onGameEndId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_GAME_END), OnGameEnd, nullptr);
+
+   onAudioUpdateId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_AUDIO_ON_UPDATE_MSG);
 
    const unsigned int getScriptApiId = msgApi->GetMsgID(SCRIPTPI_NAMESPACE, SCRIPTPI_MSG_GET_API);
    msgApi->BroadcastMsg(endpointId, getScriptApiId, &scriptApi);
@@ -223,7 +275,7 @@ MSGPI_EXPORT void MSGPIAPI PUPPluginLoad(const uint32_t sessionId, MsgPluginAPI*
    rootPath = find_case_insensitive_directory_path(rootPath + "pupvideos"s);
    if (rootPath.empty())
    {
-      LOGE("PUP folder was not found (settings is '%s')", pupFolder);
+      LOGW("PUP folder was not found (settings is '%s')", pupFolder);
    }
    pupManager = std::make_unique<PUPManager>(msgApi, endpointId, rootPath);
 }
@@ -232,6 +284,8 @@ MSGPI_EXPORT void MSGPIAPI PUPPluginUnload()
 {
    pupManager = nullptr;
    
+   msgApi->ReleaseMsgID(onAudioUpdateId);
+
    msgApi->UnsubscribeMsg(onPinMAMEGameStartId, OnPinMAMEGameStart);
    msgApi->UnsubscribeMsg(onGameEndId, OnGameEnd);
    msgApi->ReleaseMsgID(onPinMAMEGameStartId);

@@ -478,6 +478,10 @@ fun SettingsScreen(
 
                         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
+                        SwitchRow(label = "B2SLegacy", isChecked = viewModel.pluginB2SLegacy, onCheckedChange = { viewModel.handlePluginB2SLegacy(value = it) })
+
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
                         SwitchRow(
                             label = "DMDUtil",
                             isChecked = viewModel.pluginDMDUtil,
@@ -527,6 +531,10 @@ fun SettingsScreen(
                         HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
                         SwitchRow(label = "Serum", isChecked = viewModel.pluginSerum, onCheckedChange = { viewModel.handlePluginSerum(value = it) })
+
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                        SwitchRow(label = "WMP", isChecked = viewModel.pluginWMP, onCheckedChange = { viewModel.handlePluginWMP(value = it) })
                     }
                 }
 

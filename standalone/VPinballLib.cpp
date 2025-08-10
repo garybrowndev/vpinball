@@ -17,6 +17,8 @@ MSGPI_EXPORT void MSGPIAPI AlphaDMDPluginLoad(const uint32_t sessionId, const Ms
 MSGPI_EXPORT void MSGPIAPI AlphaDMDPluginUnload();
 MSGPI_EXPORT void MSGPIAPI B2SPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api);
 MSGPI_EXPORT void MSGPIAPI B2SPluginUnload();
+MSGPI_EXPORT void MSGPIAPI B2SLegacyPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api);
+MSGPI_EXPORT void MSGPIAPI B2SLegacyPluginUnload();
 MSGPI_EXPORT void MSGPIAPI DOFPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api);
 MSGPI_EXPORT void MSGPIAPI DOFPluginUnload();
 MSGPI_EXPORT void MSGPIAPI DMDUtilPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api);
@@ -33,6 +35,8 @@ MSGPI_EXPORT void MSGPIAPI ScoreViewPluginLoad(const uint32_t sessionId, const M
 MSGPI_EXPORT void MSGPIAPI ScoreViewPluginUnload();
 MSGPI_EXPORT void MSGPIAPI SerumPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api);
 MSGPI_EXPORT void MSGPIAPI SerumPluginUnload();
+MSGPI_EXPORT void MSGPIAPI WMPPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api);
+MSGPI_EXPORT void MSGPIAPI WMPPluginUnload();
 
 namespace VPinballLib {
 
@@ -105,29 +109,39 @@ void VPinball::LoadPlugins()
       const char* id;
       void (*load)(uint32_t, const MsgPluginAPI*);
       void (*unload)();
+      int priority;
    } plugins[] = {
-      { "AlphaDMD",      &AlphaDMDPluginLoad,      &AlphaDMDPluginUnload      },
-      { "B2S",           &B2SPluginLoad,           &B2SPluginUnload           },
-      { "DOF",           &DOFPluginLoad,           &DOFPluginUnload           },
-      { "DMDUtil",       &DMDUtilPluginLoad,       &DMDUtilPluginUnload       },
-      { "FlexDMD",       &FlexDMDPluginLoad,       &FlexDMDPluginUnload       },
-      { "PinMAME",       &PinMAMEPluginLoad,       &PinMAMEPluginUnload       },
-      { "PUP",           &PUPPluginLoad,           &PUPPluginUnload           },
-      { "RemoteControl", &RemoteControlPluginLoad, &RemoteControlPluginUnload },
-      { "ScoreView",     &ScoreViewPluginLoad,     &ScoreViewPluginUnload     },
-      { "Serum",         &SerumPluginLoad,         &SerumPluginUnload         }
+      { "AlphaDMD",      &AlphaDMDPluginLoad,      &AlphaDMDPluginUnload,      100 },
+      { "B2S",           &B2SPluginLoad,           &B2SPluginUnload,           200 },
+      { "B2SLegacy",     &B2SLegacyPluginLoad,     &B2SLegacyPluginUnload,     200 },
+      { "DOF",           &DOFPluginLoad,           &DOFPluginUnload,           100 },
+      { "DMDUtil",       &DMDUtilPluginLoad,       &DMDUtilPluginUnload,       100 },
+      { "FlexDMD",       &FlexDMDPluginLoad,       &FlexDMDPluginUnload,       100 },
+      { "PinMAME",       &PinMAMEPluginLoad,       &PinMAMEPluginUnload,       100 },
+      { "PUP",           &PUPPluginLoad,           &PUPPluginUnload,           100 },
+      { "RemoteControl", &RemoteControlPluginLoad, &RemoteControlPluginUnload, 100 },
+      { "ScoreView",     &ScoreViewPluginLoad,     &ScoreViewPluginUnload,     100 },
+      { "Serum",         &SerumPluginLoad,         &SerumPluginUnload,         100 },
+      { "WMP",           &WMPPluginLoad,           &WMPPluginUnload,           100 }
    };
 
-   for (auto& p : plugins) {
-      if (!VPXPluginAPIImpl::GetInstance().getAPI().GetOption(
-             p.id, "Enable",
+   std::vector<std::pair<int, size_t>> load_order;
+   for (size_t i = 0; i < std::size(plugins); ++i) {
+      if (VPXPluginAPIImpl::GetInstance().getAPI().GetOption(
+             plugins[i].id, "Enable",
              VPX_OPT_SHOW_UI, "Enable plugin",
              0.f, 1.f, 1.f, 0.f,
              VPXPluginAPI::NONE,
              nullptr
-         ))
-         continue;
+         )) {
+         load_order.emplace_back(plugins[i].priority, i);
+      }
+   }
 
+   std::sort(load_order.begin(), load_order.end());
+
+   for (auto [priority, idx] : load_order) {
+      auto& p = plugins[idx];
       auto plugin = MsgPluginManager::GetInstance().RegisterPlugin(
          p.id, p.id, p.id,
          "", "", "",
@@ -140,8 +154,8 @@ void VPinball::LoadPlugins()
 
 void VPinball::UnloadPlugins()
 {
-   for (auto& plugin : m_plugins)
-      plugin->Unload();
+   for (auto it = m_plugins.rbegin(); it != m_plugins.rend(); ++it)
+      (*it)->Unload();
    m_plugins.clear();
 }
 
@@ -172,6 +186,9 @@ void* VPinball::SendEvent(Event event, void* data)
          }
       }
       return nullptr;
+   }
+   else if (event == Event::Play) {
+      s_instance.LoadPlugins();
    }
    else if (event == Event::PlayerStarted) {
 #ifdef __APPLE__
@@ -906,6 +923,8 @@ void VPinball::Cleanup()
    CComObject<PinTable>* const pActiveTable = g_pvp->GetActiveTable();
    if (pActiveTable)
       g_pvp->CloseTable(pActiveTable);
+
+   UnloadPlugins();
 
    delete g_pvp;
    g_pvp = new ::VPinball();

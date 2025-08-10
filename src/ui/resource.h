@@ -381,8 +381,7 @@
 #define IDR_CODEVIEWACCEL               271
 #define IDD_COLLECTDIALOG               271
 #define IDD_COLLECTION                  272
-#define IDR_VPACCEL1                    272
-#define IDR_VPSIMPELACCEL               272
+#define IDR_LAYERLISTACCEL              272
 #define IDC_LEFTFLIPPER                 273
 #define IDD_PROPDISPREEL                273
 #define IDC_RIGHTFLIPPER                274
@@ -452,7 +451,6 @@
 #define IDC_STATIC_SCALEY               291
 #define IDD_PROPLIGHT_STATE             291
 #define IDD_PROPBUMPER_PHYSICS          292
-#define ID_QUIT                         293
 #define ID_RESUME                       294
 #define ID_DEBUGWINDOW                  295
 #define IDD_PHYSICS_OPTIONS             297

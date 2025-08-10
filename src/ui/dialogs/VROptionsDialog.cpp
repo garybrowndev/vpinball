@@ -361,36 +361,36 @@ BOOL VROptionsDialog::OnInitDialog()
    }
 
    #ifdef ENABLE_XR
-      ::ShowWindow(GetDlgItem(IDC_SCALE_TO_CM).GetHwnd(), SW_HIDE); // OpenXR always use fixed scale to real world lockbar width
-      ::ShowWindow(GetDlgItem(IDC_VR_SCALE_LABEL).GetHwnd(), SW_HIDE);
-      ::ShowWindow(GetDlgItem(IDC_VR_SCALE).GetHwnd(), SW_HIDE);
+      GetDlgItem(IDC_SCALE_TO_CM).ShowWindow(SW_HIDE); // OpenXR always use fixed scale to real world lockbar width
+      GetDlgItem(IDC_VR_SCALE_LABEL).ShowWindow(SW_HIDE);
+      GetDlgItem(IDC_VR_SCALE).ShowWindow(SW_HIDE);
 
-      ::ShowWindow(GetDlgItem(IDC_STATIC1).GetHwnd(), SW_HIDE); // No performance/hack option for the time being
-      ::ShowWindow(GetDlgItem(IDC_STATIC2).GetHwnd(), SW_HIDE);
-      ::ShowWindow(GetDlgItem(IDC_COMBO_TEXTURE).GetHwnd(), SW_HIDE);
-      ::ShowWindow(GetDlgItem(IDC_STATIC3).GetHwnd(), SW_HIDE);
-      ::ShowWindow(GetDlgItem(IDC_NEAR_LABEL).GetHwnd(), SW_HIDE); // OpenXR use fixed near plane distance in real world unit
-      ::ShowWindow(GetDlgItem(IDC_NEAR_PLANE).GetHwnd(), SW_HIDE);
+      GetDlgItem(IDC_STATIC1).ShowWindow(SW_HIDE); // No performance/hack option for the time being
+      GetDlgItem(IDC_STATIC2).ShowWindow(SW_HIDE);
+      GetDlgItem(IDC_COMBO_TEXTURE).ShowWindow(SW_HIDE);
+      GetDlgItem(IDC_STATIC3).ShowWindow(SW_HIDE);
+      GetDlgItem(IDC_NEAR_LABEL).ShowWindow(SW_HIDE); // OpenXR use fixed near plane distance in real world unit
+      GetDlgItem(IDC_NEAR_PLANE).ShowWindow(SW_HIDE);
 
-      ::ShowWindow(GetDlgItem(IDC_VR_SLOPE_LABEL).GetHwnd(), SW_HIDE); // OpenXR only compensate the playfield slope (no additional user adjustment)
-      ::ShowWindow(GetDlgItem(IDC_VR_SLOPE).GetHwnd(), SW_HIDE);
+      GetDlgItem(IDC_VR_SLOPE_LABEL).ShowWindow(SW_HIDE); // OpenXR only compensate the playfield slope (no additional user adjustment)
+      GetDlgItem(IDC_VR_SLOPE).ShowWindow(SW_HIDE);
 
-      ::ShowWindow(GetDlgItem(IDC_BTTABLERECENTER).GetHwnd(), SW_HIDE); // Position is managed through TweakUI, not custom key shortcuts
-      ::ShowWindow(GetDlgItem(IDC_TABLEREC_TEXT).GetHwnd(), SW_HIDE);
-      ::ShowWindow(GetDlgItem(IDC_JOYTABLERECENTER).GetHwnd(), SW_HIDE);
-      ::ShowWindow(GetDlgItem(IDC_STATIC4).GetHwnd(), SW_HIDE);
-      ::ShowWindow(GetDlgItem(IDC_STATIC5).GetHwnd(), SW_HIDE);
-      ::ShowWindow(GetDlgItem(IDC_STATIC6).GetHwnd(), SW_HIDE);
-      ::ShowWindow(GetDlgItem(IDC_BTTABLEUP).GetHwnd(), SW_HIDE);
-      ::ShowWindow(GetDlgItem(IDC_TABLEUP_TEXT).GetHwnd(), SW_HIDE);
-      ::ShowWindow(GetDlgItem(IDC_JOYTABLEUP).GetHwnd(), SW_HIDE);
-      ::ShowWindow(GetDlgItem(IDC_BTTABLEDOWN).GetHwnd(), SW_HIDE);
-      ::ShowWindow(GetDlgItem(IDC_TABLEDOWN_TEXT).GetHwnd(), SW_HIDE);
-      ::ShowWindow(GetDlgItem(IDC_JOYTABLEDOWN).GetHwnd(), SW_HIDE);
+      GetDlgItem(IDC_BTTABLERECENTER).ShowWindow(SW_HIDE); // Position is managed through TweakUI, not custom key shortcuts
+      GetDlgItem(IDC_TABLEREC_TEXT).ShowWindow(SW_HIDE);
+      GetDlgItem(IDC_JOYTABLERECENTER).ShowWindow(SW_HIDE);
+      GetDlgItem(IDC_STATIC4).ShowWindow(SW_HIDE);
+      GetDlgItem(IDC_STATIC5).ShowWindow(SW_HIDE);
+      GetDlgItem(IDC_STATIC6).ShowWindow(SW_HIDE);
+      GetDlgItem(IDC_BTTABLEUP).ShowWindow(SW_HIDE);
+      GetDlgItem(IDC_TABLEUP_TEXT).ShowWindow(SW_HIDE);
+      GetDlgItem(IDC_JOYTABLEUP).ShowWindow(SW_HIDE);
+      GetDlgItem(IDC_BTTABLEDOWN).ShowWindow(SW_HIDE);
+      GetDlgItem(IDC_TABLEDOWN_TEXT).ShowWindow(SW_HIDE);
+      GetDlgItem(IDC_JOYTABLEDOWN).ShowWindow(SW_HIDE);
 
    #else
-      ::EnableWindow(GetDlgItem(IDC_COLOR_BUTTON1).GetHwnd(), FALSE);
-      ::EnableWindow(GetDlgItem(IDC_ENABLE_PASSTHROUGH_COLOR).GetHwnd(), FALSE);
+      GetDlgItem(IDC_COLOR_BUTTON1).EnableWindow(FALSE);
+      GetDlgItem(IDC_ENABLE_PASSTHROUGH_COLOR).EnableWindow(FALSE);
    #endif
 
    const VRPreviewMode vrPreview = (VRPreviewMode)g_pvp->m_settings.LoadValueWithDefault(Settings::PlayerVR, "VRPreview"s, VRPREVIEW_LEFT);
@@ -545,7 +545,7 @@ BOOL VROptionsDialog::OnInitDialog()
    pksw->pi.SetFocusWindow(GetHwnd());
    pksw->pi.Init();
    pksw->m_timerid = 0;
-   ::SetWindowLongPtr(GetHwnd(), GWLP_USERDATA, (size_t)pksw);
+   SetWindowLongPtr(GWLP_USERDATA, (size_t)pksw);
 
    // Set buttons to ignore keyboard shortcuts when using DirectInput
    HWND hwndButton = GetDlgItem(IDC_BTTABLERECENTER).GetHwnd();
@@ -586,7 +586,7 @@ INT_PTR VROptionsDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
    #ifndef ENABLE_XR
    case WM_TIMER:
    {
-      KeyWindowStruct* const pksw = (KeyWindowStruct*)::GetWindowLongPtr(GetHwnd(), GWLP_USERDATA);
+      KeyWindowStruct* const pksw = (KeyWindowStruct*)GetWindowLongPtr(GWLP_USERDATA);
       const int key = GetNextKey();
       if (key != 0)
       {
@@ -608,7 +608,7 @@ INT_PTR VROptionsDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                ::SetWindowText(pksw->hwndKeyControl, rgszKeyName[key]);
                ::SetWindowLongPtr(pksw->hwndKeyControl, GWLP_USERDATA, key);
             }
-            ::KillTimer(GetHwnd(), pksw->m_timerid);
+            KillTimer(pksw->m_timerid);
             pksw->m_timerid = 0;
          }
       }
@@ -635,7 +635,7 @@ BOOL VROptionsDialog::OnCommand(WPARAM wParam, LPARAM lParam)
       {
          #ifdef ENABLE_XR
             // Disable the custom scale as we always scale against the real world lockbar width
-            ::ShowWindow(GetDlgItem(IDC_VR_SCALE).GetHwnd(), SW_HIDE);
+            GetDlgItem(IDC_VR_SCALE).ShowWindow(SW_HIDE);
          #else
          const bool isScaleToLockbarWidth = IsDlgButtonChecked(IDC_SCALE_TO_CM) > 0;
          if (oldScaleValue != isScaleToLockbarWidth)
@@ -755,7 +755,7 @@ void VROptionsDialog::OnOK()
 
     for (unsigned int i = eTableRecenter; i <= eTableDown; ++i) if (regkey_idc[i] != -1)
     {
-        const size_t key = ::GetWindowLongPtr(GetDlgItem(regkey_idc[i]).GetHwnd(), GWLP_USERDATA);
+        const size_t key = GetDlgItem(regkey_idc[i]).GetWindowLongPtr(GWLP_USERDATA);
         g_pvp->m_settings.SaveValue(Settings::Player, regkey_string[i], (int)key);
     }
 
@@ -764,10 +764,10 @@ void VROptionsDialog::OnOK()
 
 void VROptionsDialog::OnDestroy()
 {
-   KeyWindowStruct* const pksw = (KeyWindowStruct*)::GetWindowLongPtr(GetHwnd(), GWLP_USERDATA);
+   KeyWindowStruct* const pksw = (KeyWindowStruct*)GetWindowLongPtr(GWLP_USERDATA);
    if (pksw->m_timerid)
    {
-      ::KillTimer(GetHwnd(), pksw->m_timerid);
+      KillTimer(pksw->m_timerid);
       pksw->m_timerid = 0;
    }
    pksw->pi.UnInit();
@@ -784,7 +784,7 @@ void VROptionsDialog::SetValue(int nID, const Settings::Section& section, const 
 
 void VROptionsDialog::StartTimer(int nID)
 {
-   KeyWindowStruct* const pksw = (KeyWindowStruct*)::GetWindowLongPtr(GetHwnd(), GWLP_USERDATA);
+   KeyWindowStruct* const pksw = (KeyWindowStruct*)GetWindowLongPtr(GWLP_USERDATA);
    const HWND hwndKeyWindow = GetDlgItem(nID).GetHwnd();
    if (pksw->m_timerid == NULL) //add
    { //add
@@ -798,7 +798,7 @@ void VROptionsDialog::StartTimer(int nID)
 
       GetNextKey(); // Clear the current buffer out
 
-      pksw->m_timerid = ::SetTimer(GetHwnd(), 100, 50, nullptr);
+      pksw->m_timerid = SetTimer(100, 50, nullptr);
       pksw->hwndKeyControl = hwndKeyWindow;
       ::SetWindowText(pksw->hwndKeyControl, "????");
       while (GetNextKey() != NULL) //clear entire keyboard buffer contents

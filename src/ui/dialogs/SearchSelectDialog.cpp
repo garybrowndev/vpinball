@@ -108,7 +108,8 @@ void SearchSelectDialog::Update()
          lv.iItem = idx;
          lv.iSubItem = 0;
          lv.lParam = (LPARAM)piscript;
-         lv.pszText = (char*)PinTable::GetElementName(piedit);
+         const string szTemp = PinTable::GetElementName(piedit);
+         lv.pszText = (char*)szTemp.c_str();
          ListView_InsertItem(m_hElementList, &lv);
          AddSearchItemToList(piedit, idx);
          idx++;
@@ -130,7 +131,7 @@ BOOL SearchSelectDialog::OnInitDialog()
 
    m_switchSortOrder = false;
 
-   m_resizer.Initialize(this->GetHwnd(), CRect(0, 0, 650, 400));
+   m_resizer.Initialize(GetHwnd(), CRect(0, 0, 650, 400));
    m_resizer.AddChild(GetDlgItem(IDC_ELEMENT_LIST).GetHwnd(), CResizer::topleft, RD_STRETCH_WIDTH | RD_STRETCH_HEIGHT);
    m_resizer.AddChild(GetDlgItem(IDOK).GetHwnd(), CResizer::topright, 0);
    m_resizer.AddChild(GetDlgItem(IDCANCEL).GetHwnd(), CResizer::topright, 0);
@@ -160,7 +161,7 @@ void SearchSelectDialog::SelectElement()
         if (ListView_GetItem(m_hElementList, &lv) == TRUE)
         {
            char szType[MAXNAMEBUFFER*2];
-           ListView_GetItemText(m_hElementList, iItem, 1, szType, MAXNAMEBUFFER);
+           ListView_GetItemText(m_hElementList, iItem, 1, szType, std::size(szType));
            if (strcmp(szType, "Collection") == 0)
            {
               CComObject<Collection> *const pcol = (CComObject<Collection>*)lv.lParam;
@@ -224,16 +225,14 @@ INT_PTR SearchSelectDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
          const int windowHeight = rc.bottom - rc.top;
          const int windowWidth = rc.right - rc.left;
 
-         const HWND hOkButton = GetDlgItem(IDOK).GetHwnd();
          const int buttonY = (windowHeight - 85) + 5;
-         RECT buttonRc;
-         ::GetClientRect(hOkButton, &buttonRc);
+         const CRect buttonRc = GetDlgItem(IDOK).GetClientRect();
          const int buttonWidth = buttonRc.right - buttonRc.left;
          const int buttonHeight = buttonRc.bottom - buttonRc.top;
          
          ::SetWindowPos(m_hElementList, nullptr, 6, 5, windowWidth - 28, windowHeight - 90, 0);
-         ::SetWindowPos(hOkButton, nullptr, 6, buttonY, buttonWidth, buttonHeight, 0);
-         ::SetWindowPos(GetDlgItem(IDCANCEL).GetHwnd(), nullptr, 6 + buttonWidth + 50, buttonY, buttonWidth, buttonHeight, 0);
+         GetDlgItem(IDOK).SetWindowPos(nullptr, 6, buttonY, buttonWidth, buttonHeight, 0);
+         GetDlgItem(IDCANCEL).SetWindowPos(nullptr, 6 + buttonWidth + 50, buttonY, buttonWidth, buttonHeight, 0);
          break;
       }
 
@@ -634,7 +633,7 @@ void SearchSelectDialog::AddSearchItemToList(IEditable * const piedit, int idx)
    }
    case eItemTextbox:
    {
-      ListView_SetItemText(m_hElementList, idx, 1, (LPSTR)"Textbox");
+      ListView_SetItemText(m_hElementList, idx, 1, (LPSTR)"TextBox");
       ListView_SetItemText(m_hElementList, idx, 3, (LPSTR)"");
       ListView_SetItemText(m_hElementList, idx, 4, (LPSTR)"");
 

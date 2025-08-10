@@ -13,6 +13,9 @@
 #include <charconv>
 #include <iomanip>
 #include <filesystem>
+#if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
+#include <pthread.h>
+#endif
 
 static const char point = std::use_facet<std::numpunct<char>>(std::locale("")).decimal_point(); // gets the OS locale decimal point (e.g. ',' or '.')
 
@@ -285,7 +288,11 @@ char *MakeChar(const WCHAR* const wz)
 {
    const int len = WideCharToMultiByte(CP_ACP, 0, wz, -1, nullptr, 0, nullptr, nullptr); //(int)wcslen(wz) + 1; // include null termination
    if (len <= 1)
-      return nullptr;
+   {
+      char * const szT = new char[1];
+      szT[0] = '\0';
+      return szT;
+   }
    char * const szT = new char[len];
    WideCharToMultiByte(CP_ACP, 0, wz, -1, szT, len, nullptr, nullptr);
    return szT;
@@ -336,7 +343,14 @@ void SetThreadName(const std::string& name)
    HRESULT hr = SetThreadDescription(GetCurrentThread(), wstr.c_str());
 }
 #else
-void SetThreadName(const std::string& name) { }
+void SetThreadName(const std::string& name)
+{
+#ifdef __APPLE__
+   pthread_setname_np(name.c_str());
+#elif defined(__linux__) || defined(__ANDROID__)
+   pthread_setname_np(pthread_self(), name.c_str());
+#endif
+}
 #endif
 
 // Helper function for IsOnWine
@@ -416,6 +430,29 @@ bool IsWindowsVistaOr7()
 #endif
 }
 
+#ifndef __STANDALONE__
+string GetExecutablePath()
+{
+   std::string path;
+   DWORD size = MAX_PATH;
+   while (true)
+   {
+      path.resize(size);
+      DWORD length = ::GetModuleFileNameA(nullptr, &path[0], size);
+      if (length == 0)
+      {
+         return {};
+      }
+      else if (length < size)
+      {
+         path.resize(length); // Trim excess
+         return path;
+      }
+      size *= 2;
+   }
+}
+#endif
+
 vector<uint8_t> read_file(const string& filename, const bool binary)
 {
    vector<uint8_t> data;
@@ -426,7 +463,7 @@ vector<uint8_t> read_file(const string& filename, const bool binary)
       ShowError(text);
       return data;
    }
-   data.resize(file.tellg());
+   data.resize((size_t)file.tellg());
    file.seekg(0, std::ios::beg);
    file.read(reinterpret_cast<char*>(data.data()), data.size());
    file.close();
@@ -857,49 +894,9 @@ HRESULT external_open_storage(const OLECHAR* pwcsName, IStorage* pstgPriority, D
    return PoleStorage::Create(szName, "/", (IStorage**)ppstgOpen);
 }
 
-#include "standalone/inc/vpinmame/VPinMAMEController.h"
-#include "standalone/inc/wmp/WMPCore.h"
-#include "standalone/inc/flexdmd/FlexDMD.h"
-#include "standalone/inc/ultradmd/UltraDMDDMDObject.h"
-#include "standalone/inc/pup/PUPPinDisplay.h"
-#include "standalone/inc/b2s/Server.h"
-
 HRESULT external_create_object(const WCHAR* progid, IClassFactory* cf, IUnknown* obj)
 {
    HRESULT hres = E_NOTIMPL;
-
-   Settings* pSettings = &g_pplayer->m_ptable->m_settings;
-
-   if (!wcsicmp(progid, L"WMPlayer.OCX")) {
-      CComObject<WMPCore>* pObj = nullptr;
-      if (SUCCEEDED(CComObject<WMPCore>::CreateInstance(&pObj)))
-         hres = pObj->QueryInterface(IID_IWMPCore, (void**)obj);
-   }
-   else if (!wcsicmp(progid, L"VPinMAME.Controller")) {
-      Settings::Section section = pSettings->GetSection("Plugin.PinMAME");
-      if (!pSettings->LoadValueWithDefault(section, "Enable"s, false))
-         hres = (new VPinMAMEController())->QueryInterface(IID_IController, (void**)obj);
-   }
-   else if (!wcsicmp(progid, L"FlexDMD.FlexDMD")) {
-      Settings::Section section = pSettings->GetSection("Plugin.FlexDMD");
-      if (!pSettings->LoadValueWithDefault(section, "Enable"s, false))
-         hres = (new FlexDMD())->QueryInterface(IID_IFlexDMD, (void**)obj);
-   }
-   else if (!wcsicmp(progid, L"UltraDMD.DMDObject")) {
-      Settings::Section section = pSettings->GetSection("Plugin.FlexDMD");
-      if (!pSettings->LoadValueWithDefault(section, "Enable"s, false))
-         hres = (new UltraDMDDMDObject())->QueryInterface(IID_IDMDObject, (void**)obj);
-   }
-   else if (!wcsicmp(progid, L"B2S.Server")) {
-      Settings::Section section = pSettings->GetSection("Plugin.PinMAME");
-      if (!pSettings->LoadValueWithDefault(section, "Enable"s, false))
-         hres = (new Server())->QueryInterface(IID__Server, (void**)obj);
-   }
-   else if (!wcsicmp(progid, L"PinUpPlayer.PinDisplay")) {
-      hres = (new PUPPinDisplay())->QueryInterface(IID_IPinDisplay, (void**)obj);
-   }
-   else if (!wcsicmp(progid, L"PUPDMDControl.DMD")) {
-   }
 
    const char* const szT = MakeChar(progid);
    PLOGI.printf("progid=%s, hres=0x%08x", szT, hres);
