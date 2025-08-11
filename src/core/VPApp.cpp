@@ -1067,6 +1067,11 @@ int VPApp::Run()
    // Start VP with file dialog open and then also playing that one?
    bool loadFileResult = true;
    const bool selectOnTableStart = m_vpinball.m_settings.LoadValueWithDefault(Settings::Editor, "SelectTableOnStart"s, true);
+   std::string tempTableFileName = m_tableFileName;
+   if (m_play == true)
+   {
+      m_tableFileName.clear();
+   }
    if (!m_tableFileName.empty() || selectOnTableStart)
    {
       if (!m_tableFileName.empty())
@@ -1082,8 +1087,19 @@ int VPApp::Run()
       }
       else
       {
-         loadFileResult = m_vpinball.LoadFile(false);
-         m_vpinball.m_table_played_via_SelectTableOnStart = loadFileResult;
+         if (m_play)
+         {
+            ShowWindow(m_vpinball.GetHwnd(), SW_SHOW);
+            m_vpinball.m_securitylevel = eSecurityNone;
+            m_vpinball.LoadFileName(tempTableFileName, false);
+            loadFileResult = true;
+            m_tableFileName = tempTableFileName;
+         }
+         else
+         {
+            loadFileResult = m_vpinball.LoadFile(false);
+            m_vpinball.m_table_played_via_SelectTableOnStart = loadFileResult;
+         }
       }
 
       if (m_extractScript && loadFileResult)

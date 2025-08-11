@@ -1174,7 +1174,7 @@ void VPinball::DoPlay(const int playMode)
       #else
       auto processWindowMessages = []() {};
       #endif
-      ShowWindow(SW_HIDE);
+      //ShowWindow(SW_HIDE);
 
       g_pplayer->GameLoop(processWindowMessages);
 
