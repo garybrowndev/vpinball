@@ -37,7 +37,7 @@ using namespace std;
 
 namespace DOFPlugin {
 
-static MsgPluginAPI* msgApi = nullptr;
+static const MsgPluginAPI* msgApi = nullptr;
 static VPXPluginAPI* vpxApi = nullptr;
 static uint32_t endpointId;
 
@@ -68,6 +68,7 @@ static void OnPollStates(void* userData);
 LPI_USE();
 #define LOGD LPI_LOGD
 #define LOGI LPI_LOGI
+#define LOGW LPI_LOGW
 #define LOGE LPI_LOGE
 
 LPI_IMPLEMENT
@@ -262,7 +263,7 @@ static void OnDevSrcChanged(const unsigned int eventId, void* userData, void* ms
    {
       memset(&info, 0, sizeof(info));
       msgApi->GetEndpointInfo(getSrcMsg.entries[i].id.endpointId, &info);
-      if (info.id != nullptr && strcmp(info.id, "PinMAME") == 0)
+      if (info.id != nullptr && info.id == "PinMAME"s)
       {
          pinmameDevSrc = getSrcMsg.entries[i];
          if (pinmameDevSrc.deviceDefs)
@@ -311,7 +312,7 @@ static void OnInputSrcChanged(const unsigned int eventId, void* userData, void* 
    {
       memset(&info, 0, sizeof(info));
       msgApi->GetEndpointInfo(getSrcMsg.entries[i].id.endpointId, &info);
-      if (info.id != nullptr && strcmp(info.id, "PinMAME") == 0)
+      if (info.id != nullptr && info.id == "PinMAME"s)
       {
          pinmameInputSrc = getSrcMsg.entries[i];
          if (pinmameInputSrc.inputDefs)
@@ -333,7 +334,7 @@ using namespace DOFPlugin;
 
 MSGPI_EXPORT void MSGPIAPI DOFPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api)
 {
-   msgApi = const_cast<MsgPluginAPI*>(api);
+   msgApi = api;
    endpointId = sessionId;
 
    LPISetup(endpointId, msgApi);

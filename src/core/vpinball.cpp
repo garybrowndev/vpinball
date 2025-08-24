@@ -1100,7 +1100,7 @@ void VPinball::DoPlay(const int playMode)
                else if (dragging)
                {
                   // Handle dragging of auxiliary windows
-                  SDL_Window *sdlWnd = SDL_GetWindowFromID(e.motion.windowID);
+                  SDL_Window *const sdlWnd = SDL_GetWindowFromID(e.motion.windowID);
                   std::vector<VPX::Window*> windows = {
                      g_pplayer->m_scoreviewOutput.GetWindow(),
                      g_pplayer->m_backglassOutput.GetWindow(),
@@ -1125,7 +1125,32 @@ void VPinball::DoPlay(const int playMode)
             }
 
             if (isPFWnd)
-               ImGui_ImplSDL3_ProcessEvent(&e);
+            {
+               if (e.type == SDL_EVENT_MOUSE_MOTION)
+               {
+                  SDL_Event rotatedEvent = e;
+                  switch (g_pplayer->m_liveUI->GetUIOrientation())
+                  {
+                  case 0: break;
+                  case 1:
+                     rotatedEvent.motion.x = e.motion.y;
+                     rotatedEvent.motion.y = ImGui::GetIO().DisplaySize.y - e.motion.x;
+                     break;
+                  case 2:
+                     rotatedEvent.motion.x = e.motion.x;
+                     rotatedEvent.motion.y = ImGui::GetIO().DisplaySize.y - e.motion.y;
+                     break;
+                  case 3:
+                     rotatedEvent.motion.x = ImGui::GetIO().DisplaySize.x - e.motion.y;
+                     rotatedEvent.motion.y = e.motion.x;
+                     break;
+                  default: assert(false); return;
+                  }
+                  ImGui_ImplSDL3_ProcessEvent(&rotatedEvent);
+               }
+               else
+                  ImGui_ImplSDL3_ProcessEvent(&e);
+            }
 
             #ifdef ENABLE_SDL_INPUT
             g_pplayer->m_pininput.HandleSDLEvent(e);
@@ -1241,10 +1266,7 @@ void VPinball::LoadFileName(const string& filename, const bool updateEditor, VPX
 
    const bool hashing_error = (hr == APPX_E_BLOCK_HASH_INVALID || hr == APPX_E_CORRUPT_CONTENT);
    if (hashing_error)
-   {
-      const LocalString ls(IDS_CORRUPTFILE);
-      ShowError(ls.m_szbuffer);
-   }
+      ShowError(LocalString(IDS_CORRUPTFILE).m_szbuffer);
 
    if (!SUCCEEDED(hr) && !hashing_error)
    {
@@ -1600,7 +1622,7 @@ void VPinball::UpdateRecentFileList(const string& filename)
       for (size_t i = 0; i < m_recentTableList.size(); i++)
       {
          // now search for filenames with & and replace with && so that these display correctly, and add shortcut 1..X in front
-         const string recentMenuname = '&' + std::to_string(i+1) + "  " + string_replace_all(m_recentTableList[i], "&"s, "&&"s);
+         const string recentMenuname = '&' + std::to_string(i+1) + "  " + string_replace_all(m_recentTableList[i], '&', "&&"s);
 
          // set the IDM of this menu item
          // set up the menu info block
@@ -1795,9 +1817,7 @@ int VPinball::OnCreate(CREATESTRUCT& cs)
 
    const int result = CMDIDockFrame::OnCreate(cs);
 
-   char szName[256];
-   LoadString(theInstance, IDS_PROJNAME, szName, sizeof(szName));
-   SetWindowText(szName);
+   SetWindowText(LocalString(IDS_PROJNAME).m_szbuffer);
 
    CreateDocker();
 
@@ -2003,7 +2023,7 @@ LRESULT VPinball::OnFrontEndControlsMsg(WPARAM wParam, LPARAM lParam)
                      char cls[128];
                      if (::IsWindowVisible(hwnd) && ::IsWindowEnabled(hwnd)
                          && ::RealGetWindowClassA(hwnd, cls, std::size(cls)) != 0
-                         && strcmp(cls, "#32770") == 0)
+                         && cls == "#32770"s)
                      {
                         // close it by sending IDCANCEL
                         DWORD_PTR result;
@@ -2495,8 +2515,7 @@ void VPinball::SetDefaultPhysics()
    CComObject<PinTable> * const ptCur = GetActiveTable();
    if (ptCur)
    {
-      const LocalString ls(IDS_DEFAULTPHYSICS);
-      const int answ = MessageBox(ls.m_szbuffer, "Continue?", MB_YESNO | MB_ICONWARNING);
+      const int answ = MessageBox(LocalString(IDS_DEFAULTPHYSICS).m_szbuffer, "Continue?", MB_YESNO | MB_ICONWARNING);
       if (answ == IDYES)
       {
          ptCur->BeginUndo();
@@ -2787,7 +2806,7 @@ static unsigned int GenerateTournamentFileInternal(uint8_t *const dmd_data, cons
 #else
    const size_t cchar = g_pvp->GetActiveTable()->m_pcv->m_script_text.length();
    char * const szText = new char[cchar + 1];
-   strncpy_s(szText, g_pvp->GetActiveTable()->m_pcv->m_script_text.c_str(), cchar);
+   strncpy_s(szText, cchar+1, g_pvp->GetActiveTable()->m_pcv->m_script_text.c_str());
 #endif
 
    for(size_t i = 0; i < cchar; ++i)
@@ -2846,7 +2865,7 @@ static unsigned int GenerateTournamentFileInternal(uint8_t *const dmd_data, cons
    GetModuleFileName(nullptr, path, MAXSTRING);
 #elif defined(__APPLE__) //!! ??
    const char* szPath = SDL_GetBasePath();
-   strcpy_s(path, sizeof(path), szPath);
+   strncpy_s(path, sizeof(path), szPath);
 #else
    const ssize_t len = ::readlink("/proc/self/exe", path, sizeof(path)-1);
    if (len != -1)

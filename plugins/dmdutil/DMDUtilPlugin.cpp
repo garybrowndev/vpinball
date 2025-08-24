@@ -22,7 +22,7 @@ using namespace std;
 
 namespace DMDUtilPlugin {
    
-static MsgPluginAPI* msgApi = nullptr;
+static const MsgPluginAPI* msgApi = nullptr;
 static uint32_t endpointId;
 
 static unsigned int onGameEndId;
@@ -43,6 +43,7 @@ static uint8_t tintB;
 LPI_USE();
 #define LOGD LPI_LOGD
 #define LOGI LPI_LOGI
+#define LOGW LPI_LOGW
 #define LOGE LPI_LOGE
 
 LPI_IMPLEMENT
@@ -73,21 +74,21 @@ void DMDUTILCALLBACK OnDMDUtilLog(DMDUtil_LogLevel logLevel, const char* format,
    }
 }
 
-static string GetSettingString(MsgPluginAPI* pMsgApi, const char* section, const char* key, const string& def = string())
+static string GetSettingString(const MsgPluginAPI* pMsgApi, const char* section, const char* key, const string& def = string())
 {
    char buf[256];
    pMsgApi->GetSetting(section, key, buf, sizeof(buf));
    return buf[0] ? string(buf) : def;
 }
 
-static int GetSettingInt(MsgPluginAPI* pMsgApi, const char* section, const char* key, int def = 0)
+static int GetSettingInt(const MsgPluginAPI* pMsgApi, const char* section, const char* key, int def = 0)
 {
    const auto s = GetSettingString(pMsgApi, section, key, string());
    int result;
    return (s.empty() || (std::from_chars(s.c_str(), s.c_str() + s.length(), result).ec != std::errc{})) ? def : result;
 }
 
-static bool GetSettingBool(MsgPluginAPI* pMsgApi, const char* section, const char* key, bool def = false)
+static bool GetSettingBool(const MsgPluginAPI* pMsgApi, const char* section, const char* key, bool def = false)
 {
    const auto s = GetSettingString(pMsgApi, section, key, string());
    int result;
@@ -214,7 +215,7 @@ using namespace DMDUtilPlugin;
 
 MSGPI_EXPORT void MSGPIAPI DMDUtilPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api)
 {
-   msgApi = const_cast<MsgPluginAPI*>(api);
+   msgApi = api;
    endpointId = sessionId;
 
    LPISetup(endpointId, msgApi); // Request and setup shared login API

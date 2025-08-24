@@ -4,8 +4,11 @@
 #include <functional>
 #include "forms/FormBackglass.h"
 #include "classes/B2SCollectData.h"
+#include "core/ResURIResolver.h"
 
 namespace B2SLegacy {
+
+class PinMAMEAPI;
 
 class Server
 {
@@ -92,10 +95,18 @@ public:
    void B2SMapSound(int digit, const string& soundname);
    FormBackglass* GetFormBackglass() const { return m_pFormBackglass; }
    B2SSettings* GetB2SSettings() const { return m_pB2SSettings; }
-   void GetChangedLamps(ScriptArray* psa, bool isProxied = false);
-   void GetChangedSolenoids(ScriptArray* psa, bool isProxied = false);
-   void GetChangedGIStrings(ScriptArray* psa, bool isProxied = false);
-   void GetChangedLEDs(ScriptArray* psa, bool isProxied = false);
+   PinMAMEAPI* GetPinMAMEApi() const { return m_pinmameApi; }
+   void SetPinMAMEApi(PinMAMEAPI* pinmameApi) { m_pinmameApi = pinmameApi; }
+   uint32_t GetEndpointId() const { return m_endpointId; }
+   void GetChangedLamps();
+   void GetChangedLamps(ScriptVariant* pRet);
+   void GetChangedSolenoids();
+   void GetChangedSolenoids(ScriptVariant* pRet);
+   void GetChangedGIStrings();
+   void GetChangedGIStrings(ScriptVariant* pRet);
+   void GetChangedLEDs(ScriptVariant* pRet);
+   void GetChangedLEDs();
+   void SetSwitch(int switchId, bool value);
    void CheckGetMech(int number, int mech);
    int OnRender(VPXRenderContext2D* const renderCtx, void* context);
    void OnDevSrcChanged(const unsigned int msgId, void* userData, void* msgData);
@@ -166,11 +177,11 @@ private:
    MsgPluginAPI* const m_msgApi;
    VPXPluginAPI* const m_vpxApi;
    const uint32_t m_endpointId;
+   PinMAMEAPI* m_pinmameApi;
+
+   VPXTexture m_dmdTex = nullptr;
 
    bool m_ready = false;
-   bool m_canRenderBackglass = false;
-   bool m_canRenderDMD = false;
-   int m_renderTimeout = 0;
 };
 
 }

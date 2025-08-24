@@ -262,8 +262,6 @@ add_executable(vpinball WIN32
    third-party/include/serial.cpp
    third-party/include/serial.h
    third-party/include/hidapi/windows/hid.cpp
-   third-party/include/imgui/imgui_impl_opengl3.cpp
-   third-party/include/imgui/imgui_impl_opengl3.h
    third-party/include/imgui/imgui_impl_sdl3.cpp
    third-party/include/imgui/imgui_impl_sdl3.h
    third-party/include/nvapi/nvapi.h
@@ -351,7 +349,6 @@ target_compile_definitions(vpinball PRIVATE
    ENABLE_SDL_INPUT
    ENABLE_SDL_VIDEO
    ENABLE_OPENGL
-   USE_DINPUT8
 )
 
 set(OPT_COMMON /Ob2 /O2 /Oi /arch:SSE2 /fp:fast /fp:except- /Ot /GF /GS- /Gy /GR /Oy /GT /GL /w44005 /Zc:__cplusplus /std:c++20)
@@ -372,7 +369,6 @@ target_link_libraries(vpinball
    comctl32.lib
    freeimage.lib
    dxguid.lib
-   dinput.lib
    nvapi.lib
    winmm.lib
    hid.lib

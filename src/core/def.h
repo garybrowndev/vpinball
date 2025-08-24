@@ -17,6 +17,8 @@ using namespace std::string_literals;
 using std::string;
 using std::wstring;
 
+#include <cassert>
+
 #ifdef _MSC_VER
 #include <intrin.h>
 #ifdef _M_ARM64
@@ -117,12 +119,6 @@ constexpr __forceinline T smoothstep(const T edge0, const T edge1, T x)
    x = (x - edge0) / (edge1 - edge0);
    x = saturate(x);
    return x * x * (T(3) - T(2) * x);
-}
-
-template <typename T>
-inline void RemoveFromVector(vector<T>& v, const T& val)
-{
-   v.erase(std::remove(v.begin(), v.end(), val), v.end());
 }
 
 template <typename T>
@@ -228,7 +224,7 @@ class LocalString final
 public:
    LocalString(const int resid);
 
-   char m_szbuffer[256] = { 0 };
+   char m_szbuffer[256]; // max size would be 4096
 };
 
 class LocalStringW final
@@ -236,7 +232,7 @@ class LocalStringW final
 public:
    LocalStringW(const int resid);
 
-   WCHAR m_szbuffer[256] = { 0 };
+   WCHAR m_szbuffer[256]; // max size would be 4096
 };
 
 #ifndef M_PI
@@ -578,20 +574,6 @@ constexpr __forceinline float millimetersToVPUnits(const float value)
    // return value * (float)(1.0 / 0.540425);
 }
 
-// removes all whitespaces existing in a string
-inline void RemoveSpaces(char* const source)
-{
-   char* i = source;
-   char* j = source;
-   while (*j != '\0')
-   {
-      *i = *j++;
-      if (!isspace(*i))
-         i++;
-   }
-   *i = '\0';
-}
-
 string convert_decimal_point_and_trim(string sz, const bool use_locale);
 
 float sz2f(string sz, const bool force_convert_decimal_point = false);
@@ -762,11 +744,41 @@ bool is_string_numeric(const string& str);
 int string_to_int(const string& str, int default_value = 0);
 float string_to_float(const string& str, float default_value = 0.0f);
 vector<string> parse_csv_line(const string& line);
+// copies all characters of src incl. the null-terminator, BUT never more than dest_size-1, always null-terminates
+inline void strncpy_s(char* const __restrict dest, const size_t dest_size, const char* const __restrict src)
+{
+   if (!dest || dest_size == 0)
+      return;
+   size_t i = 0;
+   if (src)
+   {
+      for (; i < dest_size-1 && src[i] != '\0'; ++i)
+         dest[i] = src[i];
+      assert(src[i] == '\0');
+   }
+   dest[i] = '\0';
+}
+// copies all characters of src incl. the null-terminator, BUT never more than dest_size-1, always null-terminates
+inline void wcsncpy_s(WCHAR* const __restrict dest, const size_t dest_size, const WCHAR* const __restrict src)
+{
+   if (!dest || dest_size == 0)
+      return;
+   size_t i = 0;
+   if (src)
+   {
+      for (; i < dest_size-1 && src[i] != L'\0'; ++i)
+         dest[i] = src[i];
+      assert(src[i] == L'\0');
+   }
+   dest[i] = L'\0';
+}
 bool string_contains_case_insensitive(const string& str1, const string& str2);
 bool string_starts_with_case_insensitive(const string& str, const string& prefix);
 string string_replace_all(const string& szStr, const string& szFrom, const string& szTo, const size_t offs = 0);
+string string_replace_all(const string& szStr, const string& szFrom, const char szTo, const size_t offs = 0);
+string string_replace_all(const string& szStr, const char szFrom, const string& szTo, const size_t offs = 0);
 string create_hex_dump(const uint8_t* buffer, size_t size);
-vector<unsigned char> base64_decode(const string &encoded_string);
+vector<unsigned char> base64_decode(string encoded_string);
 #ifdef ENABLE_OPENGL
 const char* gl_to_string(GLuint value);
 #endif

@@ -2,7 +2,7 @@
 
 #include "core/stdafx.h"
 
-#include "LiveUI.h"
+#include "EditorUI.h"
 
 #include "renderer/VRDevice.h"
 #include "renderer/Shader.h"
@@ -27,12 +27,7 @@
   #include "imgui/imgui_impl_win32.h"
 #endif
 
-#if defined(ENABLE_BGFX)
-  #include "bgfx-imgui/imgui_impl_bgfx.h"
-#elif defined(ENABLE_OPENGL)
-  #include "imgui/imgui_impl_opengl3.h"
-#elif defined(ENABLE_DX9)
-  #include "imgui/imgui_impl_dx9.h"
+#if defined(ENABLE_DX9)
   #include <shellapi.h>
 #endif
 
@@ -40,19 +35,14 @@
 #include "imguizmo/ImGuizmo.h"
 #include "imgui_markdown/imgui_markdown.h"
 
-#ifndef __STANDALONE__
-#include "BAM/BAMView.h"
-#endif
-
 // Titles (used as Ids) of modal dialogs
-#define ID_MODAL_SPLASH "In Game UI"
 #define ID_VIDEO_SETTINGS "Video Options"
 #define ID_AUDIO_SETTINGS "Audio Options"
 #define ID_RENDERER_INSPECTION "Renderer Inspection"
-#define ID_BAM_SETTINGS "Headtracking Settings"
 #define ID_ANAGLYPH_CALIBRATION "Anaglyph Calibration"
+#define ID_PLUMB_SETTINGS "Nudge & Plumb Settings"
 
-#define PROP_WIDTH (125.f * m_dpi)
+#define PROP_WIDTH (125.f * m_liveUI.GetDPI())
 #define PROP_TIMER(is_live, startup_obj, live_obj) \
    if (ImGui::CollapsingHeader("Timer", ImGuiTreeNodeFlags_DefaultOpen) && BEGIN_PROP_TABLE) \
    { \
@@ -70,341 +60,6 @@
 #define PROP_ACCESS(startup_obj, live_obj, prop) startup_obj ? &(startup_obj->prop) : nullptr, live_obj ? &(live_obj->prop) : nullptr
 
 #define ICON_SAVE ICON_FK_FLOPPY_O
-
-// Maps directinput keycode used by VPX to ImGui keycode enum
-// FIXME This is not ok and will fail for all non QWERTY keyboards, since VPX (DirectInput Keyboard) is keyboard layout neutral while ImGui is layout aware
-// For the time being, this is used to translate global shortcuts for:
-// - Debugger (default is D which should be ok on all keyboards), 
-// - FPS display (default is F11 which should be ok)
-// - Exit (default is Escape which should be ok)
-static constexpr ImGuiKey dikToImGuiKeys[] = {
-   ImGuiKey_None,
-   ImGuiKey_Escape,    //DIK_ESCAPE          0x01
-   ImGuiKey_1,         //DIK_1               0x02
-   ImGuiKey_2,         //DIK_2               0x03
-   ImGuiKey_3,         //DIK_3               0x04
-   ImGuiKey_4,         //DIK_4               0x05
-   ImGuiKey_5,         //DIK_5               0x06
-   ImGuiKey_6,         //DIK_6               0x07
-   ImGuiKey_7,         //DIK_7               0x08
-   ImGuiKey_8,         //DIK_8               0x09
-   ImGuiKey_9,         //DIK_9               0x0A
-   ImGuiKey_0,         //DIK_0               0x0B
-   ImGuiKey_Minus,     //DIK_MINUS           0x0C    /* - on main keyboard */
-   ImGuiKey_Equal,     //DIK_EQUALS          0x0D
-   ImGuiKey_Backspace, //DIK_BACK            0x0E    /* backspace */
-   ImGuiKey_Tab,       //DIK_TAB             0x0F
-   ImGuiKey_Q,         //DIK_Q               0x10
-   ImGuiKey_W,         //DIK_W               0x11
-   ImGuiKey_E,         //DIK_E               0x12
-   ImGuiKey_R,         //DIK_R               0x13
-   ImGuiKey_T,         //DIK_T               0x14
-   ImGuiKey_Y,         //DIK_Y               0x15
-   ImGuiKey_U,         //DIK_U               0x16
-   ImGuiKey_I,         //DIK_I               0x17
-   ImGuiKey_O,         //DIK_O               0x18
-   ImGuiKey_P,         //DIK_P               0x19
-   ImGuiKey_LeftBracket, //DIK_LBRACKET      0x1A
-   ImGuiKey_RightBracket, //DIK_RBRACKET     0x1B
-   ImGuiKey_Enter,     //DIK_RETURN          0x1C    /* Enter on main keyboard */
-   ImGuiKey_LeftCtrl,  //DIK_LCONTROL        0x1D
-   ImGuiKey_A,         //DIK_A               0x1E
-   ImGuiKey_S,         //DIK_S               0x1F
-   ImGuiKey_D,         //DIK_D               0x20
-   ImGuiKey_F,         //DIK_F               0x21
-   ImGuiKey_G,         //DIK_G               0x22
-   ImGuiKey_H,         //DIK_H               0x23
-   ImGuiKey_J,         //DIK_J               0x24
-   ImGuiKey_K,         //DIK_K               0x25
-   ImGuiKey_L,         //DIK_L               0x26
-   ImGuiKey_Semicolon, //DIK_SEMICOLON       0x27
-   ImGuiKey_Apostrophe,//DIK_APOSTROPHE      0x28
-   ImGuiKey_GraveAccent, //DIK_GRAVE         0x29    /* accent grave */
-   ImGuiKey_LeftShift, //DIK_LSHIFT          0x2A
-   ImGuiKey_Backslash, //DIK_BACKSLASH       0x2B
-   ImGuiKey_Z,         //DIK_Z               0x2C
-   ImGuiKey_X,         //DIK_X               0x2D
-   ImGuiKey_C,         //DIK_C               0x2E
-   ImGuiKey_V,         //DIK_V               0x2F
-   ImGuiKey_B,         //DIK_B               0x30
-   ImGuiKey_N,         //DIK_N               0x31
-   ImGuiKey_M,         //DIK_M               0x32
-   ImGuiKey_Comma,     //DIK_COMMA           0x33
-   ImGuiKey_Period,    //DIK_PERIOD          0x34    /* . on main keyboard */
-   ImGuiKey_Slash,     //DIK_SLASH           0x35    /* / on main keyboard */
-   ImGuiKey_RightShift,//DIK_RSHIFT          0x36
-   ImGuiKey_KeypadMultiply, //DIK_MULTIPLY   0x37    /* * on numeric keypad */
-   ImGuiKey_Menu,      //DIK_LMENU           0x38    /* left Alt */
-   ImGuiKey_Space,     //DIK_SPACE           0x39
-   ImGuiKey_CapsLock,  //DIK_CAPITAL         0x3A
-   ImGuiKey_F1,        //DIK_F1              0x3B
-   ImGuiKey_F2,        //DIK_F2              0x3C
-   ImGuiKey_F3,        //DIK_F3              0x3D
-   ImGuiKey_F4,        //DIK_F4              0x3E
-   ImGuiKey_F5,        //DIK_F5              0x3F
-   ImGuiKey_F6,        //DIK_F6              0x40
-   ImGuiKey_F7,        //DIK_F7              0x41
-   ImGuiKey_F8,        //DIK_F8              0x42
-   ImGuiKey_F9,        //DIK_F9              0x43
-   ImGuiKey_F10,       //DIK_F10             0x44
-   ImGuiKey_NumLock,   //DIK_NUMLOCK         0x45
-   ImGuiKey_ScrollLock,//DIK_SCROLL          0x46    /* Scroll Lock */
-   ImGuiKey_Keypad7,   //DIK_NUMPAD7         0x47
-   ImGuiKey_Keypad8,   //DIK_NUMPAD8         0x48
-   ImGuiKey_Keypad9,   //DIK_NUMPAD9         0x49
-   ImGuiKey_KeypadSubtract, //DIK_SUBTRACT   0x4A    /* - on numeric keypad */
-   ImGuiKey_Keypad4,   //DIK_NUMPAD4         0x4B
-   ImGuiKey_Keypad5,   //DIK_NUMPAD5         0x4C
-   ImGuiKey_Keypad6,   //DIK_NUMPAD6         0x4D
-   ImGuiKey_KeypadAdd, //DIK_ADD             0x4E    /* + on numeric keypad */
-   ImGuiKey_Keypad1,   //DIK_NUMPAD1         0x4F
-   ImGuiKey_Keypad2,   //DIK_NUMPAD2         0x50
-   ImGuiKey_Keypad3,   //DIK_NUMPAD3         0x51
-   ImGuiKey_Keypad0,   //DIK_NUMPAD0         0x52
-   ImGuiKey_KeypadDecimal, //DIK_DECIMAL     0x53    /* . on numeric keypad */
-   ImGuiKey_None,      //0x54
-   ImGuiKey_None,      //0x55
-   ImGuiKey_None,      //DIK_OEM_102         0x56    /* < > | on UK/Germany keyboards */
-   ImGuiKey_F11,       //DIK_F11             0x57
-   ImGuiKey_F12,       //DIK_F12             0x58
-   ImGuiKey_None,      //0x59
-   ImGuiKey_None,      //0x5A
-   ImGuiKey_None,      //0x5B
-   ImGuiKey_None,      //0x5C
-   ImGuiKey_None,      //0x5D
-   ImGuiKey_None,      //0x5E
-   ImGuiKey_None,      //0x5F
-   ImGuiKey_None,      //0x60
-   ImGuiKey_None,      //0x61
-   ImGuiKey_None,      //0x62
-   ImGuiKey_None,      //0x63
-   ImGuiKey_None,      //DIK_F13             0x64    /*                     (NEC PC98) */
-   ImGuiKey_None,      //DIK_F14             0x65    /*                     (NEC PC98) */
-   ImGuiKey_None,      //DIK_F15             0x66    /*                     (NEC PC98) */
-   ImGuiKey_None,      //0x67
-   ImGuiKey_None,      //0x68
-   ImGuiKey_None,      //0x69
-   ImGuiKey_None,      //0x6A
-   ImGuiKey_None,      //0x6B
-   ImGuiKey_None,      //0x6C
-   ImGuiKey_None,      //0x6D
-   ImGuiKey_None,      //0x6E
-   ImGuiKey_None,      //0x6F
-
-   ImGuiKey_None, //0x70
-   ImGuiKey_None, //0x71
-   ImGuiKey_None, //0x72
-   ImGuiKey_None, //0x73
-   ImGuiKey_None, //0x74
-   ImGuiKey_None, //0x75
-   ImGuiKey_None, //0x76
-   ImGuiKey_None, //0x77
-   ImGuiKey_None, //0x78
-   ImGuiKey_None, //0x79
-   ImGuiKey_None, //0x7A
-   ImGuiKey_None, //0x7B
-   ImGuiKey_None, //0x7C
-   ImGuiKey_None, //0x7D
-   ImGuiKey_None, //0x7E
-   ImGuiKey_None, //0x7F
-
-   ImGuiKey_None, //0x80
-   ImGuiKey_None, //0x81
-   ImGuiKey_None, //0x82
-   ImGuiKey_None, //0x83
-   ImGuiKey_None, //0x84
-   ImGuiKey_None, //0x85
-   ImGuiKey_None, //0x86
-   ImGuiKey_None, //0x87
-   ImGuiKey_None, //0x88
-   ImGuiKey_None, //0x89
-   ImGuiKey_None, //0x8A
-   ImGuiKey_None, //0x8B
-   ImGuiKey_None, //0x8C
-   ImGuiKey_None, //0x8D
-   ImGuiKey_None, //0x8E
-   ImGuiKey_None, //0x8F
-
-   ImGuiKey_None, //0x90
-   ImGuiKey_None, //0x91
-   ImGuiKey_None, //0x92
-   ImGuiKey_None, //0x93
-   ImGuiKey_None, //0x94
-   ImGuiKey_None, //0x95
-   ImGuiKey_None, //0x96
-   ImGuiKey_None, //0x97
-   ImGuiKey_None, //0x98
-   ImGuiKey_None, //0x99
-   ImGuiKey_None, //0x9A
-   ImGuiKey_None, //0x9B
-
-   ImGuiKey_KeypadEnter, //DIK_NUMPADENTER     0x9C    /* Enter on numeric keypad */
-   ImGuiKey_RightCtrl,   //DIK_RCONTROL        0x9D
-
-   ImGuiKey_None, //0x9E
-   ImGuiKey_None, //0x9F
-
-   ImGuiKey_None, //0xA0
-   ImGuiKey_None, //0xA1
-   ImGuiKey_None, //0xA2
-   ImGuiKey_None, //0xA3
-   ImGuiKey_None, //0xA4
-   ImGuiKey_None, //0xA5
-   ImGuiKey_None, //0xA6
-   ImGuiKey_None, //0xA7
-   ImGuiKey_None, //0xA8
-   ImGuiKey_None, //0xA9
-   ImGuiKey_None, //0xAA
-   ImGuiKey_None, //0xAB
-   ImGuiKey_None, //0xAC
-   ImGuiKey_None, //0xAD
-   ImGuiKey_None, //0xAE
-   ImGuiKey_None, //0xAF
-
-   ImGuiKey_None, //0xB0
-   ImGuiKey_None, //0xB1
-   ImGuiKey_None, //0xB2
-   ImGuiKey_None, //0xB3
-   ImGuiKey_None, //0xB4
-
-   ImGuiKey_KeypadDivide, //DIK_DIVIDE          0xB5    /* / on numeric keypad */
-   ImGuiKey_None,         //0xB6
-   ImGuiKey_None,         //DIK_SYSRQ           0xB7
-   ImGuiKey_RightAlt,     //DIK_RMENU           0xB8    /* right Alt */
-
-   ImGuiKey_None, //0xB9
-   ImGuiKey_None, //0xBA
-   ImGuiKey_None, //0xBB
-   ImGuiKey_None, //0xBC
-   ImGuiKey_None, //0xBD
-   ImGuiKey_None, //0xBE
-   ImGuiKey_None, //0xBF
-
-   ImGuiKey_None, //0xC0
-   ImGuiKey_None, //0xC1
-   ImGuiKey_None, //0xC2
-   ImGuiKey_None, //0xC3
-   ImGuiKey_None, //0xC4
-   ImGuiKey_None, //0xC5
-   ImGuiKey_None, //0xC6
-
-   ImGuiKey_Home,       //DIK_HOME            0xC7    /* Home on arrow keypad */
-   ImGuiKey_UpArrow,    //DIK_UP              0xC8    /* UpArrow on arrow keypad */
-   ImGuiKey_PageUp,     //DIK_PRIOR           0xC9    /* PgUp on arrow keypad */
-   ImGuiKey_None,       //0xCA
-   ImGuiKey_LeftArrow,  //DIK_LEFT            0xCB    /* LeftArrow on arrow keypad */
-   ImGuiKey_None,       //0xCC
-   ImGuiKey_RightArrow, //DIK_RIGHT           0xCD    /* RightArrow on arrow keypad */
-   ImGuiKey_None,       //0xCE
-   ImGuiKey_End,        //DIK_END             0xCF    /* End on arrow keypad */
-   ImGuiKey_DownArrow,  //DIK_DOWN            0xD0    /* DownArrow on arrow keypad */
-   ImGuiKey_PageDown,   //DIK_NEXT            0xD1    /* PgDn on arrow keypad */
-   ImGuiKey_Insert,     //DIK_INSERT          0xD2    /* Insert on arrow keypad */
-   ImGuiKey_Delete,     //DIK_DELETE          0xD3    /* Delete on arrow keypad */
-
-   ImGuiKey_None, //0xD4
-   ImGuiKey_None, //0xD5
-   ImGuiKey_None, //0xD6
-   ImGuiKey_None, //0xD7
-   ImGuiKey_None, //0xD8
-   ImGuiKey_None, //0xD9
-   ImGuiKey_None, //0xDA
-
-   ImGuiKey_LeftSuper,  //DIK_LWIN            0xDB    /* Left Windows key */
-   ImGuiKey_RightSuper, //DIK_RWIN            0xDC    /* Right Windows key */
-   ImGuiKey_None,       //DIK_APPS            0xDD    /* AppMenu key */
-};
-
-static void SetupImGuiStyle(const float overall_alpha)
-{
-   // Rounded Visual Studio style by RedNicStone from ImThemes
-   ImGuiStyle &style = ImGui::GetStyle();
-
-   style.Alpha = 1.0f;
-   style.DisabledAlpha = 0.6000000238418579f;
-   style.WindowPadding = ImVec2(8.0f, 8.0f);
-   style.WindowRounding = 4.0f;
-   style.WindowBorderSize = 0.0f;
-   style.WindowMinSize = ImVec2(32.0f, 32.0f);
-   style.WindowTitleAlign = ImVec2(0.0f, 0.5f);
-   style.WindowMenuButtonPosition = ImGuiDir_Left;
-   style.ChildRounding = 0.0f;
-   style.ChildBorderSize = 1.0f;
-   style.PopupRounding = 4.0f;
-   style.PopupBorderSize = 1.0f;
-   style.FramePadding = ImVec2(4.0f, 3.0f);
-   style.FrameRounding = 2.5f;
-   style.FrameBorderSize = 0.0f;
-   style.ItemSpacing = ImVec2(8.0f, 4.0f);
-   style.ItemInnerSpacing = ImVec2(4.0f, 4.0f);
-   style.CellPadding = ImVec2(4.0f, 2.0f);
-   style.IndentSpacing = 21.0f;
-   style.ColumnsMinSpacing = 6.0f;
-   style.ScrollbarSize = 11.0f;
-   style.ScrollbarRounding = 2.5f;
-   style.GrabMinSize = 10.0f;
-   style.GrabRounding = 2.0f;
-   style.TabRounding = 3.5f;
-   style.TabBorderSize = 0.0f;
-   style.TabCloseButtonMinWidthUnselected = 0.0f;
-   style.ColorButtonPosition = ImGuiDir_Right;
-   style.ButtonTextAlign = ImVec2(0.5f, 0.5f);
-   style.SelectableTextAlign = ImVec2(0.0f, 0.0f);
-
-   style.Colors[ImGuiCol_Text] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-   style.Colors[ImGuiCol_TextDisabled] = ImVec4(0.5921568870544434f, 0.5921568870544434f, 0.5921568870544434f, overall_alpha);
-   style.Colors[ImGuiCol_WindowBg] = ImVec4(0.1450980454683304f, 0.1450980454683304f, 0.1490196138620377f, overall_alpha);
-   style.Colors[ImGuiCol_ChildBg] = ImVec4(0.1450980454683304f, 0.1450980454683304f, 0.1490196138620377f, overall_alpha);
-   style.Colors[ImGuiCol_PopupBg] = ImVec4(0.1450980454683304f, 0.1450980454683304f, 0.1490196138620377f, overall_alpha);
-   style.Colors[ImGuiCol_Border] = ImVec4(0.3058823645114899f, 0.3058823645114899f, 0.3058823645114899f, overall_alpha);
-   style.Colors[ImGuiCol_BorderShadow] = ImVec4(0.3058823645114899f, 0.3058823645114899f, 0.3058823645114899f, overall_alpha);
-   style.Colors[ImGuiCol_FrameBg] = ImVec4(0.2000000029802322f, 0.2000000029802322f, 0.2156862765550613f, overall_alpha);
-   style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.1137254908680916f, 0.5921568870544434f, 0.9254902005195618f, overall_alpha);
-   style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.0f, 0.4666666686534882f, 0.7843137383460999f, overall_alpha);
-   style.Colors[ImGuiCol_TitleBg] = ImVec4(0.1450980454683304f, 0.1450980454683304f, 0.1490196138620377f, overall_alpha);
-   style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.1450980454683304f, 0.1450980454683304f, 0.1490196138620377f, overall_alpha);
-   style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.1450980454683304f, 0.1450980454683304f, 0.1490196138620377f, overall_alpha);
-   style.Colors[ImGuiCol_MenuBarBg] = ImVec4(0.2000000029802322f, 0.2000000029802322f, 0.2156862765550613f, overall_alpha);
-   style.Colors[ImGuiCol_ScrollbarBg] = ImVec4(0.2000000029802322f, 0.2000000029802322f, 0.2156862765550613f, overall_alpha);
-   style.Colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.321568638086319f, 0.321568638086319f, 0.3333333432674408f, overall_alpha);
-   style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.3529411852359772f, 0.3529411852359772f, 0.3725490272045135f, overall_alpha);
-   style.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.3529411852359772f, 0.3529411852359772f, 0.3725490272045135f, overall_alpha);
-   style.Colors[ImGuiCol_CheckMark] = ImVec4(0.0f, 0.4666666686534882f, 0.7843137383460999f, overall_alpha);
-   style.Colors[ImGuiCol_SliderGrab] = ImVec4(0.1137254908680916f, 0.5921568870544434f, 0.9254902005195618f, overall_alpha);
-   style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.0f, 0.4666666686534882f, 0.7843137383460999f, overall_alpha);
-   style.Colors[ImGuiCol_Button] = ImVec4(0.2000000029802322f, 0.2000000029802322f, 0.2156862765550613f, overall_alpha);
-   style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.1137254908680916f, 0.5921568870544434f, 0.9254902005195618f, overall_alpha);
-   style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.1137254908680916f, 0.5921568870544434f, 0.9254902005195618f, overall_alpha);
-   style.Colors[ImGuiCol_Header] = ImVec4(0.2000000029802322f, 0.2000000029802322f, 0.2156862765550613f, overall_alpha);
-   style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.1137254908680916f, 0.5921568870544434f, 0.9254902005195618f, overall_alpha);
-   style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.0f, 0.4666666686534882f, 0.7843137383460999f, overall_alpha);
-   style.Colors[ImGuiCol_Separator] = ImVec4(0.3058823645114899f, 0.3058823645114899f, 0.3058823645114899f, overall_alpha);
-   style.Colors[ImGuiCol_SeparatorHovered] = ImVec4(0.3058823645114899f, 0.3058823645114899f, 0.3058823645114899f, overall_alpha);
-   style.Colors[ImGuiCol_SeparatorActive] = ImVec4(0.3058823645114899f, 0.3058823645114899f, 0.3058823645114899f, overall_alpha);
-   style.Colors[ImGuiCol_ResizeGrip] = ImVec4(0.1450980454683304f, 0.1450980454683304f, 0.1490196138620377f, overall_alpha);
-   style.Colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.2000000029802322f, 0.2000000029802322f, 0.2156862765550613f, overall_alpha);
-   style.Colors[ImGuiCol_ResizeGripActive] = ImVec4(0.321568638086319f, 0.321568638086319f, 0.3333333432674408f, overall_alpha);
-   style.Colors[ImGuiCol_Tab] = ImVec4(0.1450980454683304f, 0.1450980454683304f, 0.1490196138620377f, overall_alpha);
-   style.Colors[ImGuiCol_TabHovered] = ImVec4(0.1137254908680916f, 0.5921568870544434f, 0.9254902005195618f, overall_alpha);
-   style.Colors[ImGuiCol_TabActive] = ImVec4(0.0f, 0.4666666686534882f, 0.7843137383460999f, overall_alpha);
-   style.Colors[ImGuiCol_TabUnfocused] = ImVec4(0.1450980454683304f, 0.1450980454683304f, 0.1490196138620377f, overall_alpha);
-   style.Colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.0f, 0.4666666686534882f, 0.7843137383460999f, overall_alpha);
-   style.Colors[ImGuiCol_PlotLines] = ImVec4(0.0f, 0.4666666686534882f, 0.7843137383460999f, overall_alpha);
-   style.Colors[ImGuiCol_PlotLinesHovered] = ImVec4(0.1137254908680916f, 0.5921568870544434f, 0.9254902005195618f, overall_alpha);
-   style.Colors[ImGuiCol_PlotHistogram] = ImVec4(0.0f, 0.4666666686534882f, 0.7843137383460999f, overall_alpha);
-   style.Colors[ImGuiCol_PlotHistogramHovered] = ImVec4(0.1137254908680916f, 0.5921568870544434f, 0.9254902005195618f, overall_alpha);
-   style.Colors[ImGuiCol_TableHeaderBg] = ImVec4(0.1882352977991104f, 0.1882352977991104f, 0.2000000029802322f, overall_alpha);
-   style.Colors[ImGuiCol_TableBorderStrong] = ImVec4(0.3098039329051971f, 0.3098039329051971f, 0.3490196168422699f, overall_alpha);
-   style.Colors[ImGuiCol_TableBorderLight] = ImVec4(0.2274509817361832f, 0.2274509817361832f, 0.2470588237047195f, overall_alpha);
-   style.Colors[ImGuiCol_TableRowBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f * overall_alpha);
-   style.Colors[ImGuiCol_TableRowBgAlt] = ImVec4(1.0f, 1.0f, 1.0f, 0.05999999865889549f * overall_alpha);
-   style.Colors[ImGuiCol_TextSelectedBg] = ImVec4(0.0f, 0.4666666686534882f, 0.7843137383460999f, overall_alpha);
-   style.Colors[ImGuiCol_DragDropTarget] = ImVec4(0.1450980454683304f, 0.1450980454683304f, 0.1490196138620377f, overall_alpha);
-   style.Colors[ImGuiCol_NavHighlight] = ImVec4(0.1450980454683304f, 0.1450980454683304f, 0.1490196138620377f, overall_alpha);
-   style.Colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.0f, 1.0f, 1.0f, 0.699999988079071f * overall_alpha);
-   style.Colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.800000011920929f, 0.800000011920929f, 0.800000011920929f, 0.2000000029802322f * overall_alpha);
-   style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.1450980454683304f, 0.1450980454683304f, 0.1490196138620377f, overall_alpha);
-}
 
 // Helper to display a little (?) mark which shows a tooltip when hovered.
 static void HelpMarker(const char *desc)
@@ -440,27 +95,6 @@ template <class T> static std::vector<T> SortedCaseInsensitive(std::vector<T>& l
    return sorted;
 }
 
-
-static void HelpTextCentered(const string& text)
-{
-   const ImVec2 win_size = ImGui::GetWindowSize();
-   const ImVec2 text_size = ImGui::CalcTextSize(text.c_str());
-
-   // calculate the indentation that centers the text on one line, relative
-   // to window left, regardless of the `ImGuiStyleVar_WindowPadding` value
-   float text_indentation = (win_size.x - text_size.x) * 0.5f;
-
-   // if text is too long to be drawn on one line, `text_indentation` can
-   // become too small or even negative, so we check a minimum indentation
-   constexpr float min_indentation = 20.0f;
-   if (text_indentation <= min_indentation)
-      text_indentation = min_indentation;
-
-   ImGui::SameLine(text_indentation);
-   ImGui::PushTextWrapPos(win_size.x - text_indentation);
-   ImGui::TextWrapped("%s", text.c_str());
-   ImGui::PopTextWrapPos();
-}
 
 static void HelpSplash(const string &text, int rotation)
 {
@@ -527,54 +161,6 @@ static void HelpSplash(const string &text, int rotation)
    ImGui::End();
 }
 
-void LiveUI::UpdateTouchUI()
-{
-   if (!m_player->m_supportsTouch)
-      return;
-
-#ifdef __LIBVPINBALL__
-   if (m_player->m_liveUIOverride)
-      return;
-#endif
-
-   ImGuiIO &io = ImGui::GetIO();
-
-   float screenWidth = io.DisplaySize.x;
-   float screenHeight = io.DisplaySize.y;
-
-   constexpr ImGuiWindowFlags window_flags
-      = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
-
-   ImGui::SetNextWindowBgAlpha(0.0f);
-   ImGui::SetNextWindowPos(ImVec2(0,0));
-   ImGui::SetNextWindowSize(ImVec2(screenWidth, screenHeight));
-   ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-
-   ImGui::Begin("Touch Controls", nullptr, window_flags);
-
-   const bool showTouchOverlay = g_pvp->m_settings.LoadValueWithDefault(Settings::Player, "TouchOverlay"s, false);
-   if (showTouchOverlay) {
-      ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-      for (int i = 0; i < MAX_TOUCHREGION; ++i) {
-         RECT rect = touchregion[i];
-
-         ImVec2 topLeft((float)rect.left * screenWidth / 100.0f, (float)rect.top * screenHeight / 100.0f);
-         ImVec2 bottomRight((float)rect.right * screenWidth / 100.0f, (float)rect.bottom * screenHeight / 100.0f);
-
-         ImColor fillColor(255, 255, 255, 5);
-         drawList->AddRectFilled(topLeft, bottomRight, fillColor);
-
-         ImColor borderColor(255, 255, 255, 20);
-         drawList->AddRect(topLeft, bottomRight, borderColor, 0.0f, ImDrawFlags_RoundCornersAll, 2.0f);
-      }
-   }
-
-   ImGui::End();
-   ImGui::PopStyleVar(2);
-}
-
 static void HelpEditableHeader(bool is_live, IEditable *editable, IEditable *live_editable)
 {
    IEditable *notnull_editable = editable ? editable : live_editable;
@@ -607,7 +193,7 @@ static void HelpEditableHeader(bool is_live, IEditable *editable, IEditable *liv
    case eItemTrigger: title = "Trigger"s; break;
    default: break;
    }
-   HelpTextCentered(title);
+   LiveUI::CenteredText(title);
    ImGui::BeginDisabled(is_live); // Do not edit name of live objects, it would likely break the script
    string name = select_editable ? select_editable->GetName() : string();
    if (ImGui::InputText("Name", &name))
@@ -620,11 +206,8 @@ static void HelpEditableHeader(bool is_live, IEditable *editable, IEditable *liv
 
 
 
-ImGui::MarkdownConfig LiveUI::markdown_config;
-
-LiveUI::LiveUI(RenderDevice *const rd)
-   : m_rd(rd)
-   , m_perfUI(g_pplayer)
+EditorUI::EditorUI(LiveUI &liveUI)
+   : m_liveUI(liveUI)
 {
    m_StartTime_msec = msec();
    m_app = g_pvp;
@@ -633,7 +216,6 @@ LiveUI::LiveUI(RenderDevice *const rd)
    m_live_table = m_player->m_ptable;
    m_pininput = &(m_player->m_pininput);
    m_renderer = m_player->m_renderer;
-   m_disable_esc = m_live_table->m_settings.LoadValueBool(Settings::Player, "DisableESC"s);
    
    m_selection.type = Selection::SelectionType::S_NONE;
    m_useEditorCam = false;
@@ -651,1593 +233,45 @@ LiveUI::LiveUI(RenderDevice *const rd)
    constexpr vec3 up{0.f, -1.f, 0.f};
    m_camView = Matrix3D::MatrixLookAtRH(eye, at, up);
    ImGuizmo::AllowAxisFlip(false);
-
-#if defined(ENABLE_SDL_VIDEO) // SDL Windowing
-   // using the specialized initializer is not needed
-   // ImGui_ImplSDL3_InitForOpenGL(m_player->m_playfieldSdlWnd, rd->m_sdl_context);
-   ImGui_ImplSDL3_InitForOther(m_player->m_playfieldWnd->GetCore());
-   //int displayIndex = SDL_GetDisplayForWindow(m_player->m_playfieldWnd->GetCore());
-   if (m_player->m_vrDevice)
-   {
-      // VR headset cover full view range, so use a relative part of the full range for the DPI
-      m_dpi = min(m_player->m_vrDevice->GetEyeWidth(), m_player->m_vrDevice->GetEyeHeight()) / 2000.f;
-      #ifdef ENABLE_BGFX
-      ImGui_Implbgfx_SetStereoOfs((float)m_player->m_vrDevice->GetEyeWidth() * 0.15f);
-      #endif
-   }
-   else
-   {
-      // Use display DPI setting
-      // On macOS/iOS, keep m_dpi at 1.0f. ImGui_ImplSDL3_NewFrame applies a 2.0f DisplayFramebufferScale
-      // for SDL_WINDOW_HIGH_PIXEL_DENSITY windows. A m_dpi of 2.0 would cause the UI to scale at 400%.
-      // See: https://wiki.libsdl.org/SDL3/README/highdpi
-      m_dpi = SDL_GetWindowDisplayScale(m_player->m_playfieldWnd->GetCore()) / SDL_GetWindowPixelDensity(m_player->m_playfieldWnd->GetCore());
-   }
-#else // Win32 Windowing
-   ImGui_ImplWin32_Init(m_player->m_playfieldWnd->GetCore());
-   m_dpi = ImGui_ImplWin32_GetDpiScaleForHwnd(m_player->m_playfieldWnd->GetCore());
-#endif
-   m_dpi = min(m_dpi, 10.f); // To avoid texture size overflows
-   m_perfUI.SetDPI(m_dpi);
-
-   SetupImGuiStyle(1.0f);
-
-   ImGui::GetStyle().ScaleAllSizes(m_dpi);
-
-   // UI fonts
-   m_baseFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, 13.0f * m_dpi);
-   ImFontConfig icons_config;
-   icons_config.MergeMode = true;
-   icons_config.PixelSnapH = true;
-   icons_config.GlyphMinAdvanceX = 13.0f * m_dpi;
-   static constexpr ImWchar icons_ranges[] = { ICON_MIN_FK, ICON_MAX_16_FK, 0 };
-   io.Fonts->AddFontFromMemoryCompressedTTF(fork_awesome_compressed_data, fork_awesome_compressed_size, 13.0f * m_dpi, &icons_config, icons_ranges);
-
-   const float overlaySize = 13.0f * m_dpi;
-   m_overlayFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, overlaySize);
-   m_overlayBoldFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, overlaySize);
-   ImFont *H1 = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, overlaySize * 20.0f / 13.f);
-   ImFont *H2 = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, overlaySize * 18.0f / 13.f);
-   ImFont *H3 = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, overlaySize * 15.0f / 13.f);
-   markdown_config.linkCallback = MarkdownLinkCallback;
-   markdown_config.tooltipCallback = nullptr;
-   markdown_config.imageCallback = MarkdownImageCallback;
-   //markdown_config.linkIcon = ICON_FA_LINK;
-   markdown_config.headingFormats[0] = { H1, true };
-   markdown_config.headingFormats[1] = { H2, true };
-   markdown_config.headingFormats[2] = { H3, false };
-   markdown_config.userData = this;
-   markdown_config.formatCallback = MarkdownFormatCallback;
-
-#if defined(ENABLE_BGFX)
-   ImGui_Implbgfx_Init();
-   bgfx::setViewName(bgfx::getCaps()->limits.maxViews - 1, "ImGui");
-   if (m_player && m_player->m_playfieldWnd->IsWCGBackBuffer())
-   {
-      // A value of 1.0 should be sdrWhite * 80, while in the WCG colorspace 80 nits is 0.5
-      const float v = 2.0f / m_player->m_playfieldWnd->GetSDRWhitePoint();
-      float sdrColor[4] = { v, v, v, 1.f };
-      ImGui_Implbgfx_SetSDRColor(sdrColor);
-   }
-#elif defined(ENABLE_OPENGL)
-   ImGui_ImplOpenGL3_Init();
-#elif defined(ENABLE_DX9)
-   ImGui_ImplDX9_Init(rd->GetCoreDevice());
-#endif
 }
 
-LiveUI::~LiveUI()
+EditorUI::~EditorUI()
 {
-   HideUI();
-   if (ImGui::GetCurrentContext())
-   {
-      #if defined(ENABLE_BGFX)
-      ImGui_Implbgfx_Shutdown();
-      #elif defined(ENABLE_OPENGL)
-      ImGui_ImplOpenGL3_Shutdown();
-      #elif defined(ENABLE_DX9)
-      ImGui_ImplDX9_Shutdown();
-      #endif
 
-      #if defined(ENABLE_SDL_VIDEO)
-      ImGui_ImplSDL3_Shutdown();
-      #else
-      ImGui_ImplWin32_Shutdown();
-      #endif
-
-      ImGui::DestroyContext();
-   }
 }
 
-void LiveUI::MarkdownFormatCallback(const ImGui::MarkdownFormatInfo &markdownFormatInfo, bool start)
+void EditorUI::Open()
 {
-   LiveUI *const ui = (LiveUI *)(markdownFormatInfo.config->userData);
-   switch (markdownFormatInfo.type)
-   {
-   case ImGui::MarkdownFormatType::EMPHASIS:
-      ImGui::defaultMarkdownFormatCallback(markdownFormatInfo, start);
-      if (markdownFormatInfo.level == 1)
-      { // normal emphasis
-         if (start)
-            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
-         else
-            ImGui::PopStyleColor();
-      }
-      else
-      { // strong emphasis
-         if (start)
-            ImGui::PushFont(ui->m_overlayBoldFont, ui->m_overlayBoldFont->LegacySize);
-         else
-            ImGui::PopFont();
-      }
-      break;
-   case ImGui::MarkdownFormatType::HEADING:
-   {
-      ImGui::MarkdownHeadingFormat fmt;
-      if (markdownFormatInfo.level > ImGui::MarkdownConfig::NUMHEADINGS)
-         fmt = markdownFormatInfo.config->headingFormats[ImGui::MarkdownConfig::NUMHEADINGS - 1];
-      else
-         fmt = markdownFormatInfo.config->headingFormats[markdownFormatInfo.level - 1];
-      if (start)
-      {
-         if (fmt.font)
-            ImGui::PushFont(fmt.font, fmt.font->LegacySize);
-         if (ImGui::GetItemID() != ui->markdown_start_id)
-            ImGui::NewLine();
-      }
-      else
-      {
-         if (fmt.separator)
-         {
-            ImGui::PushStyleColor(ImGuiCol_Separator, ImVec4(1.f, 1.f, 1.f, 1.f));
-            ImGui::Separator();
-            ImGui::PopStyleColor();
-            ImGui::NewLine();
-         }
-         else
-         {
-            ImGui::NewLine();
-         }
-         if (fmt.font)
-            ImGui::PopFont();
-      }
-      break;
-   }
-   default: ImGui::defaultMarkdownFormatCallback(markdownFormatInfo, start); break;
-   }
-}
-
-void LiveUI::MarkdownLinkCallback(ImGui::MarkdownLinkCallbackData data)
-{
-   if (!data.isImage)
-   {
-      std::string url(data.link, data.linkLength);
-      #ifdef ENABLE_SDL_VIDEO
-      SDL_OpenURL(url.c_str());
-      #else
-      ShellExecuteA(NULL, "open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
-      #endif
-   }
-}
-
-ImGui::MarkdownImageData LiveUI::MarkdownImageCallback(ImGui::MarkdownLinkCallbackData data)
-{
-   LiveUI *const ui = (LiveUI *)data.userData;
-   Texture *const ppi = ui->m_live_table->GetImage(std::string(data.link, data.linkLength));
-   if (ppi == nullptr)
-      return ImGui::MarkdownImageData {};
-   std::shared_ptr<Sampler> sampler = ui->m_renderer->m_renderDevice->m_texMan.LoadTexture(ppi, false);
-   if (sampler == nullptr)
-      return ImGui::MarkdownImageData {};
-   #if defined(ENABLE_BGFX)
-      ImTextureID image = sampler;
-   #elif defined(ENABLE_OPENGL)
-      ImTextureID image = (ImTextureID)sampler->GetCoreTexture();
-   #elif defined(ENABLE_DX9)
-      ImTextureID image = (ImTextureID)sampler->GetCoreTexture();
-   #endif
-   ImGui::MarkdownImageData imageData { true, false, image, ImVec2(static_cast<float>(sampler->GetWidth()), static_cast<float>(sampler->GetHeight())) };
-   ImVec2 const contentSize = ImGui::GetContentRegionAvail();
-   if (imageData.size.x > contentSize.x)
-   {
-      float const ratio = imageData.size.y / imageData.size.x;
-      imageData.size.x = contentSize.x;
-      imageData.size.y = contentSize.x * ratio;
-   }
-   return imageData;
-}
-
-bool LiveUI::HasKeyboardCapture() const
-{
-   return ImGui::GetIO().WantCaptureKeyboard;
-}
-
-bool LiveUI::HasMouseCapture() const
-{
-   return ImGui::GetIO().WantCaptureMouse;
-}
-
-void LiveUI::Render()
-{
-   // For the time being, the UI is only available inside a running player
-   if (m_player == nullptr || m_player->GetCloseState() != Player::CS_PLAYING)
+   if (m_isOpened)
       return;
-
-   // Rendering must happen on a render target matching the dimension we used to prepare the UI frame
-   const ImGuiIO &io = ImGui::GetIO();
-   assert( ((m_rotate == 0 || m_rotate == 2) && RenderTarget::GetCurrentRenderTarget()->GetWidth() == (int)io.DisplaySize.x * (int)io.DisplayFramebufferScale.x && RenderTarget::GetCurrentRenderTarget()->GetHeight() == (int)io.DisplaySize.y * (int)io.DisplayFramebufferScale.y)
-        || ((m_rotate == 1 || m_rotate == 3) && RenderTarget::GetCurrentRenderTarget()->GetWidth() == (int)io.DisplaySize.y * (int)io.DisplayFramebufferScale.y && RenderTarget::GetCurrentRenderTarget()->GetHeight() == (int)io.DisplaySize.x * (int)io.DisplayFramebufferScale.x));
-
-   if (m_rotate != 0 && !m_rotation_callback_added)
-   {
-      // We hack into ImGui renderer for the simple tooltips that must be displayed facing the user
-      m_rotation_callback_added = true; // Only add it once per frame
-      ImGui::GetBackgroundDrawList()->AddCallback(
-         [](const ImDrawList *parent_list, const ImDrawCmd *cmd)
-         {
-            ImGuiIO &io = ImGui::GetIO();
-            LiveUI *const lui = (LiveUI *)cmd->UserCallbackData;
-            const Matrix3D matRotate = Matrix3D::MatrixRotateZ((float)(lui->m_rotate * (M_PI / 2.0)));
-            Matrix3D matTranslate;
-            switch (lui->m_rotate)
-            {
-            case 1: matTranslate = Matrix3D::MatrixTranslate(io.DisplaySize.y, 0, 0); break;
-            case 2: matTranslate = Matrix3D::MatrixTranslate(io.DisplaySize.x, io.DisplaySize.y, 0); break;
-            case 3: matTranslate = Matrix3D::MatrixTranslate(0, io.DisplaySize.x, 0); break;
-            }
-            matTranslate = matRotate * matTranslate;
-            const float L = 0, R = (lui->m_rotate == 1 || lui->m_rotate == 3) ? io.DisplaySize.y : io.DisplaySize.x;
-            const float T = 0, B = (lui->m_rotate == 1 || lui->m_rotate == 3) ? io.DisplaySize.x : io.DisplaySize.y;
-
-            #if defined(ENABLE_BGFX)
-            Matrix3D matProj;
-            bx::mtxOrtho(&matProj.m[0][0], L, R, B, T, 0.0f, 1000.0f, 0.0f, bgfx::getCaps()->homogeneousDepth);
-            matProj = matTranslate * matProj;
-            bgfx::setViewTransform(lui->m_rd->m_activeViewId, NULL, &matProj.m[0][0]);
-
-            #elif defined(ENABLE_OPENGL)
-            Matrix3D matProj(
-               2.0f / (R - L), 0.0f, 0.0f, 0.0f, 
-               0.0f, 2.0f / (T - B), 0.0f, 0.0f, 
-               0.0f, 0.0f, -1.0f, 0.0f, 
-               (R + L) / (L - R), (T + B) / (B - T), 0.0f, 1.0f);
-            matProj = matTranslate * matProj;
-            GLint shaderHandle;
-            glGetIntegerv(GL_CURRENT_PROGRAM, &shaderHandle);
-            GLuint attribLocationProjMtx = glGetUniformLocation(shaderHandle, "ProjMtx");
-            glUniformMatrix4fv(attribLocationProjMtx, 1, GL_FALSE, &(matProj.m[0][0]));
-            glDisable(GL_SCISSOR_TEST);
-            
-            #elif defined(ENABLE_DX9)
-            lui->m_rd->GetCoreDevice()->SetTransform(D3DTS_WORLD, (const D3DMATRIX *)&matTranslate);
-            lui->m_rd->GetCoreDevice()->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
-            #endif
-
-         }, this);
-   }
-   ImGui::Render();
-   ImDrawData * const draw_data = ImGui::GetDrawData();
-   if (m_rotate == 1 || m_rotate == 3)
-   {
-      const float size = draw_data->DisplaySize.x;
-      draw_data->DisplaySize.x = draw_data->DisplaySize.y;
-      draw_data->DisplaySize.y = size;
-      const float scale = draw_data->FramebufferScale.x;
-      draw_data->FramebufferScale.x = draw_data->FramebufferScale.y;
-      draw_data->FramebufferScale.y = scale;
-   }
-
-   #if defined(ENABLE_BGFX)
-   ImGui_Implbgfx_SetRotation(m_rotate);
-   ImGui_Implbgfx_RenderDrawLists(m_rd->m_activeViewId, RenderTarget::GetCurrentRenderTarget()->m_nLayers, draw_data);
-
-   #elif defined(ENABLE_OPENGL)
-   #ifndef __OPENGLES__
-   if (GLAD_GL_VERSION_4_3)
-      glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, "ImGui");
-   #endif
-   ImGui_ImplOpenGL3_RenderDrawData(draw_data);
-   #ifndef __OPENGLES__
-   if (GLAD_GL_VERSION_4_3)
-      glPopDebugGroup();
-   #endif
-
-   #elif defined(ENABLE_DX9)
-   ImGui_ImplDX9_RenderDrawData(draw_data);
-   #endif
+   m_isOpened = true;
+   ResetCameraFromPlayer();
+   m_player->SetPlayState(false);
+   m_renderer->DisableStaticPrePass(true);
 }
 
-void LiveUI::OpenMainSplash()
+void EditorUI::Close()
 {
-   if (!m_ShowUI && !m_ShowSplashModal)
-   {
-      m_esc_mode = 0; // Get back to game if Esc is pressed
-      m_ShowUI = true;
-      m_ShowSplashModal = true;
-      m_OpenUITime = msec();
-      m_player->SetPlayState(false);
-   }
+   if (!m_isOpened)
+      return;
+   m_isOpened = false;
+   m_flyMode = false;
+   m_renderer->DisableStaticPrePass(false);
 }
 
-void LiveUI::OpenLiveUI()
+void EditorUI::ResetCameraFromPlayer()
 {
-   if (!m_ShowUI && !m_ShowSplashModal)
-   {
-      m_OpenUITime = msec();
-      m_player->SetPlayState(false);
-      m_ShowUI = true;
-      m_ShowSplashModal = false;
-      m_useEditorCam = true;
-      m_orthoCam = false;
-      if (!m_staticPrepassDisabled)
-      {
-         m_staticPrepassDisabled = true;
-         m_renderer->DisableStaticPrePass(true);
-      }
-      ResetCameraFromPlayer();
-   }
-}
-
-unsigned int LiveUI::PushNotification(const string &message, const int lengthMs, const unsigned int reuseId)
-{
-   auto notif = std::ranges::find_if(m_notifications, [reuseId](const Notification &n) { return n.id == reuseId; });
-   if (notif != m_notifications.end())
-   {
-      notif->message = message;
-      notif->disappearTick = msec() + lengthMs;
-      return reuseId;
-   }
-   else
-   {
-      m_notifications.push_back({m_nextNotificationIs++, message, msec() + lengthMs});
-      return m_nextNotificationIs - 1;
-   }
-}
-
-void LiveUI::ResetCameraFromPlayer()
-{
-   // Try to setup editor camera to match the used one, but only mostly since the LiveUI does not have some view setup features like off-center, ...
+   // Try to setup editor camera to match the used one, but only mostly since the EditorUI does not have some view setup features like off-center, ...
    m_camView = Matrix3D::MatrixScale(1.f, 1.f, -1.f) * m_renderer->GetMVP().GetView() * Matrix3D::MatrixScale(1.f, -1.f, 1.f);
 }
 
-void LiveUI::Update(const int width, const int height)
+void EditorUI::Update()
 {
-   // For the time being, the UI is only available inside a running player
-   if (m_player == nullptr || m_player->GetCloseState() != Player::CS_PLAYING)
-      return;
-
-   m_rotation_callback_added = false;
-
-   #if defined(ENABLE_BGFX)
-   ImGui_Implbgfx_NewFrame();
-   #elif defined(ENABLE_OPENGL)
-   ImGui_ImplOpenGL3_NewFrame();
-   #elif defined(ENABLE_DX9)
-   ImGui_ImplDX9_NewFrame();
-   #endif
-
-   #if defined(ENABLE_SDL_VIDEO)
-   ImGui_ImplSDL3_NewFrame();
-   #else
-   ImGui_ImplWin32_NewFrame();
-   #endif
-
-   ImGuiIO &io = ImGui::GetIO();
-   const bool isInteractiveUI = m_ShowUI || m_ShowSplashModal || m_ShowBAMModal;
-   const bool isVR = m_renderer->m_stereo3D == STEREO_VR;
-   io.DisplaySize.x = static_cast<float>(width) / io.DisplayFramebufferScale.x;
-   io.DisplaySize.y = static_cast<float>(height) / io.DisplayFramebufferScale.y;
-   // If we are only showing overlays (no mouse interaction), apply main camera rotation
-   m_rotate = (isInteractiveUI || isVR) ? 0 : ((int)(m_player->m_ptable->mViewSetups[m_player->m_ptable->m_BG_current_set].GetRotation((int)io.DisplaySize.x, (int)io.DisplaySize.y) / 90.0f));
-   if (m_rotate == 1 || m_rotate == 3)
-   {
-      const float size = io.DisplaySize.x;
-      io.DisplaySize.x = io.DisplaySize.y;
-      io.DisplaySize.y = size;
-      const float scale = io.DisplayFramebufferScale.x;
-      io.DisplayFramebufferScale.x = io.DisplayFramebufferScale.y;
-      io.DisplayFramebufferScale.y = scale;
-   }
-   ImGui::NewFrame();
-
-   ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard; // We use it for main splash popup, but need it to be disabled to allow keyboard shortcuts
-
-   UpdateTouchUI();
-
+   const ImGuiIO &io = ImGui::GetIO();
    ImGuizmo::SetOrthographic(m_orthoCam);
    ImGuizmo::BeginFrame();
    ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
-   ImGui::PushFont(m_baseFont, m_baseFont->LegacySize);
 
-   // Display notification (except when script has an unaligned rotation)
-   const uint32_t tick = msec();
-   float notifY = io.DisplaySize.y * 0.25f;
-   const bool showNotifications = isVR || ((float)m_rotate * 90.0f == m_player->m_ptable->mViewSetups[m_player->m_ptable->m_BG_current_set].GetRotation(m_player->m_playfieldWnd->GetWidth(), m_player->m_playfieldWnd->GetHeight()));
-   ImGui::PushFont(m_overlayFont, m_overlayFont->LegacySize);
-   for (int i = (int)m_notifications.size() - 1; i >= 0; i--)
-   {
-      if (tick > m_notifications[i].disappearTick)
-      {
-         m_notifications.erase(m_notifications.begin() + i);
-      }
-      else if (showNotifications)
-      {
-          ImFont *const font = ImGui::GetFont();
-          ImFontBaked *const fontBaked = ImGui::GetFontBaked();
-
-          constexpr float padding = 50.f;
-          const float maxWidth = io.DisplaySize.x - padding;
-
-          vector<string> lines;
-          ImVec2 text_size(0, 0);
-
-          string line;
-          std::istringstream iss(m_notifications[i].message);
-          while (std::getline(iss, line)) {
-              if (line.empty()) {
-                 lines.push_back(line);
-                 continue;
-              }
-              const char *textEnd = line.c_str();
-              while (*textEnd) {
-                 const char *nextLineTextEnd = ImGui::FindRenderedTextEnd(textEnd, nullptr);
-                 ImVec2 lineSize = font->CalcTextSizeA(fontBaked->Size, FLT_MAX, 0.0f, textEnd, nextLineTextEnd);
-                 if (lineSize.x > maxWidth)
-                 {
-                    const char *wrapPoint = font->CalcWordWrapPositionA(font->Scale, textEnd, nextLineTextEnd, maxWidth);
-                    if (wrapPoint == textEnd)
-                       wrapPoint++;
-                    nextLineTextEnd = wrapPoint;
-                    lineSize = font->CalcTextSizeA(fontBaked->Size, FLT_MAX, 0.0f, textEnd, wrapPoint);
-                 }
-
-                 string newLine(textEnd, nextLineTextEnd);
-                 lines.push_back(newLine);
-
-                 if (lineSize.x > text_size.x)
-                    text_size.x = lineSize.x;
-
-                 textEnd = nextLineTextEnd;
-
-                 while (*textEnd == ' ')
-                    textEnd++;
-              }
-          }
-          text_size.x += (padding / 2.f);
-          text_size.y = ((float)lines.size() * ImGui::GetTextLineHeightWithSpacing()) + (padding / 2.f);
-
-          constexpr ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
-          ImGui::SetNextWindowBgAlpha(0.666f);
-          ImGui::SetNextWindowPos(ImVec2((io.DisplaySize.x - text_size.x) / 2, notifY));
-          ImGui::SetNextWindowSize(text_size);
-          ImGui::Begin(("Notification" + std::to_string(i)).c_str(), nullptr, window_flags);
-          for (const string& lline : lines) {
-             ImVec2 lineSize = font->CalcTextSizeA(fontBaked->Size, FLT_MAX, 0.0f, lline.c_str());
-             ImGui::SetCursorPosX(((text_size.x - lineSize.x) / 2));
-             ImGui::TextUnformatted(lline.c_str());
-          }
-          ImGui::End();
-          notifY += text_size.y + 10.f;
-      }
-   }
-   ImGui::PopFont();
-
-   if (isInteractiveUI)
-   { // Main UI
-      UpdateMainUI();
-   }
-   else if (m_tweakMode && showNotifications)
-   { // Tweak UI
-      UpdateTweakModeUI();
-   }
-   else if (m_player->m_throwBalls || m_player->m_ballControl)
-   { // No UI displayed: process ball control & throw balls
-      if (m_player->m_throwBalls && ImGui::IsMouseDown(ImGuiMouseButton_Right))
-      {
-         const ImVec2 mousePos = ImGui::GetMousePos();
-         const POINT point { (LONG)mousePos.x, (LONG)mousePos.y };
-         const Vertex3Ds vertex = m_renderer->Get3DPointFrom2D(width, height, point);
-         for (size_t i = 0; i < m_player->m_vball.size(); i++)
-         {
-            HitBall *const pBall = m_player->m_vball[i];
-            const float dx = fabsf(vertex.x - pBall->m_d.m_pos.x);
-            const float dy = fabsf(vertex.y - pBall->m_d.m_pos.y);
-            if (dx < pBall->m_d.m_radius * 2.f && dy < pBall->m_d.m_radius * 2.f)
-            {
-                m_player->DestroyBall(pBall);
-                break;
-            }
-         }
-      }
-      else if (m_player->m_throwBalls && (ImGui::GetMouseDragDelta().x != 0.f || ImGui::GetMouseDragDelta().y != 0.f))
-      {
-         const ImVec2 mousePos = ImGui::GetMousePos();
-         const ImVec2 mouseDrag = ImGui::GetMouseDragDelta();
-         const ImVec2 mouseInitalPos = mousePos - mouseDrag;
-         const POINT point { (LONG)mouseInitalPos.x, (LONG)mouseInitalPos.y };
-         const Vertex3Ds vertex = m_renderer->Get3DPointFrom2D(width, height, point);
-         const POINT newPoint { (LONG)mousePos.x, (LONG)mousePos.y };
-         const Vertex3Ds vert = m_renderer->Get3DPointFrom2D(width, height, newPoint);
-
-         ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
-         ImGui::SetNextWindowPos(ImVec2(0, 0));
-         ImGui::PushStyleColor(ImGuiCol_WindowBg, 0);
-         ImGui::PushStyleColor(ImGuiCol_Border, 0);
-         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-         ImGui::Begin("Ball throw overlay", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBringToFrontOnFocus);
-         ImGui::GetWindowDrawList()->AddLine(mousePos, mouseInitalPos, IM_COL32(255, 128, 0, 255));
-         ImGui::End();
-         ImGui::PopStyleVar();
-         ImGui::PopStyleColor(2);
-
-         if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) || ImGui::IsMouseReleased(ImGuiMouseButton_Middle))
-         {
-            float vx = mouseDrag.x * 0.1f;
-            float vy = mouseDrag.y * 0.1f;
-            const float radangle = ANGTORAD(m_live_table->mViewSetups[m_live_table->m_BG_current_set].mViewportRotation);
-            const float sn = sinf(radangle);
-            const float cs = cosf(radangle);
-            const float vx2 = cs * vx - sn * vy;
-            const float vy2 = sn * vx + cs * vy;
-            vx = -vx2;
-            vy = -vy2;
-
-            if (m_player->m_ballControl)
-            { // If Ball Control and Throw Balls are both checked, that means we want ball throwing behavior with the sensed active ball, instead of creating new ones
-               HitBall *const pBall = m_player->m_pactiveballBC;
-               if (pBall)
-               {
-                  pBall->m_d.m_pos.x = vert.x;
-                  pBall->m_d.m_pos.y = vert.y;
-                  pBall->m_d.m_vel.x = vx;
-                  pBall->m_d.m_vel.y = vy;
-               }
-            }
-            else
-            {
-               bool ballGrabbed = false;
-               if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
-               {
-                  for (size_t i = 0; i < m_player->m_vball.size(); i++)
-                  {
-                     HitBall *const pBall = m_player->m_vball[i];
-                     const float dx = fabsf(vertex.x - pBall->m_d.m_pos.x);
-                     const float dy = fabsf(vertex.y - pBall->m_d.m_pos.y);
-                     if (dx < pBall->m_d.m_radius * 2.f && dy < pBall->m_d.m_radius * 2.f)
-                     {
-                        ballGrabbed = true;
-                        pBall->m_d.m_pos.x = vert.x;
-                        pBall->m_d.m_pos.y = vert.y;
-                        pBall->m_d.m_vel.x = vx;
-                        pBall->m_d.m_vel.y = vy;
-                        pBall->m_d.m_mass = 1.f;
-                        break;
-                     }
-                  }
-               }
-               if (!ballGrabbed)
-               {
-                  const float z = ImGui::IsMouseReleased(ImGuiMouseButton_Middle) ? m_live_table->m_glassTopHeight : 0.f;
-                  HitBall *const pball = m_player->CreateBall(vertex.x, vertex.y, z, vx, vy, 0, (float)m_player->m_debugBallSize * 0.5f, m_player->m_debugBallMass);
-                  pball->m_pBall->AddRef();
-               }
-            }
-         }
-      }
-      else if (!m_player->m_throwBalls && m_player->m_ballControl && ImGui::IsMouseDown(ImGuiMouseButton_Left))
-      {
-         // Note that ball control release is handled by pininput
-         const ImVec2 mousePos = ImGui::GetMousePos();
-         const POINT point { (LONG)mousePos.x, (LONG)mousePos.y };
-         m_player->m_pBCTarget = new Vertex3Ds(m_renderer->Get3DPointFrom2D(width, height, point));
-         m_player->m_pBCTarget->x = clamp(m_player->m_pBCTarget->x, 0.f, m_live_table->m_right);
-         m_player->m_pBCTarget->y = clamp(m_player->m_pBCTarget->y, 0.f, m_live_table->m_bottom);
-         if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
-         {
-            // Double click.  Move the ball directly to the target if possible.
-            // Drop it from the glass height, so it will appear over any object (or on a raised playfield)
-            HitBall *const pBall = m_player->m_pactiveballBC;
-            if (pBall && !pBall->m_d.m_lockedInKicker)
-            {
-                pBall->m_d.m_pos.x = m_player->m_pBCTarget->x;
-                pBall->m_d.m_pos.y = m_player->m_pBCTarget->y;
-                pBall->m_d.m_pos.z = m_live_table->m_glassTopHeight;
-                pBall->m_d.m_vel.x = 0.0f;
-                pBall->m_d.m_vel.y = 0.0f;
-                pBall->m_d.m_vel.z = -1000.0f;
-            }
-         }
-      }
-   }
-   else if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && g_pplayer->m_BallHistory.Control())
-   {
-      g_pplayer->m_BallHistory.ProcessMouse(*g_pplayer, tick);
-   }
-
-   UpdatePerfOverlay();
-
-   g_pplayer->m_BallHistory.DrawMenu = true;
-   g_pplayer->m_BallHistory.Process(*g_pplayer, tick);
-   g_pplayer->m_BallHistory.DrawMenu = false;
-
-   g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, EnumAssignKeys::eCKeys, false, tick, true);
-
-   ImGui::PopFont();
-   ImGui::EndFrame();
-}
-
-void LiveUI::OpenTweakMode()
-{
-   m_ShowUI = false;
-   m_ShowSplashModal = false;
-   if (!m_staticPrepassDisabled)
-   {
-      m_staticPrepassDisabled = true;
-      m_renderer->DisableStaticPrePass(true);
-   }
-   m_tweakMode = true;
-   m_tweakPages.clear();
-   if (!m_table->m_rules.empty())
-      m_tweakPages.push_back(TP_Rules);
-   if (m_renderer->m_stereo3D != STEREO_VR)
-      m_tweakPages.push_back(TP_PointOfView);
-   #ifdef ENABLE_XR
-   // Legacy OpenVR does not support dynamic repositioning through LiveUI (especially overall scale, this would need to be rewritten but not done as this is planned for deprecation)
-   else
-      m_tweakPages.push_back(TP_VRPosition);
-   #endif
-   m_tweakPages.push_back(TP_TableOption);
-   for (int j = 0; j < Settings::GetNPluginSections(); j++)
-   {
-      int nOptions = 0;
-      const int nCustomOptions = (int)Settings::GetPluginSettings().size();
-      for (int i = 0; i < nCustomOptions; i++)
-         if ((Settings::GetPluginSettings()[i].section == Settings::Plugin00 + j) && (Settings::GetPluginSettings()[i].showMask & VPX_OPT_SHOW_TWEAK))
-            nOptions++;
-      if (nOptions > 0)
-         m_tweakPages.push_back((TweakPage)(TP_Plugin00 + j));
-   }
-   if (!m_table->m_description.empty())
-      m_tweakPages.push_back(TP_Info);
-   m_activeTweakPageIndex = 0;
-   m_activeTweakIndex = 0;
-   UpdateTweakPage();
-}
-
-void LiveUI::CloseTweakMode()
-{
-   if (m_tweakMode)
-      m_live_table->FireOptionEvent(3); // Tweak mode closed event
-   m_tweakMode = false;
-}
-
-void LiveUI::UpdateTweakPage()
-{
-   m_tweakPageOptions.clear();
-   m_tweakPageOptions.push_back(BS_Page);
-   switch (m_tweakPages[m_activeTweakPageIndex])
-   {
-   case TP_Info:
-   case TP_Rules:
-      break;
-   case TP_VRPosition:
-      m_tweakPageOptions.push_back(BS_VROrientation);
-      m_tweakPageOptions.push_back(BS_VRX);
-      m_tweakPageOptions.push_back(BS_VRY);
-      m_tweakPageOptions.push_back(BS_VRZ);
-      m_tweakPageOptions.push_back(BS_VRScale);
-      m_tweakPageOptions.push_back(BS_AR_VR);
-      break;
-   case TP_PointOfView:
-      switch (m_live_table->mViewSetups[m_live_table->m_BG_current_set].mMode)
-      {
-      case VLM_LEGACY:
-         m_tweakPageOptions.push_back(BS_ViewMode);
-         m_tweakPageOptions.push_back(BS_LookAt);
-         m_tweakPageOptions.push_back(BS_FOV);
-         m_tweakPageOptions.push_back(BS_Layback);
-         m_tweakPageOptions.push_back(BS_XYZScale);
-         m_tweakPageOptions.push_back(BS_XScale);
-         m_tweakPageOptions.push_back(BS_YScale);
-         m_tweakPageOptions.push_back(BS_ZScale);
-         m_tweakPageOptions.push_back(BS_XOffset);
-         m_tweakPageOptions.push_back(BS_YOffset);
-         m_tweakPageOptions.push_back(BS_ZOffset);
-         break;
-      case VLM_CAMERA:
-         m_tweakPageOptions.push_back(BS_ViewMode);
-         m_tweakPageOptions.push_back(BS_FOV);
-         m_tweakPageOptions.push_back(BS_ViewHOfs);
-         m_tweakPageOptions.push_back(BS_ViewVOfs);
-         m_tweakPageOptions.push_back(BS_XYZScale);
-         m_tweakPageOptions.push_back(BS_XScale);
-         m_tweakPageOptions.push_back(BS_YScale);
-         m_tweakPageOptions.push_back(BS_ZScale);
-         m_tweakPageOptions.push_back(BS_LookAt);
-         m_tweakPageOptions.push_back(BS_XOffset);
-         m_tweakPageOptions.push_back(BS_YOffset);
-         m_tweakPageOptions.push_back(BS_ZOffset);
-         break;
-      case VLM_WINDOW:
-         m_tweakPageOptions.push_back(BS_ViewMode);
-         m_tweakPageOptions.push_back(BS_ViewHOfs);
-         m_tweakPageOptions.push_back(BS_ViewVOfs);
-         m_tweakPageOptions.push_back(BS_XYZScale);
-         m_tweakPageOptions.push_back(BS_XScale);
-         m_tweakPageOptions.push_back(BS_YScale);
-         m_tweakPageOptions.push_back(BS_WndTopZOfs);
-         m_tweakPageOptions.push_back(BS_WndBottomZOfs);
-         m_tweakPageOptions.push_back(BS_XOffset);
-         m_tweakPageOptions.push_back(BS_YOffset);
-         m_tweakPageOptions.push_back(BS_ZOffset);
-         break;
-      }
-      break;
-   case TP_TableOption:
-   {
-      const int nCustomOptions = (int)m_live_table->m_settings.GetTableSettings().size();
-      for (int i = 0; i < nCustomOptions; i++)
-         m_tweakPageOptions.push_back((BackdropSetting)(BS_Custom + i));
-      m_tweakPageOptions.push_back(BS_DayNight);
-      m_tweakPageOptions.push_back(BS_Exposure);
-      if (!m_player || !m_player->m_renderer->m_HDRforceDisableToneMapper || !m_player->m_playfieldWnd->IsWCGBackBuffer())
-         m_tweakPageOptions.push_back(BS_Tonemapper);
-      m_tweakPageOptions.push_back(BS_Difficulty);
-      m_tweakPageOptions.push_back(BS_Volume);
-      m_tweakPageOptions.push_back(BS_BackglassVolume);
-      m_tweakPageOptions.push_back(BS_PlayfieldVolume);
-      break;
-   }
-   default: // Plugin options
-   {
-      const int nCustomOptions = (int)Settings::GetPluginSettings().size();
-      for (int i = 0; i < nCustomOptions; i++)
-         if (Settings::GetPluginSettings()[i].section == Settings::Plugin00 + (m_tweakPages[m_activeTweakPageIndex] - TP_Plugin00) && (Settings::GetPluginSettings()[i].showMask & VPX_OPT_SHOW_TWEAK))
-            m_tweakPageOptions.push_back((BackdropSetting)(BS_Custom + i));
-      break;
-   }
-   }
-   if (m_activeTweakIndex >= (int)m_tweakPageOptions.size())
-      m_activeTweakIndex = (int)m_tweakPageOptions.size() - 1;
-}
-
-void LiveUI::HandleTweakInput()
-{
-   const uint32_t now = msec();
-   static uint32_t lastHandle = now;
-   const uint32_t sinceLastInputHandleMs = now - lastHandle;
-   lastHandle = now;
-
-   BackdropSetting activeTweakSetting = m_tweakPageOptions[m_activeTweakIndex];
-   PinTable * const table = m_live_table;
-
-   if (m_live_table->m_settings.LoadValueBool(Settings::Player, "EnableCameraModeFlyAround"s))
-   {
-      if (!ImGui::IsKeyDown(ImGuiKey_LeftAlt) && !ImGui::IsKeyDown(ImGuiKey_RightAlt))
-      {
-         if (ImGui::IsKeyDown(ImGuiKey_LeftArrow))
-            m_renderer->m_cam.x += 10.0f;
-         if (ImGui::IsKeyDown(ImGuiKey_RightArrow))
-            m_renderer->m_cam.x -= 10.0f;
-         if (ImGui::IsKeyDown(ImGuiKey_UpArrow))
-            m_renderer->m_cam.y += 10.0f;
-         if (ImGui::IsKeyDown(ImGuiKey_DownArrow))
-            m_renderer->m_cam.y -= 10.0f;
-      }
-      else
-      {
-         if (ImGui::IsKeyDown(ImGuiKey_UpArrow))
-            m_renderer->m_cam.z += 10.0f;
-         if (ImGui::IsKeyDown(ImGuiKey_DownArrow))
-            m_renderer->m_cam.z -= 10.0f;
-         if (ImGui::IsKeyDown(ImGuiKey_LeftArrow))
-            m_renderer->m_inc += 0.01f;
-         if (ImGui::IsKeyDown(ImGuiKey_RightArrow))
-            m_renderer->m_inc -= 0.01f;
-      }
-   }
-
-   static PinInput::InputState prevState { 0 };
-   PinInput::InputState state = m_player->m_pininput.GetInputState();
-   for (int i = 0; i < eCKeys; i++)
-   {
-      const EnumAssignKeys keycode = static_cast<EnumAssignKeys>(i);
-      int keyEvent;
-      if (state.IsKeyPressed(keycode, prevState))
-         keyEvent = 1;
-      else if (state.IsKeyReleased(keycode, prevState))
-         keyEvent = 2;
-      else if (state.IsKeyDown(keycode))
-         keyEvent = 0;
-      else
-         continue;
-
-      // Handle scrolling in rules/infos
-      if ((m_tweakPages[m_activeTweakPageIndex] == TP_Rules || m_tweakPages[m_activeTweakPageIndex] == TP_Info)
-         && (keycode == eRightMagnaSave || keycode == eLeftMagnaSave) && (keyEvent != 2))
-      {
-         const float speed = ImGui::GetFontBaked()->Size * 0.5f;
-         if (keycode == eLeftMagnaSave)
-            m_tweakScroll -= speed;
-         else if (keycode == eRightMagnaSave)
-            m_tweakScroll += speed;
-      }
-
-      if (keycode == eLeftFlipperKey || keycode == eRightFlipperKey)
-      {
-         static uint32_t startOfPress = 0;
-         static float floatFraction = 1.0f;
-         if (keyEvent != 0)
-         {
-            startOfPress = now;
-            floatFraction = 1.0f;
-         }
-         if (keyEvent == 2) // Do not react on key up (only key down or long press)
-            continue;
-         const bool up = keycode == eRightFlipperKey;
-         const float step = up ? 1.f : -1.f;
-         const float absIncSpeed = (float)sinceLastInputHandleMs * 0.001f * min(50.f, 0.75f + (float)(now - startOfPress) / 300.0f);
-         const float incSpeed = up ? absIncSpeed : -absIncSpeed;
-
-         // Since we need less than 1 int per frame for eg volume, we need to keep track of the float value
-         // and step every n frames.
-         floatFraction += absIncSpeed * 10.f;
-         int absIntStep = 0;
-         if (floatFraction >= 1.f)
-         {
-            absIntStep = static_cast<int>(floatFraction);
-            floatFraction = floatFraction - (float)absIntStep;
-         }
-         const int intStep = up ? absIntStep : -absIntStep;
-
-         ViewSetup &viewSetup = table->mViewSetups[table->m_BG_current_set];
-         const bool isWindow = viewSetup.mMode == VLM_WINDOW;
-         bool modified = true;
-         switch (activeTweakSetting)
-         {
-         // UI navigation
-         case BS_Page:
-         {
-            m_tweakState[activeTweakSetting] = 0;
-            if (keyEvent != 1) // Only keydown
-               continue;
-            int stepi = up ? 1 : (int)m_tweakPages.size() - 1;
-            m_activeTweakPageIndex = ((m_activeTweakPageIndex + stepi) % (int)m_tweakPages.size());
-            m_activeTweakIndex = 0;
-            m_tweakScroll = 0.f;
-            UpdateTweakPage();
-            break;
-         }
-
-         // View setup settings
-         case BS_ViewMode:
-         {
-            if (keyEvent != 1) // Only keydown
-               continue;
-            int vlm = viewSetup.mMode + (int)step;
-            viewSetup.mMode = vlm < 0 ? VLM_WINDOW : vlm >= 3 ? VLM_LEGACY : (ViewLayoutMode)vlm;
-            UpdateTweakPage();
-            break;
-         }
-         case BS_LookAt: viewSetup.mLookAt += incSpeed; break;
-         case BS_FOV: viewSetup.mFOV += incSpeed; break;
-         case BS_Layback: viewSetup.mLayback += incSpeed; break;
-         case BS_ViewHOfs: viewSetup.mViewHOfs += incSpeed; break;
-         case BS_ViewVOfs: viewSetup.mViewVOfs += incSpeed; break;
-         case BS_XYZScale:
-            viewSetup.mSceneScaleX += 0.005f * incSpeed;
-            viewSetup.mSceneScaleY += 0.005f * incSpeed;
-            viewSetup.mSceneScaleZ += 0.005f * incSpeed;
-            break;
-         case BS_XScale: viewSetup.mSceneScaleX += 0.005f * incSpeed; break;
-         case BS_YScale: viewSetup.mSceneScaleY += 0.005f * incSpeed; break;
-         case BS_ZScale: viewSetup.mSceneScaleZ += 0.005f * incSpeed; break;
-         case BS_XOffset:
-            if (isWindow)
-               table->m_settings.SaveValue(Settings::Player, "ScreenPlayerX"s, table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerX"s) + 0.5f * incSpeed);
-            else
-               viewSetup.mViewX += 10.f * incSpeed;
-            break;
-         case BS_YOffset:
-            if (isWindow)
-               table->m_settings.SaveValue(Settings::Player, "ScreenPlayerY"s, table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerY"s) + 0.5f * incSpeed);
-            else
-               viewSetup.mViewY += 10.f * incSpeed;
-            break;
-         case BS_ZOffset:
-            if (isWindow)
-               table->m_settings.SaveValue(Settings::Player, "ScreenPlayerZ"s, table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerZ"s) + 0.5f * incSpeed);
-            else
-               viewSetup.mViewZ += (viewSetup.mMode == VLM_LEGACY ? 100.f : 10.f) * incSpeed;
-            break;
-         case BS_WndTopZOfs: viewSetup.mWindowTopZOfs += 10.f * incSpeed; break;
-         case BS_WndBottomZOfs: viewSetup.mWindowBottomZOfs += 10.f * incSpeed; break;
-
-         // VR Position
-         case BS_VRScale: m_player->m_vrDevice->SetLockbarWidth(clamp(m_player->m_vrDevice->GetLockbarWidth() + 1.f * incSpeed, 5.f, 200.f)); break;
-         case BS_VROrientation: m_player->m_vrDevice->SetSceneOrientation(m_player->m_vrDevice->GetSceneOrientation() + 1.f * incSpeed); break;
-         case BS_VRX: { Vertex3Ds pos = m_player->m_vrDevice->GetSceneOffset(); pos.x += 1.f * incSpeed; m_player->m_vrDevice->SetSceneOffset(pos); break; }
-         case BS_VRY: { Vertex3Ds pos = m_player->m_vrDevice->GetSceneOffset(); pos.y += 1.f * incSpeed; m_player->m_vrDevice->SetSceneOffset(pos); break; }
-         case BS_VRZ: { Vertex3Ds pos = m_player->m_vrDevice->GetSceneOffset(); pos.z += 1.f * incSpeed; m_player->m_vrDevice->SetSceneOffset(pos); break; }
-         case BS_AR_VR: if (keyEvent == 1) m_renderer->m_vrApplyColorKey = !m_renderer->m_vrApplyColorKey; break;
-
-         // Table customization
-         case BS_DayNight:
-            m_renderer->m_globalEmissionScale = clamp(m_renderer->m_globalEmissionScale + incSpeed * 0.05f, 0.f, 1.f);
-            m_renderer->MarkShaderDirty();
-            m_live_table->FireOptionEvent(1); // Table option changed event
-            break;
-         case BS_Difficulty:
-            table->m_globalDifficulty = clamp(table->m_globalDifficulty + incSpeed * 0.05f, 0.f, 1.f);
-            m_live_table->FireOptionEvent(1); // Table option changed event
-            break;
-         case BS_Volume:
-            m_player->m_MusicVolume = clamp(m_player->m_MusicVolume + intStep, 0, 100);
-            m_player->m_SoundVolume = clamp(m_player->m_SoundVolume + intStep, 0, 100);
-            m_player->UpdateVolume();
-            m_live_table->FireOptionEvent(1); // Table option changed event
-            break;
-         case BS_BackglassVolume:
-            m_player->m_MusicVolume = clamp(m_player->m_MusicVolume + intStep, 0, 100);
-            m_player->UpdateVolume();
-            m_live_table->FireOptionEvent(1); // Table option changed event
-            break;
-         case BS_PlayfieldVolume:
-            m_player->m_SoundVolume = clamp(m_player->m_SoundVolume + intStep, 0, 100);
-            m_player->UpdateVolume();
-            m_live_table->FireOptionEvent(1); // Table option changed event
-            break;
-         case BS_Exposure:
-            m_renderer->m_exposure = clamp(m_renderer->m_exposure + incSpeed * 0.05f, 0.f, 2.0f);
-            m_live_table->FireOptionEvent(1); // Table option changed event
-            break;
-         case BS_Tonemapper:
-            if (keyEvent == 1)
-            {
-               int tm = m_renderer->m_toneMapper + static_cast<int>(step);
-               #ifdef ENABLE_BGFX
-               if (tm < 0)
-                  tm = ToneMapper::TM_AGX_PUNCHY;
-               if (tm > ToneMapper::TM_AGX_PUNCHY)
-                  tm = ToneMapper::TM_REINHARD;
-               #else
-               if (tm < 0)
-                  tm = ToneMapper::TM_NEUTRAL;
-               if (tm > ToneMapper::TM_NEUTRAL)
-                  tm = ToneMapper::TM_REINHARD;
-               #endif
-               m_renderer->m_toneMapper = static_cast<ToneMapper>(tm);
-               m_live_table->FireOptionEvent(1); // Table option changed event
-            }
-            break;
-
-         default:
-            if (activeTweakSetting >= BS_Custom)
-            {
-               const vector<Settings::OptionDef> &customOptions = m_tweakPages[m_activeTweakPageIndex] == TP_TableOption ? m_live_table->m_settings.GetTableSettings() : Settings::GetPluginSettings();
-               if (activeTweakSetting < BS_Custom + (int)customOptions.size())
-               {
-                  const auto& opt = customOptions[activeTweakSetting - BS_Custom];
-                  float nTotalSteps = (opt.maxValue - opt.minValue) / opt.step;
-                  int nMsecPerStep = nTotalSteps < 20.f ? 500 : max(5, 250 - (int)(now - startOfPress) / 10); // discrete vs continuous sliding
-                  int nSteps = (now - m_lastTweakKeyDown) / nMsecPerStep;
-                  if (keyEvent == 1)
-                  {
-                     nSteps = 1;
-                     m_lastTweakKeyDown = now - nSteps * nMsecPerStep;
-                  }
-                  if (nSteps > 0)
-                  {
-                     m_lastTweakKeyDown += nSteps * nMsecPerStep;
-                     float value = m_live_table->m_settings.LoadValueWithDefault(opt.section, opt.id, opt.defaultValue);
-                     if (!opt.literals.empty())
-                     {
-                        value += (float)nSteps * opt.step * step;
-                        while (value < opt.minValue)
-                           value += opt.maxValue - opt.minValue + 1;
-                        while (value > opt.maxValue)
-                           value -= opt.maxValue - opt.minValue + 1;
-                     }
-                     else
-                        value = clamp(value + (float)nSteps * opt.step * step, opt.minValue, opt.maxValue);
-                     table->m_settings.SaveValue(opt.section, opt.id, value);
-                     if (opt.section == Settings::TableOption)
-                        m_live_table->FireOptionEvent(1); // Table option changed event
-                     else
-                        VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(VPXPluginAPIImpl::GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_SETTINGS_CHANGED), nullptr);
-                  }
-                  else
-                     modified = false;
-               }
-            }
-            else
-            {
-               assert(false);
-               break;
-            }
-         }
-         m_tweakState[activeTweakSetting] |= modified ? 1 : 0;
-      }
-      else if (keyEvent == 1) // Key down
-      {
-         if (keycode == eLeftTiltKey && m_live_table->m_settings.LoadValueBool(Settings::Player, "EnableCameraModeFlyAround"s))
-            m_live_table->mViewSetups[m_live_table->m_BG_current_set].mViewportRotation -= 1.0f;
-         else if (keycode == eRightTiltKey && m_live_table->m_settings.LoadValueBool(Settings::Player, "EnableCameraModeFlyAround"s))
-            m_live_table->mViewSetups[m_live_table->m_BG_current_set].mViewportRotation += 1.0f;
-         else if (keycode == eStartGameKey) // Save tweak page
-         {
-            string iniFileName = m_live_table->GetSettingsFileName();
-            string message;
-            if (m_tweakPages[m_activeTweakPageIndex] == TP_PointOfView)
-            {
-               message = "Point of view"s;
-               m_live_table->mViewSetups[m_live_table->m_BG_current_set].SaveToTableOverrideSettings(m_table->m_settings, m_live_table->m_BG_current_set);
-               if (m_live_table->m_BG_current_set == BG_FULLSCREEN)
-               { // Player position is saved as an override (not saved if equal to app settings)
-                  m_table->m_settings.SaveValue(Settings::Player, "ScreenPlayerX"s, m_live_table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerX"s), true);
-                  m_table->m_settings.SaveValue(Settings::Player, "ScreenPlayerY"s, m_live_table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerY"s), true);
-                  m_table->m_settings.SaveValue(Settings::Player, "ScreenPlayerZ"s, m_live_table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerZ"s), true);
-               }
-               // The saved value are the new base value, so all fields are marked as untouched
-               for (int i2 = BS_ViewMode; i2 < BS_WndBottomZOfs; i2++)
-                  m_tweakState[i2] = 0;
-            }
-            else if (m_tweakPages[m_activeTweakPageIndex] == TP_VRPosition)
-            {
-               // Note that scene offset is not saved per table but as an app setting
-               m_player->m_vrDevice->SaveVRSettings(g_pvp->m_settings);
-               m_table->m_settings.SaveValue(Settings::PlayerVR, "UsePassthroughColor"s, m_renderer->m_vrApplyColorKey);
-            }
-            else if (m_tweakPages[m_activeTweakPageIndex] == TP_TableOption)
-            {
-               // Day Night slider
-               if (m_tweakState[BS_DayNight] == 1)
-               {
-                  m_table->m_settings.SaveValue(Settings::Player, "OverrideTableEmissionScale"s, true);
-                  m_table->m_settings.SaveValue(Settings::Player, "DynamicDayNight"s, false);
-                  m_table->m_settings.SaveValue(Settings::Player, "EmissionScale"s, m_renderer->m_globalEmissionScale);
-               }
-               else if (m_tweakState[BS_DayNight] == 2)
-               {
-                  m_table->m_settings.DeleteValue(Settings::Player, "OverrideTableEmissionScale"s);
-                  m_table->m_settings.DeleteValue(Settings::Player, "DynamicDayNight"s);
-                  m_table->m_settings.DeleteValue(Settings::Player, "EmissionScale"s);
-               }
-               m_tweakState[BS_DayNight] = 0;
-               // Exposure slider
-               if (m_tweakState[BS_Exposure] == 1)
-                  m_table->m_settings.SaveValue(Settings::TableOverride, "Exposure"s, m_renderer->m_exposure);
-               else if (m_tweakState[BS_Exposure] == 2)
-                  m_table->m_settings.DeleteValue(Settings::TableOverride, "Exposure"s);
-               m_tweakState[BS_Exposure] = 0;
-               // Tonemapper
-               if (m_tweakState[BS_Tonemapper] == 1)
-                  m_table->m_settings.SaveValue(Settings::TableOverride, "ToneMapper"s, m_renderer->m_toneMapper);
-               else if (m_tweakState[BS_Tonemapper] == 2)
-                  m_table->m_settings.DeleteValue(Settings::TableOverride, "ToneMapper"s);
-               m_tweakState[BS_Tonemapper] = 0;
-               // Difficulty
-               if (m_tweakState[BS_Difficulty] != 0)
-                  PushNotification("You have changed the difficulty level\nThis change will only be applied after restart.", 10000);
-               if (m_tweakState[BS_Difficulty] == 1)
-                  m_table->m_settings.SaveValue(Settings::TableOverride, "Difficulty"s, m_live_table->m_globalDifficulty);
-               else if (m_tweakState[BS_Difficulty] == 2)
-                  m_table->m_settings.DeleteValue(Settings::TableOverride, "Difficulty"s);
-               m_tweakState[BS_Difficulty] = 0;
-               // Music/sound volume
-               if (m_tweakState[BS_BackglassVolume] == 1)
-                  m_table->m_settings.SaveValue(Settings::Player, "MusicVolume"s, m_player->m_MusicVolume);
-               else if (m_tweakState[BS_BackglassVolume] == 2)
-                  m_table->m_settings.DeleteValue(Settings::Player, "MusicVolume"s);
-               m_tweakState[BS_BackglassVolume] = 0;
-               if (m_tweakState[BS_PlayfieldVolume] == 1)
-                  m_table->m_settings.SaveValue(Settings::Player, "SoundVolume"s, m_player->m_SoundVolume);
-               else if (m_tweakState[BS_PlayfieldVolume] == 2)
-                  m_table->m_settings.DeleteValue(Settings::Player, "SoundVolume"s);
-               m_tweakState[BS_PlayfieldVolume] = 0;
-            }
-            // Custom table/plugin options
-            if (m_tweakPages[m_activeTweakPageIndex] >= TP_TableOption)
-            {
-               const vector<Settings::OptionDef> &customOptions = m_tweakPages[m_activeTweakPageIndex] == TP_TableOption ? m_live_table->m_settings.GetTableSettings() : Settings::GetPluginSettings();
-               message = m_tweakPages[m_activeTweakPageIndex] > TP_TableOption ? "Plugin options"s : "Table options"s;
-               const int nOptions = (int)customOptions.size();
-               for (int i2 = 0; i2 < nOptions; i2++)
-               {
-                  const auto& opt = customOptions[i2];
-                  if ((opt.section == Settings::TableOption && m_tweakPages[m_activeTweakPageIndex] == TP_TableOption)
-                     || (opt.section > Settings::TableOption && m_tweakPages[m_activeTweakPageIndex] == static_cast<int>(TP_Plugin00) + static_cast<int>(opt.section) - static_cast<int>(Settings::Plugin00)))
-                  {
-                     if (m_tweakState[BS_Custom + i2] == 2)
-                        m_table->m_settings.DeleteValue(opt.section, opt.id);
-                     else
-                        m_table->m_settings.SaveValue(opt.section, opt.id, m_live_table->m_settings.LoadValueWithDefault(opt.section, opt.name, opt.defaultValue));
-                     m_tweakState[BS_Custom + i2] = 0;
-                  }
-               }
-            }
-            if (m_table->m_filename.empty() || !FileExists(m_table->m_filename))
-            {
-               PushNotification("You need to save your table before exporting user settings"s, 5000);
-            }
-            else
-            {
-               m_table->m_settings.SaveToFile(iniFileName);
-               PushNotification(message + " exported to " + iniFileName, 5000);
-            }
-            if (g_pvp->m_povEdit && m_tweakPages[m_activeTweakPageIndex] == TP_PointOfView)
-               g_pvp->QuitPlayer(Player::CloseState::CS_CLOSE_APP);
-         }
-         else if (keycode == ePlungerKey) // Reset tweak page
-         {
-            if (m_tweakPages[m_activeTweakPageIndex] == TP_TableOption)
-            {
-               // Remove custom day/night and get back to the one of the table, eventually overriden by app (not table) settings
-               // FIXME we just default to the table value, missing the app settings being applied (like day/night from lat/lon,... see in player.cpp)
-               m_tweakState[BS_DayNight] = 2;
-               m_renderer->m_globalEmissionScale = m_table->m_globalEmissionScale;
-
-               // Exposure
-               m_tweakState[BS_Exposure] = 2;
-               m_renderer->m_exposure = m_table->m_settings.LoadValueWithDefault(Settings::TableOverride, "Exposure"s, m_table->GetExposure());
-
-               // Tonemapper
-               m_tweakState[BS_Tonemapper] = 2;
-               m_renderer->m_toneMapper = (ToneMapper)m_table->m_settings.LoadValueWithDefault(Settings::TableOverride, "ToneMapper"s, m_table->GetToneMapper());
-
-               // Remove custom difficulty and get back to the one of the table, eventually overriden by app (not table) settings
-               m_tweakState[BS_Difficulty] = 2;
-               m_live_table->m_globalDifficulty = g_pvp->m_settings.LoadValueWithDefault(Settings::TableOverride, "Difficulty"s, m_table->m_difficulty);
-
-               // Music/sound volume
-               m_player->m_MusicVolume = m_table->m_settings.LoadValueWithDefault(Settings::Player, "MusicVolume"s, 100);
-               m_player->m_SoundVolume = m_table->m_settings.LoadValueWithDefault(Settings::Player, "SoundVolume"s, 100);
-
-               m_renderer->MarkShaderDirty();
-            }
-            else if (m_tweakPages[m_activeTweakPageIndex] == TP_PointOfView)
-            {
-               for (int i2 = BS_ViewMode; i2 < BS_WndBottomZOfs; i2++)
-                  m_tweakState[i2] = 2;
-               ViewSetupID id = table->m_BG_current_set;
-               ViewSetup &viewSetup = table->mViewSetups[id];
-               viewSetup.mViewportRotation = 0.f;
-               const bool portrait = m_player->m_playfieldWnd->GetWidth() < m_player->m_playfieldWnd->GetHeight();
-               switch (id)
-               {
-               case BG_DESKTOP:
-               case BG_FSS:
-                  PushNotification("POV reset to default values"s, 5000);
-                  if (id == BG_DESKTOP && !portrait)
-                  { // Desktop
-                     viewSetup.mMode = (ViewLayoutMode)g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopMode"s, VLM_CAMERA);
-                     viewSetup.mViewX = CMTOVPU(g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopCamX"s, 0.f));
-                     viewSetup.mViewY = CMTOVPU(g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopCamY"s, 20.f));
-                     viewSetup.mViewZ = CMTOVPU(g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopCamZ"s, 70.f));
-                     viewSetup.mSceneScaleX = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopScaleX"s, 1.f);
-                     viewSetup.mSceneScaleY = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopScaleY"s, 1.f);
-                     viewSetup.mSceneScaleZ = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopScaleZ"s, 1.f);
-                     viewSetup.mFOV = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopFov"s, 50.f);
-                     viewSetup.mLookAt = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopLookAt"s, 25.0f);
-                     viewSetup.mViewVOfs = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "DesktopViewVOfs"s, 14.f);
-                  }
-                  else
-                  { // FSS
-                     viewSetup.mMode = (ViewLayoutMode)g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSMode"s, VLM_CAMERA);
-                     viewSetup.mViewX = CMTOVPU(g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSCamX"s, 0.f));
-                     viewSetup.mViewY = CMTOVPU(g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSCamY"s, 20.f));
-                     viewSetup.mViewZ = CMTOVPU(g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSCamZ"s, 70.f));
-                     viewSetup.mSceneScaleX = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSScaleX"s, 1.f);
-                     viewSetup.mSceneScaleY = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSScaleY"s, 1.f);
-                     viewSetup.mSceneScaleZ = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSScaleZ"s, 1.f);
-                     viewSetup.mFOV = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSFov"s, 77.f);
-                     viewSetup.mLookAt = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSLookAt"s, 50.0f);
-                     viewSetup.mViewVOfs = g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultCamera, "FSSViewVOfs"s, 22.f);
-                  }
-                  break;
-               case BG_FULLSCREEN:
-               {
-                  const float screenWidth = g_pvp->m_settings.LoadValueFloat(Settings::Player, "ScreenWidth"s);
-                  const float screenHeight = g_pvp->m_settings.LoadValueFloat(Settings::Player, "ScreenHeight"s);
-                  if (screenWidth <= 1.f || screenHeight <= 1.f)
-                  {
-                     PushNotification("You must setup your screen size before using Window mode"s, 5000);
-                  }
-                  else
-                  {
-                     float topHeight = table->m_glassTopHeight;
-                     float bottomHeight = table->m_glassBottomHeight;
-                     if (bottomHeight == topHeight)
-                     { // If table does not define the glass position (for table without it, when loading we set the glass as horizontal)
-                        TableDB db;
-                        db.Load();
-                        int bestSizeMatch = db.GetBestSizeMatch(table->GetTableWidth(), table->GetHeight(), topHeight);
-                        if (bestSizeMatch >= 0)
-                        {
-                           bottomHeight = INCHESTOVPU(db.m_data[bestSizeMatch].glassBottom);
-                           topHeight = INCHESTOVPU(db.m_data[bestSizeMatch].glassTop);
-                           PushNotification("Missing glass position guessed to be " + std::to_string(db.m_data[bestSizeMatch].glassBottom) + "\" / " + std::to_string(db.m_data[bestSizeMatch].glassTop) + "\" (" + db.m_data[bestSizeMatch].name + ')', 5000);
-                        }
-                        else
-                        {
-                           PushNotification("The table is missing glass position and no good guess was found."s, 5000);
-                        }
-                     }
-                     const float scale = (screenHeight / table->GetTableWidth()) * (table->GetHeight() / screenWidth);
-                     const bool isFitted = (viewSetup.mViewHOfs == 0.f) && (viewSetup.mViewVOfs == -2.8f) && (viewSetup.mSceneScaleY == scale) && (viewSetup.mSceneScaleX == scale);
-                     viewSetup.mMode = VLM_WINDOW;
-                     viewSetup.mViewHOfs = 0.f;
-                     viewSetup.mViewVOfs = isFitted ? 0.f : -2.8f;
-                     viewSetup.mSceneScaleX = scale;
-                     viewSetup.mSceneScaleY = isFitted ? 1.f : scale;
-                     viewSetup.mWindowBottomZOfs = bottomHeight;
-                     viewSetup.mWindowTopZOfs = topHeight;
-                     PushNotification(isFitted ? "POV reset to default values (stretch to fit)"s : "POV reset to default values (no stretching)"s, 5000);
-                  }
-                  break;
-               }
-               case BG_INVALID:
-               case NUM_BG_SETS: assert(false); break;
-               }
-               m_renderer->m_cam = Vertex3Ds(0.f, 0.f, 0.f);
-               UpdateTweakPage();
-            }
-            else if (m_tweakPages[m_activeTweakPageIndex] == TP_VRPosition)
-            {
-               m_player->m_vrDevice->RecenterTable();
-            }
-            // Reset custom table/plugin options
-            else if (m_tweakPages[m_activeTweakPageIndex] >= TP_TableOption)
-            {
-               if (m_tweakPages[m_activeTweakPageIndex] > TP_TableOption)
-                  PushNotification("Plugin options reset to default values"s, 5000);
-               else
-                  PushNotification("Table options reset to default values"s, 5000);
-               const vector<Settings::OptionDef> &customOptions = m_tweakPages[m_activeTweakPageIndex] == TP_TableOption ? m_live_table->m_settings.GetTableSettings() : Settings::GetPluginSettings();
-               const int nOptions = (int)customOptions.size();
-               for (int i2 = 0; i2 < nOptions; i2++)
-               {
-                  const auto& opt = customOptions[i2];
-                  if ((opt.section == Settings::TableOption && m_tweakPages[m_activeTweakPageIndex] == TP_TableOption)
-                     || (opt.section > Settings::TableOption && m_tweakPages[m_activeTweakPageIndex] == static_cast<int>(TP_Plugin00) + static_cast<int>(opt.section) - static_cast<int>(Settings::Plugin00)))
-                  {
-                     if (m_tweakState[BS_Custom + i2] == 2)
-                        m_table->m_settings.DeleteValue(opt.section, opt.id);
-                     else
-                        m_table->m_settings.SaveValue(opt.section, opt.id, m_live_table->m_settings.LoadValueWithDefault(opt.section, opt.id, opt.defaultValue));
-                     m_tweakState[BS_Custom + i2] = 0;
-                  }
-               }
-               if (m_tweakPages[m_activeTweakPageIndex] > TP_TableOption)
-                  VPXPluginAPIImpl::GetInstance().BroadcastVPXMsg(VPXPluginAPIImpl::GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_SETTINGS_CHANGED), nullptr);
-               else
-                  m_live_table->FireOptionEvent(2); // custom option resetted event
-            }
-         }
-         else if (keycode == eAddCreditKey) // Undo tweaks of page
-         {
-            if (g_pvp->m_povEdit)
-               // Tweak mode from command line => quit
-               g_pvp->QuitPlayer(Player::CloseState::CS_CLOSE_APP);
-            else
-            {
-               // Undo POV: copy from startup table to the live one
-               if (m_tweakPages[m_activeTweakPageIndex] == TP_PointOfView)
-               {
-                  PushNotification("POV undo to startup values"s, 5000);
-                  ViewSetupID id = m_live_table->m_BG_current_set;
-                  const PinTable *const __restrict src = m_player->m_pEditorTable;
-                  PinTable *const __restrict dst = m_live_table;
-                  dst->mViewSetups[id] = src->mViewSetups[id];
-                  dst->mViewSetups[id].ApplyTableOverrideSettings(m_live_table->m_settings, id);
-                  m_renderer->m_cam = Vertex3Ds(0.f, 0.f, 0.f);
-               }
-               if (m_tweakPages[m_activeTweakPageIndex] == TP_TableOption)
-               {
-                  // TODO undo Day/Night, difficulty, ...
-               }
-            }
-         }
-         else if (keycode == eRightMagnaSave || keycode == eLeftMagnaSave)
-         {
-            if (keycode == eRightMagnaSave)
-            {
-               m_activeTweakIndex++;
-               if (m_activeTweakIndex >= (int) m_tweakPageOptions.size())
-                  m_activeTweakIndex = 0;
-            }
-            else
-            {
-               m_activeTweakIndex--;
-               if (m_activeTweakIndex < 0)
-                  m_activeTweakIndex = (int)m_tweakPageOptions.size() - 1;
-            }
-         }
-      }
-      else if (keyEvent == 0) // Continuous keypress
-      {
-         if ((keycode == ePlungerKey) && (m_tweakPages[m_activeTweakPageIndex] == TP_VRPosition))
-            m_player->m_vrDevice->RecenterTable();
-         else if (keycode == eLeftTiltKey && m_live_table->m_settings.LoadValueBool(Settings::Player, "EnableCameraModeFlyAround"s))
-            m_live_table->mViewSetups[m_live_table->m_BG_current_set].mViewportRotation -= 1.0f;
-         else if (keycode == eRightTiltKey && m_live_table->m_settings.LoadValueBool(Settings::Player, "EnableCameraModeFlyAround"s))
-            m_live_table->mViewSetups[m_live_table->m_BG_current_set].mViewportRotation += 1.0f;
-      }
-   }
-   prevState = state;
-}
-
-void LiveUI::UpdateTweakModeUI()
-{
-   HandleTweakInput();
-
-   ImGui::PushFont(m_overlayFont, m_overlayFont->LegacySize);
-   PinTable *const table = m_live_table;
-   constexpr ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
-   const float FontSize = ImGui::GetFontBaked()->Size;
-   ImVec2 minSize(min(FontSize * (m_tweakPages[m_activeTweakPageIndex] == TP_Rules ? 35.0f
-                                : m_tweakPages[m_activeTweakPageIndex] == TP_Info  ? 45.0f
-                                                                                   : 30.0f),
-                  min(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y)),0.f);
-   ImVec2 maxSize(ImGui::GetIO().DisplaySize.x - 2.f * FontSize, 0.8f * ImGui::GetIO().DisplaySize.y - 1.f * FontSize);
-   ImGui::SetNextWindowBgAlpha(0.5f);
-   if (m_player->m_vrDevice)
-      ImGui::SetNextWindowPos(ImVec2(0.5f * ImGui::GetIO().DisplaySize.x, 0.5f * ImGui::GetIO().DisplaySize.y), 0, ImVec2(0.5f, 0.5f));
-   else
-      ImGui::SetNextWindowPos(ImVec2(0.5f * ImGui::GetIO().DisplaySize.x, 0.8f * ImGui::GetIO().DisplaySize.y), 0, ImVec2(0.5f, 1.f));
-   ImGui::SetNextWindowSizeConstraints(minSize, maxSize);
-   ImGui::Begin("TweakUI", nullptr, window_flags);
-
-   ViewSetupID vsId = table->m_BG_current_set;
-   ViewSetup &viewSetup = table->mViewSetups[vsId];
-   const bool isLegacy = viewSetup.mMode == VLM_LEGACY;
-   const bool isCamera = viewSetup.mMode == VLM_CAMERA;
-   const bool isWindow = viewSetup.mMode == VLM_WINDOW;
-
-   BackdropSetting activeTweakSetting = m_tweakPageOptions[m_activeTweakIndex];
-   if (ImGui::BeginTable("TweakTable", 4, /* ImGuiTableFlags_Borders */ 0))
-   {
-      static float vWidth = 50.f;
-      ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthStretch);
-      ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, vWidth);
-      ImGui::TableSetupColumn("Unit", ImGuiTableColumnFlags_WidthFixed);
-      ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
-      #define CM_ROW(id, label, format, value, unit) \
-      { \
-         char buf[1024]; snprintf(buf, sizeof(buf), format, value); \
-         ImGui::TableNextColumn(); ImGui::TextUnformatted(label); ImGui::TableNextColumn(); \
-         float textWidth = ImGui::CalcTextSize(buf).x; vWidth = max(vWidth, textWidth); \
-         if (textWidth < vWidth) ImGui::SameLine(vWidth - textWidth); \
-         ImGui::TextUnformatted(buf); ImGui::TableNextColumn(); \
-         ImGui::TextUnformatted(unit); ImGui::TableNextColumn(); \
-         ImGui::TextUnformatted(m_tweakState[id] == 0 ? "  " : m_tweakState[id] == 1 ? " **" : " *"); ImGui::TableNextRow(); \
-      }
-      #define CM_SKIP_LINE {ImGui::TableNextColumn(); ImGui::Dummy(ImVec2(0.f, m_dpi * 3.f)); ImGui::TableNextRow();}
-      const float realToVirtual = viewSetup.GetRealToVirtualScale(table);
-      for (int setting : m_tweakPageOptions)
-      {
-         const bool highlight = (setting == activeTweakSetting)
-                             || (activeTweakSetting == BS_XYZScale && (setting == BS_XScale || setting == BS_YScale || setting == BS_ZScale))
-                             || (activeTweakSetting == BS_Volume && (setting == BS_BackglassVolume || setting == BS_PlayfieldVolume));
-         if (highlight)
-            ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 255, 0, 255));
-         if (setting >= BS_Custom)
-         {
-            const vector<Settings::OptionDef> &customOptions = m_tweakPages[m_activeTweakPageIndex] == TP_TableOption ? m_live_table->m_settings.GetTableSettings() : Settings::GetPluginSettings();
-            if (setting - BS_Custom >= (int)customOptions.size())
-               continue;
-            const Settings::OptionDef &opt = customOptions[setting - BS_Custom];
-            float value = table->m_settings.LoadValueWithDefault(opt.section, opt.id, opt.defaultValue);
-            const string label = opt.name + ": ";
-            if (!opt.literals.empty()) // List of values
-            {
-               int index = (int) (value - opt.minValue);
-               if (index < 0 || index >= (int)opt.literals.size())
-                  index = (int)(opt.defaultValue - opt.minValue);
-               CM_ROW(setting, label.c_str(), "%s", opt.literals[index].c_str(), "");
-            }
-            else if (opt.unit == Settings::OT_PERCENT) // Percent value
-            {
-               CM_ROW(setting, label.c_str(), "%.1f", 100.f * value, "%");
-            }
-            else // OT_NONE
-            {
-               CM_ROW(setting, label.c_str(), "%.1f", value, "");
-            }
-         }
-         else switch (setting)
-         {
-         case BS_Page: {
-            const int page = m_tweakPages[m_activeTweakPageIndex];
-            string title;
-            if (page >= TP_Plugin00)
-            {
-               const string& sectionName = Settings::GetSectionName((Settings::Section)(Settings::Plugin00 + page - TP_Plugin00));
-               const std::shared_ptr<MsgPlugin> plugin = sectionName.length() > 7 ? MsgPluginManager::GetInstance().GetPlugin(std::string_view(sectionName).substr(7)) : nullptr;
-               if (plugin)
-                  title = plugin->m_name + " Plugin";
-               else
-                  title = "Invalid Plugin"s;
-            }
-            else 
-               title = m_tweakPages[m_activeTweakPageIndex] == TP_TableOption ? "Table Options"s
-                     : m_tweakPages[m_activeTweakPageIndex] == TP_PointOfView ? "Point of View"s
-                     : m_tweakPages[m_activeTweakPageIndex] == TP_VRPosition  ? "VR Scene Position"s
-                     : m_tweakPages[m_activeTweakPageIndex] == TP_Rules       ? "Rules"s
-                                                                              : "Information"s;
-            CM_ROW(setting, "Page "s.append(std::to_string(1 + m_activeTweakPageIndex)).append(1,'/').append(std::to_string(m_tweakPages.size())).c_str(), "%s", title.c_str(), "");
-            CM_SKIP_LINE;
-            break;
-         }
-
-         // View setup
-         case BS_ViewMode: CM_ROW(setting, "View Layout Mode:", "%s", isLegacy ? "Legacy" : isCamera ? "Camera" : "Window", ""); CM_SKIP_LINE; break;
-         case BS_XYZScale: break;
-         case BS_XScale: CM_ROW(setting, "Table X Scale", "%.1f", 100.f * viewSetup.mSceneScaleX / realToVirtual, "%"); break;
-         case BS_YScale: CM_ROW(setting, isWindow ? "Table YZ Scale" : "Table Y Scale", "%.1f", 100.f * viewSetup.mSceneScaleY / realToVirtual, "%"); break;
-         case BS_ZScale: CM_ROW(setting, "Table Z Scale", "%.1f", 100.f * viewSetup.mSceneScaleZ / realToVirtual, "%"); CM_SKIP_LINE; break;
-         case BS_LookAt:  if (isLegacy) { CM_ROW(setting, "Inclination", "%.1f", viewSetup.mLookAt, "deg"); } else { CM_ROW(setting, "Look at", "%.1f", viewSetup.mLookAt, "%"); } break;
-         case BS_XOffset: CM_ROW(setting, isLegacy ? "X Offset" : isWindow ? "Player X" : "Camera X", "%.1f", isWindow ? table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerX"s) : VPUTOCM(viewSetup.mViewX), "cm"); break;
-         case BS_YOffset: CM_ROW(setting, isLegacy ? "Y Offset" : isWindow ? "Player Y" : "Camera Y", "%.1f", isWindow ? table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerY"s) : VPUTOCM(viewSetup.mViewY), "cm"); break;
-         case BS_ZOffset: CM_ROW(setting, isLegacy ? "Z Offset" : isWindow ? "Player Z" : "Camera Z", "%.1f", isWindow ? table->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerZ"s) : VPUTOCM(viewSetup.mViewZ), "cm"); CM_SKIP_LINE; break;
-         case BS_FOV: CM_ROW(setting, "Field Of View (overall scale)", "%.1f", viewSetup.mFOV, "deg"); break;
-         case BS_Layback: CM_ROW(setting, "Layback", "%.1f", viewSetup.mLayback, ""); CM_SKIP_LINE; break;
-         case BS_ViewHOfs: CM_ROW(setting, "Horizontal Offset", "%.1f", viewSetup.mViewHOfs, isWindow ? "cm" : ""); break;
-         case BS_ViewVOfs: CM_ROW(setting, "Vertical Offset", "%.1f", viewSetup.mViewVOfs, isWindow ? "cm" : ""); CM_SKIP_LINE; break;
-         case BS_WndTopZOfs: CM_ROW(setting, "Window Top Z Ofs.", "%.1f", VPUTOCM(viewSetup.mWindowTopZOfs), "cm"); break;
-         case BS_WndBottomZOfs: CM_ROW(setting, "Window Bottom Z Ofs.", "%.1f", VPUTOCM(viewSetup.mWindowBottomZOfs), "cm"); CM_SKIP_LINE; break;
-
-         // VR Position
-         case BS_VROrientation: CM_ROW(setting, "Scene Orientation", "%.1f", m_player->m_vrDevice->GetSceneOrientation(), "°"); break;
-         case BS_VRX: CM_ROW(setting, "Scene Offset X", "%.1f", m_player->m_vrDevice->GetSceneOffset().x, "cm"); break;
-         case BS_VRY: CM_ROW(setting, "Scene Offset Y", "%.1f", m_player->m_vrDevice->GetSceneOffset().y, "cm"); break;
-         case BS_VRZ: CM_ROW(setting, "Scene Offset Z", "%.1f", m_player->m_vrDevice->GetSceneOffset().z, "cm"); break;
-         case BS_VRScale: CM_ROW(setting, "Lockbar width", "%.1f", m_player->m_vrDevice->GetLockbarWidth(), "cm"); break;
-         case BS_AR_VR: CM_ROW(setting, "Color Keyed Passthrough:", "%s", m_renderer->m_vrApplyColorKey ? "Enabled" : "Disabled", ""); break;
-
-         // Table options
-         case BS_DayNight: CM_ROW(setting, "Day Night: ", "%.1f", 100.f * m_renderer->m_globalEmissionScale, "%"); break;
-         case BS_Difficulty:
-            char label[64];
-            snprintf(label, std::size(label), "Difficulty (%.2f° slope and trajectories scattering):", m_live_table->GetPlayfieldSlope());
-            CM_ROW(setting, label, "%.1f", 100.f * m_live_table->m_globalDifficulty, "%");
-            break;
-         case BS_Exposure: CM_ROW(setting, "Exposure: ", "%.1f", 100.f * m_renderer->m_exposure, "%"); break;
-         case BS_Tonemapper: CM_ROW(setting, "Tonemapper: ", "%s", m_renderer->m_toneMapper == TM_REINHARD   ? "Reinhard"
-                                                                 : m_renderer->m_toneMapper == TM_FILMIC     ? "Filmic" 
-                                                                 : m_renderer->m_toneMapper == TM_NEUTRAL    ? "Neutral"
-                                                                 : m_renderer->m_toneMapper == TM_AGX        ? "AgX"
-                                                                 : m_renderer->m_toneMapper == TM_AGX_PUNCHY ? "AgX Punchy"
-                                                                 : m_renderer->m_toneMapper == TM_WCG_SPLINE ? "WCG Display" : "Invalid",""); // Should not happen as this tonemapper is not exposed to user
-            break;
-         case BS_Volume: break;
-         case BS_BackglassVolume: CM_ROW(setting, "Backglass Volume: ", "%d", m_player->m_MusicVolume, "%"); break;
-         case BS_PlayfieldVolume: CM_ROW(setting, "Playfield Volume: ", "%d", m_player->m_SoundVolume, "%"); break;
-
-         }
-         if (highlight)
-            ImGui::PopStyleColor();
-      }
-      #undef CM_ROW
-      #undef CM_SKIP_LINE
-      ImGui::EndTable();
-   }
-
-   if (m_tweakPages[m_activeTweakPageIndex] == TP_PointOfView)
-   {
-      if (isLegacy)
-      {
-         // Useless for absolute mode: the camera is always where we put it
-         Matrix3D view = m_renderer->GetMVP().GetView();
-         view.Invert();
-         const vec3 pos = view.GetOrthoNormalPos();
-         ImGui::Text("Camera at X: %.0fcm Y: %.0fcm Z: %.0fcm, Rotation: %.2f", 
-            VPUTOCM(pos.x - 0.5f * m_live_table->m_right), 
-            VPUTOCM(pos.y - m_live_table->m_bottom), 
-            VPUTOCM(pos.z), viewSetup.mViewportRotation);
-         ImGui::NewLine();
-      }
-      if (isWindow)
-      {
-         // Do not show it as it is more confusing than helpful due to the use of different coordinate systems in settings vs live edit
-         //ImGui::Text("Camera at X: %.1fcm Y: %.1fcm Z: %.1fcm", VPUTOCM(viewSetup.mViewX), VPUTOCM(viewSetup.mViewY), VPUTOCM(viewSetup.mViewZ));
-         //ImGui::NewLine();
-         if (m_live_table->m_settings.LoadValueFloat(Settings::Player, "ScreenWidth"s) <= 1.f)
-         {
-            ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 0, 0, 255));
-            ImGui::TextUnformatted("You are using 'Window' mode but haven't defined your display physical size.");
-            ImGui::TextUnformatted("This will break the overall scale as well as the stereo rendering.");
-            ImGui::NewLine();
-            ImGui::PopStyleColor();
-         }
-         viewSetup.SetWindowModeFromSettings(m_live_table);
-      }
-      m_renderer->InitLayout();
-   }
-
-   if (m_tweakPages[m_activeTweakPageIndex] == TP_Rules)
-   {
-      static float lastHeight = 0.f, maxScroll = 0.f;
-      m_tweakScroll = clamp(m_tweakScroll, 0.f, maxScroll);
-      ImGui::SetNextWindowScroll(ImVec2(0.f, m_tweakScroll));
-      ImGui::SetNextWindowSizeConstraints(ImVec2(0.f, 0.f), ImVec2(FLT_MAX, lastHeight));
-      if (ImGui::BeginChild("Rules", ImVec2(0.f, 0.f), 0, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar /* | ImGuiWindowFlags_AlwaysVerticalScrollbar */))
-      {
-         markdown_start_id = ImGui::GetItemID();
-         ImGui::Markdown(m_table->m_rules.c_str(), m_table->m_rules.length(), markdown_config);
-         lastHeight = ImGui::GetCursorPos().y - ImGui::GetCursorStartPos().y; // Height of content
-         maxScroll = ImGui::GetScrollMaxY();
-      }
-      ImGui::EndChild();
-      ImGui::NewLine();
-   }
-   else if (m_tweakPages[m_activeTweakPageIndex] == TP_Info)
-   {
-      static float lastHeight = 0.f, maxScroll = 0.f;
-      m_tweakScroll = clamp(m_tweakScroll, 0.f, maxScroll);
-      ImGui::SetNextWindowScroll(ImVec2(0.f, m_tweakScroll));
-      ImGui::SetNextWindowSizeConstraints(ImVec2(0.f, 0.f), ImVec2(FLT_MAX, lastHeight));
-      if (ImGui::BeginChild("Info", ImVec2(0.f, 0.f), 0, ImGuiWindowFlags_NoBackground))
-      {
-         markdown_start_id = ImGui::GetItemID();
-         ImGui::Markdown(m_table->m_description.c_str(), m_table->m_description.length(), markdown_config);
-         lastHeight = ImGui::GetCursorPos().y - ImGui::GetCursorStartPos().y; // Height of content
-         maxScroll = ImGui::GetScrollMaxY();
-      }
-      ImGui::EndChild();
-      ImGui::NewLine();
-   }
-
-   ImGui::NewLine();
-   vector<string> infos;
-   if (m_tweakPages[m_activeTweakPageIndex] != TP_Rules && m_tweakPages[m_activeTweakPageIndex] != TP_Info)
-   {
-      infos.push_back("Plunger Key:   Reset page to defaults"s);
-      if (m_app->m_povEdit)
-      {
-         infos.push_back("Start Key:   Export settings and quit"s);
-         infos.push_back("Credit Key:   Quit without export"s);
-      }
-      else
-      {
-         infos.push_back("Start Key:   Export settings file"s);
-         infos.push_back("Credit Key:   Reset page to old values"s);
-      }
-      infos.push_back("Magna save keys:   Previous/Next option"s);
-      if (m_live_table->m_settings.LoadValueBool(Settings::Player, "EnableCameraModeFlyAround"s))
-      {
-         infos.push_back("Nudge key:   Rotate table orientation"s);
-         infos.push_back("Arrows & Left Alt Key:   Navigate around"s);
-      }
-   }
-   infos.push_back(activeTweakSetting == BS_Page ? "Flipper keys:   Previous/Next page"s : "Flipper keys:   Adjust highlighted value"s);
-   const uint32_t info = ((msec() - m_StartTime_msec) / 2000u) % (uint32_t)infos.size();
-   ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
-   HelpTextCentered(infos[info]);
-   ImGui::PopStyleColor();
-
-   ImGui::End();
-   ImGui::PopFont();
-}
-
-void LiveUI::HideUI()
-{ 
-   CloseTweakMode();
-   m_table->m_settings.Save();
-   g_pvp->m_settings.Save();
-   m_ShowSplashModal = false;
-   m_ShowUI = false;
-   m_flyMode = false;
-   if (m_staticPrepassDisabled)
-   {
-      m_staticPrepassDisabled = false;
-      m_renderer->DisableStaticPrePass(false);
-   }
-   m_player->SetPlayState(true);
-}
-
-void LiveUI::UpdateMainUI()
-{
    Selection previousSelection = m_selection;
 
 #if !((defined(__APPLE__) && ((defined(TARGET_OS_IOS) && TARGET_OS_IOS) || (defined(TARGET_OS_TV) && TARGET_OS_TV))) || defined(__ANDROID__))
@@ -2246,31 +280,20 @@ void LiveUI::UpdateMainUI()
 
    // Gives some transparency when positioning camera to better view camera view bounds
    // TODO for some reasons, this breaks the modal background behavior
-   //SetupImGuiStyle(m_selection.type == LiveUI::Selection::SelectionType::S_CAMERA ? 0.3f : 1.0f);
-
-   bool popup_video_settings = false;
-   bool popup_audio_settings = false;
-
-   m_ShowBAMModal = ImGui::IsPopupOpen(ID_BAM_SETTINGS);
+   //SetupImGuiStyle(m_selection.type == EditorUI::Selection::SelectionType::S_CAMERA ? 0.3f : 1.0f);
 
    bool showFullUI = true;
-   showFullUI &= !m_ShowSplashModal;
-   showFullUI &= !m_RendererInspection;
-   showFullUI &= !m_tweakMode;
-   showFullUI &= !m_ShowBAMModal;
+   showFullUI &= !m_showRendererInspection;
    showFullUI &= !ImGui::IsPopupOpen(ID_VIDEO_SETTINGS);
    showFullUI &= !ImGui::IsPopupOpen(ID_ANAGLYPH_CALIBRATION);
    showFullUI &= !m_flyMode;
 
    if (showFullUI)
    {
-      if (!m_staticPrepassDisabled)
-      {
-         m_staticPrepassDisabled = true;
-         m_renderer->DisableStaticPrePass(true);
-      }
-
       // Main menubar
+      bool openAudioSettings = false;
+      bool openVideoSettings = false;
+      bool openPlumbSettings = false;
       if (ImGui::BeginMainMenuBar())
       {
          if (!m_table->IsLocked() && ImGui::BeginMenu("Debug"))
@@ -2278,7 +301,7 @@ void LiveUI::UpdateMainUI()
             if (ImGui::MenuItem("Open debugger"))
                m_player->m_showDebugger = true;
             if (ImGui::MenuItem("Renderer Inspection"))
-               m_RendererInspection = true;
+               m_showRendererInspection = true;
             if (ImGui::MenuItem(m_player->m_debugWindowActive ? "Play" : "Pause"))
                m_player->SetPlayState(!m_player->IsPlaying());
             ImGui::EndMenu();
@@ -2286,19 +309,38 @@ void LiveUI::UpdateMainUI()
          if (ImGui::BeginMenu("Preferences"))
          {
             if (ImGui::MenuItem("Audio Options"))
-               popup_audio_settings = true;
+               openAudioSettings = true;
             if (ImGui::MenuItem("Video Options"))
-               popup_video_settings = true;
+               openVideoSettings = true;
             if (ImGui::MenuItem("Nudge Options"))
-               m_ShowPlumb = true;
+               openPlumbSettings = true;
             ImGui::EndMenu();
          }
+         float buttonWidth = ImGui::CalcTextSize(ICON_FK_REPLY, nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2.0f
+            + ImGui::CalcTextSize(ICON_FK_WINDOW_CLOSE, nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+         ImVec2 padding = ImGui::GetCursorScreenPos();
+         padding.x += ImGui::GetContentRegionAvail().x - buttonWidth;
+         ImGui::SetCursorScreenPos(padding);
+         if (ImGui::Button(ICON_FK_REPLY)) // ICON_FK_STOP
+            Close();
+         if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Get back to player");
+         if (ImGui::Button(ICON_FK_WINDOW_CLOSE))
+            m_table->QuitPlayer(Player::CS_STOP_PLAY);
+         if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Close editor");
          m_menubar_height = ImGui::GetWindowSize().y;
          ImGui::EndMainMenuBar();
       }
+      if (openAudioSettings)
+         ImGui::OpenPopup(ID_AUDIO_SETTINGS, ImGuiPopupFlags_NoReopen);
+      if (openVideoSettings)
+         ImGui::OpenPopup(ID_VIDEO_SETTINGS, ImGuiPopupFlags_NoReopen);
+      if (openPlumbSettings)
+         ImGui::OpenPopup(ID_PLUMB_SETTINGS, ImGuiPopupFlags_NoReopen);
 
       // Main toolbar
-      m_toolbar_height = 20.f * m_dpi;
+      m_toolbar_height = 20.f * m_liveUI.GetDPI();
       const ImGuiViewport *const viewport = ImGui::GetMainViewport();
       ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y + m_menubar_height));
       ImGui::SetNextWindowSize(ImVec2(viewport->Size.x, m_toolbar_height));
@@ -2313,15 +355,9 @@ void LiveUI::UpdateMainUI()
       if (ImGui::Button(ICON_FK_STEP_FORWARD))
          m_player->m_step = true;
       ImGui::EndDisabled();
-      ImGui::SameLine();
-      if (ImGui::Button(ICON_FK_STOP))
-      {
-         ImGui::CloseCurrentPopup();
-         HideUI();
-         m_table->QuitPlayer(Player::CS_STOP_PLAY);
-      }
-      // TODO move viewport options to the right of the toolbar
-      ImGui::SameLine(ImGui::GetWindowWidth() - 100.f);
+      float buttonWidth = ImGui::CalcTextSize(ICON_FK_STICKY_NOTE, nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2.0f
+         + ImGui::CalcTextSize(ICON_FK_FILTER, nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+      ImGui::SameLine(ImGui::GetContentRegionAvail().x - buttonWidth);
       if (ImGui::Button(ICON_FK_STICKY_NOTE)) // Overlay option menu
          ImGui::OpenPopup("Overlay Popup");
       if (ImGui::BeginPopup("Overlay Popup"))
@@ -2363,9 +399,8 @@ void LiveUI::UpdateMainUI()
       ImGui::End();
 
       // Overlay Info Text
-      ImGuiIO &io = ImGui::GetIO();
-      ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x - 200.f * m_dpi, io.DisplaySize.y - m_toolbar_height - m_menubar_height - 5.f * m_dpi)); // Fixed outliner width (to be adjusted when moving ImGui to the docking branch)
-      ImGui::SetNextWindowPos(ImVec2(200.f * m_dpi, m_toolbar_height + m_menubar_height + 5.f * m_dpi));
+      ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x - 200.f * m_liveUI.GetDPI(), io.DisplaySize.y - m_toolbar_height - m_menubar_height - 5.f * m_liveUI.GetDPI())); // Fixed outliner width (to be adjusted when moving ImGui to the docking branch)
+      ImGui::SetNextWindowPos(ImVec2(200.f * m_liveUI.GetDPI(), m_toolbar_height + m_menubar_height + 5.f * m_liveUI.GetDPI()));
       ImGui::Begin("text overlay", NULL, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav);
       switch (m_gizmoOperation)
       {
@@ -2383,31 +418,15 @@ void LiveUI::UpdateMainUI()
    }
 
    // Popups & Modal dialogs
-   if (popup_video_settings)
-      ImGui::OpenPopup(ID_VIDEO_SETTINGS);
-   if (ImGui::IsPopupOpen(ID_VIDEO_SETTINGS))
-      UpdateVideoOptionsModal();
-   if (ImGui::IsPopupOpen(ID_ANAGLYPH_CALIBRATION))
-      UpdateAnaglyphCalibrationModal();
+   UpdateVideoOptionsModal();
+   UpdateAnaglyphCalibrationModal();
+   UpdateAudioOptionsModal();
+   UpdatePlumbWindow();
 
-   if (popup_audio_settings)
-      ImGui::OpenPopup(ID_AUDIO_SETTINGS);
-   if (ImGui::IsPopupOpen(ID_AUDIO_SETTINGS))
-      UpdateAudioOptionsModal();
-
-   if (m_RendererInspection)
+   if (m_showRendererInspection)
       UpdateRendererInspectionModal();
 
-   if (ImGui::IsPopupOpen(ID_BAM_SETTINGS))
-      UpdateHeadTrackingModal();
-
-   UpdatePlumbWindow();
 #endif
-
-   if (m_ShowSplashModal && !ImGui::IsPopupOpen(ID_MODAL_SPLASH))
-      ImGui::OpenPopup(ID_MODAL_SPLASH);
-   if (m_ShowSplashModal)
-      UpdateMainSplashModal();
 
    // Invisible full frame window for overlays
    ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
@@ -2432,7 +451,6 @@ void LiveUI::UpdateMainUI()
       float zNear, zFar;
       m_live_table->ComputeNearFarPlane(RH2LH * m_camView * YAxis, 1.f, zNear, zFar);
 
-      ImGuiIO &io = ImGui::GetIO();
       if (m_orthoCam)
       {
          float viewHeight = m_camDistance;
@@ -2484,7 +502,7 @@ void LiveUI::UpdateMainUI()
       if (isSelectionTransformValid)
       {
          Vertex2D pos = project(transform.GetOrthoNormalPos());
-         overlayDrawList->AddCircleFilled(ImVec2(pos.x, pos.y), 3.f * m_dpi, IM_COL32(255, 255, 255, 255), 16);
+         overlayDrawList->AddCircleFilled(ImVec2(pos.x, pos.y), 3.f * m_liveUI.GetDPI(), IM_COL32(255, 255, 255, 255), 16);
       }
 
       if (m_selection.type == Selection::S_EDITABLE && m_selectionOverlay)
@@ -2509,10 +527,10 @@ void LiveUI::UpdateMainUI()
    }
 
    // Handle uncaught mouse & keyboard shortcuts
-   if (!ImGui::GetIO().WantCaptureMouse)
+   if (!io.WantCaptureMouse)
    {
       // Zoom in/out with mouse wheel
-      if (ImGui::GetIO().MouseWheel != 0)
+      if (io.MouseWheel != 0)
       {
          m_useEditorCam = true;
          Matrix3D view(m_camView);
@@ -2629,149 +647,140 @@ void LiveUI::UpdateMainUI()
          }
       }
    }
-   if (!ImGui::GetIO().WantCaptureKeyboard)
+   if (!io.WantCaptureKeyboard)
    {
-      if (!m_ShowSplashModal)
+      if (ImGui::IsKeyReleased(ImGuiKey_Escape) && m_gizmoOperation != ImGuizmo::NONE)
       {
-         if (ImGui::IsKeyReleased(ImGuiKey_Escape) && m_gizmoOperation != ImGuizmo::NONE)
+         // Cancel current operation
+         m_gizmoOperation = ImGuizmo::NONE;
+      }
+      else if (ImGui::IsKeyReleased(ImGuiKey_Escape) && m_selection.type != Selection::S_NONE)
+      {
+         // Cancel current selection
+         m_selection = Selection();
+      }
+      else if (ImGui::IsKeyPressed(ImGuiKey_F))
+      {
+         m_flyMode = !m_flyMode;
+      }
+      else if (ImGui::IsKeyPressed(ImGuiKey_A) && ImGui::GetIO().KeyAlt)
+      {
+         m_selection = Selection();
+      }
+      else if (m_useEditorCam && ImGui::IsKeyPressed(ImGuiKey_G))
+      {
+         // Grab (translate)
+         if (io.KeyAlt)
          {
-            // Cancel current operation
-            m_gizmoOperation = ImGuizmo::NONE;
-         }
-         else if (ImGui::IsKeyReleased(ImGuiKey_Escape) && m_selection.type != Selection::S_NONE)
-         {
-            // Cancel current selection
-            m_selection = Selection();
-         }
-         else if (ImGui::IsKeyReleased(ImGuiKey_Escape) || (ImGui::IsKeyReleased(dikToImGuiKeys[m_player->m_rgKeys[eEscape]]) && !m_disable_esc))
-         {
-            // Open Main modal dialog
-            m_esc_mode = 3; // Get back to editor if Esc is pressed
-            m_ShowSplashModal = true;
-         }
-         else if (ImGui::IsKeyPressed(ImGuiKey_F))
-         {
-            m_flyMode = !m_flyMode;
-         }
-         else if (ImGui::IsKeyPressed(ImGuiKey_A) && ImGui::GetIO().KeyAlt)
-         {
-            m_selection = Selection();
-         }
-         else if (m_useEditorCam && ImGui::IsKeyPressed(ImGuiKey_G))
-         {
-            // Grab (translate)
-            if (ImGui::GetIO().KeyAlt)
-            {
-               Matrix3D tmp;
-               if (GetSelectionTransform(tmp))
-                  SetSelectionTransform(tmp, true, false, false);
-            }
-            else
-            {
-               m_gizmoOperation = ImGuizmo::TRANSLATE;
-               m_gizmoMode = m_gizmoOperation == ImGuizmo::TRANSLATE ? (m_gizmoMode == ImGuizmo::LOCAL ? ImGuizmo::WORLD : ImGuizmo::LOCAL) : ImGuizmo::WORLD;
-            }
-         }
-         else if (m_useEditorCam && ImGui::IsKeyPressed(ImGuiKey_S))
-         {
-            // Scale
-            if (ImGui::GetIO().KeyAlt)
-            {
-               Matrix3D tmp;
-               if (GetSelectionTransform(tmp))
-                  SetSelectionTransform(tmp, false, true, false);
-            }
-            else
-            {
-               m_gizmoOperation = ImGuizmo::SCALE;
-               m_gizmoMode = m_gizmoOperation == ImGuizmo::SCALE ? (m_gizmoMode == ImGuizmo::LOCAL ? ImGuizmo::WORLD : ImGuizmo::LOCAL) : ImGuizmo::WORLD;
-            }
-         }
-         else if (m_useEditorCam && ImGui::IsKeyPressed(ImGuiKey_R))
-         {
-            // Rotate
-            if (ImGui::GetIO().KeyAlt)
-            {
-               Matrix3D tmp;
-               if (GetSelectionTransform(tmp))
-                  SetSelectionTransform(tmp, false, false, true);
-            }
-            else
-            {
-               m_gizmoOperation = ImGuizmo::ROTATE;
-               m_gizmoMode = m_gizmoOperation == ImGuizmo::ROTATE ? (m_gizmoMode == ImGuizmo::LOCAL ? ImGuizmo::WORLD : ImGuizmo::LOCAL) : ImGuizmo::WORLD;
-            }
-         }
-         else if (ImGui::IsKeyPressed(ImGuiKey_Keypad0))
-         {
-            // Editor toggle play camera / editor camera
-            m_useEditorCam = !m_useEditorCam;
-            if (m_useEditorCam)
-               ResetCameraFromPlayer();
-         }
-         else if (ImGui::IsKeyPressed(ImGuiKey_Keypad5))
-         {
-            // Editor toggle orthographic / perspective
-            m_useEditorCam = true;
-            m_orthoCam = !m_orthoCam;
-         }
-         else if (ImGui::IsKeyPressed(ImGuiKey_KeypadDecimal))
-         {
-            // Editor Camera center on selection
-            m_useEditorCam = true;
-            Matrix3D view(m_camView);
-            view.Invert();
-            const vec3 up = view.GetOrthoNormalUp(), dir = view.GetOrthoNormalDir(), pos = view.GetOrthoNormalPos();
-            const vec3 camTarget = pos - dir * m_camDistance;
-            vec3 newTarget = camTarget;
             Matrix3D tmp;
             if (GetSelectionTransform(tmp))
-               newTarget = vec3(tmp._41, tmp._42, tmp._43);
-            const vec3 newEye = newTarget + dir * m_camDistance;
-            m_camView = Matrix3D::MatrixLookAtRH(newEye, newTarget, up);
+               SetSelectionTransform(tmp, true, false, false);
          }
-         else if (ImGui::IsKeyPressed(ImGuiKey_Keypad7))
+         else
          {
-            // Editor Camera to Top / Bottom
-            m_useEditorCam = true;
-            m_orthoCam = true;
-            Matrix3D view(m_camView);
-            view.Invert();
-            const vec3 /*up = view.GetOrthoNormalUp(),*/ dir = view.GetOrthoNormalDir(), pos = view.GetOrthoNormalPos();
-            const vec3 camTarget = pos - dir * m_camDistance;
-            constexpr vec3 newUp{0.f, -1.f, 0.f};
-            const vec3 newDir(0.f, 0.f, ImGui::GetIO().KeyCtrl ? 1.f : -1.f);
-            const vec3 newEye = camTarget + newDir * m_camDistance;
-            m_camView = Matrix3D::MatrixLookAtRH(newEye, camTarget, newUp);
+            m_gizmoOperation = ImGuizmo::TRANSLATE;
+            m_gizmoMode = m_gizmoOperation == ImGuizmo::TRANSLATE ? (m_gizmoMode == ImGuizmo::LOCAL ? ImGuizmo::WORLD : ImGuizmo::LOCAL) : ImGuizmo::WORLD;
          }
-         else if (ImGui::IsKeyPressed(ImGuiKey_Keypad1))
+      }
+      else if (m_useEditorCam && ImGui::IsKeyPressed(ImGuiKey_S))
+      {
+         // Scale
+         if (io.KeyAlt)
          {
-            // Editor Camera to Front / Back
-            m_useEditorCam = true;
-            m_orthoCam = true;
-            Matrix3D view(m_camView);
-            view.Invert();
-            const vec3 /*up = view.GetOrthoNormalUp(),*/ dir = view.GetOrthoNormalDir(), pos = view.GetOrthoNormalPos();
-            const vec3 camTarget = pos - dir * m_camDistance;
-            constexpr vec3 newUp{0.f, 0.f, -1.f};
-            const vec3 newDir(0.f, ImGui::GetIO().KeyCtrl ? -1.f : 1.f, 0.f);
-            const vec3 newEye = camTarget + newDir * m_camDistance;
-            m_camView = Matrix3D::MatrixLookAtRH(newEye, camTarget, newUp);
+            Matrix3D tmp;
+            if (GetSelectionTransform(tmp))
+               SetSelectionTransform(tmp, false, true, false);
          }
-         else if (ImGui::IsKeyPressed(ImGuiKey_Keypad3))
+         else
          {
-            // Editor Camera to Right / Left
-            m_useEditorCam = true;
-            m_orthoCam = true;
-            Matrix3D view(m_camView);
-            view.Invert();
-            const vec3 /*up = view.GetOrthoNormalUp(),*/ dir = view.GetOrthoNormalDir(), pos = view.GetOrthoNormalPos();
-            const vec3 camTarget = pos - dir * m_camDistance;
-            constexpr vec3 newUp{0.f, 0.f, -1.f};
-            const vec3 newDir(ImGui::GetIO().KeyCtrl ? 1.f : -1.f, 0.f, 0.f);
-            const vec3 newEye = camTarget + newDir * m_camDistance;
-            m_camView = Matrix3D::MatrixLookAtRH(newEye, camTarget, newUp);
+            m_gizmoOperation = ImGuizmo::SCALE;
+            m_gizmoMode = m_gizmoOperation == ImGuizmo::SCALE ? (m_gizmoMode == ImGuizmo::LOCAL ? ImGuizmo::WORLD : ImGuizmo::LOCAL) : ImGuizmo::WORLD;
          }
+      }
+      else if (m_useEditorCam && ImGui::IsKeyPressed(ImGuiKey_R))
+      {
+         // Rotate
+         if (io.KeyAlt)
+         {
+            Matrix3D tmp;
+            if (GetSelectionTransform(tmp))
+               SetSelectionTransform(tmp, false, false, true);
+         }
+         else
+         {
+            m_gizmoOperation = ImGuizmo::ROTATE;
+            m_gizmoMode = m_gizmoOperation == ImGuizmo::ROTATE ? (m_gizmoMode == ImGuizmo::LOCAL ? ImGuizmo::WORLD : ImGuizmo::LOCAL) : ImGuizmo::WORLD;
+         }
+      }
+      else if (ImGui::IsKeyPressed(ImGuiKey_Keypad0))
+      {
+         // Editor toggle play camera / editor camera
+         m_useEditorCam = !m_useEditorCam;
+         if (m_useEditorCam)
+            ResetCameraFromPlayer();
+      }
+      else if (ImGui::IsKeyPressed(ImGuiKey_Keypad5))
+      {
+         // Editor toggle orthographic / perspective
+         m_useEditorCam = true;
+         m_orthoCam = !m_orthoCam;
+      }
+      else if (ImGui::IsKeyPressed(ImGuiKey_KeypadDecimal))
+      {
+         // Editor Camera center on selection
+         m_useEditorCam = true;
+         Matrix3D view(m_camView);
+         view.Invert();
+         const vec3 up = view.GetOrthoNormalUp(), dir = view.GetOrthoNormalDir(), pos = view.GetOrthoNormalPos();
+         const vec3 camTarget = pos - dir * m_camDistance;
+         vec3 newTarget = camTarget;
+         Matrix3D tmp;
+         if (GetSelectionTransform(tmp))
+            newTarget = vec3(tmp._41, tmp._42, tmp._43);
+         const vec3 newEye = newTarget + dir * m_camDistance;
+         m_camView = Matrix3D::MatrixLookAtRH(newEye, newTarget, up);
+      }
+      else if (ImGui::IsKeyPressed(ImGuiKey_Keypad7))
+      {
+         // Editor Camera to Top / Bottom
+         m_useEditorCam = true;
+         m_orthoCam = true;
+         Matrix3D view(m_camView);
+         view.Invert();
+         const vec3 /*up = view.GetOrthoNormalUp(),*/ dir = view.GetOrthoNormalDir(), pos = view.GetOrthoNormalPos();
+         const vec3 camTarget = pos - dir * m_camDistance;
+         constexpr vec3 newUp{0.f, -1.f, 0.f};
+         const vec3 newDir(0.f, 0.f, ImGui::GetIO().KeyCtrl ? 1.f : -1.f);
+         const vec3 newEye = camTarget + newDir * m_camDistance;
+         m_camView = Matrix3D::MatrixLookAtRH(newEye, camTarget, newUp);
+      }
+      else if (ImGui::IsKeyPressed(ImGuiKey_Keypad1))
+      {
+         // Editor Camera to Front / Back
+         m_useEditorCam = true;
+         m_orthoCam = true;
+         Matrix3D view(m_camView);
+         view.Invert();
+         const vec3 /*up = view.GetOrthoNormalUp(),*/ dir = view.GetOrthoNormalDir(), pos = view.GetOrthoNormalPos();
+         const vec3 camTarget = pos - dir * m_camDistance;
+         constexpr vec3 newUp{0.f, 0.f, -1.f};
+         const vec3 newDir(0.f, ImGui::GetIO().KeyCtrl ? -1.f : 1.f, 0.f);
+         const vec3 newEye = camTarget + newDir * m_camDistance;
+         m_camView = Matrix3D::MatrixLookAtRH(newEye, camTarget, newUp);
+      }
+      else if (ImGui::IsKeyPressed(ImGuiKey_Keypad3))
+      {
+         // Editor Camera to Right / Left
+         m_useEditorCam = true;
+         m_orthoCam = true;
+         Matrix3D view(m_camView);
+         view.Invert();
+         const vec3 /*up = view.GetOrthoNormalUp(),*/ dir = view.GetOrthoNormalDir(), pos = view.GetOrthoNormalPos();
+         const vec3 camTarget = pos - dir * m_camDistance;
+         constexpr vec3 newUp{0.f, 0.f, -1.f};
+         const vec3 newDir(ImGui::GetIO().KeyCtrl ? 1.f : -1.f, 0.f, 0.f);
+         const vec3 newEye = camTarget + newDir * m_camDistance;
+         m_camView = Matrix3D::MatrixLookAtRH(newEye, camTarget, newUp);
       }
    }
 
@@ -2830,9 +839,9 @@ void LiveUI::UpdateMainUI()
    }
 }
 
-bool LiveUI::GetSelectionTransform(Matrix3D& transform)
+bool EditorUI::GetSelectionTransform(Matrix3D& transform)
 {
-   if (m_selection.type == LiveUI::Selection::SelectionType::S_EDITABLE)
+   if (m_selection.type == EditorUI::Selection::SelectionType::S_EDITABLE)
    switch (m_selection.editable->GetItemType())
    {
    case eItemBall:
@@ -2895,7 +904,7 @@ bool LiveUI::GetSelectionTransform(Matrix3D& transform)
    return false;
 }
 
-void LiveUI::SetSelectionTransform(const Matrix3D &newTransform, bool clearPosition, bool clearScale, bool clearRotation)
+void EditorUI::SetSelectionTransform(const Matrix3D &newTransform, bool clearPosition, bool clearScale, bool clearRotation)
 {
    Matrix3D transform = newTransform;
    const Vertex3Ds right(transform._11, transform._12, transform._13);
@@ -2940,7 +949,7 @@ void LiveUI::SetSelectionTransform(const Matrix3D &newTransform, bool clearPosit
    if (clearRotation)
       rotX = rotY = rotZ = 0.f;
 
-   if (m_selection.type == LiveUI::Selection::SelectionType::S_EDITABLE)
+   if (m_selection.type == EditorUI::Selection::SelectionType::S_EDITABLE)
    switch (m_selection.editable->GetItemType())
    {
    case eItemBall:
@@ -3013,7 +1022,7 @@ void LiveUI::SetSelectionTransform(const Matrix3D &newTransform, bool clearPosit
    }
 }
 
-bool LiveUI::IsOutlinerFiltered(const string& name)
+bool EditorUI::IsOutlinerFiltered(const string& name)
 {
    if (m_outlinerFilter.empty())
       return true;
@@ -3022,17 +1031,17 @@ bool LiveUI::IsOutlinerFiltered(const string& name)
    return name_lcase.find(filter_lcase) != std::string::npos;
 }
 
-void LiveUI::UpdateOutlinerUI()
+void EditorUI::UpdateOutlinerUI()
 {
    if (m_table && m_table->IsLocked())
       return;
    const ImGuiViewport * const viewport = ImGui::GetMainViewport();
-   const float pane_width = 200.f * m_dpi;
+   const float pane_width = 200.f * m_liveUI.GetDPI();
    ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y + m_menubar_height + m_toolbar_height));
    ImGui::SetNextWindowSize(ImVec2(pane_width, viewport->Size.y - m_menubar_height - m_toolbar_height));
    constexpr ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize
       | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
-   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f * m_dpi, 4.0f * m_dpi));
+   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f * m_liveUI.GetDPI(), 4.0f * m_liveUI.GetDPI()));
    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
    ImGui::Begin("OUTLINER", nullptr, window_flags);
@@ -3182,17 +1191,17 @@ void LiveUI::UpdateOutlinerUI()
    ImGui::PopStyleVar(3);
 }
 
-void LiveUI::UpdatePropertyUI()
+void EditorUI::UpdatePropertyUI()
 {
    if (m_table && m_table->IsLocked())
       return;
    const ImGuiViewport *const viewport = ImGui::GetMainViewport();
-   const float pane_width = 250.f * m_dpi;
+   const float pane_width = 250.f * m_liveUI.GetDPI();
    ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x + viewport->Size.x - pane_width, viewport->Pos.y + m_menubar_height + m_toolbar_height));
    ImGui::SetNextWindowSize(ImVec2(pane_width, viewport->Size.y - m_menubar_height - m_toolbar_height));
    constexpr ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove
       | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
-   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f * m_dpi, 4.0f * m_dpi));
+   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f * m_liveUI.GetDPI(), 4.0f * m_liveUI.GetDPI()));
    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
    ImGui::Begin("PROPERTIES", nullptr, window_flags);
@@ -3225,7 +1234,7 @@ void LiveUI::UpdatePropertyUI()
                assert(startup_obj == nullptr || std::find(m_table->m_vedit.begin(), m_table->m_vedit.end(), startup_obj) != m_table->m_vedit.end());
                if ((is_live && live_obj == nullptr) || (!is_live && startup_obj == nullptr))
                {
-                  HelpTextCentered("No Object"s);
+                  m_liveUI.CenteredText("No Object"s);
                }
                else
                {
@@ -3262,10 +1271,10 @@ void LiveUI::UpdatePropertyUI()
    ImGui::PopStyleVar(3);
 }
 
-void LiveUI::UpdateAudioOptionsModal()
+void EditorUI::UpdateAudioOptionsModal()
 {
-   bool p_open = true;
-   if (ImGui::BeginPopupModal(ID_AUDIO_SETTINGS, &p_open, ImGuiWindowFlags_AlwaysAutoResize))
+   bool open = true;
+   if (ImGui::BeginPopupModal(ID_AUDIO_SETTINGS, &open, ImGuiWindowFlags_AlwaysAutoResize))
    {
       bool fsound = g_pvp->m_settings.LoadValueWithDefault(Settings::Player, "PlayMusic"s, true);
       if (ImGui::Checkbox("Enable Backglass Sounds", &fsound))
@@ -3301,7 +1310,7 @@ void LiveUI::UpdateAudioOptionsModal()
    }
 }
 
-void LiveUI::UpdateVideoOptionsModal()
+void EditorUI::UpdateVideoOptionsModal()
 {
    bool popup_anaglyph_calibration = false;
    bool p_open = true;
@@ -3480,7 +1489,7 @@ void LiveUI::UpdateVideoOptionsModal()
       ImGui::OpenPopup(ID_ANAGLYPH_CALIBRATION);
 }
 
-void LiveUI::UpdateAnaglyphCalibrationModal()
+void EditorUI::UpdateAnaglyphCalibrationModal()
 {
    int glassesIndex = m_renderer->m_stereo3D - STEREO_ANAGLYPH_1;
    if (glassesIndex < 0 || glassesIndex > 9)
@@ -3547,7 +1556,7 @@ void LiveUI::UpdateAnaglyphCalibrationModal()
          g_pvp->m_settings.SaveValue(Settings::Player, prefKey + fields[calibrationStep], calibrationBrightness);
       }
 
-      ImGui::PushFont(m_overlayFont, m_overlayFont->LegacySize);
+      ImGui::PushFont(m_liveUI.GetOverlayFont(), m_liveUI.GetOverlayFont()->LegacySize);
       const ImVec2 win_size = ImGui::GetWindowSize();
       ImDrawList *draw_list = ImGui::GetWindowDrawList();
       const float s = min(win_size.x, win_size.y) / 5.f, t = 1.f * s;
@@ -3627,19 +1636,11 @@ void LiveUI::UpdateAnaglyphCalibrationModal()
    ImGui::PopStyleColor();
 }
 
-void LiveUI::UpdateHeadTrackingModal()
-{
-#ifndef __STANDALONE__
-   BAMView::drawMenu();
-#endif
-}
-
-void LiveUI::UpdatePlumbWindow()
+void EditorUI::UpdatePlumbWindow()
 {
    // TODO table or global settings ?
-   if (!m_ShowPlumb)
-      return;
-   if (ImGui::Begin("Nudge & Plumb Settings", &m_ShowPlumb, ImGuiWindowFlags_AlwaysAutoResize))
+   bool open = true;
+   if (ImGui::BeginPopupModal(ID_PLUMB_SETTINGS, &open, ImGuiWindowFlags_AlwaysAutoResize))
    {
       // Physical accelerator settings
       bool accEnabled = m_live_table->m_settings.LoadValueWithDefault(Settings::Player, "PBWEnabled"s, true);
@@ -3721,8 +1722,8 @@ void LiveUI::UpdatePlumbWindow()
       constexpr int panelSize = 100;
       if (ImGui::BeginTable("PlumbInfo", 2, ImGuiTableFlags_Borders))
       {
-         ImGui::TableSetupColumn("Col1", ImGuiTableColumnFlags_WidthFixed, panelSize * m_dpi);
-         ImGui::TableSetupColumn("Col2", ImGuiTableColumnFlags_WidthFixed, panelSize * m_dpi);
+         ImGui::TableSetupColumn("Col1", ImGuiTableColumnFlags_WidthFixed, panelSize * m_liveUI.GetDPI());
+         ImGui::TableSetupColumn("Col2", ImGuiTableColumnFlags_WidthFixed, panelSize * m_liveUI.GetDPI());
       
          ImGui::TableNextColumn();
          ImGui::TextUnformatted("Cab. Sensor");
@@ -3730,7 +1731,7 @@ void LiveUI::UpdatePlumbWindow()
          ImGui::TextUnformatted("Plumb Position");
          ImGui::TableNextRow();
 
-         const ImVec2 fullSize = ImVec2(panelSize * m_dpi, panelSize * m_dpi);
+         const ImVec2 fullSize = ImVec2(panelSize * m_liveUI.GetDPI(), panelSize * m_liveUI.GetDPI());
          const ImVec2 halfSize = fullSize * 0.5f;
          ImGui::TableNextColumn();
          {
@@ -3740,7 +1741,7 @@ void LiveUI::UpdatePlumbWindow()
             ImGui::GetWindowDrawList()->AddLine(pos + ImVec2(halfSize.x, 0.f), pos + ImVec2(halfSize.y, fullSize.y), IM_COL32_WHITE);
             const Vertex2D &acc = m_player->m_pininput.GetNudge(); // Range: -1..1
             ImVec2 accPos = pos + halfSize + ImVec2(acc.x, acc.y) * halfSize * 2.f + ImVec2(0.5f, 0.5f);
-            ImGui::GetWindowDrawList()->AddCircleFilled(accPos, 5.f * m_dpi, IM_COL32(255, 0, 0, 255));
+            ImGui::GetWindowDrawList()->AddCircleFilled(accPos, 5.f * m_liveUI.GetDPI(), IM_COL32(255, 0, 0, 255));
             ImGui::EndChild();
          }
          ImGui::TableNextColumn();
@@ -3758,7 +1759,7 @@ void LiveUI::UpdatePlumbWindow()
             const Vertex3Ds &plumb = m_player->m_physics->GetPlumbPos();
             const ImVec2 plumbPos = pos + halfSize + scale * ImVec2(plumb.x, plumb.y) / m_player->m_physics->GetPlumbPoleLength() + ImVec2(0.5f, 0.5f);
             ImGui::GetWindowDrawList()->AddLine(pos + halfSize, plumbPos, IM_COL32(255, 128, 0, 255));
-            ImGui::GetWindowDrawList()->AddCircleFilled(plumbPos, 5.f * m_dpi, IM_COL32(255, 0, 0, 255));
+            ImGui::GetWindowDrawList()->AddCircleFilled(plumbPos, 5.f * m_liveUI.GetDPI(), IM_COL32(255, 0, 0, 255));
             ImGui::EndChild();
             ImGui::EndDisabled();
          }
@@ -3778,13 +1779,13 @@ void LiveUI::UpdatePlumbWindow()
             ImGui::GetWindowDrawList()->AddLine(pos + ImVec2(halfSize.x, 0.f), pos + ImVec2(halfSize.y, fullSize.y), IM_COL32_WHITE);
             const Vertex3Ds nudge = (float)PHYS_FACTOR * m_player->m_physics->GetNudgeAcceleration(); // Range: -1..1
             const ImVec2 nudgePos = pos + halfSize + ImVec2(nudge.x, nudge.y) * halfSize * 2.f + ImVec2(0.5f, 0.5f);
-            ImGui::GetWindowDrawList()->AddCircleFilled(nudgePos, 5.f * m_dpi, IM_COL32(255, 0, 0, 255));
+            ImGui::GetWindowDrawList()->AddCircleFilled(nudgePos, 5.f * m_liveUI.GetDPI(), IM_COL32(255, 0, 0, 255));
             ImGui::EndChild();
          }
          ImGui::TableNextColumn();
          {
             ImGui::BeginDisabled(!enablePlumbTilt);
-            ImGui::BeginChild("PlumbAngle", ImVec2(panelSize * m_dpi, panelSize * m_dpi));
+            ImGui::BeginChild("PlumbAngle", ImVec2(panelSize * m_liveUI.GetDPI(), panelSize * m_liveUI.GetDPI()));
             const ImVec2 &pos = ImGui::GetWindowPos();
             const Vertex3Ds& plumb = m_player->m_physics->GetPlumbPos();
             float radius = min(fullSize.x, fullSize.y) * 0.9f;
@@ -3801,28 +1802,24 @@ void LiveUI::UpdatePlumbWindow()
                angle = -angle;
             plumbPos = pos + ImVec2(halfSize.x + sinf(angle) * radius, cosf(angle) * radius);
             ImGui::GetWindowDrawList()->AddLine(pos + ImVec2(halfSize.x, 0.f), plumbPos, IM_COL32(255, 128, 0, 255));
-            ImGui::GetWindowDrawList()->AddCircleFilled(plumbPos, 5.f * m_dpi, IM_COL32(255, 0, 0, 255));
+            ImGui::GetWindowDrawList()->AddCircleFilled(plumbPos, 5.f * m_liveUI.GetDPI(), IM_COL32(255, 0, 0, 255));
             ImGui::EndChild();
             ImGui::EndDisabled();
          }
          ImGui::EndTable();
       }
+      ImGui::EndPopup();
    }
-   ImGui::End();
 }
 
-void LiveUI::UpdateRendererInspectionModal()
+void EditorUI::UpdateRendererInspectionModal()
 {
-   if (m_staticPrepassDisabled)
-   {
-      m_staticPrepassDisabled = false;
-      m_renderer->DisableStaticPrePass(false);
-   }
+   // FIXME m_renderer->DisableStaticPrePass(false);
    m_useEditorCam = false;
    m_renderer->InitLayout();
 
-   ImGui::SetNextWindowSize(ImVec2(350.f * m_dpi, 0));
-   if (ImGui::Begin(ID_RENDERER_INSPECTION, &m_RendererInspection))
+   ImGui::SetNextWindowSize(ImVec2(350.f * m_liveUI.GetDPI(), 0));
+   if (ImGui::Begin(ID_RENDERER_INSPECTION, &m_showRendererInspection))
    {
       ImGui::TextUnformatted("Display single render pass:");
       static int pass_selection = IF_FPS;
@@ -3870,7 +1867,7 @@ void LiveUI::UpdateRendererInspectionModal()
       }
 
       ImGui::TextUnformatted("Press F11 to reset min/max/average timings");
-      if (ImGui::IsKeyPressed(dikToImGuiKeys[m_player->m_rgKeys[eFrameCount]]))
+      if (ImGui::IsKeyPressed(m_liveUI.GetImGuiKeysFromDIkeycode(m_player->m_rgKeys[eFrameCount])))
          m_player->InitFPS();
 
       // Other detailed information
@@ -3879,210 +1876,12 @@ void LiveUI::UpdateRendererInspectionModal()
    ImGui::End();
 }
 
-void LiveUI::UpdateMainSplashModal()
-{
-   const bool enableKeyboardShortcuts = (msec() - m_OpenUITime) > 250;
-
-   ImGuiStyle &style = ImGui::GetStyle();
-   // FIXME push style
-   style.Colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0, 0, 0, 0);
-
-   // Display table name,author,version and blurb and description
-   {
-      std::ostringstream info;
-
-      if (m_ShowUI) // Move below menu & toolbar
-         info << "\n\n\n\n";
-
-      if (!m_table->m_tableName.empty())
-         info << "# " << m_table->m_tableName << '\n';
-      else
-         info << "# Table\n";
-
-      const size_t line_length = info.str().size();
-      if (!m_table->m_blurb.empty())
-         info << m_table->m_blurb << std::string(line_length, '=') << '\n';
-      if (!m_table->m_description.empty())
-         info << m_table->m_description;
-
-      info << "\n\n  ";
-      if (!m_table->m_author.empty())
-         info << "By " << m_table->m_author << ", ";
-      if (!m_table->m_version.empty())
-         info << "Version: " << m_table->m_version;
-      info << " (" << (!m_table->m_dateSaved.empty() ? m_table->m_dateSaved : "N.A."s) << " Revision " << m_table->m_numTimesSaved << ")\n";
-
-      constexpr ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
-      ImGui::SetNextWindowBgAlpha(0.5f);
-      ImGui::SetNextWindowPos(ImVec2(0, 0));
-      ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
-      ImGui::Begin("Table Info", nullptr, window_flags);
-      markdown_start_id = ImGui::GetItemID();
-      ImGui::Markdown(info.str().c_str(), info.str().length(), markdown_config);
-      ImGui::End();
-   }
-
-   constexpr ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove;
-   if (ImGui::BeginPopupModal(ID_MODAL_SPLASH, nullptr, window_flags))
-   {
-#ifndef __STANDALONE__
-      const ImVec2 size(m_dpi * (m_player->m_headTracking ? 120.f : 100.f), 0);
-#else
-      const ImVec2 size(m_dpi * 170.f, 0);
-#endif
-
-      // If displaying the main splash popup, save user changes and exit camera mode started from it
-      if (m_tweakMode && m_live_table != nullptr && m_table != nullptr)
-         CloseTweakMode();
-
-      // Key shortcut: click on the button, or press escape key (react on key released, otherwise, it would immediately reopen the UI,...)
-      int keyShortcut = 0;
-      if (enableKeyboardShortcuts && (ImGui::IsKeyReleased(ImGuiKey_Escape) || ((ImGui::IsKeyReleased(dikToImGuiKeys[m_player->m_rgKeys[eEscape]]) && !m_disable_esc))))
-         keyShortcut = m_esc_mode == 0 ? 1 : m_esc_mode;
-
-      // Map action to ImgUI navigation
-      if (m_player)
-      {
-         static PinInput::InputState prevState { 0 };
-         const PinInput::InputState& state = m_player->m_pininput.GetInputState();
-         if (state.IsKeyPressed(eLeftFlipperKey, prevState))
-            ImGui::GetIO().AddKeyEvent(ImGuiKey_UpArrow, true);
-         else if (state.IsKeyReleased(eLeftFlipperKey, prevState))
-            ImGui::GetIO().AddKeyEvent(ImGuiKey_UpArrow, false);
-         if (state.IsKeyPressed(eRightFlipperKey, prevState))
-            ImGui::GetIO().AddKeyEvent(ImGuiKey_DownArrow, true);
-         else if (state.IsKeyReleased(eRightFlipperKey, prevState))
-            ImGui::GetIO().AddKeyEvent(ImGuiKey_DownArrow, false);
-         if (state.IsKeyPressed(eStartGameKey, prevState))
-            ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, true);
-         else if (state.IsKeyReleased(eStartGameKey, prevState))
-            ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false);
-         if (state.IsKeyPressed(ePlungerKey, prevState))
-            ImGui::GetIO().AddKeyEvent(ImGuiKey_Space, true);
-         else if (state.IsKeyReleased(ePlungerKey, prevState))
-            ImGui::GetIO().AddKeyEvent(ImGuiKey_Space, false);
-         prevState = state;
-      }
-
-      ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-      if (ImGui::Button("Resume Game", size) || (keyShortcut == 1))
-      {
-         ImGui::CloseCurrentPopup();
-         SetupImGuiStyle(1.0f);
-         m_useEditorCam = false;
-         m_renderer->InitLayout();
-         HideUI();
-      }
-      ImGui::SetItemDefaultFocus();
-      if (ImGui::Button("Table Options", size) || (keyShortcut == 2))
-      {
-         ImGui::CloseCurrentPopup();
-         OpenTweakMode();
-      }
-      bool popup_headtracking = false;
-#if !((defined(__APPLE__) && ((defined(TARGET_OS_IOS) && TARGET_OS_IOS) || (defined(TARGET_OS_TV) && TARGET_OS_TV))) || defined(__ANDROID__))
-      if (m_player->m_headTracking && ImGui::Button("Adjust Headtracking", size))
-      {
-         ImGui::CloseCurrentPopup();
-         m_ShowUI = false;
-         m_ShowSplashModal = false;
-         popup_headtracking = true;
-      }
-      if (m_renderer->m_stereo3D != STEREO_VR && (ImGui::Button("Live Editor", size) || (keyShortcut == 3)))
-      {
-         ImGui::CloseCurrentPopup();
-         m_ShowUI = true;
-         m_ShowSplashModal = false;
-         if (!m_staticPrepassDisabled)
-         {
-            m_staticPrepassDisabled = true;
-            m_renderer->DisableStaticPrePass(true);
-         }
-         ResetCameraFromPlayer();
-      }
-#endif
-      if (g_pvp->m_ptableActive->TournamentModePossible() && ImGui::Button("Generate Tournament File", size))
-      {
-         g_pvp->GenerateTournamentFile();
-      }
-#ifndef __STANDALONE__
-      // Quit: click on the button, or press exit button
-      if (ImGui::Button("Quit to Editor", size) || (enableKeyboardShortcuts && ImGui::IsKeyPressed(dikToImGuiKeys[m_player->m_rgKeys[eExitGame]])))
-      {
-         ImGui::CloseCurrentPopup();
-         HideUI();
-         m_table->QuitPlayer(Player::CS_STOP_PLAY);
-      }
-#else
-#if ((defined(__APPLE__) && (defined(TARGET_OS_IOS) && TARGET_OS_IOS)) || defined(__ANDROID__))
-      bool showTouchOverlay = g_pvp->m_settings.LoadValueWithDefault(Settings::Player, "TouchOverlay"s, false);
-      if (ImGui::Button(showTouchOverlay ? "Disable Touch Overlay" : "Enable Touch Overlay", size))
-      {
-         showTouchOverlay = !showTouchOverlay;
-         g_pvp->m_settings.SaveValue(Settings::Player, "TouchOverlay"s, showTouchOverlay);
-
-         ImGui::GetIO().MousePos.x = 0;
-         ImGui::GetIO().MousePos.y = 0;
-      }
-#endif
-#if (defined(__APPLE__) && ((defined(TARGET_OS_IOS) && TARGET_OS_IOS) || (defined(TARGET_OS_TV) && TARGET_OS_TV))) || defined(__ANDROID__)
-      if (ImGui::Button(m_perfUI.GetPerfMode() != PerfUI::PerfMode::PM_DISABLED ? "Disable FPS" : "Enable FPS", size))
-      {
-         m_perfUI.NextPerfMode();
-         while (m_perfUI.GetPerfMode() != PerfUI::PerfMode::PM_DISABLED && m_perfUI.GetPerfMode() != PerfUI::PerfMode::PM_FPS)
-            m_perfUI.NextPerfMode();
-
-         ImGui::GetIO().MousePos.x = 0;
-         ImGui::GetIO().MousePos.y = 0;
-      }
-#endif
-      if (ImGui::Button("Quit", size) || (enableKeyboardShortcuts && ImGui::IsKeyPressed(dikToImGuiKeys[m_player->m_rgKeys[eExitGame]])))
-      {
-         ImGui::CloseCurrentPopup();
-         HideUI();
-         m_table->QuitPlayer(Player::CS_CLOSE_APP);
-      }
-#endif
-      const ImVec2 pos = ImGui::GetWindowPos();
-      ImVec2 max = ImGui::GetWindowSize();
-      const bool hovered = ImGui::IsWindowHovered();
-      ImGui::EndPopup();
-
-      if (popup_headtracking)
-         ImGui::OpenPopup(ID_BAM_SETTINGS);
-
-      // Handle dragging mouse to allow dragging the main application window
-      if (m_player)
-      {
-         static ImVec2 initialDragPos;
-         if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
-         {
-            max.x += pos.x;
-            max.y += pos.y;
-            if (!hovered && !(pos.x <= initialDragPos.x && initialDragPos.x <= max.x && pos.y <= initialDragPos.y && initialDragPos.y <= max.y) // Don't drag if mouse is over UI components
-             && !m_player->m_playfieldWnd->IsFullScreen()) // Don't drag if window is fullscreen
-            {
-               //const ImVec2 pos = ImGui::GetMousePos();
-               const ImVec2 drag = ImGui::GetMouseDragDelta();
-               int x, y;
-               m_player->m_playfieldWnd->GetPos(x, y);
-               m_player->m_playfieldWnd->SetPos(x + (int)drag.x, y + (int)drag.y);
-            }
-         }
-         else
-         {
-            initialDragPos = ImGui::GetMousePos();
-         }
-      }
-   }
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 //
 // Property panes
 //
 
-void LiveUI::TableProperties(bool is_live)
+void EditorUI::TableProperties(bool is_live)
 {
    HelpEditableHeader(is_live, m_table, m_live_table);
    if (ImGui::CollapsingHeader("User", ImGuiTreeNodeFlags_DefaultOpen) && BEGIN_PROP_TABLE)
@@ -4137,7 +1936,7 @@ void LiveUI::TableProperties(bool is_live)
    }
 }
 
-void LiveUI::CameraProperties(bool is_live)
+void EditorUI::CameraProperties(bool is_live)
 {
    PinTable *const table = (is_live ? m_live_table : m_table);
 
@@ -4190,9 +1989,9 @@ void LiveUI::CameraProperties(bool is_live)
       m_renderer->GetMVP().GetView()._43);
 }
 
-void LiveUI::ImageProperties()
+void EditorUI::ImageProperties()
 {
-   HelpTextCentered("Image"s);
+   m_liveUI.CenteredText("Image"s);
    string name = m_selection.image->m_name;
    ImGui::BeginDisabled(true); // Editing the name of a live item can break the script
    if (ImGui::InputText("Name", &name))
@@ -4205,26 +2004,19 @@ void LiveUI::ImageProperties()
       m_table->SetNonUndoableDirty(eSaveDirty);
    ImGui::EndDisabled();
    ImGui::Separator();
-   std::shared_ptr<Sampler> sampler = m_renderer->m_renderDevice->m_texMan.LoadTexture(m_selection.image, false);
-   #if defined(ENABLE_BGFX)
-      ImTextureID image = sampler;
-   #elif defined(ENABLE_OPENGL)
-      ImTextureID image = sampler ? (ImTextureID)sampler->GetCoreTexture() : 0;
-   #elif defined(ENABLE_DX9)
-      ImTextureID image = sampler ? (ImTextureID)sampler->GetCoreTexture() : 0;
-   #endif
+   ImTextureID image = m_renderer->m_renderDevice->m_texMan.LoadTexture(m_selection.image, false);
    if (image)
    {
       const float w = ImGui::GetWindowWidth();
-      ImGui::Image(image, ImVec2(w, static_cast<float>(sampler->GetHeight()) * w / static_cast<float>(sampler->GetWidth())));
+      ImGui::Image(image, ImVec2(w, static_cast<float>(image->GetHeight()) * w / static_cast<float>(image->GetWidth())));
    }
 }
 
-void LiveUI::RenderProbeProperties(bool is_live)
+void EditorUI::RenderProbeProperties(bool is_live)
 {
    RenderProbe * const live_probe = (RenderProbe *)(m_selection.is_live ? m_selection.renderprobe : m_live_table->m_startupToLive[m_selection.renderprobe]);
    RenderProbe * const startup_probe = (RenderProbe *)(m_selection.is_live ? m_live_table->m_liveToStartup[m_selection.renderprobe] : m_selection.renderprobe);
-   HelpTextCentered("Render Probe"s);
+   m_liveUI.CenteredText("Render Probe"s);
    string name = m_selection.renderprobe->GetName();
    ImGui::BeginDisabled(is_live); // Editing the name of a live item can break the script
    if (ImGui::InputText("Name", &name))
@@ -4298,12 +2090,12 @@ void LiveUI::RenderProbeProperties(bool is_live)
    }
 }
 
-void LiveUI::MaterialProperties(bool is_live)
+void EditorUI::MaterialProperties(bool is_live)
 {
    Material * const live_material = (Material *)(m_selection.is_live ? m_selection.editable : m_live_table->m_startupToLive[m_selection.editable]);
    Material * const startup_material = (Material *)(m_selection.is_live ? m_live_table->m_liveToStartup[m_selection.editable] : m_selection.editable);
    Material * const material = (is_live ? live_material : startup_material);
-   HelpTextCentered("Material"s);
+   m_liveUI.CenteredText("Material"s);
    string name = ((Material *)m_selection.editable)->m_name;
    ImGui::BeginDisabled(is_live); // Editing the name of a live item can break the script
    if (ImGui::InputText("Name", &name))
@@ -4344,7 +2136,7 @@ void LiveUI::MaterialProperties(bool is_live)
    }
 }
 
-void LiveUI::BallProperties(bool is_live, Ball *startup_obj, Ball *live_obj)
+void EditorUI::BallProperties(bool is_live, Ball *startup_obj, Ball *live_obj)
 {
    Ball *const ball = (is_live ? live_obj : startup_obj);
    if (ImGui::CollapsingHeader("Visual", ImGuiTreeNodeFlags_DefaultOpen) && BEGIN_PROP_TABLE)
@@ -4375,7 +2167,7 @@ void LiveUI::BallProperties(bool is_live, Ball *startup_obj, Ball *live_obj)
    }
 }
 
-void LiveUI::BumperProperties(bool is_live, Bumper *startup_obj, Bumper *live_obj)
+void EditorUI::BumperProperties(bool is_live, Bumper *startup_obj, Bumper *live_obj)
 {
    if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_DefaultOpen) && BEGIN_PROP_TABLE)
    {
@@ -4398,7 +2190,7 @@ void LiveUI::BumperProperties(bool is_live, Bumper *startup_obj, Bumper *live_ob
    }
 }
 
-void LiveUI::FlasherProperties(bool is_live, Flasher *startup_obj, Flasher *live_obj)
+void EditorUI::FlasherProperties(bool is_live, Flasher *startup_obj, Flasher *live_obj)
 {
    Flasher *const flasher = (is_live ? live_obj : startup_obj);
    if (flasher == nullptr)
@@ -4463,7 +2255,7 @@ void LiveUI::FlasherProperties(bool is_live, Flasher *startup_obj, Flasher *live
    }
 }
 
-void LiveUI::KickerProperties(bool is_live, Kicker *startup_obj, Kicker *live_obj)
+void EditorUI::KickerProperties(bool is_live, Kicker *startup_obj, Kicker *live_obj)
 {
    if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_DefaultOpen) && BEGIN_PROP_TABLE)
    {
@@ -4477,7 +2269,7 @@ void LiveUI::KickerProperties(bool is_live, Kicker *startup_obj, Kicker *live_ob
    }
 }
 
-void LiveUI::LightProperties(bool is_live, Light *startup_light, Light *live_light)
+void EditorUI::LightProperties(bool is_live, Light *startup_light, Light *live_light)
 {
    Light *const light = (is_live ? live_light : startup_light);
    if (light && ImGui::CollapsingHeader("Visual", ImGuiTreeNodeFlags_DefaultOpen) && BEGIN_PROP_TABLE)
@@ -4592,7 +2384,7 @@ void LiveUI::LightProperties(bool is_live, Light *startup_light, Light *live_lig
    }
 }
 
-void LiveUI::PrimitiveProperties(bool is_live, Primitive *startup_obj, Primitive *live_obj)
+void EditorUI::PrimitiveProperties(bool is_live, Primitive *startup_obj, Primitive *live_obj)
 {
    if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_DefaultOpen) && BEGIN_PROP_TABLE)
    {
@@ -4642,7 +2434,7 @@ void LiveUI::PrimitiveProperties(bool is_live, Primitive *startup_obj, Primitive
    }*/
 }
 
-void LiveUI::RampProperties(bool is_live, Ramp *startup_obj, Ramp *live_obj)
+void EditorUI::RampProperties(bool is_live, Ramp *startup_obj, Ramp *live_obj)
 {
    if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_DefaultOpen) && BEGIN_PROP_TABLE)
    {
@@ -4663,7 +2455,7 @@ void LiveUI::RampProperties(bool is_live, Ramp *startup_obj, Ramp *live_obj)
    }*/
 }
 
-void LiveUI::RubberProperties(bool is_live, Rubber *startup_obj, Rubber *live_obj)
+void EditorUI::RubberProperties(bool is_live, Rubber *startup_obj, Rubber *live_obj)
 {
    if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_DefaultOpen) && BEGIN_PROP_TABLE)
    {
@@ -4687,7 +2479,7 @@ void LiveUI::RubberProperties(bool is_live, Rubber *startup_obj, Rubber *live_ob
    PROP_TIMER(is_live, startup_obj, live_obj)
 }
 
-void LiveUI::SurfaceProperties(bool is_live, Surface *startup_obj, Surface *live_obj)
+void EditorUI::SurfaceProperties(bool is_live, Surface *startup_obj, Surface *live_obj)
 {
    if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_DefaultOpen) && BEGIN_PROP_TABLE)
    {
@@ -4713,7 +2505,7 @@ void LiveUI::SurfaceProperties(bool is_live, Surface *startup_obj, Surface *live
    PROP_TIMER(is_live, startup_obj, live_obj)
 }
 
-void LiveUI::TriggerProperties(bool is_live, Trigger *startup_obj, Trigger *live_obj)
+void EditorUI::TriggerProperties(bool is_live, Trigger *startup_obj, Trigger *live_obj)
 {
    if (ImGui::CollapsingHeader("Visuals", ImGuiTreeNodeFlags_DefaultOpen) && BEGIN_PROP_TABLE)
    {
@@ -4789,7 +2581,7 @@ psel->GetIEditable()->SetDirtyDraw();
    }                                                                                                                                                                                         \
    ImGui::PopID();
 
-void LiveUI::PropSeparator(const char *label)
+void EditorUI::PropSeparator(const char *label)
 {
    PROP_TABLE_SETUP
    ImGui::TableNextColumn();
@@ -4798,7 +2590,7 @@ void LiveUI::PropSeparator(const char *label)
    ImGui::TableNextColumn();
 }
 
-void LiveUI::PropCheckbox(const char *label, IEditable *undo_obj, bool is_live, bool *startup_v, bool *live_v, const OnBoolPropChange &chg_callback)
+void EditorUI::PropCheckbox(const char *label, IEditable *undo_obj, bool is_live, bool *startup_v, bool *live_v, const OnBoolPropChange &chg_callback)
 {
    PROP_HELPER_BEGIN(bool)
    if (ImGui::Checkbox(label, v))
@@ -4814,7 +2606,7 @@ void LiveUI::PropCheckbox(const char *label, IEditable *undo_obj, bool is_live, 
    PROP_HELPER_END
 }
 
-void LiveUI::PropFloat(const char *label, IEditable* undo_obj, bool is_live, float *startup_v, float *live_v, float step, float step_fast, const char *format, ImGuiInputTextFlags flags, const OnFloatPropChange &chg_callback)
+void EditorUI::PropFloat(const char *label, IEditable* undo_obj, bool is_live, float *startup_v, float *live_v, float step, float step_fast, const char *format, ImGuiInputTextFlags flags, const OnFloatPropChange &chg_callback)
 {
    PROP_HELPER_BEGIN(float)
    if (ImGui::InputFloat(label, v, step, step_fast, format, flags))
@@ -4830,7 +2622,7 @@ void LiveUI::PropFloat(const char *label, IEditable* undo_obj, bool is_live, flo
    PROP_HELPER_END
 }
 
-void LiveUI::PropInt(const char *label, IEditable *undo_obj, bool is_live, int *startup_v, int *live_v)
+void EditorUI::PropInt(const char *label, IEditable *undo_obj, bool is_live, int *startup_v, int *live_v)
 {
    PROP_HELPER_BEGIN(int)
    if (ImGui::InputInt(label, v))
@@ -4842,7 +2634,7 @@ void LiveUI::PropInt(const char *label, IEditable *undo_obj, bool is_live, int *
    PROP_HELPER_END
 }
 
-void LiveUI::PropRGB(const char *label, IEditable *undo_obj, bool is_live, COLORREF *startup_v, COLORREF *live_v, ImGuiColorEditFlags flags)
+void EditorUI::PropRGB(const char *label, IEditable *undo_obj, bool is_live, COLORREF *startup_v, COLORREF *live_v, ImGuiColorEditFlags flags)
 {
    PROP_HELPER_BEGIN(COLORREF)
    float col[3];
@@ -4862,7 +2654,7 @@ void LiveUI::PropRGB(const char *label, IEditable *undo_obj, bool is_live, COLOR
    PROP_HELPER_END
 }
 
-void LiveUI::PropVec3(const char *label, IEditable *undo_obj, bool is_live, float *startup_x, float *startup_y, float *startup_z, float *live_x, float *live_y, float *live_z, const char *format, ImGuiInputTextFlags flags, const OnVec3PropChange &chg_callback)
+void EditorUI::PropVec3(const char *label, IEditable *undo_obj, bool is_live, float *startup_x, float *startup_y, float *startup_z, float *live_x, float *live_y, float *live_z, const char *format, ImGuiInputTextFlags flags, const OnVec3PropChange &chg_callback)
 {
    PROP_TABLE_SETUP
    ImGui::TableNextColumn();
@@ -4901,7 +2693,7 @@ void LiveUI::PropVec3(const char *label, IEditable *undo_obj, bool is_live, floa
    PROP_HELPER_END
 }
 
-void LiveUI::PropVec3(const char *label, IEditable *undo_obj, bool is_live, float *startup_v2, float *live_v2, const char *format, ImGuiInputTextFlags flags, const OnVec3PropChange &chg_callback)
+void EditorUI::PropVec3(const char *label, IEditable *undo_obj, bool is_live, float *startup_v2, float *live_v2, const char *format, ImGuiInputTextFlags flags, const OnVec3PropChange &chg_callback)
 {
    Vertex3Ds startV, liveV;
    Vertex3Ds *startup_v = nullptr, *live_v = nullptr;
@@ -4930,7 +2722,7 @@ void LiveUI::PropVec3(const char *label, IEditable *undo_obj, bool is_live, floa
    }
 }
 
-void LiveUI::PropVec3(const char *label, IEditable *undo_obj, bool is_live, Vertex3Ds *startup_v, Vertex3Ds *live_v, const char *format, ImGuiInputTextFlags flags, const OnVec3PropChange &chg_callback)
+void EditorUI::PropVec3(const char *label, IEditable *undo_obj, bool is_live, Vertex3Ds *startup_v, Vertex3Ds *live_v, const char *format, ImGuiInputTextFlags flags, const OnVec3PropChange &chg_callback)
 {
    PROP_HELPER_BEGIN(Vertex3Ds)
    float col[3] = { v->x, v->y, v->z };
@@ -4949,7 +2741,7 @@ void LiveUI::PropVec3(const char *label, IEditable *undo_obj, bool is_live, Vert
    PROP_HELPER_END
 }
 
-void LiveUI::PropCombo(const char *label, IEditable *undo_obj, bool is_live, int *startup_v, int *live_v, size_t n_values, const string labels[], const OnIntPropChange &chg_callback)
+void EditorUI::PropCombo(const char *label, IEditable *undo_obj, bool is_live, int *startup_v, int *live_v, size_t n_values, const string labels[], const OnIntPropChange &chg_callback)
 {
    PROP_HELPER_BEGIN(int)
    const char *const preview_value = labels[clamp(*v, 0, static_cast<int>(n_values) - 1)].c_str();
@@ -4972,7 +2764,7 @@ void LiveUI::PropCombo(const char *label, IEditable *undo_obj, bool is_live, int
    PROP_HELPER_END
 }
 
-void LiveUI::PropImageCombo(const char *label, IEditable *undo_obj, bool is_live, string *startup_v, string *live_v, PinTable *table, const OnStringPropChange &chg_callback)
+void EditorUI::PropImageCombo(const char *label, IEditable *undo_obj, bool is_live, string *startup_v, string *live_v, PinTable *table, const OnStringPropChange &chg_callback)
 {
    PROP_HELPER_BEGIN(string)
    const char *const preview_value = v->c_str();
@@ -4998,7 +2790,7 @@ void LiveUI::PropImageCombo(const char *label, IEditable *undo_obj, bool is_live
    PROP_HELPER_END
 }
 
-void LiveUI::PropMaterialCombo(const char *label, IEditable *undo_obj, bool is_live, string *startup_v, string *live_v, PinTable *table, const OnStringPropChange &chg_callback)
+void EditorUI::PropMaterialCombo(const char *label, IEditable *undo_obj, bool is_live, string *startup_v, string *live_v, PinTable *table, const OnStringPropChange &chg_callback)
 {
    PROP_HELPER_BEGIN(string)
    const char *const preview_value = v->c_str();
@@ -5024,7 +2816,7 @@ void LiveUI::PropMaterialCombo(const char *label, IEditable *undo_obj, bool is_l
    PROP_HELPER_END
 }
 
-void LiveUI::PropLightmapCombo(const char *label, IEditable *undo_obj, bool is_live, string *startup_v, string *live_v, PinTable *table, const OnStringPropChange &chg_callback)
+void EditorUI::PropLightmapCombo(const char *label, IEditable *undo_obj, bool is_live, string *startup_v, string *live_v, PinTable *table, const OnStringPropChange &chg_callback)
 {
    PROP_HELPER_BEGIN(string)
    const char *const preview_value = v->c_str();
@@ -5050,7 +2842,7 @@ void LiveUI::PropLightmapCombo(const char *label, IEditable *undo_obj, bool is_l
    PROP_HELPER_END
 }
 
-void LiveUI::PropRenderProbeCombo(const char *label, RenderProbe::ProbeType type, IEditable *undo_obj, bool is_live, string *startup_v, string *live_v, PinTable *table, const OnStringPropChange &chg_callback)
+void EditorUI::PropRenderProbeCombo(const char *label, RenderProbe::ProbeType type, IEditable *undo_obj, bool is_live, string *startup_v, string *live_v, PinTable *table, const OnStringPropChange &chg_callback)
 {
    PROP_HELPER_BEGIN(string)
    const char *const preview_value = v->c_str();

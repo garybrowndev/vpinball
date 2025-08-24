@@ -27,7 +27,7 @@ public:
    ModelViewProj& GetMVP() { return *m_mvp; }
    const ModelViewProj& GetMVP() const { return *m_mvp; }
    Vertex3Ds Unproject(const int width, const int height, const Vertex3Ds& point);
-   Vertex3Ds Get3DPointFrom2D(const int width, const int height, const POINT& p, float z=0.0f);
+   Vertex3Ds Get3DPointFrom2D(const int width, const int height, const Vertex2D& p, float z);
    POINT Get2DPointFrom3D(const int width, const int height, const Vertex3Ds& point3D);
 
    void MarkShaderDirty() { m_shaderDirty = true; }

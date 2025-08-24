@@ -23,7 +23,6 @@ public:
    BiffWriter(IStream *pistream, const HCRYPTHASH hcrypthash);
 
    HRESULT WriteInt(const int id, const int value);
-   HRESULT WriteString(const int id, const char * const szvalue);
    HRESULT WriteString(const int id, const string& szvalue);
 
    HRESULT WriteWideString(const int id, const WCHAR * const wzvalue);
@@ -47,7 +46,7 @@ public:
 class BiffReader final
 {
 public:
-   BiffReader(IStream *pistream, ILoadable *piloadable, void *ppassdata, const int version, const HCRYPTHASH hcrypthash, const HCRYPTKEY hcryptkey);
+   BiffReader(IStream *pistream, ILoadable *piloadable, const int version, const HCRYPTHASH hcrypthash, const HCRYPTKEY hcryptkey);
 
    int GetBytesInRecordRemaining() const { return m_bytesinrecordremaining; }
 
@@ -70,7 +69,6 @@ public:
       return hr;
    }
 #endif
-   HRESULT GetString(char * const szvalue, const size_t szvalue_maxlength);
    HRESULT GetString(string& szvalue);
    HRESULT GetWideString(WCHAR* wzvalue, const size_t wzvalue_maxlength);
    HRESULT GetWideString(std::basic_string<WCHAR>& wzvalue);
@@ -93,7 +91,6 @@ public:
    HRESULT Load(std::function<bool(const int id, BiffReader *const pbr)> processToken = nullptr);
 
    IStream *m_pistream;
-   void *m_pdata;
    int m_version;
 
    HCRYPTHASH m_hcrypthash;

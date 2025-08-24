@@ -162,7 +162,7 @@ void SearchSelectDialog::SelectElement()
         {
            char szType[MAXNAMEBUFFER*2];
            ListView_GetItemText(m_hElementList, iItem, 1, szType, std::size(szType));
-           if (strcmp(szType, "Collection") == 0)
+           if (szType == "Collection"s)
            {
               CComObject<Collection> *const pcol = (CComObject<Collection>*)lv.lParam;
               if (!pcol->m_visel.empty())
@@ -764,6 +764,14 @@ void SearchSelectDialog::AddSearchItemToList(IEditable * const piedit, int idx)
        ListView_SetItemText(m_hElementList, idx, 4, (LPSTR)"");
 
        break;
+   }
+   case eItemPartGroup:
+   {
+      ListView_SetItemText(m_hElementList, idx, 1, (LPSTR) "PartGroup");
+      ListView_SetItemText(m_hElementList, idx, 3, (LPSTR) "");
+      ListView_SetItemText(m_hElementList, idx, 4, (LPSTR) "");
+
+      break;
    }
    default:
       assert(!"AddSearchItemToList unhandled case");

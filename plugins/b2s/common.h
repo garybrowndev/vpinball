@@ -33,6 +33,7 @@ namespace B2S
 LPI_USE();
 #define LOGD LPI_LOGD
 #define LOGI LPI_LOGI
+#define LOGW LPI_LOGW
 #define LOGE LPI_LOGE
 
 PSC_USE_ERROR();
@@ -61,14 +62,27 @@ public:
    float x = 0.f, y = 0.f, z = 0.f, w = 0.f;
 };
 
+class ivec4
+{
+public:
+   ivec4() { }
+   ivec4(int px, int py, int pz, int pw) : x(px), y(py), z(pz), w(pw) { }
+
+   int x = 0, y = 0, z = 0, w = 0;
+};
+
 // Rendering provided through plugin messages
 extern VPXTexture CreateTexture(uint8_t *rawData, int size);
 extern VPXTextureInfo* GetTextureInfo(VPXTexture texture);
 extern void DeleteTexture(VPXTexture texture);
+extern void UpdateTexture(VPXTexture *texture, int width, int height, VPXTextureFormat format, const uint8_t *image);
+
+int GetSettingInt(const MsgPluginAPI* pMsgApi, const string& section, const string& key, int def = 0);
+bool GetSettingBool(const MsgPluginAPI* pMsgApi, const string& section, const string& key, bool def = false);
 
 // The following function are duplicates from the main VPX codebase
 string find_case_insensitive_file_path(const string &szPath);
 string TitleAndPathFromFilename(const string &filename);
-vector<unsigned char> base64_decode(const string &encoded_string);
+vector<unsigned char> base64_decode(string encoded_string);
 
 }

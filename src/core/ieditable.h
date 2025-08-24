@@ -38,19 +38,19 @@ public:
 
 
 #define INITVBA(ItemType) \
-   virtual HRESULT InitVBA(BOOL fNew, int id, WCHAR * const wzName) \
+   virtual HRESULT InitVBA(bool fNew, WCHAR * const wzName) \
    { \
       if (fNew && !wzName) /* setup a default unique name */ \
       { \
          WCHAR wzUniqueName[std::size(m_wzName)]; \
          GetPTable()->GetUniqueName(ItemType, wzUniqueName, std::size(m_wzName)); \
-         wcscpy_s(m_wzName, wzUniqueName); \
+         wcsncpy_s(m_wzName, std::size(m_wzName), wzUniqueName); \
       } \
       if (GetScriptable() != nullptr) \
       { \
          if (GetScriptable()->m_wzName[0] == '\0') \
             /* Just in case something screws up - not good having a null script name */ \
-            wcscpy_s(GetScriptable()->m_wzName, std::to_wstring(reinterpret_cast<uintptr_t>(this)).c_str()); \
+            wcsncpy_s(GetScriptable()->m_wzName, std::size(m_wzName), std::to_wstring(reinterpret_cast<uintptr_t>(this)).c_str()); \
          GetPTable()->m_pcv->AddItem(GetScriptable(), false); \
       } \
       return S_OK; \
@@ -93,7 +93,7 @@ public:
 			return E_FAIL; \
 		if (GetPTable()->m_pcv->ReplaceName(this, newName) != S_OK) \
 			return E_FAIL; \
-		wcscpy_s(m_wzName, newName.c_str()); \
+		wcsncpy_s(m_wzName, std::size(m_wzName), newName.c_str()); \
 		return S_OK; \
 	} \
 	STDMETHOD(get_TimerInterval)(/*[out, retval]*/ LONG *pVal) {*pVal = m_d.m_tdr.m_TimerInterval; return S_OK;} \
@@ -136,7 +136,7 @@ public:
 	virtual void Uncreate() {IEditable::Uncreate();} \
 	virtual HRESULT SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool saveForUndo); \
 	virtual ItemTypeEnum GetItemType() const { return ItemType; } \
-	virtual HRESULT InitLoad(IStream *pstm, PinTable *ptable, int *pid, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey); \
+	virtual HRESULT InitLoad(IStream *pstm, PinTable *ptable, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey); \
 	virtual HRESULT InitPostLoad(); \
 	virtual bool LoadToken(const int id, BiffReader * const pbr); \
 	virtual IDispatch *GetDispatch() {return static_cast<IDispatch *>(this);} \
@@ -256,9 +256,9 @@ public:
 
    virtual HRESULT SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool saveForUndo) = 0;
    virtual void ClearForOverwrite() { }
-   virtual HRESULT InitLoad(IStream *pstm, PinTable *ptable, int *pid, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey) = 0;
+   virtual HRESULT InitLoad(IStream *pstm, PinTable *ptable, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey) = 0;
    virtual HRESULT InitPostLoad() = 0;
-   virtual HRESULT InitVBA(BOOL fNew, int id, WCHAR * const wzName) = 0;
+   virtual HRESULT InitVBA(bool fNew, WCHAR * const wzName) = 0;
    virtual ISelect *GetISelect() = 0;
    virtual const ISelect *GetISelect() const = 0;
    virtual void SetDefaults(const bool fromMouseClick) = 0;

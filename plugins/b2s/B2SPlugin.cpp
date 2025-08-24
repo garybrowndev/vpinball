@@ -20,7 +20,7 @@ LPI_IMPLEMENT // Implement shared login support
 // - implement COM B2S Server which can be used as a game controller,
 //   in turn, eventually using PinMAME plugin if requested
 
-static MsgPluginAPI* msgApi = nullptr;
+static const MsgPluginAPI* msgApi = nullptr;
 static VPXPluginAPI* vpxApi = nullptr;
 static ScriptablePluginAPI* scriptApi = nullptr;
 static uint32_t endpointId;
@@ -138,13 +138,19 @@ PSC_CLASS_END(B2SServer)
 //
 
 std::future<std::shared_ptr<B2STable>> loadedB2S;
-B2SRenderer* renderer = nullptr;
+std::unique_ptr<B2SRenderer> renderer = nullptr;
 
 VPXTexture CreateTexture(uint8_t* rawData, int size)
 {
    if (vpxApi)
       return vpxApi->CreateTexture(rawData, size);
    return nullptr;
+}
+
+void UpdateTexture(VPXTexture* texture, int width, int height, VPXTextureFormat format, const uint8_t* image)
+{
+   if (vpxApi)
+      vpxApi->UpdateTexture(texture, width, height, format, image);
 }
 
 VPXTextureInfo* GetTextureInfo(VPXTexture texture)
@@ -161,7 +167,7 @@ void DeleteTexture(VPXTexture texture)
       vpxApi->DeleteTexture(texture);
 }
 
-void OnGameStart(const unsigned int eventId, void* userData, void* eventData)
+void OnGameStart(const unsigned int, void*, void*)
 {
    VPXTableInfo tableInfo;
    vpxApi->GetTableInfo(&tableInfo);
@@ -193,11 +199,10 @@ void OnGameStart(const unsigned int eventId, void* userData, void* eventData)
    }
 }
 
-void OnGameEnd(const unsigned int eventId, void* userData, void* eventData)
+void OnGameEnd(const unsigned int, void*, void*)
 {
    if (loadedB2S.valid())
       loadedB2S.get();
-   delete renderer;
    renderer = nullptr;
    if (pinmameInstance)
       PSC_RELEASE(pinmameClassDef, pinmameInstance);
@@ -216,7 +221,7 @@ int OnRender(VPXRenderContext2D* ctx, void*)
    {
       if (loadedB2S.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
       {
-         renderer = new B2SRenderer(msgApi, endpointId, loadedB2S.get());
+         renderer = std::make_unique<B2SRenderer>(msgApi, endpointId, loadedB2S.get());
          renderer->Render(ctx);
       }
       return true; // Until loaded, we suppose that the file will succeeded load with the expected backglass/scoreview
@@ -227,7 +232,7 @@ int OnRender(VPXRenderContext2D* ctx, void*)
    }
 }
 
-void OnGetRenderer(const unsigned int msgId, void* context, void* msgData)
+void OnGetRenderer(const unsigned int, void*, void* msgData)
 {
    static AnciliaryRendererDef entry = { "B2S", "B2S Backglass & FullDMD", "Renderer for directb2s backglass files", nullptr, OnRender };
    GetAnciliaryRendererMsg* msg = static_cast<GetAnciliaryRendererMsg*>(msgData);
@@ -240,7 +245,7 @@ void OnGetRenderer(const unsigned int msgId, void* context, void* msgData)
 }
 
 // Only register if PinMAME is available
-void RegisterServerObject(void* userData)
+void RegisterServerObject(void*)
 {
    pinmameClassDef = scriptApi->GetClassDef("Controller");
    if (pinmameClassDef != nullptr)
@@ -249,7 +254,7 @@ void RegisterServerObject(void* userData)
       RegisterB2SServerSCD(regLambda);
       B2SServer_SCD->CreateObject = []()
       {
-         B2SServer* server = new B2SServer();
+         auto server = new B2SServer();
          return static_cast<void*>(server);
       };
       scriptApi->SubmitTypeLibrary();
@@ -267,7 +272,7 @@ using namespace B2S;
 
 MSGPI_EXPORT void MSGPIAPI B2SPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api)
 {
-   msgApi = const_cast<MsgPluginAPI*>(api);
+   msgApi = api;
    endpointId = sessionId;
    apiThread = std::this_thread::get_id();
    LPISetup(endpointId, msgApi);

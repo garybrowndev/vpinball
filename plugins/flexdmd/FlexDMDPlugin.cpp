@@ -314,7 +314,7 @@ PSC_CLASS_END(FlexDMD)
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Plugin interface
 
-static MsgPluginAPI* msgApi = nullptr;
+static const MsgPluginAPI* msgApi = nullptr;
 static VPXPluginAPI* vpxApi = nullptr;
 static ScriptablePluginAPI* scriptApi = nullptr;
 
@@ -605,7 +605,7 @@ static void OnShowChanged(FlexDMD* pFlex)
 static void OnFlexDestroyed(FlexDMD* pFlex)
 {
    bool showChanged = pFlex->GetShow();
-   flexDmds.erase(std::remove(flexDmds.begin(), flexDmds.end(), pFlex), flexDmds.end());
+   std::erase(flexDmds, pFlex);
    if (showChanged)
       OnShowChanged(pFlex);
 }
@@ -616,7 +616,7 @@ using namespace Flex;
 
 MSGPI_EXPORT void MSGPIAPI FlexDMDPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api)
 {
-   msgApi = const_cast<MsgPluginAPI*>(api);
+   msgApi = api;
    endpointId = sessionId;
 
    // Setup login

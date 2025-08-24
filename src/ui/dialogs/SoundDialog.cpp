@@ -6,9 +6,9 @@
 
 typedef struct _tagSORTDATA
 {
-    HWND hwndList;
-    int subItemIndex;
-    int sortUpDown;
+   HWND hwndList;
+   int subItemIndex;
+   int sortUpDown;
 } SORTDATA;
 
 extern SORTDATA SortData;
@@ -28,14 +28,14 @@ SoundDialog::~SoundDialog()
 
 void SoundDialog::OnDestroy()
 {
-    CDialog::OnDestroy();
+   CDialog::OnDestroy();
 }
 
 void SoundDialog::OnClose()
 {
    m_audioPlayer = nullptr;
-    SavePosition();
-    CDialog::OnClose();
+   SavePosition();
+   CDialog::OnClose();
 }
 
 static long GetSystemDPI()
@@ -58,8 +58,7 @@ static int DPIValue(int value)
 
 BOOL SoundDialog::OnInitDialog()
 {
-   m_audioPlayer = std::make_unique<VPX::AudioPlayer>(g_pvp->m_settings);
-    CCO( PinTable ) * const pt = g_pvp->GetActiveTable();
+    m_audioPlayer = std::make_unique<VPX::AudioPlayer>(g_pvp->m_settings);
     const HWND toolTipHwnd = CreateWindowEx(
       0, TOOLTIPS_CLASS, nullptr, WS_POPUP | TTS_ALWAYSTIP | TTS_BALLOON, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, GetHwnd(), nullptr, g_pvp->theInstance, nullptr);
     hSoundList = GetDlgItem( IDC_SOUNDLIST ).GetHwnd();
@@ -337,13 +336,13 @@ BOOL SoundDialog::OnCommand( WPARAM wParam, LPARAM lParam )
 
 void SoundDialog::OnOK()
 {
-    // do not call CDialog::OnOk() here because if you rename sounds keys like backspace or escape in rename mode cause an IDOK message and this function is called
+   // do not call CDialog::OnOk() here because if you rename sounds keys like backspace or escape in rename mode cause an IDOK message and this function is called
 }
 
 void SoundDialog::OnCancel()
 {
-    SavePosition();
-    CDialog::OnCancel();
+   SavePosition();
+   CDialog::OnCancel();
 }
 
 void SoundDialog::Import()
@@ -381,8 +380,7 @@ void SoundDialog::ReImport()
     const int count = ListView_GetSelectedCount( hSoundList );
     if (count > 0)
     {
-        const LocalString ls( IDS_REPLACESOUND );
-        const int ans = MessageBox( ls.m_szbuffer/*"Are you sure you want to remove this image?"*/, "Confirm Reimport", MB_YESNO | MB_DEFBUTTON2 );
+        const int ans = MessageBox( LocalString( IDS_REPLACESOUND ).m_szbuffer/*"Are you sure you want to remove this image?"*/, "Confirm Reimport", MB_YESNO | MB_DEFBUTTON2 );
         if (ans == IDYES)
         {
             int sel = ListView_GetNextItem( hSoundList, -1, LVNI_SELECTED );
@@ -422,8 +420,7 @@ void SoundDialog::ReImportFrom()
     const int sel = ListView_GetNextItem( hSoundList, -1, LVNI_SELECTED );
     if (sel != -1)
     {
-        const LocalString ls( IDS_REPLACESOUND );
-        const int ans = MessageBox( ls.m_szbuffer/*"Are you sure you want to replace this sound with a new one?"*/, "Confirm Reimport", MB_YESNO | MB_DEFBUTTON2 );
+        const int ans = MessageBox(LocalString( IDS_REPLACESOUND ).m_szbuffer/*"Are you sure you want to replace this sound with a new one?"*/, "Confirm Reimport", MB_YESNO | MB_DEFBUTTON2);
         if (ans == IDYES)
         {
             string szInitialDir = g_pvp->m_settings.LoadValueWithDefault(Settings::RecentDir, "SoundDir"s, PATH_TABLES);
@@ -477,21 +474,20 @@ void SoundDialog::Export()
             ofn.lpstrFilter = "Sound Files (.wav/.ogg/.mp3)\0*.wav;*.ogg;*.mp3\0";
 
             char filename[MAXSTRING];
-            filename[0] = '\0';
             if (!renameOnExport)
             {
                string filename2 = pps->GetImportPath();
                const size_t pos = filename2.find_last_of(PATH_SEPARATOR_CHAR);
                if (pos != string::npos)
                   filename2 = filename2.substr(pos + 1);
-               strncpy_s(filename, filename2.c_str(), sizeof(filename) - 1);
+               strncpy_s(filename, sizeof(filename), filename2.c_str());
             }
             else
             {
                string filename2 = pps->GetName();
                const size_t pos = pps->GetImportPath().find_last_of('.');
                filename2 += pos != string::npos ? pps->GetImportPath().substr(pos) : ".ogg"s;
-               strncpy_s(filename, filename2.c_str(), sizeof(filename) - 1);
+               strncpy_s(filename, sizeof(filename), filename2.c_str());
             }
             ofn.lpstrFile = filename;
             ofn.nMaxFile = sizeof(filename);
@@ -635,8 +631,7 @@ void SoundDialog::DeleteSound()
     const int count = ListView_GetSelectedCount( hSoundList );
     if (count > 0)
     {
-        const LocalString ls( IDS_REMOVESOUND );
-        const int ans = MessageBox( ls.m_szbuffer/*"Are you sure you want to remove this image?"*/, "Confirm Deletion", MB_YESNO | MB_DEFBUTTON2 );
+        const int ans = MessageBox(LocalString( IDS_REMOVESOUND ).m_szbuffer/*"Are you sure you want to remove this image?"*/, "Confirm Deletion", MB_YESNO | MB_DEFBUTTON2);
         if (ans == IDYES)
         {
             int sel = ListView_GetNextItem( hSoundList, -1, LVNI_SELECTED );
@@ -667,7 +662,7 @@ void SoundDialog::LoadPosition()
    const int w = g_pvp->m_settings.LoadValueWithDefault(Settings::Editor, "SoundMngWidth"s, 1000);
    const int h = g_pvp->m_settings.LoadValueWithDefault(Settings::Editor, "SoundMngHeight"s, 800);
    POINT p { x, y };
-   if (MonitorFromPoint(p, MONITOR_DEFAULTTONULL) != NULL) // Do not apply if point is offscreen
+   if (MonitorFromPoint(p, MONITOR_DEFAULTTONULL) != nullptr) // Do not apply if point is offscreen
       SetWindowPos( nullptr, x, y, w, h, SWP_NOOWNERZORDER | SWP_NOZORDER | SWP_NOACTIVATE );
 }
 
