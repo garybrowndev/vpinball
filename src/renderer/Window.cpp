@@ -46,7 +46,7 @@ Window::Window(const string &title, const Settings& settings, const Settings::Se
    , m_settingsPrefix(settingsPrefix)
    , m_isVR(false)
 {
-   m_fullscreen = settings.LoadValueWithDefault(m_settingsSection, m_settingsPrefix + "FullScreen", IsWindows10_1803orAbove());
+   m_fullscreen = settings.LoadValueWithDefault(m_settingsSection, m_settingsPrefix + "FullScreen", false); // IsWindows10_1803orAbove());
    // FIXME remove command line override => this is hacky and not needed anymore (use INI override instead)
    if (m_settingsSection == Settings::Player)
    {
@@ -384,6 +384,16 @@ void Window::RaiseAndFocus(const bool raise)
    #endif
 }
 
+bool Window::IsFocused() const {
+   if (m_isVR)
+      return true;
+#if defined(ENABLE_SDL_VIDEO) // SDL Windowing
+   return m_nwnd == SDL_GetKeyboardFocus();
+#else // Win32 Windowing
+   return m_nwnd == GetForegroundWindow();
+#endif
+}
+
 void Window::GetPos(int& x, int& y) const
 {
    if (m_isVR)
@@ -469,7 +479,7 @@ int Window::GetDisplays(vector<DisplayConfig>& displays)
                display.second.adapter = i;
                const char* displayName = SDL_GetDisplayName(display.second.adapter);
                if (displayName)
-                  strncpy_s(display.second.GPU_Name, displayName, sizeof(display.second.GPU_Name) - 1);
+                  strncpy_s(display.second.GPU_Name, sizeof(display.second.GPU_Name), displayName);
             }
          }
       }
@@ -505,9 +515,9 @@ int Window::GetDisplays(vector<DisplayConfig>& displays)
          displayConf.width = displayBounds.w;
          displayConf.height = displayBounds.h;
          const string devicename = "\\\\.\\DISPLAY" + std::to_string(i);
-         strncpy_s(displayConf.DeviceName, devicename.c_str(), sizeof(displayConf.DeviceName) - 1);
+         strncpy_s(displayConf.DeviceName, sizeof(displayConf.DeviceName), devicename.c_str());
          const char* name = SDL_GetDisplayName(displayIDs[i]);
-         strncpy_s(displayConf.GPU_Name, name ? name : "UNKNOWN", sizeof(displayConf.GPU_Name) - 1);
+         strncpy_s(displayConf.GPU_Name, sizeof(displayConf.GPU_Name), name ? name : "UNKNOWN");
          displays.push_back(displayConf);
       }
    }
@@ -533,7 +543,7 @@ int Window::GetDisplays(vector<DisplayConfig>& displays)
       if (display != displayMap.end())
       {
          display->second.adapter = i;
-         strncpy_s(display->second.GPU_Name, adapter.Description, sizeof(display->second.GPU_Name) - 1);
+         strncpy_s(display->second.GPU_Name, sizeof(display->second.GPU_Name), adapter.Description);
       }
    }
    SAFE_RELEASE(pD3D);

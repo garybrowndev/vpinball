@@ -20,12 +20,14 @@ string trim_string(const string& str)
    return str.substr(start, end - start);
 }
 
+// trims leading whitespace or similar
 static bool try_parse_int(const string& str, int& value)
 {
    const string tmp = trim_string(str);
    return (std::from_chars(tmp.c_str(), tmp.c_str() + tmp.length(), value).ec == std::errc{});
 }
 
+// trims leading whitespace or similar
 static bool try_parse_float(const string& str, float& value)
 {
    const string tmp = trim_string(str);
@@ -39,16 +41,18 @@ static bool try_parse_float(const string& str, float& value)
 #endif
 }
 
-int string_to_int(const string& str, int default_value)
+// trims leading whitespace or similar
+int string_to_int(const string& str, int defaultValue)
 {
    int value;
-   return try_parse_int(str, value) ? value : default_value;
+   return try_parse_int(str, value) ? value : defaultValue;
 }
 
-float string_to_float(const string& str, float default_value)
+// trims leading whitespace or similar
+float string_to_float(const string& str, float defaultValue)
 {
    float value;
-   return try_parse_float(str, value) ? value : default_value;
+   return try_parse_float(str, value) ? value : defaultValue;
 }
 
 vector<string> parse_csv_line(const string& line)
@@ -94,6 +98,17 @@ string string_replace_all(const string& szStr, const string& szFrom, const strin
    string szNewStr = szStr;
    szNewStr.replace(startPos, szFrom.length(), szTo);
    return string_replace_all(szNewStr, szFrom, szTo, startPos+szTo.length());
+}
+
+string string_replace_all(const string& szStr, const string& szFrom, const char szTo, const size_t offs)
+{
+   size_t startPos = szStr.find(szFrom, offs);
+   if (startPos == string::npos)
+      return szStr;
+
+   string szNewStr = szStr;
+   szNewStr.replace(startPos, szFrom.length(), 1, szTo);
+   return string_replace_all(szNewStr, szFrom, szTo, startPos+1);
 }
 
 constexpr inline char cLower(char c)

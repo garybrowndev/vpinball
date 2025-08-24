@@ -27,6 +27,7 @@ namespace RemoteControl {
 LPI_USE();
 #define LOGD RemoteControl::LPI_LOGD
 #define LOGI RemoteControl::LPI_LOGI
+#define LOGW RemoteControl::LPI_LOGW
 #define LOGE RemoteControl::LPI_LOGE
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -218,7 +219,7 @@ public:
 ///////////////////////////////////////////////////////////////////////////////
 // Remote Control implementation
 
-MsgPluginAPI* msgApi = nullptr;
+const MsgPluginAPI* msgApi = nullptr;
 VPXPluginAPI* vpxApi = nullptr;
 
 uint32_t endpointId;
@@ -476,7 +477,7 @@ using namespace RemoteControl;
 
 MSGPI_EXPORT void MSGPIAPI RemoteControlPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api)
 {
-   msgApi = const_cast<MsgPluginAPI*>(api);
+   msgApi = api;
    endpointId = sessionId;
    runMode = RunMode::RunModeNone;
    LPISetup(endpointId, msgApi); // Request and setup shared login API

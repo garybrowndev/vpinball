@@ -89,7 +89,7 @@ bool ObjLoader::Load(const string& filename, const bool flipTv, const bool conve
          break;
       }
 
-      if (strcmp(lineHeader, "v") == 0)
+      if (lineHeader == "v"s)
       {
          Vertex3Ds tmp;
          if (fscanf_s(f, "%f %f %f\n", &tmp.x, &tmp.y, &tmp.z) != 3)
@@ -101,7 +101,7 @@ bool ObjLoader::Load(const string& filename, const bool flipTv, const bool conve
             tmp.z = -tmp.z;
          m_tmpVerts.push_back(tmp);
       }
-      else if (strcmp(lineHeader, "vt") == 0)
+      else if (lineHeader == "vt"s)
       {
          Vertex2D tmp;
          if (fscanf_s(f, "%f %f", &tmp.x, &tmp.y) != 2)
@@ -113,7 +113,7 @@ bool ObjLoader::Load(const string& filename, const bool flipTv, const bool conve
             tmp.y = 1.f - tmp.y;
          m_tmpTexel.push_back(tmp);
       }
-      else if (strcmp(lineHeader, "vn") == 0)
+      else if (lineHeader == "vn"s)
       {
          Vertex3Ds tmp;
          if (fscanf_s(f, "%f %f %f\n", &tmp.x, &tmp.y, &tmp.z) != 3)
@@ -125,7 +125,7 @@ bool ObjLoader::Load(const string& filename, const bool flipTv, const bool conve
             tmp.z = -tmp.z;
          m_tmpNorms.push_back(tmp);
       }
-      else if (strcmp(lineHeader, "f") == 0)
+      else if (lineHeader == "f"s)
       {
          if (m_tmpVerts.empty())
          {
@@ -352,36 +352,8 @@ void ObjLoader::Save(const string& filename, const string& description, const Me
 bool ObjLoader::ExportStart(const string& filename)
 {
 #ifndef __STANDALONE__
-   const int len = min((int)filename.length(), MAX_PATH - 1);
-   int i;
-   for (i = len; i >= 0; i--)
-   {
-      if (filename[i] == '.')
-      {
-         i++;
-         break;
-      }
-   }
-   char matName[MAX_PATH];
-   strncpy_s(matName, filename.c_str(), sizeof(matName) - 1);
-   if (i < len)
-   {
-      memcpy(matName, filename.c_str(), i);
-      matName[i] = '\0';
-      strncat_s(matName, "mtl", sizeof(matName) - strnlen_s(matName, sizeof(matName)) - 1);
-   }
-
-   for (i = len; i >= 0; i--)
-   {
-      if (matName[i] == PATH_SEPARATOR_CHAR)
-      {
-         i++;
-         break;
-      }
-   }
-   char nameOnly[MAX_PATH] = { 0 };
-   memcpy(nameOnly, matName + i, len - i);
-   if ((fopen_s(&m_matFile, matName, "wt") != 0) || !m_matFile)
+   const string matname = filename.substr(0, filename.find_last_of('.')) + ".mtl";
+   if ((fopen_s(&m_matFile, matname.c_str(), "wt") != 0) || !m_matFile)
       return false;
    fprintf_s(m_matFile, "# Visual Pinball table mat file\n");
 
@@ -389,7 +361,9 @@ bool ObjLoader::ExportStart(const string& filename)
       return false;
    m_faceIndexOffset = 0;
    fprintf_s(m_fHandle, "# Visual Pinball table OBJ file\n");
-   fprintf_s(m_fHandle, "mtllib %s\n", nameOnly);
+   const size_t pos = matname.find_last_of(PATH_SEPARATOR_CHAR);
+   const string nameonly = pos != string::npos ? matname.substr(pos+1) : matname;
+   fprintf_s(m_fHandle, "mtllib %s\n", nameonly.c_str());
 #endif
    return true;
 }
@@ -471,13 +445,13 @@ bool ObjLoader::LoadMaterial(const string& filename, Material* const mat)
          fclose(f);
          return true;
       }
-      if (strcmp(lineHeader, "newmtl") == 0)
+      if (lineHeader == "newmtl"s)
       {
          char buf[MAXSTRING];
          fscanf_s(f, "%s\n", buf, MAXSTRING);
          mat->m_name = buf;
       }
-      else if (strcmp(lineHeader, "Ns") == 0)
+      else if (lineHeader == "Ns"s)
       {
          float tmp;
          fscanf_s(f, "%f\n", &tmp);
@@ -493,12 +467,12 @@ bool ObjLoader::LoadMaterial(const string& filename, Material* const mat)
          if (mat->m_fRoughness < 0.01f)
             mat->m_fRoughness = 0.01f;
       }
-      else if (strcmp(lineHeader, "Ka") == 0)
+      else if (lineHeader == "Ka"s)
       {
          Vertex3Ds tmp;
          fscanf_s(f, "%f %f %f\n", &tmp.x, &tmp.y, &tmp.z);
       }
-      else if (strcmp(lineHeader, "Kd") == 0)
+      else if (lineHeader == "Kd"s)
       {
          Vertex3Ds tmp;
          fscanf_s(f, "%f %f %f\n", &tmp.x, &tmp.y, &tmp.z);
@@ -507,7 +481,7 @@ bool ObjLoader::LoadMaterial(const string& filename, Material* const mat)
          const uint32_t b = (uint32_t)(tmp.z * 255.f);
          mat->m_cBase = RGB(r, g, b);
       }
-      else if (strcmp(lineHeader, "Ks") == 0)
+      else if (lineHeader == "Ks"s)
       {
          Vertex3Ds tmp;
          fscanf_s(f, "%f %f %f\n", &tmp.x, &tmp.y, &tmp.z);
@@ -516,12 +490,12 @@ bool ObjLoader::LoadMaterial(const string& filename, Material* const mat)
          const uint32_t b = (uint32_t)(tmp.z * 255.f);
          mat->m_cGlossy = RGB(r, g, b);
       }
-      else if (strcmp(lineHeader, "Ni") == 0)
+      else if (lineHeader == "Ni"s)
       {
          float tmp;
          fscanf_s(f, "%f\n", &tmp);
       }
-      else if (strcmp(lineHeader, "d") == 0)
+      else if (lineHeader == "d"s)
       {
          float tmp;
          fscanf_s(f, "%f\n", &tmp);
@@ -534,12 +508,10 @@ bool ObjLoader::LoadMaterial(const string& filename, Material* const mat)
    return true;
 }
 
-void ObjLoader::WriteMaterial(const string& texelName, const string& texelFilename, const Material* const mat)
+void ObjLoader::WriteMaterial(string texelName, string texelFilename, const Material* const mat)
 {
-   char texelNameCopy[MAX_PATH];
-   strncpy_s(texelNameCopy, texelName.c_str(), sizeof(texelNameCopy) - 1);
-   RemoveSpaces(texelNameCopy);
-   fprintf_s(m_matFile, "newmtl %s\n", texelNameCopy);
+   std::erase(texelName, ' ');
+   fprintf_s(m_matFile, "newmtl %s\n", texelName.c_str());
    fprintf_s(m_matFile, "Ns 7.843137\n");
    vec4 color = convertColor(mat->m_cBase, 1.f);
    fprintf_s(m_matFile, "Ka 0.000000 0.000000 0.000000\n");
@@ -551,10 +523,8 @@ void ObjLoader::WriteMaterial(const string& texelName, const string& texelFilena
    fprintf_s(m_matFile, "illum 5\n");
    if (!texelFilename.empty())
    {
-      strncpy_s(texelNameCopy, texelFilename.c_str(), sizeof(texelNameCopy) - 1);
-      RemoveSpaces(texelNameCopy);
-
-      fprintf_s(m_matFile, "map_kd %s\n", texelNameCopy);
-      fprintf_s(m_matFile, "map_ka %s\n\n", texelNameCopy);
+      std::erase(texelFilename, ' ');
+      fprintf_s(m_matFile, "map_kd %s\n", texelFilename.c_str());
+      fprintf_s(m_matFile, "map_ka %s\n\n", texelFilename.c_str());
    }
 }

@@ -2,8 +2,30 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <charconv>
 
 namespace B2S {
+
+static string GetSettingString(const MsgPluginAPI* pMsgApi, const string& section, const string& key, const string& def = string())
+{
+   char buf[256];
+   pMsgApi->GetSetting(section.c_str(), key.c_str(), buf, sizeof(buf));
+   return buf[0] ? string(buf) : def;
+}
+
+int GetSettingInt(const MsgPluginAPI* pMsgApi, const string& section, const string& key, int def)
+{
+   const auto s = GetSettingString(pMsgApi, section, key, string());
+   int result;
+   return (s.empty() || (std::from_chars(s.c_str(), s.c_str() + s.length(), result).ec != std::errc {})) ? def : result;
+}
+
+bool GetSettingBool(const MsgPluginAPI* pMsgApi, const string& section, const string& key, bool def)
+{
+   const auto s = GetSettingString(pMsgApi, section, key, string());
+   int result;
+   return (s.empty() || (std::from_chars(s.c_str(), s.c_str() + s.length(), result).ec != std::errc {})) ? def : (result != 0);
+}
 
 static inline char cLower(char c)
 {
@@ -32,7 +54,8 @@ string normalize_path_separators(const string& szPath)
    else
       std::ranges::replace(szResult.begin(), szResult.end(), '/', PATH_SEPARATOR_CHAR);
 
-   auto end = std::unique(szResult.begin(), szResult.end(), [](char a, char b) { return a == b && a == PATH_SEPARATOR_CHAR; });
+   auto end = std::unique(szResult.begin(), szResult.end(),
+      [](char a, char b) { return a == b && a == PATH_SEPARATOR_CHAR; });
    szResult.erase(end, szResult.end());
 
    return szResult;
@@ -91,24 +114,23 @@ string find_case_insensitive_file_path(const string& szPath)
    return string();
 }
 
-vector<unsigned char> base64_decode(const string &encoded_string)
+vector<unsigned char> base64_decode(string encoded_string)
 {
    static const string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                       "abcdefghijklmnopqrstuvwxyz"
                                       "0123456789+/"s;
 
-   string input = encoded_string;
-   input.erase(std::remove(input.begin(), input.end(), '\r'), input.end());
-   input.erase(std::remove(input.begin(), input.end(), '\n'), input.end());
+   std::erase(encoded_string, '\r');
+   std::erase(encoded_string, '\n');
 
-   int in_len = static_cast<int>(input.size());
+   int in_len = static_cast<int>(encoded_string.length());
    int i = 0, in_ = 0;
    unsigned char char_array_4[4], char_array_3[3];
    vector<unsigned char> ret;
 
-   while (in_len-- && (input[in_] != '=') && (std::isalnum(input[in_]) || (input[in_] == '+') || (input[in_] == '/')))
+   while (in_len-- && (encoded_string[in_] != '=') && (std::isalnum(encoded_string[in_]) || (encoded_string[in_] == '+') || (encoded_string[in_] == '/')))
    {
-      char_array_4[i++] = input[in_];
+      char_array_4[i++] = encoded_string[in_];
       in_++;
       if (i == 4)
       {

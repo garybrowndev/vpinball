@@ -6,6 +6,24 @@
 namespace B2SLegacy
 {
 
+static string trim_string(const string& str)
+{
+   size_t start = 0;
+   size_t end = str.length();
+   while (start < end && (str[start] == ' ' || str[start] == '\t' || str[start] == '\r' || str[start] == '\n'))
+      ++start;
+   while (end > start && (str[end - 1] == ' ' || str[end - 1] == '\t' || str[end - 1] == '\r' || str[end - 1] == '\n'))
+      --end;
+   return str.substr(start, end - start);
+}
+
+// trims leading whitespace or similar
+static bool try_parse_int(const string& str, int& value)
+{
+   const string tmp = trim_string(str);
+   return (std::from_chars(tmp.c_str(), tmp.c_str() + tmp.length(), value).ec == std::errc{});
+}
+
 constexpr inline char cLower(char c)
 {
    if (c >= 'A' && c <= 'Z')
@@ -20,10 +38,27 @@ bool StrCompareNoCase(const string& strA, const string& strB)
          [](char a, char b) { return cLower(a) == cLower(b); });
 }
 
-string find_case_insensitive_file_path(const string &szPath)
+string normalize_path_separators(const string& szPath)
+{
+   string szResult = szPath;
+
+   if (PATH_SEPARATOR_CHAR == '/')
+      std::ranges::replace(szResult.begin(), szResult.end(), '\\', PATH_SEPARATOR_CHAR);
+   else
+      std::ranges::replace(szResult.begin(), szResult.end(), '/', PATH_SEPARATOR_CHAR);
+
+   auto end = std::unique(szResult.begin(), szResult.end(),
+      [](char a, char b) { return a == b && a == PATH_SEPARATOR_CHAR; });
+   szResult.erase(end, szResult.end());
+
+   return szResult;
+}
+
+string find_case_insensitive_file_path(const string& szPath)
 {
    auto fn = [&](auto& self, const string& s) -> string {
-      std::filesystem::path p = std::filesystem::path(s).lexically_normal();
+      string path = normalize_path_separators(s);
+      std::filesystem::path p = std::filesystem::path(path).lexically_normal();
       std::error_code ec;
 
       if (std::filesystem::exists(p, ec))
@@ -42,6 +77,9 @@ string find_case_insensitive_file_path(const string &szPath)
       for (auto& ent : std::filesystem::directory_iterator(base, ec)) {
          if (!ec && StrCompareNoCase(ent.path().filename().string(), p.filename().string())) {
             auto found = ent.path().string();
+            if (found != path) {
+               LOGI("case insensitive file match: requested \"%s\", actual \"%s\"", path.c_str(), found.c_str());
+            }
             return found;
          }
       }
@@ -115,13 +153,11 @@ bool string_starts_with_case_insensitive(const string& str, const string& prefix
       [](char a, char b) { return cLower(a) == cLower(b); });
 }
 
+// trims leading whitespace or similar, this is needed as e.g. B2S reels feature leading whitespace(s)
 int string_to_int(const string& str, int defaultValue)
 {
    int value;
-   if (std::from_chars(str.c_str(), str.c_str() + str.length(), value).ec == std::errc{})
-      return value;
-   else
-      return defaultValue;
+   return try_parse_int(str, value) ? value : defaultValue;
 }
 
 string title_and_path_from_filename(const string& filename)

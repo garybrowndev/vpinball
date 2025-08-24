@@ -275,8 +275,6 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
 
    m_minphyslooptime = min(m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "MinPhysLoopTime"s, 0), 1000);
 
-   m_throwBalls = m_ptable->m_settings.LoadValueWithDefault(Settings::Editor, "ThrowBallsAlwaysOn"s, false);
-   m_ballControl = m_ptable->m_settings.LoadValueWithDefault(Settings::Editor, "BallControlAlwaysOn"s, false);
    m_debugBallSize = m_ptable->m_settings.LoadValueWithDefault(Settings::Editor, "ThrowBallSize"s, 50);
    m_debugBallMass = m_ptable->m_settings.LoadValueWithDefault(Settings::Editor, "ThrowBallMass"s, 1.0f);
 
@@ -624,6 +622,7 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    // We need to initialize the perf counter before creating the UI which uses it
    wintimer_init();
    m_liveUI = new LiveUI(m_renderer->m_renderDevice);
+   m_liveUI->m_ballControl.LoadSettings(m_ptable->m_settings);
 
    m_BallHistory.Init(*this, 0, true);
 
@@ -859,7 +858,7 @@ Player::Player(PinTable *const editor_table, PinTable *const live_table, const i
    if (playMode == 1)
       m_liveUI->OpenTweakMode();
    else if (playMode == 2 && m_renderer->m_stereo3D != STEREO_VR)
-      m_liveUI->OpenLiveUI();
+      m_liveUI->OpenEditorUI();
 
    // Pre-render all non-changing elements such as static walls, rails, backdrops, etc. and also static playfield reflections
    // This is done after starting the script and firing the Init event to allow script to adjust static parts on startup
@@ -1126,8 +1125,6 @@ Player::~Player()
 
    m_changed_vht.clear();
 
-   delete m_pBCTarget;
-   m_pBCTarget = nullptr;
    if (m_ptable->m_isLiveInstance)
       delete m_ptable;
    //m_ptable = nullptr;
@@ -1387,8 +1384,8 @@ void Player::DestroyBall(HitBall *pHitBall)
       m_pactiveball = m_vball.empty() ? nullptr : m_vball.front();
    if (m_pactiveballDebug == pHitBall)
       m_pactiveballDebug = m_vball.empty() ? nullptr : m_vball.front();
-   if (m_pactiveballBC == pHitBall)
-      m_pactiveballBC = nullptr;
+   if (m_liveUI->m_ballControl.GetDraggedBall() == pHitBall)
+      m_liveUI->m_ballControl.SetDraggedBall(nullptr);
 }
 
 
@@ -1977,39 +1974,6 @@ void Player::PrepareFrame(const std::function<void()>& sync)
    // Check if we should turn animate the plunger light.
    ushock_output_set(HID_OUTPUT_PLUNGER, ((m_time_msec - m_LastPlungerHit) < 512) && ((m_time_msec & 512) > 0));
 
-   // Update Live UI (must be rendered using a display resolution matching the final composition)
-   {
-      int w, h;
-      m_renderer->GetRenderSize(w, h); // LiveUI is rendered after up/downscaling, so don't use AA render size;
-      if (m_renderer->IsStereo())
-      {
-         if (m_vrDevice)
-         {
-            w = m_vrDevice->GetEyeWidth();
-            h = m_vrDevice->GetEyeHeight();
-         }
-         else if (m_renderer->m_stereo3Denabled)
-         {
-            // LiveUI is rendered before stereo and upscaling, but after downscaling
-            w = min(w, m_renderer->GetBackBufferTexture()->GetWidth());
-            h = min(h, m_renderer->GetBackBufferTexture()->GetHeight());
-         }
-         else
-         {
-            // FIXME disabled stereo is not really supported since the change to layered rendering, it will fail if AA is not 100%. It has never been properly supported beside fake stereo since render buffer do not have the right resolution
-            //assert(false);
-            w = m_playfieldWnd->GetWidth();
-            h = m_playfieldWnd->GetHeight();
-         }
-      }
-      m_liveUI->Update(w, h);
-      #ifdef __LIBVPINBALL__
-         if (m_liveUIOverride)
-            VPinballLib::VPinball::SendEvent(VPinballLib::Event::LiveUIUpdate, nullptr);
-      #endif
-      m_physics->ResetPerFrameStats();
-   }
-
    // Shake screen when nudging
    if (m_NudgeShake > 0.0f)
    {
@@ -2053,6 +2017,14 @@ void Player::PrepareFrame(const std::function<void()>& sync)
    
    // Apply screenspace transforms (MSAA, AO, AA, stereo, ball motion blur, tonemapping, dithering, bloom,...)
    m_renderer->PrepareVideoBuffers(m_renderer->m_renderDevice->GetOutputBackBuffer());
+
+   // UI hook
+   #ifdef __LIBVPINBALL__
+      if (m_liveUIOverride)
+         VPinballLib::VPinball::SendEvent(VPinballLib::Event::LiveUIUpdate, nullptr);
+   #endif
+
+   m_physics->ResetPerFrameStats();
 
    m_logicProfiler.ExitProfileSection();
 
@@ -2243,10 +2215,20 @@ RenderTarget *Player::RenderAnciliaryWindow(VPXAnciliaryWindow window, RenderTar
    if (output.GetMode() == VPX::RenderOutput::OM_EMBEDDED)
    {
       outputRT = embedRT;
-      m_outputW = output.GetEmbeddedWindow()->GetWidth();
-      m_outputH = output.GetEmbeddedWindow()->GetHeight();
-      output.GetEmbeddedWindow()->GetPos(m_outputX, m_outputY);
-      m_outputY = outputRT->GetHeight() - m_outputY - m_outputH;
+
+      const float displayScaleX = static_cast<float>(m_playfieldWnd->GetPixelWidth()) / static_cast<float>(m_playfieldWnd->GetWidth());
+      const float displayScaleY = static_cast<float>(m_playfieldWnd->GetPixelHeight()) / static_cast<float>(m_playfieldWnd->GetHeight());
+
+      const int wndW = output.GetEmbeddedWindow()->GetWidth();
+      const int wndH = output.GetEmbeddedWindow()->GetHeight();
+      int wndX;
+      int wndY;
+      output.GetEmbeddedWindow()->GetPos(wndX, wndY);
+
+      m_outputW = static_cast<int>(wndW * displayScaleX);
+      m_outputH = static_cast<int>(wndH * displayScaleY);
+      m_outputX = static_cast<int>(wndX * displayScaleX);
+      m_outputY = static_cast<int>(wndY * displayScaleY);
    }
    #ifdef ENABLE_BGFX
    else if (output.GetMode() == VPX::RenderOutput::OM_WINDOW)
@@ -2343,16 +2325,16 @@ RenderTarget *Player::RenderAnciliaryWindow(VPXAnciliaryWindow window, RenderTar
                // We force to linear (no sRGB decoding) when rendering in sRGB colorspace, this suppose that the texture is in sRGB colorspace to get correct gamma (other situations would need dedicated shaders to handle them efficiently)
                assert(tex->m_format == BaseTexture::SRGB || tex->m_format == BaseTexture::SRGBA || tex->m_format == BaseTexture::SRGB565);
                // Disable filtering and mipmap generation if they are not needed
-               const SamplerFilter sf = (ctx->is2D && (srcW * ctx->outWidth == ctx->srcWidth * tex->width()) && (srcH * ctx->outHeight == ctx->srcHeight * tex->height())) ? SamplerFilter::SF_NONE : SamplerFilter::SF_UNDEFINED;
+               const SamplerFilter sf = (ctx->is2D && (srcW * ctx->outWidth == ctx->srcWidth * (float)tex->width()) && (srcH * ctx->outHeight == ctx->srcHeight * (float)tex->height())) ? SamplerFilter::SF_NONE : SamplerFilter::SF_UNDEFINED;
                rd->m_basicShader->SetTexture(SHADER_tex_base_color, tex.get(), !context->isLinearOutput, sf);
                const float vx1 = srcX / ctx->srcWidth;
                const float vy1 = srcY / ctx->srcHeight;
                const float vx2 = vx1 + srcW / ctx->srcWidth;
                const float vy2 = vy1 + srcH / ctx->srcHeight;
-               const float tx1 = texX / tex->width();
-               const float ty1 = 1.f - texY / tex->height();
-               const float tx2 = (texX + texW) / tex->width();
-               const float ty2 = 1.f - (texY + texH) / tex->height();
+               const float tx1 = texX / (float)tex->width();
+               const float ty1 = 1.f - texY / (float)tex->height();
+               const float tx2 = (texX + texW) / (float)tex->width();
+               const float ty2 = 1.f - (texY + texH) / (float)tex->height();
                Vertex3D_NoTex2 vertices[4] = {
                   { vx2, vy1, 0.f, 0.f, 0.f, 1.f, tx2, ty2 },
                   { vx1, vy1, 0.f, 0.f, 0.f, 1.f, tx1, ty2 },
@@ -2360,8 +2342,8 @@ RenderTarget *Player::RenderAnciliaryWindow(VPXAnciliaryWindow window, RenderTar
                   { vx1, vy2, 0.f, 0.f, 0.f, 1.f, tx1, ty1 } };
                if (rotation)
                {
-                  const float px = lerp(vx1, vx2, (pivotX - texX) / tex->width());
-                  const float py = lerp(vy1, vy2, (pivotY - texY) / tex->height());
+                  const float px = lerp(vx1, vx2, (pivotX - texX) / (float)tex->width());
+                  const float py = lerp(vy1, vy2, (pivotY - texY) / (float)tex->height());
                   Matrix3D matRot = 
                        Matrix3D::MatrixTranslate(-px, -py, 0.f)
                      * Matrix3D::MatrixRotateZ(rotation * (float)(M_PI / 180.0)) 
@@ -2381,7 +2363,7 @@ RenderTarget *Player::RenderAnciliaryWindow(VPXAnciliaryWindow window, RenderTar
             {
                PlayerRenderContext2D *context = reinterpret_cast<PlayerRenderContext2D *>(ctx);
                VPXPluginAPIImpl &vxpApi = VPXPluginAPIImpl::GetInstance();
-               std::shared_ptr<BaseTexture> const gTex = vxpApi.GetTexture(glassTex);
+               std::shared_ptr<BaseTexture> const gTex = glassTex ? vxpApi.GetTexture(glassTex) : nullptr;
                std::shared_ptr<BaseTexture> const dTex = vxpApi.GetTexture(dispTex);
                RenderDevice *const rd = g_pplayer->m_renderer->m_renderDevice;
                rd->ResetRenderState();
@@ -2620,10 +2602,10 @@ float Player::ParseLog(LARGE_INTEGER *pli1, LARGE_INTEGER *pli2)
       int index;
       sscanf_s(szLine, "%s",szWord, (unsigned)_countof(szWord));
 
-      if (!strcmp(szWord,"Key"))
+      if (szWord == "Key"s)
       {
          sscanf_s(szLine, "%s %s %d",szWord, (unsigned)_countof(szWord), szSubWord, (unsigned)_countof(szSubWord), &index);
-         if (!strcmp(szSubWord, "Down"))
+         if (szSubWord == "Down"s)
          {
             m_ptable->FireGenericKeyEvent(DISPID_GameEvents_KeyDown, index);
          }
@@ -2632,11 +2614,11 @@ float Player::ParseLog(LARGE_INTEGER *pli1, LARGE_INTEGER *pli2)
             m_ptable->FireGenericKeyEvent(DISPID_GameEvents_KeyUp, index);
          }
       }
-      else if (!strcmp(szWord, "Physics"))
+      else if (szWord == "Physics"s)
       {
          sscanf_s(szLine, "%s %s %f",szWord, (unsigned)_countof(szWord), szSubWord, (unsigned)_countof(szSubWord), &dtime);
       }
-      else if (!strcmp(szWord, "Frame"))
+      else if (szWord == "Frame"s)
       {
          int a,b,c,d;
          sscanf_s(szLine, "%s %s %f %u %u %u %u",szWord, (unsigned)_countof(szWord), szSubWord, (unsigned)_countof(szSubWord), &dtime, &a, &b, &c, &d);
@@ -2645,7 +2627,7 @@ float Player::ParseLog(LARGE_INTEGER *pli1, LARGE_INTEGER *pli2)
          pli2->HighPart = c;
          pli2->LowPart = d;
       }
-      else if (!strcmp(szWord, "Step"))
+      else if (szWord == "Step"s)
       {
          int a,b,c,d;
          sscanf_s(szLine, "%s %s %u %u %u %u",szWord, (unsigned)_countof(szWord), szSubWord, (unsigned)_countof(szSubWord), &a, &b, &c, &d);
@@ -2654,7 +2636,7 @@ float Player::ParseLog(LARGE_INTEGER *pli1, LARGE_INTEGER *pli2)
          pli2->HighPart = c;
          pli2->LowPart = d;
       }
-      else if (!strcmp(szWord,"End"))
+      else if (szWord == "End"s)
       {
          return dtime;
       }

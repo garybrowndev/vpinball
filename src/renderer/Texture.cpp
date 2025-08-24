@@ -869,7 +869,7 @@ Texture::Texture(string name, PinBinary* ppb, unsigned int width, unsigned int h
    assert(m_height > 0);
 }
 
-Texture* Texture::CreateFromStream(IStream *pstream, int version, PinTable *pt)
+Texture* Texture::CreateFromStream(IStream * const pstream, int version, PinTable * const pt)
 {
    string name;
    string path;
@@ -881,7 +881,7 @@ Texture* Texture::CreateFromStream(IStream *pstream, int version, PinTable *pt)
    uint8_t md5Hash[16] = { 0 };
    bool isOpaqueDirty = true;
    bool isOpaque = true;
-   BiffReader br(pstream, nullptr, pt, version, 0, 0);
+   BiffReader br(pstream, nullptr, version, 0, 0);
    br.Load([&](const int id, BiffReader* const pbr)
    {
       switch(id)
@@ -971,7 +971,7 @@ Texture* Texture::CreateFromStream(IStream *pstream, int version, PinTable *pt)
       {
          int linkid;
          pbr->GetInt(linkid);
-         ppb = ((PinTable*)pbr->m_pdata)->GetImageLinkBinary(linkid);
+         ppb = pt->GetImageLinkBinary(linkid);
          if (!ppb)
          {
             assert(!"Invalid PinBinary");
@@ -1027,7 +1027,7 @@ Texture::~Texture()
    #endif
 }
 
-HRESULT Texture::SaveToStream(IStream *pstream, const PinTable *pt)
+HRESULT Texture::SaveToStream(IStream *pstream, const PinTable *pt) const
 {
    BiffWriter bw(pstream, 0);
    bw.WriteString(FID(NAME), m_name);

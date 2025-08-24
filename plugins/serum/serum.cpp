@@ -16,15 +16,12 @@
 #include <filesystem>
 
 #include "LoggingPlugin.h"
-LPI_IMPLEMENT // Implement shared login support
 
 using namespace std::string_literals;
 
-#ifndef _MSC_VER
- #define strcpy_s(A, B, C) strncpy(A, C, B)
-#endif
-
 namespace Serum {
+
+LPI_IMPLEMENT
 
 ///////////////////////////////////////////////////////////////////////////////
 // Serum Colorization plugin
@@ -34,7 +31,7 @@ namespace Serum {
 // - PinMame/OnGameStart: msgData is PinMame game identifier (rom name)
 // - PinMame/OnGameEnd
 
-static MsgPluginAPI* msgApi = nullptr;
+static const MsgPluginAPI* msgApi = nullptr;
 static VPXPluginAPI* vpxApi = nullptr;
 
 static uint32_t endpointId;
@@ -323,7 +320,7 @@ static void OnControllerGameStart(const unsigned int eventId, void* userData, vo
       std::filesystem::path tablePath = tableInfo.path;
       string path = find_case_insensitive_directory_path(tablePath.parent_path().string() + PATH_SEPARATOR_CHAR + "pinmame"s + PATH_SEPARATOR_CHAR + "altcolor"s);
       if (!path.empty())
-         strcpy_s(crzFolder, sizeof(crzFolder), path.c_str());
+         strncpy_s(crzFolder, sizeof(crzFolder), path.c_str());
    }
    pSerum = Serum_Load(crzFolder, msg->gameId, FLAG_REQUEST_32P_FRAMES | FLAG_REQUEST_64P_FRAMES);
    OnDmdSrcChanged(onDmdSrcChangedId, nullptr, nullptr);
@@ -345,7 +342,7 @@ using namespace Serum;
 
 MSGPI_EXPORT void MSGPIAPI SerumPluginLoad(const uint32_t sessionId, const MsgPluginAPI* api)
 {
-   msgApi = const_cast<MsgPluginAPI*>(api);
+   msgApi = api;
    endpointId = sessionId;
 
    // Request and setup shared login API

@@ -8,7 +8,7 @@
 
 namespace PUP {
 
-PUPManager::PUPManager(MsgPluginAPI* msgApi, uint32_t endpointId, const string& rootPath)
+PUPManager::PUPManager(const MsgPluginAPI* msgApi, uint32_t endpointId, const string& rootPath)
    : m_szRootPath(rootPath)
    , m_msgApi(msgApi)
    , m_endpointId(endpointId)
@@ -304,14 +304,14 @@ bool PUPManager::AddFont(TTF_Font* pFont, const string& szFilename)
 
    const string szFamilyName = string(TTF_GetFontFamilyName(pFont));
 
-   const string szNormalizedFamilyName = lowerCase(string_replace_all(szFamilyName, "  "s, " "s));
+   const string szNormalizedFamilyName = lowerCase(string_replace_all(szFamilyName, "  "s, ' '));
    m_fontMap[szNormalizedFamilyName] = pFont;
 
    string szStyleName = string(TTF_GetFontStyleName(pFont));
    if (szStyleName != "Regular")
    {
       const string szFullName = szFamilyName + ' ' + szStyleName;
-      const string szNormalizedFullName = lowerCase(string_replace_all(szFullName, "  "s, " "s));
+      const string szNormalizedFullName = lowerCase(string_replace_all(szFullName, "  "s, ' '));
       m_fontMap[szNormalizedFullName] = pFont;
    }
 
@@ -325,7 +325,7 @@ bool PUPManager::AddFont(TTF_Font* pFont, const string& szFilename)
 
 TTF_Font* PUPManager::GetFont(const string& szFont)
 {
-   string szNormalizedFamilyName = lowerCase(string_replace_all(szFont, "  "s, " "s));
+   string szNormalizedFamilyName = lowerCase(string_replace_all(szFont, "  "s, ' '));
 
    ankerl::unordered_dense::map<string, TTF_Font*>::const_iterator it = m_fontMap.find(szNormalizedFamilyName);
    if (it != m_fontMap.end())
@@ -447,7 +447,7 @@ void PUPManager::ProcessQueue()
             // Broadcast event on plugin message bus (avoid holding any reference as we don't know when this event will be processed and maybe the manager will be deleted by then)
             struct DmdEvent
             {
-               MsgPluginAPI* msgApi;
+               const MsgPluginAPI* msgApi;
                uint32_t endpointId;
                unsigned int onDmdTriggerId;
                int dmdTrigger;
@@ -732,7 +732,7 @@ void PUPManager::OnDevSrcChanged(const unsigned int eventId, void* userData, voi
       memset(&info, 0, sizeof(info));
       me->m_msgApi->GetEndpointInfo(getSrcMsg.entries[i].id.endpointId, &info);
       DevSrcId* devSrc = nullptr;
-      if (info.id != nullptr && strcmp(info.id, "PinMAME") == 0)
+      if (info.id != nullptr && info.id == "PinMAME"s)
          devSrc = &me->m_pinmameDevSrc;
       else
          continue;
@@ -781,9 +781,9 @@ void PUPManager::OnInputSrcChanged(const unsigned int eventId, void* userData, v
       memset(&info, 0, sizeof(info));
       me->m_msgApi->GetEndpointInfo(getSrcMsg.entries[i].id.endpointId, &info);
       InputSrcId* inputSrc = nullptr;
-      if (info.id != nullptr && strcmp(info.id, "PinMAME") == 0)
+      if (info.id != nullptr && info.id == "PinMAME"s)
          inputSrc = &me->m_pinmameInputSrc;
-      else if (info.id != nullptr && strcmp(info.id, "B2S") == 0)
+      else if (info.id != nullptr && info.id == "B2S"s)
          inputSrc = &me->m_b2sInputSrc;
       else
          continue;

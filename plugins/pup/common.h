@@ -94,7 +94,7 @@ public:
    {
    }
 
-   void DispatchOnMainThread(MsgPluginAPI* msgApi)
+   void DispatchOnMainThread(const MsgPluginAPI* msgApi)
    {
       std::lock_guard<std::mutex> lock(m_pendingListMutex);
       m_pendingList.push_back(this);
@@ -103,7 +103,7 @@ public:
 
    void Invalidate() { m_valid = false; }
 
-   static void DispatchOnMainThread(MsgPluginAPI* msgApi, vector<AsyncCallback*>& pendingList, std::mutex& pendingListMutex, std::function<void()> callback)
+   static void DispatchOnMainThread(const MsgPluginAPI* msgApi, vector<AsyncCallback*>& pendingList, std::mutex& pendingListMutex, std::function<void()> callback)
    {
       AsyncCallback* cb = new AsyncCallback(pendingList, pendingListMutex, callback);
       cb->DispatchOnMainThread(msgApi);
@@ -112,7 +112,7 @@ public:
    // Invalidate pending triggers as their execution context is not valid any more
    static void InvalidateAllPending(vector<AsyncCallback*>& pendingList, std::mutex& pendingListMutex)
    {
-      std::lock_guard<std::mutex> lock(pendingListMutex);
+      std::lock_guard lock(pendingListMutex);
       std::for_each(pendingList.begin(), pendingList.end(), [](AsyncCallback* cb) { cb->Invalidate(); });
    }
 
@@ -121,7 +121,7 @@ public:
       AsyncCallback* tcb = static_cast<AsyncCallback*>(userdata);
       if (tcb->m_valid)
       {
-         std::unique_lock<std::mutex> lock(tcb->m_pendingListMutex);
+         std::unique_lock lock(tcb->m_pendingListMutex);
          auto it = std::ranges::find(tcb->m_pendingList, tcb);
          if (it != tcb->m_pendingList.end())
             tcb->m_pendingList.erase(it);
@@ -141,10 +141,14 @@ private:
 string trim_string(const string &str);
 
 // The following function are duplicates from the main VPX codebase
-int string_to_int(const string &str, int default_value = 0);
-float string_to_float(const string &str, float default_value = 0.0f);
+
+// trims leading whitespace or similar
+int string_to_int(const string &str, int defaultValue = 0);
+// trims leading whitespace or similar
+float string_to_float(const string &str, float defaultValue = 0.0f);
 vector<string> parse_csv_line(const string &line);
 string string_replace_all(const string &szStr, const string &szFrom, const string &szTo, const size_t offs = 0);
+string string_replace_all(const string &szStr, const string &szFrom, const char szTo, const size_t offs = 0);
 string extension_from_path(const string &path);
 string normalize_path_separators(const string &szPath);
 string find_case_insensitive_file_path(const string &szPath);

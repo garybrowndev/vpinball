@@ -1485,8 +1485,7 @@ void PinTable::InitBuiltinTable(const size_t tableId)
    for (int i = 0; i < 16; i++)
       m_rgcolorcustom[i] = RGB(0, 0, 0);
    LoadGameFromFilename(g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + path);
-   const LocalString ls(IDS_TABLE);
-   m_title = ls.m_szbuffer/*"Table"*/ + std::to_string(m_vpinball->m_NextTableID);
+   m_title = LocalString(IDS_TABLE).m_szbuffer /*"Table"*/ + std::to_string(m_vpinball->m_NextTableID);
    m_vpinball->m_NextTableID++;
    m_settings.SetIniPath(string());
    m_filename.clear();
@@ -1756,7 +1755,6 @@ bool PinTable::IsNameUnique(const wstring& wzName) const
 void PinTable::GetUniqueName(const ItemTypeEnum type, WCHAR *const wzUniqueName, const size_t wzUniqueName_maxlength) const
 {
    WCHAR wzRoot[256];
-   wzRoot[0] = L'\0';
    GetTypeNameForType(type, wzRoot);
    GetUniqueName(wzRoot, wzUniqueName, wzUniqueName_maxlength);
 }
@@ -1773,7 +1771,7 @@ void PinTable::GetUniqueName(const wstring& wzRoot, WCHAR *const wzUniqueName, c
          :                            std::to_wstring(suffix));
       suffix++;
    } while (!IsNameUnique(wzName) && suffix < 1000);
-   wcscpy_s(wzUniqueName, wzUniqueName_maxlength, wzName.c_str());
+   wcsncpy_s(wzUniqueName, wzUniqueName_maxlength, wzName.c_str());
 }
 
 void PinTable::GetUniqueNamePasting(const int type, WCHAR * const wzUniqueName, const size_t wzUniqueName_maxlength) const
@@ -1888,7 +1886,7 @@ void PinTable::UIRenderPass2(Sur * const psur)
    //    SetTextColor( psur->m_hdc,RGB(180,180,180));
    //    char text[64];
    //    char number[8];
-   //    strcpy_s( text,"Layer_");
+   //    strncpy_s( text, sizeof(text), "Layer_");
    //    _itoa_s(activeLayer+1, number, 10 );
    //    strcat_s( text, number);
    //    RECT textRect;
@@ -2225,21 +2223,19 @@ PinTable* PinTable::CopyForPlay()
    live_table->m_pcv->AddItem(live_table->m_pcv->m_pdm, false);
 
    #ifdef __STANDALONE__
-      Textbox* implicitDMD = (Textbox*)EditableRegistry::CreateAndInit(ItemTypeEnum::eItemTextbox, live_table, 0, 0);
+      Textbox* const implicitDMD = (Textbox*)EditableRegistry::CreateAndInit(ItemTypeEnum::eItemTextbox, live_table, 0, 0);
       live_table->m_pcv->RemoveItem(implicitDMD->GetScriptable());
-      wcscpy(implicitDMD->m_wzName, L"ImplicitDMD");
+      wcsncpy_s(implicitDMD->m_wzName, std::size(implicitDMD->m_wzName), L"ImplicitDMD");
       implicitDMD->m_d.m_visible = false;
       implicitDMD->m_d.m_isDMD = true;
       implicitDMD->m_d.m_fontcolor = RGB(255, 165, 0);
       live_table->m_vedit.push_back(implicitDMD);
       live_table->m_pcv->AddItem(implicitDMD->GetScriptable(), false);
-      char* szT = MakeChar(implicitDMD->m_wzName);
-      PLOGI << "Implicit Textbox DMD added: name=" << szT;
-      delete[] szT;
+      PLOGI << "Implicit Textbox DMD added: name=" << MakeString(implicitDMD->m_wzName);
 
-      Flasher* implicitDMD2 = (Flasher*)EditableRegistry::CreateAndInit(ItemTypeEnum::eItemFlasher, live_table, 0, 0);
+      Flasher* const implicitDMD2 = (Flasher*)EditableRegistry::CreateAndInit(ItemTypeEnum::eItemFlasher, live_table, 0, 0);
       live_table->m_pcv->RemoveItem(implicitDMD2->GetScriptable());
-      wcscpy(implicitDMD2->m_wzName, L"ImplicitDMD2");
+      wcsncpy_s(implicitDMD2->m_wzName, std::size(implicitDMD2->m_wzName), L"ImplicitDMD2");
       int dmdWidth = 128 * 4; // (658)
       int dmdHeight = 38 * 4; // (189)
       int x = ((live_table->m_right - live_table->m_left) - dmdWidth) / 2;
@@ -2259,9 +2255,7 @@ PinTable* PinTable::CopyForPlay()
       implicitDMD2->m_d.m_addBlend = true;
       live_table->m_vedit.push_back(implicitDMD2);
       live_table->m_pcv->AddItem(implicitDMD2->GetScriptable(), false);
-      szT = MakeChar(implicitDMD2->m_wzName);
-      PLOGI << "Implicit Flasher DMD added: name=" << szT;
-      delete[] szT;
+      PLOGI << "Implicit Flasher DMD added: name=" << MakeString(implicitDMD2->m_wzName);
    #endif
 
    live_table->m_vrenderprobe.reserve(m_vrenderprobe.size() + live_table->m_vrenderprobe.size());
@@ -2359,11 +2353,8 @@ void PinTable::AutoSave()
 
    m_vpinball->KillTimer(VPinball::TIMER_ID_AUTOSAVE);
 
-   {
-      const LocalString ls(IDS_AUTOSAVING);
-      m_vpinball->SetActionCur(ls.m_szbuffer);
-      m_vpinball->SetCursorCur(nullptr, IDC_WAIT);
-   }
+   m_vpinball->SetActionCur(LocalString(IDS_AUTOSAVING).m_szbuffer);
+   m_vpinball->SetCursorCur(nullptr, IDC_WAIT);
 
    FastIStorage * const pstgroot = new FastIStorage();
    pstgroot->AddRef();
@@ -2411,11 +2402,12 @@ HRESULT PinTable::Save(const bool saveAs)
       // TEXT
       ofn.lpstrFilter = "Visual Pinball Tables (*.vpx)\0*.vpx\0";
 
-      const string::size_type ptr = StrFindNoCase(m_filename, ".vpt"s);
-      char fileName[MAXSTRING];
-      strncpy_s(fileName, m_filename.c_str(), sizeof(fileName)-1);
+      const size_t ptr = StrFindNoCase(m_filename, ".vpt"s);
+      string filename_new = m_filename;
       if (ptr != string::npos)
-         strcpy_s(fileName+ptr, 5, ".vpx");
+         filename_new.replace(ptr+1, 3, "vpx");
+      char fileName[MAXSTRING];
+      strncpy_s(fileName, sizeof(fileName), filename_new.c_str());
       ofn.lpstrFile = fileName;
       ofn.nMaxFile = sizeof(fileName);
       ofn.lpstrDefExt = "vpx";
@@ -2455,8 +2447,7 @@ HRESULT PinTable::Save(const bool saveAs)
          if (FAILED(hr = StgCreateStorageEx(MakeWString(m_filename).c_str(), STGM_TRANSACTED | STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE,
             STGFMT_DOCFILE, 0, &stg, nullptr, IID_IStorage, (void**)&pstgRoot)))
          {
-            const LocalString ls(IDS_SAVEERROR);
-            m_mdiTable->MessageBox(ls.m_szbuffer, "Visual Pinball", MB_ICONERROR);
+            m_mdiTable->MessageBox(LocalString(IDS_SAVEERROR).m_szbuffer, "Visual Pinball", MB_ICONERROR);
             return hr;
          }
       }
@@ -2466,9 +2457,9 @@ HRESULT PinTable::Save(const bool saveAs)
    }
    else
    {
-      const string::size_type ptr = StrFindNoCase(m_filename, ".vpt"s);
+      const size_t ptr = StrFindNoCase(m_filename, ".vpt"s);
       if (ptr != string::npos)
-         strcpy_s(m_filename.data()+ptr, 5, ".vpx");
+         m_filename.replace(ptr+1, 3, "vpx");
 
       STGOPTIONS stg;
       stg.usVersion = 1;
@@ -2479,17 +2470,13 @@ HRESULT PinTable::Save(const bool saveAs)
       if (FAILED(hr = StgCreateStorageEx(MakeWString(m_filename).c_str(), STGM_TRANSACTED | STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE,
          STGFMT_DOCFILE, 0, &stg, nullptr, IID_IStorage, (void**)&pstgRoot)))
       {
-         const LocalString ls(IDS_SAVEERROR);
-         m_mdiTable->MessageBox(ls.m_szbuffer, "Visual Pinball", MB_ICONERROR);
+         m_mdiTable->MessageBox(LocalString(IDS_SAVEERROR).m_szbuffer, "Visual Pinball", MB_ICONERROR);
          return hr;
       }
    }
 
-   {
-      const LocalString ls(IDS_SAVING);
-      m_vpinball->SetActionCur(ls.m_szbuffer);
-      m_vpinball->SetCursorCur(nullptr, IDC_WAIT);
-   }
+   m_vpinball->SetActionCur(LocalString(IDS_SAVING).m_szbuffer);
+   m_vpinball->SetCursorCur(nullptr, IDC_WAIT);
 
    RemoveInvalidReferences();
 
@@ -2538,40 +2525,18 @@ HRESULT PinTable::SaveToStorage(IStorage *pstgRoot, VPXFileFeedback& feedback)
    m_savingActive = true;
    feedback.OperationStarted();
 
-   //////////////// Begin Encryption
-   HCRYPTPROV hcp = NULL;
-   HCRYPTHASH hch = NULL;
-   HCRYPTKEY  hkey = NULL;
-   HCRYPTHASH hchkey = NULL;
+   // Hashing (to ensure file integrity)
+   HCRYPTPROV hcp = NULL; // context
+   HCRYPTHASH hch = NULL; // hash
 
-   int foo;
-
-   foo = CryptAcquireContext(&hcp, nullptr, nullptr, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT | CRYPT_NEWKEYSET/* | CRYPT_SILENT*/);
-
-   //foo = CryptGenKey(hcp, CALG_RC2, CRYPT_EXPORTABLE, &hkey);
-
+   int foo = CryptAcquireContext(&hcp, nullptr, nullptr, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT | CRYPT_NEWKEYSET/* | CRYPT_SILENT*/);
    foo = GetLastError();
-
-   foo = CryptCreateHash(hcp, CALG_MD2/*CALG_MAC*//*CALG_HMAC*/, NULL/*hkey*/, 0, &hch);
-
+   foo = CryptCreateHash(hcp, CALG_MD2, NULL, 0, &hch);
    foo = GetLastError();
-
    foo = CryptHashData(hch, (BYTE *)TABLE_KEY, 14, 0);
-
    foo = GetLastError();
 
-   // create a key hash (we have to use a second hash as deriving a key from the
-   // integrity hash actually modifies it, and thus it calculates the wrong hash)
-   foo = CryptCreateHash(hcp, CALG_MD5, NULL, 0, &hchkey);
-   foo = GetLastError();
-   // hash the password
-   foo = CryptHashData(hchkey, (BYTE *)TABLE_KEY, 14, 0);
-   foo = GetLastError();
-   // Create a block cipher session key based on the hash of the password.
-   foo = CryptDeriveKey(hcp, CALG_RC2, hchkey, CRYPT_EXPORTABLE | 0x00280000, &hkey);
-   foo = GetLastError();
-
-   ////////////// End Encryption
+   //
 
    const int ctotalitems = (int)(m_vedit.size() + m_vsound.size() + m_vimage.size() + m_vfont.size() + m_vcollection.size());
    int csaveditems = 0;
@@ -2702,12 +2667,10 @@ HRESULT PinTable::SaveToStorage(IStorage *pstgRoot, VPXFileFeedback& feedback)
 
       feedback.Finalizing();
 
+      // Authentication block
       BYTE hashval[256];
       DWORD hashlen = 256;
-
-      // Authentication block
       foo = CryptGetHashParam(hch, HP_HASHSIZE, hashval, &hashlen, 0);
-
       hashlen = 256;
       foo = CryptGetHashParam(hch, HP_HASHVAL, hashval, &hashlen, 0);
 
@@ -2719,19 +2682,11 @@ HRESULT PinTable::SaveToStorage(IStorage *pstgRoot, VPXFileFeedback& feedback)
          pstmItem->Write(hashval, hashlen, &writ);
          pstmItem->Release();
          pstmItem = nullptr;
-         //if (FAILED(hr)) goto Error;
-
-         //CryptExportKey(hkey, nullptr, PUBLICKEYBLOB, 0, BYTE *pbData, DWORD *pdwDataLen);
       }
 
       foo = CryptDestroyHash(hch);
-
-      foo = CryptDestroyHash(hchkey);
-
-      foo = CryptDestroyKey(hkey);
-
       foo = CryptReleaseContext(hcp, 0);
-      //////// End Authentication block
+      // End Authentication block
 
       if (SUCCEEDED(hr))
          pstgData->Commit(STGC_DEFAULT);
@@ -2739,13 +2694,10 @@ HRESULT PinTable::SaveToStorage(IStorage *pstgRoot, VPXFileFeedback& feedback)
       {
          pstgData->Revert();
          pstgRoot->Revert();
-         const LocalString ls(IDS_SAVEERROR);
-         feedback.ErrorOccured(ls.m_szbuffer);
+         feedback.ErrorOccured(LocalString(IDS_SAVEERROR).m_szbuffer);
       }
       pstgData->Release();
    }
-
-   //Error:
 
    feedback.Done();
    m_savingActive = false;
@@ -2867,7 +2819,7 @@ HRESULT PinTable::ReadInfoValue(IStorage* pstg, const wstring& wzName, string &o
       WCHAR * const wzT = new WCHAR[len + 1];
       memset(wzT, 0, sizeof(WCHAR) * (len + 1));
 
-      BiffReader br(pstm, NULL, NULL, 0, hcrypthash, NULL);
+      BiffReader br(pstm, nullptr, 0, hcrypthash, NULL);
 #ifndef __STANDALONE__
       br.ReadBytes(wzT, ss.cbSize.LowPart);
 #else
@@ -2919,7 +2871,7 @@ HRESULT PinTable::LoadInfo(IStorage* pstg, HCRYPTHASH hcrypthash, int version)
 
       m_pbTempScreenshot->m_buffer.resize(ss.cbSize.LowPart);
 
-      BiffReader br(pstm, NULL, NULL, 0, hcrypthash, NULL);
+      BiffReader br(pstm, nullptr, 0, hcrypthash, NULL);
       br.ReadBytes(m_pbTempScreenshot->m_buffer.data(), static_cast<uint32_t>(m_pbTempScreenshot->m_buffer.size()));
 
       pstm->Release();
@@ -2930,7 +2882,7 @@ HRESULT PinTable::LoadInfo(IStorage* pstg, HCRYPTHASH hcrypthash, int version)
 
 HRESULT PinTable::LoadCustomInfo(IStorage* pstg, IStream *pstmTags, HCRYPTHASH hcrypthash, int version)
 {
-   BiffReader br(pstmTags, this, NULL, version, hcrypthash, NULL);
+   BiffReader br(pstmTags, this, version, hcrypthash, NULL);
    const HRESULT hr = br.Load();
 
    for (size_t i = 0; i < m_vCustomInfoTag.size(); i++)
@@ -3079,7 +3031,7 @@ HRESULT PinTable::SaveData(IStream* pstm, HCRYPTHASH hcrypthash, const bool save
          mats[i].bIsMetal = m->m_type == Material::MaterialType::METAL;
          mats[i].bOpacityActive_fEdgeAlpha = m->m_bOpacityActive ? 1 : 0;
          mats[i].bOpacityActive_fEdgeAlpha |= quantizeUnsigned<7>(clamp(m->m_fEdgeAlpha, 0.f, 1.f)) << 1;
-         strncpy_s(mats[i].szName, m->m_name.c_str(), sizeof(mats[i].szName)-1);
+         strncpy_s(mats[i].szName, sizeof(mats[i].szName), m->m_name.c_str());
          for (size_t c = strnlen_s(mats[i].szName, sizeof(mats[i].szName)); c < sizeof(mats[i].szName); ++c) // to avoid garbage after 0
              mats[i].szName[c] = 0;
       }
@@ -3089,9 +3041,9 @@ HRESULT PinTable::SaveData(IStream* pstm, HCRYPTHASH hcrypthash, const bool save
       for (size_t i = 0; i < m_materials.size(); i++)
       {
           const Material* const m = m_materials[i];
-          strncpy_s(phymats[i].szName, m->m_name.c_str(), sizeof(phymats[i].szName)-1);
+          strncpy_s(phymats[i].szName, sizeof(phymats[i].szName), m->m_name.c_str());
           for (size_t c = strnlen_s(phymats[i].szName, sizeof(phymats[i].szName)); c < sizeof(phymats[i].szName); ++c) // to avoid garbage after 0
-              phymats[i].szName[c] = 0;
+              phymats[i].szName[c] = '\0';
           phymats[i].fElasticity = m->m_fElasticity;
           phymats[i].fElasticityFallOff = m->m_fElasticityFalloff;
           phymats[i].fFriction = m->m_fFriction;
@@ -3141,9 +3093,8 @@ HRESULT PinTable::SaveData(IStream* pstm, HCRYPTHASH hcrypthash, const bool save
 
       bw.WriteStruct(FID(CCUS), m_rgcolorcustom, sizeof(COLORREF) * 16);
 
-      // save the script source code
+      // save the script source code, incl. the computed hash to be able to check for file integrity on loading
       bw.WriteTag(FID(CODE));
-      // if the script is protected then we pass in the proper cyptokey into the code savestream
       m_pcv->SaveToStream(pstm, hcrypthash);
    }
 
@@ -3193,33 +3144,34 @@ HRESULT PinTable::LoadGameFromFilename(const string& filename, VPXFileFeedback& 
 
    feedback.OperationStarted();
 
-   HCRYPTPROV hcp = NULL;
-   HCRYPTHASH hch = NULL;
-   HCRYPTHASH hchkey = NULL;
-   HCRYPTKEY  hkey = NULL;
+   //
+
+   HCRYPTPROV hcp = NULL; // crypt context
+   HCRYPTHASH hch = NULL; // hash for file integrity check
+   HCRYPTHASH hchkey = NULL; // hash for decryption key derivation
 
    #ifndef __STANDALONE__
-   bool hashValidation = !g_pvp->m_settings.LoadValueBool(Settings::Editor, "DisableHash");
+   // Hashing (to ensure file integrity), can be disabled for slightly faster loading (and then also matches standalone which cannot feature this)
+   const bool hashValidation = !g_pvp->m_settings.LoadValueBool(Settings::Editor, "DisableHash"s);
+   int foo = CryptAcquireContext(&hcp, nullptr, nullptr, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT | CRYPT_NEWKEYSET /* | CRYPT_SILENT*/);
+   foo = GetLastError();
    if (hashValidation)
    {
-      int foo;
-      foo = CryptAcquireContext(&hcp, nullptr, nullptr, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT | CRYPT_NEWKEYSET /* | CRYPT_SILENT*/);
-      foo = GetLastError();
-      foo = CryptCreateHash(hcp, CALG_MD2 /*CALG_MAC*/ /*CALG_HMAC*/, NULL /*hkey*/, 0, &hch);
+      foo = CryptCreateHash(hcp, CALG_MD2, NULL, 0, &hch);
       foo = GetLastError();
       foo = CryptHashData(hch, (BYTE *)TABLE_KEY, 14, 0);
       foo = GetLastError();
-
-      // create a key hash (we have to use a second hash as deriving a key from the
-      // integrity hash actually modifies it, and thus it calculates the wrong hash)
-      foo = CryptCreateHash(hcp, CALG_MD5, NULL, 0, &hchkey);
-      foo = GetLastError();
-      // hash the password
-      foo = CryptHashData(hchkey, (BYTE *)TABLE_KEY, 14, 0);
-      foo = GetLastError();
-      // Create a block cipher session key based on the hash of the password.
-      // We need to figure out the file verison before we can create the key
    }
+   // Decryption, for unlocking old VP8/VP9 tables that featured password protection (and that had script encryption set);
+   // Create a key hash (we have to use a second hash as deriving a key from the
+   // integrity hash actually modifies it, and thus it calculates the wrong hash)
+   foo = CryptCreateHash(hcp, CALG_MD5, NULL, 0, &hchkey);
+   foo = GetLastError();
+   // Hash the password
+   foo = CryptHashData(hchkey, (BYTE *)TABLE_KEY, 14, 0);
+   foo = GetLastError();
+   // Create a block cipher session key based on the hash of the password.
+   // We need to figure out the file version before we can create the key
    #endif
 
    int loadfileversion = CURRENT_FILE_FORMAT_VERSION;
@@ -3231,7 +3183,8 @@ HRESULT PinTable::LoadGameFromFilename(const string& filename, VPXFileFeedback& 
       IStream *pstmGame;
       if (SUCCEEDED(hr = pstgData->OpenStream(L"GameData", nullptr, STGM_DIRECT | STGM_READ | STGM_SHARE_EXCLUSIVE, 0, &pstmGame)))
       {
-         IStream* pstmVersion;
+         HCRYPTKEY hkey = NULL;
+         IStream *pstmVersion;
          if (SUCCEEDED(hr = pstgData->OpenStream(L"Version", nullptr, STGM_DIRECT | STGM_READ | STGM_SHARE_EXCLUSIVE, 0, &pstmVersion)))
          {
             ULONG read;
@@ -3286,14 +3239,14 @@ HRESULT PinTable::LoadGameFromFilename(const string& filename, VPXFileFeedback& 
             pstgInfo->Release();
          }
 
-         int csubobj = 0;
-         int csounds = 0;
-         int ctextures = 0;
-         int cfonts = 0;
-         int ccollection = 0;
-
-         if (SUCCEEDED(hr = LoadData(pstmGame, csubobj, csounds, ctextures, cfonts, ccollection, loadfileversion, hch, (loadfileversion < NO_ENCRYPTION_FORMAT_VERSION) ? hkey : NULL)))
+         if (SUCCEEDED(hr = LoadData(pstmGame, loadfileversion, hch, (loadfileversion < NO_ENCRYPTION_FORMAT_VERSION) ? hkey : NULL)))
          {
+            const int csubobj = m_loadTemp[0];
+            const int csounds = m_loadTemp[1];
+            const int ctextures = m_loadTemp[2];
+            const int cfonts = m_loadTemp[3];
+            const int ccollection = m_loadTemp[4];
+            
             PLOGI << "LoadData loaded"; // For profiling
 
             const int ctotalitems = csubobj + csounds + ctextures + cfonts;
@@ -3310,18 +3263,19 @@ HRESULT PinTable::LoadGameFromFilename(const string& filename, VPXFileFeedback& 
                   ItemTypeEnum type;
                   pstmItem->Read(&type, sizeof(int), &read);
 
-                  IEditable * const piedit = EditableRegistry::Create(type);
+                  IEditable* const piedit = EditableRegistry::Create(type);
+                  if (piedit)
+                  {
+                     hr = piedit->InitLoad(pstmItem, this, loadfileversion, (loadfileversion < 1000) ? hch : NULL, (loadfileversion < 1000) ? hkey : NULL); // 1000 (VP10 beta) removed the encryption //!! NO_ENCRYPTION_FORMAT_VERSION?
+                     piedit->InitVBA(false, nullptr);
+                     pstmItem->Release();
+                     pstmItem = nullptr;
+                     if (FAILED(hr)) break;
 
-                  int id = 0; // VBA id for this item
-                  hr = piedit->InitLoad(pstmItem, this, &id, loadfileversion, (loadfileversion < 1000) ? hch : NULL, (loadfileversion < 1000) ? hkey : NULL); // 1000 (VP10 beta) removed the encryption
-                  piedit->InitVBA(fFalse, id, nullptr);
-                  pstmItem->Release();
-                  pstmItem = nullptr;
-                  if (FAILED(hr)) break;
+                     m_vedit.push_back(piedit);
 
-                  m_vedit.push_back(piedit);
-
-                  //hr = piedit->InitPostLoad();
+                     //hr = piedit->InitPostLoad();
+                  }
                }
                feedback.ItemHasBeenProcessed(i + 1, csubobj);
             }
@@ -3341,8 +3295,8 @@ HRESULT PinTable::LoadGameFromFilename(const string& filename, VPXFileFeedback& 
                   if (pps)
                   {
                      // search for duplicate names, do not load dupes
-                     for (size_t i = 0; i < m_vsound.size(); ++i)
-                        if (m_vsound[i]->GetName() == pps->GetName())
+                     for (size_t i2 = 0; i2 < m_vsound.size(); ++i2)
+                        if (m_vsound[i2]->GetName() == pps->GetName())
                         {
                            PLOGE << "Duplicate sound name found: " << pps->GetName() << ", not loading it!";
                            delete pps;
@@ -3425,7 +3379,7 @@ HRESULT PinTable::LoadGameFromFilename(const string& filename, VPXFileFeedback& 
                   CComObject<Collection> *pcol;
                   CComObject<Collection>::CreateInstance(&pcol);
                   pcol->AddRef();
-                  pcol->LoadData(pstmItem, this, loadfileversion, hch, (loadfileversion < NO_ENCRYPTION_FORMAT_VERSION) ? hkey : NULL);
+                  pcol->LoadData(pstmItem, loadfileversion, hch, (loadfileversion < NO_ENCRYPTION_FORMAT_VERSION) ? hkey : NULL);
                   m_vcollection.push_back(pcol);
                   m_pcv->AddItem((IScriptable *)pcol, false);
                   pstmItem->Release();
@@ -3437,24 +3391,24 @@ HRESULT PinTable::LoadGameFromFilename(const string& filename, VPXFileFeedback& 
             PLOGI << "Collection loaded"; // For profiling
 
             for (size_t i = 0; i < m_vedit.size(); i++)
-            {
-               IEditable * const piedit = m_vedit[i];
-               piedit->InitPostLoad();
-            }
+               m_vedit[i]->InitPostLoad();
 
             PLOGI << "IEditable PostLoad performed"; // For profiling
+
+            for (int i = 0; i < m_vcollection.size(); i++)
+               m_vcollection[i].InitPostLoad(this);
+
+            PLOGI << "Collection PostLoad performed"; // For profiling
          }
          pstmGame->Release();
          feedback.Finalizing();
 
          // Authentication block
-
          if (hch && loadfileversion > 40)
          {
             if (SUCCEEDED(hr = pstgData->OpenStream(L"MAC", nullptr, STGM_DIRECT | STGM_READ | STGM_SHARE_EXCLUSIVE, 0, &pstmVersion)))
             {
                BYTE hashvalOld[256];
-               //DWORD hashlenOld = 256;
                ULONG read;
                hr = pstmVersion->Read(&hashvalOld, HASHLENGTH, &read);
 
@@ -3481,11 +3435,9 @@ HRESULT PinTable::LoadGameFromFilename(const string& filename, VPXFileFeedback& 
                #endif
             }
             else
-            {
-               // Error
-               hr = APPX_E_CORRUPT_CONTENT;
-            }
+               hr = APPX_E_CORRUPT_CONTENT; // Error
          }
+         // End Authentication block
 
          if (loadfileversion < 1030) // the m_fGlossyImageLerp part was included first with 10.3, so set all previously saved materials to the old default
             for (size_t i = 0; i < m_materials.size(); ++i)
@@ -3630,13 +3582,9 @@ HRESULT PinTable::LoadGameFromFilename(const string& filename, VPXFileFeedback& 
                {
                   if (textbox->GetScriptable())
                      m_pcv->RemoveItem(textbox->GetScriptable());
-                  Flasher *dmd = (Flasher *)EditableRegistry::CreateAndInit(ItemTypeEnum::eItemFlasher, this, 0, 0);
+                  Flasher* const dmd = (Flasher *)EditableRegistry::CreateAndInit(ItemTypeEnum::eItemFlasher, this, 0, 0);
                   m_pcv->RemoveItem(dmd->GetScriptable());
-                  #ifdef _MSC_VER
-                  wcscpy_s(dmd->m_wzName, textbox->m_wzName);
-                  #else
-                  wcscpy(dmd->m_wzName, textbox->m_wzName);
-                  #endif
+                  wcsncpy_s(dmd->m_wzName, sizeof(dmd->m_wzName), textbox->m_wzName);
                   dmd->UpdatePoint(0, textbox->m_d.m_v1.x, textbox->m_d.m_v1.y);
                   dmd->UpdatePoint(1, textbox->m_d.m_v1.x, textbox->m_d.m_v2.y);
                   dmd->UpdatePoint(2, textbox->m_d.m_v2.x, textbox->m_d.m_v2.y);
@@ -3669,8 +3617,6 @@ HRESULT PinTable::LoadGameFromFilename(const string& filename, VPXFileFeedback& 
 
          // Do not consider properties converted to settings as changes to avoid creating an ini for each opened old table (they will be imported again as they are part of the VPX file)
          m_settings.SetModified(false);
-
-         //////// End Authentication block
       }
       pstgData->Release();
    }
@@ -3739,20 +3685,14 @@ void PinTable::SetLoadDefaults()
    m_overridePhysicsFlipper = false;
 }
 
-HRESULT PinTable::LoadData(IStream* pstm, int& csubobj, int& csounds, int& ctextures, int& cfonts, int& ccollection, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey)
+HRESULT PinTable::LoadData(IStream* pstm, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey)
 {
    SetLoadDefaults();
 
-   int rgi[6] = { 0, 0, 0, 0, 0, 0 };
+   memset(m_loadTemp, 0, sizeof(m_loadTemp));
 
-   BiffReader br(pstm, this, rgi, version, hcrypthash, hcryptkey);
+   BiffReader br(pstm, this, version, hcrypthash, hcryptkey);
    const HRESULT hr = br.Load();
-
-   csubobj = rgi[1];
-   csounds = rgi[2];
-   ctextures = rgi[3];
-   cfonts = rgi[4];
-   ccollection = rgi[5];
 
    return hr;
 }
@@ -3763,7 +3703,7 @@ bool PinTable::LoadToken(const int id, BiffReader * const pbr)
    const bool hasIni = !INIFilename.empty() && FileExists(INIFilename);
    switch(id)
    {
-   case FID(PIID): pbr->GetInt(pbr->m_pdata); break;
+   case FID(PIID): { int pid; pbr->GetInt(&pid); } break;
    case FID(LEFT): pbr->GetFloat(m_left); break;
    case FID(TOPX): pbr->GetFloat(m_top); break;
    case FID(RGHT): pbr->GetFloat(m_right); break;
@@ -3864,11 +3804,11 @@ bool PinTable::LoadToken(const int id, BiffReader * const pbr)
    case FID(BLIF): pbr->GetString(m_ballImageDecal); break;
    case FID(SSHT): pbr->GetString(m_screenShot); break;
    case FID(FBCK): pbr->GetBool(m_backdrop); break;
-   case FID(SEDT): pbr->GetInt(&((int *)pbr->m_pdata)[1]); break;
-   case FID(SSND): pbr->GetInt(&((int *)pbr->m_pdata)[2]); break;
-   case FID(SIMG): pbr->GetInt(&((int *)pbr->m_pdata)[3]); break;
-   case FID(SFNT): pbr->GetInt(&((int *)pbr->m_pdata)[4]); break;
-   case FID(SCOL): pbr->GetInt(&((int *)pbr->m_pdata)[5]); break;
+   case FID(SEDT): pbr->GetInt(m_loadTemp[0]); break;
+   case FID(SSND): pbr->GetInt(m_loadTemp[1]); break;
+   case FID(SIMG): pbr->GetInt(m_loadTemp[2]); break;
+   case FID(SFNT): pbr->GetInt(m_loadTemp[3]); break;
+   case FID(SCOL): pbr->GetInt(m_loadTemp[4]); break;
    case FID(NAME): pbr->GetWideString(m_wzName, std::size(m_wzName)); break;
    case FID(BIMG): pbr->GetString(m_BG_image[0]); break;
    case FID(BIMF): pbr->GetString(m_BG_image[1]); break;
@@ -4112,7 +4052,7 @@ bool PinTable::LoadToken(const int id, BiffReader * const pbr)
       LPVOID pData = ::GlobalLock(hMem);
       pbr->GetStruct(pData, record_size);
       ::GlobalUnlock(hMem);
-      Material *rpb = new Material();
+      Material *mat = new Material();
       CComPtr<IStream> spStream;
 #ifndef __STANDALONE__
       const HRESULT hr = ::CreateStreamOnHGlobal(hMem, FALSE, &spStream);
@@ -4123,13 +4063,13 @@ bool PinTable::LoadToken(const int id, BiffReader * const pbr)
       fastStream.m_cSize = record_size;
       spStream.Attach(&fastStream);
 #endif
-      if (rpb->LoadData(spStream, this, pbr->m_version, NULL, NULL) != S_OK)
+      if (mat->LoadData(spStream, pbr->m_version, NULL, NULL) != S_OK)
       {
          assert(!"Invalid binary image file");
-         delete rpb;
+         delete mat;
          return false;
       }
-      m_materials.push_back(rpb);
+      m_materials.push_back(mat);
       ::GlobalFree(hMem);
       spStream.Detach();
       break;
@@ -4152,7 +4092,7 @@ bool PinTable::LoadToken(const int id, BiffReader * const pbr)
       fastStream.m_cSize = record_size;
       spStream.Attach(&fastStream);
 #endif
-      if (rpb->LoadData(spStream, this, pbr->m_version, NULL, NULL) != S_OK)
+      if (rpb->LoadData(spStream, pbr->m_version, NULL, NULL) != S_OK)
       {
          assert(!"Invalid binary image file");
          delete rpb;
@@ -4273,8 +4213,7 @@ void PinTable::NewCollection(const HWND hwndListView, const bool fromSelection)
    CComObject<Collection>::CreateInstance(&pcol);
    pcol->AddRef();
 
-   const LocalStringW prefix(IDS_COLLECTION);
-   GetUniqueName(prefix.m_szbuffer, pcol->m_wzName, std::size(pcol->m_wzName));
+   GetUniqueName(LocalStringW(IDS_COLLECTION).m_szbuffer, pcol->m_wzName, std::size(pcol->m_wzName));
 
    if (fromSelection && !MultiSelIsEmpty())
    {
@@ -4459,7 +4398,7 @@ void PinTable::SetCollectionName(Collection *pcol, const char *szName, HWND hwnd
    {
       if (hwndList)
          ListView_SetItemText(hwndList, index, 0, (char*)szName);
-      wcscpy_s(pcol->m_wzName, wzT.c_str());
+      wcsncpy_s(pcol->m_wzName, std::size(pcol->m_wzName), wzT.c_str());
    }
 #endif
 }
@@ -4653,8 +4592,7 @@ void PinTable::OnRightButtonDown(int x, int y)
 void PinTable::FillCollectionContextMenu(CMenu &mainMenu, CMenu &colSubMenu, ISelect *psel)
 {
 #ifndef __STANDALONE__
-    const LocalString ls16(IDS_TO_COLLECTION);
-    mainMenu.AppendMenu(MF_POPUP | MF_STRING, (size_t)colSubMenu.GetHandle(), ls16.m_szbuffer);
+    mainMenu.AppendMenu(MF_POPUP | MF_STRING, (size_t)colSubMenu.GetHandle(), LocalString(IDS_TO_COLLECTION).m_szbuffer);
 
     const int maxItems = m_vcollection.size() - 1;
 
@@ -4699,8 +4637,7 @@ void PinTable::FillCollectionContextMenu(CMenu &mainMenu, CMenu &colSubMenu, ISe
 void PinTable::FillLayerContextMenu(CMenu &mainMenu, CMenu &layerSubMenu, ISelect *psel) 
 {
 #ifndef __STANDALONE__
-   const LocalString ls16(IDS_ASSIGN_TO_LAYER2);
-   mainMenu.AppendMenu(MF_POPUP | MF_STRING, (size_t)layerSubMenu.GetHandle(), ls16.m_szbuffer);
+   mainMenu.AppendMenu(MF_POPUP | MF_STRING, (size_t)layerSubMenu.GetHandle(), LocalString(IDS_ASSIGN_TO_LAYER2).m_szbuffer);
    int i = 0;
    for (IEditable *edit : m_vedit)
    {
@@ -4768,37 +4705,27 @@ void PinTable::DoContextMenu(int x, int y, const int menuid, ISelect *psel)
       layerSubMenu.CreatePopupMenu();
 
       // TEXT
-      const LocalString ls17(IDS_COPY_ELEMENT);
-      newMenu.AppendMenu(MF_STRING, IDC_COPY, ls17.m_szbuffer);
-      const LocalString ls18(IDS_PASTE_ELEMENT);
-      newMenu.AppendMenu(MF_STRING, IDC_PASTE, ls18.m_szbuffer);
-      const LocalString ls19(IDS_PASTE_AT_ELEMENT);
-      newMenu.AppendMenu(MF_STRING, IDC_PASTEAT, ls19.m_szbuffer);
+      newMenu.AppendMenu(MF_STRING, IDC_COPY, LocalString(IDS_COPY_ELEMENT).m_szbuffer);
+      newMenu.AppendMenu(MF_STRING, IDC_PASTE, LocalString(IDS_PASTE_ELEMENT).m_szbuffer);
+      newMenu.AppendMenu(MF_STRING, IDC_PASTEAT, LocalString(IDS_PASTE_AT_ELEMENT).m_szbuffer);
 
       newMenu.AppendMenu(MF_SEPARATOR, ~0u, "");
 
-      const LocalString ls14(IDS_DRAWING_ORDER_HIT);
-      newMenu.AppendMenu(MF_STRING, ID_EDIT_DRAWINGORDER_HIT, ls14.m_szbuffer);
-      const LocalString ls15(IDS_DRAWING_ORDER_SELECT);
-      newMenu.AppendMenu(MF_STRING, ID_EDIT_DRAWINGORDER_SELECT, ls15.m_szbuffer);
+      newMenu.AppendMenu(MF_STRING, ID_EDIT_DRAWINGORDER_HIT, LocalString(IDS_DRAWING_ORDER_HIT).m_szbuffer);
+      newMenu.AppendMenu(MF_STRING, ID_EDIT_DRAWINGORDER_SELECT, LocalString(IDS_DRAWING_ORDER_SELECT).m_szbuffer);
 
-      const LocalString ls1(IDS_DRAWINFRONT);
-      const LocalString ls2(IDS_DRAWINBACK);
-      newMenu.AppendMenu(MF_STRING, ID_DRAWINFRONT, ls1.m_szbuffer);
-      newMenu.AppendMenu(MF_STRING, ID_DRAWINBACK, ls2.m_szbuffer);
+      newMenu.AppendMenu(MF_STRING, ID_DRAWINFRONT, LocalString(IDS_DRAWINFRONT).m_szbuffer);
+      newMenu.AppendMenu(MF_STRING, ID_DRAWINBACK, LocalString(IDS_DRAWINBACK).m_szbuffer);
 
-      const LocalString ls3(IDS_SETASDEFAULT);
-      newMenu.AppendMenu(MF_STRING, ID_SETASDEFAULT, ls3.m_szbuffer);
+      newMenu.AppendMenu(MF_STRING, ID_SETASDEFAULT, LocalString(IDS_SETASDEFAULT).m_szbuffer);
 
       newMenu.AppendMenu(MF_SEPARATOR, ~0u, "");
 
       FillLayerContextMenu(newMenu, layerSubMenu, psel);
-      const LocalString lsLayer(IDS_ASSIGN_TO_CURRENT_LAYER);
-      newMenu.AppendMenu(MF_STRING, ID_ASSIGN_TO_CURRENT_LAYER, lsLayer.m_szbuffer);
+      newMenu.AppendMenu(MF_STRING, ID_ASSIGN_TO_CURRENT_LAYER, LocalString(IDS_ASSIGN_TO_CURRENT_LAYER).m_szbuffer);
       FillCollectionContextMenu(newMenu, colSubMenu, psel);
 
-      const LocalString ls5(IDS_LOCK);
-      newMenu.AppendMenu(MF_STRING, ID_LOCK, ls5.m_szbuffer);
+      newMenu.AppendMenu(MF_STRING, ID_LOCK, LocalString(IDS_LOCK).m_szbuffer);
 
       newMenu.AppendMenu(MF_SEPARATOR, ~0u, "");
       newMenu.AppendMenu(MF_SEPARATOR, ~0u, "");
@@ -5317,7 +5244,7 @@ void PinTable::ExportBlueprint()
       ofn.hwndOwner = m_vpinball->GetHwnd();
       ofn.lpstrFilter = "PNG (.png)\0*.png;\0Bitmap (.bmp)\0*.bmp;\0TGA (.tga)\0*.tga;\0TIFF (.tiff/.tif)\0*.tiff;*.tif;\0WEBP (.webp)\0*.webp;\0";
       char szBlueprintFileName[MAXSTRING];
-      strncpy_s(szBlueprintFileName, m_filename.c_str(), sizeof(szBlueprintFileName)-1);
+      strncpy_s(szBlueprintFileName, sizeof(szBlueprintFileName), m_filename.c_str());
       const size_t idx = m_filename.find_last_of('.');
       if (idx != string::npos && idx < MAXSTRING)
           szBlueprintFileName[idx] = '\0';
@@ -5496,10 +5423,10 @@ void PinTable::ExportTableMesh()
 {
 #ifndef __STANDALONE__
    char szObjFileName[MAXSTRING];
-   strncpy_s(szObjFileName, m_filename.c_str(), sizeof(szObjFileName)-1);
+   strncpy_s(szObjFileName, sizeof(szObjFileName), m_filename.c_str());
    const size_t idx = m_filename.find_last_of('.');
    if (idx != string::npos && idx < MAXSTRING)
-       szObjFileName[idx] = '\0';
+      szObjFileName[idx] = '\0';
    OPENFILENAME ofn = {};
    ofn.lStructSize = sizeof(OPENFILENAME);
    ofn.hInstance = m_vpinball->theInstance;
@@ -5781,7 +5708,7 @@ void PinTable::ExportBackdropPOV() const
 	// TEXT
 	ofn.lpstrFilter = "INI file(*.ini)\0*.ini\0";
 	char szFileName[MAXSTRING];
-	strncpy_s(szFileName, m_filename.c_str(), sizeof(szFileName)-1);
+	strncpy_s(szFileName, sizeof(szFileName), m_filename.c_str());
 	const size_t idx = m_filename.find_last_of('.');
 	if(idx != string::npos && idx < MAXSTRING)
 		szFileName[idx] = '\0';
@@ -5994,26 +5921,29 @@ void PinTable::Paste(const bool atLocation, const int x, const int y)
       }
       else
       {
-         IEditable *peditNew = EditableRegistry::Create(type);
-
-         int id;
-         peditNew->InitLoad(pstm, this, &id, CURRENT_FILE_FORMAT_VERSION, NULL, NULL);
-
-         if (type != eItemDecal)
+         IEditable* const peditNew = EditableRegistry::Create(type);
+         if (peditNew)
          {
-            GetUniqueNamePasting(type, peditNew->GetScriptable()->m_wzName, std::size(peditNew->GetScriptable()->m_wzName));
-            peditNew->InitVBA(fTrue, 0, peditNew->GetScriptable()->m_wzName);
+            peditNew->InitLoad(pstm, this, CURRENT_FILE_FORMAT_VERSION, NULL, NULL);
+
+            if (type != eItemDecal)
+            {
+               GetUniqueNamePasting(type, peditNew->GetScriptable()->m_wzName, std::size(peditNew->GetScriptable()->m_wzName));
+               peditNew->InitVBA(true, peditNew->GetScriptable()->m_wzName);
+            }
+
+            peditNew->InitPostLoad();
+            peditNew->m_backglass = m_vpinball->m_backglassView;
+
+            peditNew->SetPartGroup(m_vpinball->GetLayersListDialog()->GetSelectedPartGroup());
+
+            m_vedit.push_back(peditNew);
+
+            AddMultiSel(peditNew->GetISelect(), (i != m_vpinball->m_vstmclipboard.size() - 1), true, false);
+            cpasted++;
          }
-
-         peditNew->InitPostLoad();
-         peditNew->m_backglass = m_vpinball->m_backglassView;
-
-         peditNew->SetPartGroup(m_vpinball->GetLayersListDialog()->GetSelectedPartGroup());
-
-         m_vedit.push_back(peditNew);
-         
-         AddMultiSel(peditNew->GetISelect(), (i != m_vpinball->m_vstmclipboard.size() - 1), true, false);
-         cpasted++;
+         else
+            error = true;
       }
    }
    m_vpinball->GetLayersListDialog()->Update();
@@ -6023,39 +5953,19 @@ void PinTable::Paste(const bool atLocation, const int x, const int y)
       Translate(TransformPoint(x, y) - GetCenter());
 
    if (error)
-   {
-      const LocalString ls(IDS_NOPASTEINVIEW);
-      m_mdiTable->MessageBox(ls.m_szbuffer, "Visual Pinball", 0);
-   }
+      m_mdiTable->MessageBox(LocalString(IDS_NOPASTEINVIEW).m_szbuffer, "Visual Pinball", 0);
 #endif
 }
 
-void PinTable::UIRenderPass1(Sur * const psur)
-{
-}
-
-HRESULT PinTable::InitLoad(IStream *pstm, PinTable *ptable, int *pid, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey)
+HRESULT PinTable::InitLoad(IStream *pstm, PinTable *ptable, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey)
 {
    SetDefaults(false);
 
-   int csubobj, csounds, ctextures, cfonts, ccollection;
-   LoadData(pstm, csubobj, csounds, ctextures, cfonts, ccollection, version, hcrypthash, hcryptkey);
+   memset(m_loadTemp, 0, sizeof(m_loadTemp));
+
+   LoadData(pstm, version, hcrypthash, hcryptkey);
 
    return S_OK;
-}
-
-HRESULT PinTable::InitPostLoad()
-{
-   return S_OK;
-}
-
-HRESULT PinTable::InitVBA(BOOL fNew, int id, WCHAR * const wzName)
-{
-   return S_OK;
-}
-
-void PinTable::SetDefaults(const bool fromMouseClick)
-{
 }
 
 void PinTable::SetDefaultPhysics(const bool fromMouseClick)
@@ -6256,8 +6166,7 @@ void PinTable::OnDelete()
    }
    if (inCollection)
    {
-      const LocalString ls(IDS_DELETE_ELEMENTS);
-      const int ans = m_mdiTable->MessageBox(ls.m_szbuffer/*"Selected elements are part of one or more collections.\nDo you really want to delete them?"*/, "Visual Pinball", MB_YESNO | MB_DEFBUTTON2);
+      const int ans = m_mdiTable->MessageBox(LocalString(IDS_DELETE_ELEMENTS).m_szbuffer/*"Selected elements are part of one or more collections.\nDo you really want to delete them?"*/, "Visual Pinball", MB_YESNO | MB_DEFBUTTON2);
       if (ans != IDYES)
          return;
    }
@@ -6454,10 +6363,7 @@ void PinTable::OnMouseMove(int x, int y)
 HRESULT PinTable::GetTypeName(BSTR *pVal) const
 {
    const int stringid = (!m_vpinball->m_backglassView) ? IDS_TABLE : IDS_TB_BACKGLASS;
-
-   const LocalStringW ls(stringid);
-   *pVal = SysAllocString(ls.m_szbuffer);
-
+   *pVal = SysAllocString(LocalStringW(stringid).m_szbuffer);
    return S_OK;
 }
 
@@ -6486,7 +6392,7 @@ STDMETHODIMP PinTable::put_Name(BSTR newVal)
 
    STARTUNDO
    if (m_pcv->ReplaceName((IScriptable *)this, newName) == S_OK)
-      wcscpy_s(m_wzName, newVal);
+      wcsncpy_s(m_wzName, std::size(m_wzName), newVal);
    STOPUNDO
 
    return S_OK;
@@ -7158,7 +7064,9 @@ string PinTable::AuditTable(bool log) const
    const string msg = "Table audit:\r\n" + ss.str();
    if (log)
    {
-      PLOGI << trim_string(string_replace_all(msg, "\r"s, ""s));
+      string msg2 = msg;
+      std::erase(msg2, '\r');
+      PLOGI << trim_string(msg2);
    }
    return msg;
 }
@@ -7249,8 +7157,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
 
       WCHAR *wzDst = (WCHAR *)CoTaskMemAlloc(7 * sizeof(WCHAR));
       // TEXT
-      const LocalString ls(IDS_NONE);
-      MultiByteToWideCharNull(CP_ACP, 0, ls.m_szbuffer, -1, wzDst, 7);
+      MultiByteToWideCharNull(CP_ACP, 0, LocalString(IDS_NONE).m_szbuffer, -1, wzDst, 7);
       rgstr[0] = wzDst;
       rgdw[0] = ~0u;
 
@@ -7280,8 +7187,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
 
       WCHAR *wzDst = (WCHAR *)CoTaskMemAlloc(7 * sizeof(WCHAR));
       // TEXT
-      const LocalString ls(IDS_NONE);
-      MultiByteToWideCharNull(CP_ACP, 0, ls.m_szbuffer, -1, wzDst, 7);
+      MultiByteToWideCharNull(CP_ACP, 0, LocalString(IDS_NONE).m_szbuffer, -1, wzDst, 7);
       rgstr[0] = wzDst;
       rgdw[0] = ~0u;
 
@@ -7308,7 +7214,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
       rgdw = (uint32_t *)CoTaskMemAlloc((cvar + 1) * sizeof(uint32_t));
 
       rgstr[0] = (WCHAR *)CoTaskMemAlloc(7 * sizeof(WCHAR));
-      wcscpy_s(rgstr[0], 7, L"<None>");
+      wcsncpy_s(rgstr[0], 7, L"<None>");
       rgdw[0] = ~0u;
 
       for (size_t ivar = 0; ivar < cvar; ivar++)
@@ -7334,7 +7240,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
       rgdw = (uint32_t *)CoTaskMemAlloc((cvar + 1) * sizeof(uint32_t));
 
       rgstr[0] = (WCHAR *)CoTaskMemAlloc(7 * sizeof(WCHAR));
-      wcscpy_s(rgstr[0], 7, L"<None>");
+      wcsncpy_s(rgstr[0], 7, L"<None>");
       rgdw[0] = ~0u;
 
       for (size_t ivar = 0; ivar < cvar; ivar++)
@@ -7379,7 +7285,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
       if (wzDst == nullptr)
          ShowError("DISPID_Surface alloc failed (0)");
       // TEXT
-      wcscpy_s(wzDst, 7, L"<None>");
+      wcsncpy_s(wzDst, 7, L"<None>");
       rgstr[cvar] = wzDst;
       rgdw[cvar] = ~0u;
       cvar++;
@@ -7402,7 +7308,7 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
             if (wzDst == nullptr)
                ShowError("DISPID_Surface alloc failed (1)");
 
-            wcscpy_s(wzDst, cwch, sname.c_str());
+            wcsncpy_s(wzDst, cwch, sname.c_str());
             rgstr[cvar] = wzDst;
             rgdw[cvar] = (uint32_t)ivar;
             cvar++;
@@ -7418,19 +7324,19 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
       rgdw = (uint32_t *)CoTaskMemAlloc((cvar) * sizeof(uint32_t));
 
       rgstr[0] = (WCHAR *)CoTaskMemAlloc(5 * sizeof(WCHAR));
-      wcscpy_s(rgstr[0], 5, L"None");
+      wcsncpy_s(rgstr[0], 5, L"None");
       rgdw[0] = ~0u;
       rgstr[1] = (WCHAR *)CoTaskMemAlloc(9 * sizeof(WCHAR));
-      wcscpy_s(rgstr[1], 9, L"Additive");
+      wcsncpy_s(rgstr[1], 9, L"Additive");
       rgdw[1] = 1;
       rgstr[2] = (WCHAR *)CoTaskMemAlloc(9 * sizeof(WCHAR));
-      wcscpy_s(rgstr[2], 9, L"Multiply");
+      wcsncpy_s(rgstr[2], 9, L"Multiply");
       rgdw[2] = 2;
       rgstr[3] = (WCHAR *)CoTaskMemAlloc(8 * sizeof(WCHAR));
-      wcscpy_s(rgstr[3], 8, L"Overlay");
+      wcsncpy_s(rgstr[3], 8, L"Overlay");
       rgdw[3] = 3;
       rgstr[4] = (WCHAR *)CoTaskMemAlloc(7 * sizeof(WCHAR));
-      wcscpy_s(rgstr[4], 7, L"Screen");
+      wcsncpy_s(rgstr[4], 7, L"Screen");
       rgdw[4] = 4;
 
       break;
@@ -7539,7 +7445,7 @@ STDMETHODIMP PinTable::GetPredefinedValue(DISPID dispID, DWORD dwCookie, VARIANT
       static const wstring filterNames[5] = { L"None"s, L"Additive"s, L"Multiply"s, L"Overlay"s, L"Screen"s };
       const size_t cwch = filterNames[idx].length() + 1;
       wzDst = (WCHAR *)malloc(cwch*sizeof(WCHAR));
-      wcscpy_s(wzDst, cwch, filterNames[idx].c_str());
+      wcsncpy_s(wzDst, cwch, filterNames[idx].c_str());
       break;
    }
    case DISPID_Surface:
@@ -7560,7 +7466,7 @@ STDMETHODIMP PinTable::GetPredefinedValue(DISPID dispID, DWORD dwCookie, VARIANT
          if (wzDst == nullptr)
             ShowError("DISPID_Surface alloc failed (2)");
          else
-            wcscpy_s(wzDst, cwch, sname.c_str());
+            wcsncpy_s(wzDst, cwch, sname.c_str());
       }
    }
    break;
@@ -9073,7 +8979,7 @@ STDMETHODIMP PinTable::ExportPhysics()
    Flipper * const flipper = (Flipper *)m_vedit[i];
 
    char szFileName[MAXSTRING];
-   strncpy_s(szFileName, m_filename.c_str(), sizeof(szFileName)-1);
+   strncpy_s(szFileName, sizeof(szFileName), m_filename.c_str());
    const size_t idx = m_filename.find_last_of('.');
    if (idx != string::npos && idx < MAXSTRING)
       szFileName[idx] = '\0';
@@ -9687,23 +9593,15 @@ bool PinTableMDI::CanClose() const
 {
     if (m_table != nullptr && m_table->FDirty() && !g_pvp->m_povEdit)
     {
-        const LocalString ls1(IDS_SAVE_CHANGES1);
-        const LocalString ls2(IDS_SAVE_CHANGES2);
-        const string szText = ls1.m_szbuffer/*"Do you want to save the changes you made to '"*/ + m_table->m_title + ls2.m_szbuffer;
+        const string szText = LocalString(IDS_SAVE_CHANGES1).m_szbuffer /*"Do you want to save the changes you made to '"*/ + m_table->m_title + LocalString(IDS_SAVE_CHANGES2).m_szbuffer;
 #ifndef __STANDALONE__
         const int result = MessageBox(szText.c_str(), "Visual Pinball", MB_YESNOCANCEL | MB_DEFBUTTON3 | MB_ICONWARNING);
 
         if (result == IDCANCEL)
             return false;
 
-        if (result == IDYES)
-        {
-            if (m_table->TableSave() != S_OK)
-            {
-                const LocalString ls3(IDS_SAVEERROR);
-                MessageBox(ls3.m_szbuffer, "Visual Pinball", MB_ICONERROR);
-            }
-        }
+        if ((result == IDYES) && (m_table->TableSave() != S_OK))
+            MessageBox(LocalString(IDS_SAVEERROR).m_szbuffer, "Visual Pinball", MB_ICONERROR);
 #endif
     }
     return true;

@@ -304,6 +304,7 @@ void ReportError(const char *errorText, const HRESULT hr, const char *file, cons
 
 RenderDeviceState::RenderDeviceState(RenderDevice* rd)
    : m_rd(rd)
+   , m_uiShaderState(new ShaderState(m_rd->m_uiShader, m_rd->UseLowPrecision()))
    , m_basicShaderState(new ShaderState(m_rd->m_basicShader, m_rd->UseLowPrecision()))
    , m_DMDShaderState(new ShaderState(m_rd->m_DMDShader, m_rd->UseLowPrecision()))
    , m_FBShaderState(new ShaderState(m_rd->m_FBShader, m_rd->UseLowPrecision()))
@@ -316,6 +317,7 @@ RenderDeviceState::RenderDeviceState(RenderDevice* rd)
 
 RenderDeviceState::~RenderDeviceState()
 {
+   delete m_uiShaderState;
    delete m_basicShaderState;
    delete m_DMDShaderState;
    delete m_FBShaderState;
@@ -711,13 +713,7 @@ RenderDevice::RenderDevice(
    syncMode = syncMode != VideoSyncMode::VSM_NONE ? VideoSyncMode::VSM_VSYNC : VideoSyncMode::VSM_NONE;
    
    static const string bgfxRendererNames[bgfx::RendererType::Count + 1] = { "Noop"s, "Agc"s, "Direct3D11"s, "Direct3D12"s, "Gnm"s, "Metal"s, "Nvn"s, "OpenGLES"s, "OpenGL"s, "Vulkan"s, "Default"s };
-#ifdef __ANDROID__
-   string gfxBackend = g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "GfxBackend"s, bgfxRendererNames[bgfx::RendererType::OpenGLES]);
-#elif defined(__APPLE__)
-   string gfxBackend = g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "GfxBackend"s, bgfxRendererNames[bgfx::RendererType::Metal]);
-#else
-   string gfxBackend = g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "GfxBackend"s, bgfxRendererNames[bgfx::RendererType::Vulkan]);
-#endif
+   string gfxBackend = g_pplayer->m_ptable->m_settings.LoadValueString(Settings::Player, "GfxBackend"s);
    bgfx::RendererType::Enum supportedRenderers[bgfx::RendererType::Count];
    const int nRendererSupported = bgfx::getSupportedRenderers(bgfx::RendererType::Count, supportedRenderers);
    string supportedRendererLog;
@@ -727,6 +723,12 @@ RenderDevice::RenderDevice(
       if (gfxBackend == bgfxRendererNames[supportedRenderers[i]])
          init.type = supportedRenderers[i];
    }
+   if (init.type == bgfx::RendererType::Noop)
+      init.type = bgfx::RendererType::Count;
+   #ifndef _DEBUG // Disable Direct3D12 in release builds as it is not yet fully supported
+   if (init.type == bgfx::RendererType::Direct3D12)
+      init.type = bgfx::RendererType::Count;
+   #endif
    PLOGI << "Using graphics backend: " << bgfxRendererNames[init.type] << " (available: " << supportedRendererLog << ')';
 
    #ifndef __LIBVPINBALL__
@@ -767,11 +769,11 @@ RenderDevice::RenderDevice(
    init.platformData.backBuffer = nullptr;
    init.platformData.backBufferDS = nullptr;
    #if BX_PLATFORM_LINUX || BX_PLATFORM_BSD
-   if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "x11") == 0) {
+   if (SDL_GetCurrentVideoDriver() == "x11"s) {
       init.platformData.ndt = SDL_GetPointerProperty(SDL_GetWindowProperties(m_outputWnd[0]->GetCore()), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, NULL);
       init.platformData.nwh = (void*)SDL_GetNumberProperty(SDL_GetWindowProperties(m_outputWnd[0]->GetCore()), SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
    }
-   else if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "wayland") == 0) {
+   else if (SDL_GetCurrentVideoDriver() == "wayland"s) {
       init.platformData.type = bgfx::NativeWindowHandleType::Wayland;
       init.platformData.ndt = SDL_GetPointerProperty(SDL_GetWindowProperties(m_outputWnd[0]->GetCore()), SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, NULL);
       init.platformData.nwh = SDL_GetPointerProperty(SDL_GetWindowProperties(m_outputWnd[0]->GetCore()), SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, NULL);
@@ -791,6 +793,8 @@ RenderDevice::RenderDevice(
    #ifdef DEBUG
    init.debug = true;
    #endif
+
+   ResetActiveView();
 
    m_renderDeviceAlive = true;
    m_renderThread = std::thread(&RenderThread, this, init);
@@ -1260,6 +1264,7 @@ RenderDevice::RenderDevice(
       #endif
    }
 
+   m_uiShader = new Shader(this, Shader::UI_SHADER, m_nEyes == 2);
    m_basicShader = new Shader(this, Shader::BASIC_SHADER, m_nEyes == 2);
    m_ballShader = new Shader(this, Shader::BALL_SHADER, m_nEyes == 2);
    m_DMDShader = new Shader(this, m_isVR ? Shader::DMD_VR_SHADER : Shader::DMD_SHADER, m_nEyes == 2);
@@ -1315,6 +1320,8 @@ RenderDevice::~RenderDevice()
       SAFE_RELEASE(m_pVertexNormalTexelDeclaration);
    #endif
 
+   delete m_uiShader;
+   m_uiShader = nullptr;
    delete m_basicShader;
    m_basicShader = nullptr;
    delete m_DMDShader;
@@ -1347,12 +1354,8 @@ RenderDevice::~RenderDevice()
    delete m_pVertexTexelDeclaration;
    delete m_pVertexNormalTexelDeclaration;
 
-   if (bgfx::isValid(m_mipmapProgram))
-      bgfx::destroy(m_mipmapProgram);
-   if (bgfx::isValid(m_mipmapOpts))
-      bgfx::destroy(m_mipmapOpts);
-   if (bgfx::isValid(m_mipmapSource))
-      bgfx::destroy(m_mipmapSource);
+   for (auto prog : m_mipmapPrograms)
+      bgfx::destroy(prog);
 
    // Shutdown BGFX once all native resources have been cleaned up
    m_frameReadySem.post();
@@ -1459,11 +1462,11 @@ void RenderDevice::AddWindow(VPX::Window* wnd)
    void* nwh;
 #if BX_PLATFORM_LINUX || BX_PLATFORM_BSD
    void* ndt;
-   if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "x11") == 0) {
+   if (SDL_GetCurrentVideoDriver() == "x11"s) {
       ndt = SDL_GetPointerProperty(SDL_GetWindowProperties(sdlWnd), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, NULL);
       nwh = (void*)SDL_GetNumberProperty(SDL_GetWindowProperties(sdlWnd), SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
    }
-   else if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "wayland") == 0) {
+   else if (SDL_GetCurrentVideoDriver() == "wayland"s) {
       ndt = SDL_GetPointerProperty(SDL_GetWindowProperties(sdlWnd), SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, NULL);
       nwh = SDL_GetPointerProperty(SDL_GetWindowProperties(sdlWnd), SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, NULL);
    }
@@ -1867,6 +1870,7 @@ void RenderDevice::CopyRenderStates(const bool copyTo, RenderDeviceState& state)
 {
    assert(state.m_rd == this);
    CopyRenderStates(copyTo, state.m_renderState);
+   m_uiShader->m_state->CopyTo(copyTo, state.m_uiShaderState);
    m_basicShader->m_state->CopyTo(copyTo, state.m_basicShaderState);
    m_DMDShader->m_state->CopyTo(copyTo, state.m_DMDShaderState);
    m_FBShader->m_state->CopyTo(copyTo, state.m_FBShaderState);
@@ -1936,8 +1940,7 @@ void RenderDevice::DiscardRenderFrame()
    m_currentPass = nullptr;
    m_renderFrame->Discard();
    #ifdef ENABLE_BGFX
-      RenderTarget::OnFrameFlushed();
-      m_activeViewId = -1;
+   ResetActiveView();
    #endif
 }
 
@@ -2003,15 +2006,6 @@ void RenderDevice::SubmitVR(RenderTarget* source)
    AddRenderTargetDependency(source);
    RenderCommand* cmd = m_renderFrame->NewCommand();
    cmd->SetSubmitVR(source);
-   cmd->m_dependency = m_nextRenderCommandDependency;
-   m_nextRenderCommandDependency = nullptr;
-   m_currentPass->Submit(cmd);
-}
-
-void RenderDevice::RenderLiveUI()
-{
-   RenderCommand* cmd = m_renderFrame->NewCommand();
-   cmd->SetRenderLiveUI();
    cmd->m_dependency = m_nextRenderCommandDependency;
    m_nextRenderCommandDependency = nullptr;
    m_currentPass->Submit(cmd);

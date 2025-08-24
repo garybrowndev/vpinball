@@ -247,10 +247,6 @@ add_executable(vpinball WIN32
    third-party/include/BAM/BAMView.h
    third-party/include/BAM/BAM_Tracker.h
    third-party/include/BAM/BAM_ViewPortSetup.h
-   third-party/include/bgfx-imgui/imgui_impl_bgfx.cpp
-   third-party/include/bgfx-imgui/imgui_impl_bgfx.h
-   third-party/include/bgfx-imgui/fs_ocornut_imgui.bin.h
-   third-party/include/bgfx-imgui/vs_ocornut_imgui.bin.h
    third-party/include/freeimage.h
    third-party/include/serial.cpp
    third-party/include/serial.h
@@ -344,7 +340,6 @@ target_compile_definitions(vpinball PRIVATE
    ENABLE_SDL_VIDEO
    ENABLE_BGFX
    ENABLE_XR
-   USE_DINPUT8
    $<$<CONFIG:Debug>:BX_CONFIG_DEBUG=1>
    $<$<CONFIG:Release>:BX_CONFIG_DEBUG=0>
 )
@@ -367,7 +362,6 @@ target_link_libraries(vpinball
    comctl32.lib
    freeimage64.lib
    dxguid.lib
-   dinput.lib
    nvapi.lib
    winmm.lib
    hid.lib

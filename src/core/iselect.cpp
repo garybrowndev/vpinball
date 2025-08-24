@@ -233,7 +233,6 @@ HRESULT ISelect::GetTypeName(BSTR *pVal) const
 void ISelect::GetTypeNameForType(const ItemTypeEnum type, WCHAR * const buf) const
 {
    UINT strID;
-
    switch (type)
    {
    case eItemTable:        strID = IDS_TABLE; break;
@@ -245,14 +244,15 @@ void ISelect::GetTypeNameForType(const ItemTypeEnum type, WCHAR * const buf) con
    }
 
 #ifndef __STANDALONE__
+   buf[0] = L'\0';
    /*const int len =*/ LoadStringW(m_vpinball->theInstance, strID, buf, 256);
-#else
-   const LocalStringW wzString(strID);
-   wcscpy(buf, wzString.m_szbuffer);
+   buf[256-1] = L'\0'; // in case of truncation
+ #else
+   wcsncpy_s(buf, 256, LocalStringW(strID).m_szbuffer);
 #endif
 }
 
-static void SetPartGroup(ISelect* const me, const string& layerName)
+static void SetPartGroup(ISelect* const me, string layerName)
 {
    if (me->GetIEditable() && (me->GetItemType() != eItemDragPoint) && (me->GetItemType() != eItemLightCenter))
    {
@@ -268,17 +268,22 @@ static void SetPartGroup(ISelect* const me, const string& layerName)
             legacyPartGroup->Release();
          }
       }*/
+      if (layerName.size() >= std::size(me->GetPTable()->m_wzName))
+         layerName = layerName.substr(0, std::size(me->GetPTable()->m_wzName) - 1);
       auto partGroupF = std::ranges::find_if(me->GetPTable()->m_vedit, [layerName](IEditable *editable) {
          return (editable->GetItemType() == ItemTypeEnum::eItemPartGroup) && editable->GetName() == layerName;
       });
       if (partGroupF == me->GetPTable()->m_vedit.end())
       {
          PartGroup *const newGroup = static_cast<PartGroup *>(EditableRegistry::CreateAndInit(eItemPartGroup, me->GetPTable(), 0, 0));
-         const wstring newName = MakeWString(layerName);
-         me->GetPTable()->m_pcv->ReplaceName(newGroup->GetIEditable()->GetScriptable(), newName);
-         wcscpy_s(newGroup->GetScriptable()->m_wzName, newName.c_str());
-         me->GetPTable()->m_vedit.push_back(newGroup);
-         me->GetIEditable()->SetPartGroup(newGroup);
+         if (newGroup)
+         {
+            const wstring newName = MakeWString(layerName);
+            me->GetPTable()->m_pcv->ReplaceName(newGroup->GetIEditable()->GetScriptable(), newName);
+            wcsncpy_s(newGroup->GetScriptable()->m_wzName, std::size(newGroup->GetScriptable()->m_wzName), newName.c_str());
+            me->GetPTable()->m_vedit.push_back(newGroup);
+            me->GetIEditable()->SetPartGroup(newGroup);
+         }
       }
       else
       {

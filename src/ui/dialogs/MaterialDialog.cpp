@@ -3,7 +3,6 @@
 #include "core/stdafx.h"
 #include "ui/resource.h"
 #include "MaterialDialog.h"
-#include "WhereUsedDialog.h"
 
 typedef struct _tagSORTDATA
 {
@@ -17,7 +16,7 @@ extern int CALLBACK MyCompProc( LPARAM lSortParam1, LPARAM lSortParam2, LPARAM l
 
 int MaterialDialog::m_columnSortOrder;
 bool MaterialDialog::m_deletingItem;
-WhereUsedDialog m_whereUsedDlg_Materials;
+WhereUsedDialog MaterialDialog::m_whereUsedDlg_Materials;
 
 void MaterialDialog::EnableAllMaterialDialogItems(const BOOL e)
 {
@@ -453,7 +452,7 @@ BOOL MaterialDialog::OnCommand(WPARAM wParam, LPARAM lParam)
                break;
 
             char szFileName[MAXSTRING];
-            strncpy_s(szFileName, "Materials.mat", sizeof(szFileName)-1);
+            strncpy_s(szFileName, sizeof(szFileName), "Materials.mat");
             OPENFILENAME ofn = {};
             ofn.lStructSize = sizeof(OPENFILENAME);
             ofn.hInstance = g_pvp->theInstance;
@@ -498,7 +497,7 @@ BOOL MaterialDialog::OnCommand(WPARAM wParam, LPARAM lParam)
                   mat.fOpacity = pmat->m_fOpacity;
                   mat.bOpacityActive_fEdgeAlpha = pmat->m_bOpacityActive ? 1 : 0;
                   mat.bOpacityActive_fEdgeAlpha |= quantizeUnsigned<7>(clamp(pmat->m_fEdgeAlpha, 0.f, 1.f)) << 1;
-                  strncpy_s(mat.szName, pmat->m_name.c_str(), sizeof(mat.szName)-1);
+                  strncpy_s(mat.szName, sizeof(mat.szName), pmat->m_name.c_str());
 
                   fwrite(&mat, sizeof(SaveMaterial), 1, f);
                   fwrite(&pmat->m_fElasticity, sizeof(float), 1, f);
@@ -527,8 +526,7 @@ BOOL MaterialDialog::OnCommand(WPARAM wParam, LPARAM lParam)
          const int count = ListView_GetSelectedCount(m_hMaterialList);
          if (count > 0)
          {
-            const LocalString ls(IDS_REMOVEMATERIAL);
-            const int ans = MessageBox(ls.m_szbuffer/*"Are you sure you want to remove this material?"*/, "Confirm Deletion", MB_YESNO | MB_DEFBUTTON2);
+            const int ans = MessageBox(LocalString(IDS_REMOVEMATERIAL).m_szbuffer /*"Are you sure you want to remove this material?"*/, "Confirm Deletion", MB_YESNO | MB_DEFBUTTON2);
             if (ans == IDYES)
             {
                m_deletingItem = true;

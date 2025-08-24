@@ -9447,7 +9447,8 @@ POINT BallHistory::Get2DPointFrom3D(Player& player, const Vertex3Ds& vertex)
 Vertex3Ds BallHistory::Get3DPointFrom2D(const POINT& p, float heightZ)
 {
    // TODO GARY This is not correct, need to check width/height and add heightZ
-   return g_pplayer->m_renderer->Get3DPointFrom2D(g_pplayer->m_playfieldWnd->GetWidth(), g_pplayer->m_playfieldWnd->GetHeight(), p, heightZ);
+   Vertex2D vertexPoint = { float(p.x), float(p.y) };
+   return g_pplayer->m_renderer->Get3DPointFrom2D(g_pplayer->m_playfieldWnd->GetWidth(), g_pplayer->m_playfieldWnd->GetHeight(), vertexPoint, heightZ);
 }
 
 Vertex3Ds BallHistory::Get3DPointFromMousePosition(Player& player, float heightZ)

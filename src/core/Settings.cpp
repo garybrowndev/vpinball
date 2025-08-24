@@ -234,9 +234,13 @@ void Settings::Validate(const bool addDefaults)
    //////////////////////////////////////////////////////////////////////////
    // GfxBackend section
 
-#ifdef __ANDROID__
-   SettingString(Section::Player, "GfxBackend"s, "OpenGLES"s, ""s);
-#endif
+   #ifdef __ANDROID__
+      SettingString(Settings::Player, "GfxBackend"s, "OpenGLES"s, ""s);
+   #elif defined(__APPLE__)
+      SettingString(Settings::Player, "GfxBackend"s, "Metal"s, ""s);
+   #else
+      SettingString(Settings::Player, "GfxBackend"s, "Default"s, ""s);
+   #endif
 
    //////////////////////////////////////////////////////////////////////////
    // Ball Rendering section
@@ -329,7 +333,7 @@ void Settings::Validate(const bool addDefaults)
    SettingFloat(Section::Player, "ScreenPlayerZ"s, 70.f, -100.f, 200.f, ""s);
    SettingFloat(Section::Player, "ScreenWidth"s, 95.89f, 1.f, 500.f, "Physical width (cm) of the display area of the playfield (main) screen."s);
    SettingFloat(Section::Player, "ScreenHeight"s, 53.94f, 1.f, 500.f, "Physical height (cm) of the display area of the playfield (main) screen."s);
-   SettingFloat(Section::Player, "ScreenInclination"s, 0.0f, -15.f, 15.f, "Inclination (degree) of the playfield (main) screen. 0 is horizontal."s);
+   SettingFloat(Section::Player, "ScreenInclination"s, 0.0f, -30.f, 30.f, "Inclination (degree) of the playfield (main) screen. 0 is horizontal."s);
    SettingFloat(Section::Player, "LockbarWidth"s, 70.f, 10.f, 150.f, "Lockbar width in centimeters (measured on the cabinet)."s);
    SettingFloat(Section::Player, "LockbarHeight"s, 85.f, 0.f, 250.f, "Lockbar height in centimeters (measured on the cabinet, from ground to top of lockbar)."s);
 
@@ -521,9 +525,9 @@ bool Settings::LoadFromFile(const string& path, const bool createDefault)
             }
 
             // old Win32xx and Win32xx 9+ docker keys
-            if (strcmp((char *)pvalue, "Dock Windows") == 0) // should not happen, as a folder, not value.. BUT also should save these somehow and restore for Win32++, or not ?
+            if ((char *)pvalue == "Dock Windows"s) // should not happen, as a folder, not value.. BUT also should save these somehow and restore for Win32++, or not ?
                continue;
-            if (strcmp((char *)pvalue, "Dock Settings") == 0) // should not happen, as a folder, not value.. BUT also should save these somehow and restore for Win32++, or not ?
+            if ((char *)pvalue == "Dock Settings"s) // should not happen, as a folder, not value.. BUT also should save these somehow and restore for Win32++, or not ?
                continue;
 
             string copy;
@@ -643,7 +647,7 @@ bool Settings::LoadValue(const Section section, const string &key, void *const s
    string val;
    const bool success = LoadValue(section, key, val);
    if (success)
-      strncpy_s((char *)szbuffer, size, val.c_str(), size - 1);
+      strncpy_s((char *)szbuffer, size, val.c_str());
    else
       ((char *)szbuffer)[0] = '\0';
 

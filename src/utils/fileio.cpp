@@ -129,26 +129,6 @@ HRESULT BiffWriter::WriteInt(const int id, const int value)
    return hr;
 }
 
-HRESULT BiffWriter::WriteString(const int id, const char * const szvalue)
-{
-   ULONG writ = 0;
-   HRESULT hr;
-   const int len = (int)strlen(szvalue);
-
-   if (FAILED(hr = WriteRecordSize((int)sizeof(int) * 2 + len)))
-      return hr;
-
-   if (FAILED(hr = WriteBytes(&id, sizeof(int), &writ)))
-      return hr;
-
-   if (FAILED(hr = WriteBytes(&len, sizeof(int), &writ)))
-      return hr;
-
-   hr = WriteBytes(szvalue, len, &writ);
-
-   return hr;
-}
-
 HRESULT BiffWriter::WriteString(const int id, const string &szvalue)
 {
    ULONG writ = 0;
@@ -286,11 +266,10 @@ HRESULT BiffWriter::WriteTag(const int id)
    return hr;
 }
 
-BiffReader::BiffReader(IStream *pistream, ILoadable *piloadable, void *ppassdata, const int version, const HCRYPTHASH hcrypthash, const HCRYPTKEY hcryptkey)
+BiffReader::BiffReader(IStream *pistream, ILoadable *piloadable, const int version, const HCRYPTHASH hcrypthash, const HCRYPTKEY hcryptkey)
 {
    m_pistream = pistream;
    m_piloadable = piloadable;
-   m_pdata = ppassdata;
    m_version = version;
 
    m_bytesinrecordremaining = 0;
@@ -345,27 +324,6 @@ HRESULT BiffReader::GetInt(int &value)
    return ReadBytes(&value, sizeof(int));
 }
 
-HRESULT BiffReader::GetString(char *const szvalue, const size_t szvalue_maxlength)
-{
-   HRESULT hr;
-   int len;
-
-   if (FAILED(hr = ReadBytes(&len, sizeof(int))))
-   {
-      szvalue[0] = '\0';
-      return hr;
-   }
-
-   m_bytesinrecordremaining -= len + (int)sizeof(int);
-
-   char *tmp = new char[len+1];
-   hr = ReadBytes(tmp, len);
-   tmp[len] = '\0';
-   strncpy_s(szvalue, szvalue_maxlength, tmp, len);
-   delete[] tmp;
-   return hr;
-}
-
 HRESULT BiffReader::GetString(string &szvalue)
 {
    HRESULT hr;
@@ -410,7 +368,7 @@ HRESULT BiffReader::GetWideString(WCHAR *wzvalue, const size_t wzvalue_maxlength
       ptr += sizeof(WCHAR);
    }
 #endif
-   wcscpy_s(wzvalue, wzvalue_maxlength, tmp);
+   wcsncpy_s(wzvalue, wzvalue_maxlength, tmp);
    delete[] tmp;
    return hr;
 }
@@ -573,7 +531,7 @@ HRESULT __stdcall FastIStorage::CreateStream(const WCHAR *wzName, ULONG, ULONG, 
    pfs->AddRef(); // AddRef once for us, and once for the caller
    pfs->AddRef();
    pfs->m_wzName = new WCHAR[wzNameLen];
-   wcscpy_s(pfs->m_wzName, wzNameLen, wzName);
+   wcsncpy_s(pfs->m_wzName, wzNameLen, wzName);
 
    *ppstm = pfs;
 
@@ -594,7 +552,7 @@ HRESULT __stdcall FastIStorage::CreateStorage(const WCHAR *wzName, ULONG, ULONG,
    pfs->AddRef(); // AddRef once for us, and once for the caller
    pfs->AddRef();
    pfs->m_wzName = new WCHAR[wzNameLen];
-   wcscpy_s(pfs->m_wzName, wzNameLen, wzName);
+   wcsncpy_s(pfs->m_wzName, wzNameLen, wzName);
 
    *ppstg = pfs;
 
