@@ -2308,110 +2308,128 @@ void BallHistory::DrawLineRotate(Rubber& drawnLine, const Vertex3Ds& center, con
 
 void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex3Ds& posA, const Vertex3Ds& posB, DWORD color, int thickness)
 {
-   float lineLength = BallHistory::DistancePixels(posA, posB);
+ const float lineLength = BallHistory::DistancePixels(posA, posB);
    if (lineLength == 0.0f)
-   {
       return;
-   }
 
-   std::string imageColorName = "BallHistoryDrawLineRed" + std::to_string(color);
-   Texture* colorTexture = player.m_ptable->GetImage(imageColorName);
-   if (colorTexture == nullptr)
+   // Ensure a 1x1 texture exists for this color (reused by name)
+   const std::string imageColorName = "BallHistoryDrawLine" + std::to_string(color);
+   if (player.m_ptable->GetImage(imageColorName) == nullptr)
    {
       FIBITMAP* dib = FreeImage_Allocate(1, 1, 24);
-
-      RGBQUAD singleColor = { 0 };
-      singleColor.rgbBlue = (color >> 16) & 0xFF;
-      singleColor.rgbGreen = (color >> 8) & 0xFF;
-      singleColor.rgbRed = color & 0xFF;
-      singleColor.rgbReserved = 0;
-
-      FreeImage_SetPixelColor(dib, 0, 0, &singleColor);
-
-      std::string settingsFolderPath;
-      if (GetSettingsFolderPath(settingsFolderPath) == true)
+      if (dib)
       {
-         std::string tempColorImageFilePath = settingsFolderPath + std::string("\\") + imageColorName + ".png";
-         FreeImage_Save(FIF_PNG, dib, tempColorImageFilePath.c_str(), PNG_DEFAULT);
+         RGBQUAD singleColor = {};
+         singleColor.rgbBlue = (color >> 16) & 0xFF;
+         singleColor.rgbGreen = (color >> 8) & 0xFF;
+         singleColor.rgbRed = color & 0xFF;
+         FreeImage_SetPixelColor(dib, 0, 0, &singleColor);
 
-         player.m_ptable->ImportImage(tempColorImageFilePath, imageColorName);
-
-         ::DeleteFile(tempColorImageFilePath.c_str());
+         std::string settingsFolderPath;
+         if (GetSettingsFolderPath(settingsFolderPath))
+         {
+            const std::string tmpPath = settingsFolderPath + "\\" + imageColorName + ".png";
+            if (FreeImage_Save(FIF_PNG, dib, tmpPath.c_str(), PNG_DEFAULT))
+            {
+               player.m_ptable->ImportImage(tmpPath, imageColorName);
+               ::DeleteFile(tmpPath.c_str());
+            }
+         }
+         FreeImage_Unload(dib);
       }
    }
 
-   Vertex3Ds midpoint = { (posA.x + posB.x) / 2.0f, (posA.y + posB.y) / 2.0f, (posA.z + posB.z) / 2.0f };
+   // Geometry
+   const Vertex3Ds midpoint = { (posA.x + posB.x) / 2.0f, (posA.y + posB.y) / 2.0f, (posA.z + posB.z) / 2.0f };
+   const Vertex3Ds start = { midpoint.x - (lineLength / 2.0f), midpoint.y, midpoint.z };
+   const Vertex3Ds end = { midpoint.x + (lineLength / 2.0f), midpoint.y, midpoint.z };
 
-   CComObject<Rubber>* drawnLine = nullptr;
-   auto findIt = m_DrawnLines.find(name);
-   if (findIt == m_DrawnLines.end())
+   // Get or create the line object
+   CComObject<Rubber>* pLine = nullptr;
+   auto it = m_DrawnLines.find(name);
+   const bool isNew = (it == m_DrawnLines.end());
+   if (isNew)
    {
-      CComObject<Rubber>::CreateInstance(&drawnLine);
-      drawnLine->AddRef();
-      drawnLine->Init(player.m_ptable, 0.0f, 0.0f, false, true);
-      drawnLine->RenderSetup(player.m_renderer->m_renderDevice);
-      m_DrawnLines[name] = drawnLine;
+      CComObject<Rubber>::CreateInstance(&pLine);
+      if (!pLine) return;
+      pLine->AddRef();
+      m_DrawnLines[name] = pLine;
    }
    else
    {
-      drawnLine = m_DrawnLines[name];
+      pLine = it->second;
    }
 
-   if (drawnLine)
+   // Common setup/update
+   pLine->Init(player.m_ptable, 0.0f, 0.0f, false, true);
+   pLine->ClearForOverwrite();
+   pLine->AddDragPoint(start);
+   pLine->AddDragPoint(end);
+   pLine->m_d.m_height = midpoint.z;
+   pLine->m_d.m_thickness = thickness;
+   pLine->m_d.m_staticRendering = false;
+   pLine->m_d.m_szImage = imageColorName;
+
+   DrawLineRotate(*pLine, midpoint, start, posA);
+
+   if (isNew)
    {
-      drawnLine->RenderRelease();
-      drawnLine->ClearForOverwrite();
-
-      drawnLine->AddDragPoint({ midpoint.x - (lineLength / 2.0f), midpoint.y, midpoint.z });
-      drawnLine->AddDragPoint({ midpoint.x + (lineLength / 2.0f), midpoint.y, midpoint.z });
-
-      drawnLine->m_d.m_height = midpoint.z;
-      drawnLine->m_d.m_thickness = thickness;
-      drawnLine->m_d.m_staticRendering = false;
-      drawnLine->m_d.m_szImage = imageColorName;
-
-      DrawLineRotate(*drawnLine, { midpoint.x, midpoint.y, midpoint.z }, { midpoint.x - (lineLength / 2.0f), midpoint.y, midpoint.z }, { posA.x, posA.y, posA.z });
-
-      drawnLine->RenderSetup(player.m_renderer->m_renderDevice);
-
-      player.m_vhitables.push_back(drawnLine);
+      // First-time GPU setup
+      pLine->RenderSetup(player.m_renderer->m_renderDevice);
    }
+   else
+   {
+      // Re-create GPU resources safely at end of frame (avoid mid-frame release/setup)
+      g_pplayer->m_renderer->m_renderDevice->AddEndOfFrameCmd([pLine]() {
+         pLine->RenderRelease();
+         pLine->RenderSetup(g_pplayer->m_renderer->m_renderDevice);
+      });
+   }
+
+   player.m_vhitables.push_back(pLine);
 }
 
 void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name, Vertex3Ds& position, float intersectionRadiusPercent, DWORD color)
 {
-   CComObject<Light>* drawnIntersectionCircle = nullptr;
-   auto findIt = m_DrawnIntersectionCircles.find(name);
-   if (findIt == m_DrawnIntersectionCircles.end())
+   CComObject<Light>* pIntersectionCircle = nullptr;
+   auto it = m_DrawnIntersectionCircles.find(name);
+   const bool isNew = (it == m_DrawnIntersectionCircles.end());
+
+   if (isNew)
    {
-      CComObject<Light>::CreateInstance(&drawnIntersectionCircle);
-      drawnIntersectionCircle->AddRef();
-      drawnIntersectionCircle->Init(player.m_ptable, 0.0f, 0.0f, false, true);
-      drawnIntersectionCircle->RenderSetup(player.m_renderer->m_renderDevice);
-      m_DrawnIntersectionCircles[name] = drawnIntersectionCircle;
+      CComObject<Light>::CreateInstance(&pIntersectionCircle);
+      if (!pIntersectionCircle) return;
+      pIntersectionCircle->AddRef();
+      m_DrawnIntersectionCircles[name] = pIntersectionCircle;
    }
    else
    {
-      drawnIntersectionCircle = m_DrawnIntersectionCircles[name];
+      pIntersectionCircle = it->second;
    }
-   if (drawnIntersectionCircle)
+
+   // Common setup/update
+   pIntersectionCircle->Init(g_pplayer->m_ptable, position.x, position.y, false, true);
+   pIntersectionCircle->ClearForOverwrite();
+   pIntersectionCircle->m_d.m_falloff = GetDefaultBallRadius() * intersectionRadiusPercent;;
+   pIntersectionCircle->InitShape();
+   pIntersectionCircle->m_overrideSurfaceHeight = position.z;
+   pIntersectionCircle->put_Color(color);
+
+   if (isNew)
    {
-      drawnIntersectionCircle->RenderRelease();
-      drawnIntersectionCircle->Init(player.m_ptable, position.x, position.y, false, true);
-
-      drawnIntersectionCircle->ClearForOverwrite();
-      float ballRadius = GetDefaultBallRadius();
-      float intersectionRadius = ballRadius * intersectionRadiusPercent / 100.0f;
-      drawnIntersectionCircle->m_d.m_falloff = intersectionRadius;
-      drawnIntersectionCircle->InitShape();
-
-      drawnIntersectionCircle->m_overrideSurfaceHeight = position.z - ballRadius;
-      drawnIntersectionCircle->put_Color(color);
-
-      drawnIntersectionCircle->RenderSetup(player.m_renderer->m_renderDevice);
-
-      player.m_vhitables.push_back(drawnIntersectionCircle);
+      // First-time GPU setup
+      pIntersectionCircle->RenderSetup(g_pplayer->m_renderer->m_renderDevice);
    }
+   else
+   {
+      // Re-create GPU resources safely at end of frame
+      g_pplayer->m_renderer->m_renderDevice->AddEndOfFrameCmd([pIntersectionCircle]() {
+         pIntersectionCircle->RenderRelease();
+         pIntersectionCircle->RenderSetup(g_pplayer->m_renderer->m_renderDevice);
+      });
+   }
+
+   g_pplayer->m_vhitables.push_back(pIntersectionCircle);
 }
 
 void BallHistory::DrawNormalModeVisuals(Player& player, int currentTimeMs)
