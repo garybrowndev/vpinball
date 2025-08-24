@@ -6,6 +6,7 @@ Only tested on Windows x64 with DirectX 3D graphics engine.
 To build (and merge):
 - Sync code
 - Extract VPinballX-<VERSION>-<BUILD>-<HASH>-dev-third-party-windows-x64-Debug to .\third-party and overwrite all files
+- Extract VPinballX-<VERSION>-<BUILD>-<HASH>-dev-third-party-windows-x64-Release to .\third-party and overwrite all files
 - Revert all changes from above overwrite of files
 - (If merging) Merge changes from branch
 - Run .\make\create_vs_solution.bat
@@ -55,3 +56,4 @@ Documentation is currently sparse. Check the [docs](docs) directory for various 
 ## How to build
 
 Build instructions are available in the [make directory README](make/README.md).
+
