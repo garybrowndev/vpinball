@@ -12,7 +12,7 @@ To build (and merge):
 - Run .\make\create_vs_solution.bat
 - Select 2022
 - Open .\.build\vsproject\VisualPinball.sln in Visual Studio 2022
-- Set VPinball as the Startup Project
+- Set "vpx" as the Startup Project
 - Build VPinball Debug / x64
 - Build VPinball Release / x64
 
@@ -56,4 +56,5 @@ Documentation is currently sparse. Check the [docs](docs) directory for various 
 ## How to build
 
 Build instructions are available in the [make directory README](make/README.md).
+
 
