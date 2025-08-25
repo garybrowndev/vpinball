@@ -6312,7 +6312,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
             PrintScreenRecord::MenuText(
                m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode == TrainerOptions::BallEndAssociationModeType::BallEndAssociationModeType_Select &&
                   m_MenuOptions.m_CurrentAssociationIndex == bsorIndex,
-               std::format("Ball {}u", bsorIndex + 1));
+               std::format("Ball {}", bsorIndex + 1));
          }
          else
          {

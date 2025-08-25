@@ -1089,7 +1089,7 @@ int VPApp::Run()
       {
          if (m_play)
          {
-            ShowWindow(m_vpinball.GetHwnd(), SW_SHOW);
+            m_vpinball.ShowWindow(SW_SHOW);
             m_vpinball.m_securitylevel = eSecurityNone;
             m_vpinball.LoadFileName(tempTableFileName, false);
             loadFileResult = true;
