@@ -2391,6 +2391,12 @@ void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex
 
 void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name, Vertex3Ds& position, float intersectionRadiusPercent, DWORD color)
 {
+   POINT position2D = Get2DPointFrom3D(player, position);
+   if (position2D.x < 0.0f || position2D.y < 0.0f || position2D.x > player.m_playfieldWnd->GetWidth() || position2D.y > player.m_playfieldWnd->GetHeight())
+   {
+      return;
+   }
+
    CComObject<Light>* pIntersectionCircle = nullptr;
    auto it = m_DrawnIntersectionCircles.find(name);
    const bool isNew = (it == m_DrawnIntersectionCircles.end());
@@ -2410,9 +2416,10 @@ void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name
    // Common setup/update
    pIntersectionCircle->Init(g_pplayer->m_ptable, position.x, position.y, false, true);
    pIntersectionCircle->ClearForOverwrite();
-   pIntersectionCircle->m_d.m_falloff = GetDefaultBallRadius() * intersectionRadiusPercent;;
+   float defaultBallRadius = GetDefaultBallRadius();
+   pIntersectionCircle->m_d.m_falloff = defaultBallRadius * (intersectionRadiusPercent / 100.0f);
+   pIntersectionCircle->m_overrideSurfaceHeight = position.z - defaultBallRadius;
    pIntersectionCircle->InitShape();
-   pIntersectionCircle->m_overrideSurfaceHeight = position.z;
    pIntersectionCircle->put_Color(color);
 
    if (isNew)
@@ -9386,9 +9393,15 @@ Matrix3 BallHistory::GetDefaultBallOrientation()
    return orientation;
 }
 
-float BallHistory::DistancePixels(POINT& p1, POINT& p2) { return sqrtf(float(powl(p1.x - p2.x, 2)) + float(powl(p1.y - p2.y, 2))); }
+float BallHistory::DistancePixels(POINT& p1, POINT& p2)
+{
+   return sqrtf(float(powl(p1.x - p2.x, 2)) + float(powl(p1.y - p2.y, 2)));
+}
 
-float BallHistory::DistancePixels(const Vertex3Ds& pos1, const Vertex3Ds& pos2) { return sqrtf(powf((pos1.x - pos2.x), 2) + powf((pos1.y - pos2.y), 2) + powf((pos1.z - pos2.z), 2)); }
+float BallHistory::DistancePixels(const Vertex3Ds& pos1, const Vertex3Ds& pos2)
+{
+   return sqrtf(powf((pos1.x - pos2.x), 2) + powf((pos1.y - pos2.y), 2) + powf((pos1.z - pos2.z), 2));
+}
 
 float BallHistory::DistanceToLineSegment(const Vertex3Ds& lineA, const Vertex3Ds& lineB, const Vertex3Ds& point)
 {

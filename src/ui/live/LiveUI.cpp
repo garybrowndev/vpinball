@@ -685,7 +685,7 @@ void LiveUI::Update()
 
    ImGui::PushFont(m_baseFont, m_baseFont->LegacySize);
 
-   uint32_t tick = m_player->m_time_msec;
+   uint32_t tick = msec();
 
    if (m_escSplashModal.IsOpened())
    {
