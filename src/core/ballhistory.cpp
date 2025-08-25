@@ -125,7 +125,6 @@ bool TrainerOptions::BallStartOptionsRecord::IsZero()
 
 // ================================================================================================================================================================================================================================================
 
-
 const char* TrainerOptions::BallEndOptionsRecord::ImGuiBallPassLabels[] = {
    "DrawTrainerBallPass0",
    "DrawTrainerBallPass1",
@@ -285,6 +284,30 @@ const char* NormalOptions::ImGuiDrawRecallVertexLabels[] = {
    "DrawRecallVertex17",
    "DrawRecallVertex18",
    "DrawRecallVertex19",
+};
+
+const char* NormalOptions::ImGuiBallControlVBallLabels[]
+{
+   "DrawTrainerBallControlVBall00",
+   "DrawTrainerBallControlVBall01",
+   "DrawTrainerBallControlVBall02",
+   "DrawTrainerBallControlVBall03",
+   "DrawTrainerBallControlVBall04",
+   "DrawTrainerBallControlVBall05",
+   "DrawTrainerBallControlVBall06",
+   "DrawTrainerBallControlVBall07",
+   "DrawTrainerBallControlVBall08",
+   "DrawTrainerBallControlVBall09",
+   "DrawTrainerBallControlVBall10",
+   "DrawTrainerBallControlVBall11",
+   "DrawTrainerBallControlVBall12",
+   "DrawTrainerBallControlVBall13",
+   "DrawTrainerBallControlVBall14",
+   "DrawTrainerBallControlVBall15",
+   "DrawTrainerBallControlVBall16",
+   "DrawTrainerBallControlVBall17",
+   "DrawTrainerBallControlVBall18",
+   "DrawTrainerBallControlVBall19",
 };
 
 const float NormalOptions::ManageAutoControlFindFactor = 0.025f;
@@ -691,11 +714,14 @@ void BallHistory::PrintScreenRecord::SetWindowPosClamped(const char* name, const
 
 bool BallHistory::DrawMenu = false;
 
-const int BallHistory::MenuOptionsRecord::SkipKeyPressHoldMs = 2000;
-const int BallHistory::MenuOptionsRecord::SkipKeyIntervalMs = 250;
+const int BallHistory::MenuOptionsRecord::SkipKeySlowPressedMs = 250; // after key has been pressed for this time, start slow skipping
+const int BallHistory::MenuOptionsRecord::SkipKeyFastPressedMs = 2000; // after key has been pressed for this time, start fast skipping
+
+const int BallHistory::MenuOptionsRecord::SkipKeySlowIntervalMs = 250; // slow skip interval, 4 per second
+const int BallHistory::MenuOptionsRecord::SkipKeyFastIntervalMs = 100; // fast skip interval, 10 per second
 const int32_t BallHistory::MenuOptionsRecord::SkipKeyStepFactor = 10;
 
-const int BallHistory::MenuOptionsRecord::SkipControlIntervalMs = 300;
+const int BallHistory::MenuOptionsRecord::SkipControlSlowIntervalMs = 300;
 const int32_t BallHistory::MenuOptionsRecord::SkipControlStepFactor = 3;
 
 const float BallHistory::MenuOptionsRecord::DefaultBallRadius = 25.0f;
@@ -2439,8 +2465,21 @@ void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name
    g_pplayer->m_vhitables.push_back(pIntersectionCircle);
 }
 
+void BallHistory::DrawControlVBalls(Player &player)
+{
+   for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
+   {
+      HitBall* controlVBall = m_ControlVBalls[controlVBallIndex];
+      std::string controlVBallFakeBallName = "ControlVBall" + std::to_string(controlVBallIndex);
+      POINT screenPoint = Get2DPointFrom3D(player, controlVBall->m_d.m_pos);
+      PrintScreenRecord::Text(NormalOptions::ImGuiBallControlVBallLabels[controlVBallIndex], float(screenPoint.x), float(screenPoint.y), std::format("C-{}", controlVBallIndex + 1));
+   }
+}
+
 void BallHistory::DrawNormalModeVisuals(Player& player, int currentTimeMs)
 {
+   DrawControlVBalls(player);
+
    Matrix3 orientation;
    orientation.SetIdentity();
    float ballRadius = MenuOptionsRecord::DefaultBallRadius;
@@ -2742,6 +2781,8 @@ void BallHistory::DrawTrainerBallCorridorOpeningRight(Player& player, TrainerOpt
 void BallHistory::DrawTrainerModeVisuals(Player& player, int currentTimeMs)
 {
    ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_DrawTrainerBallsUsec);
+
+   DrawControlVBalls(player);
 
    float ballRadius = GetDefaultBallRadius();
    Matrix3 orientation = GetDefaultBallOrientation();
@@ -3177,6 +3218,12 @@ void BallHistory::ShowStatus(Player& player, int currentTimeMs)
                statuses.push_back({ std::format("Pass<-->Start {}", bsorIndex + 1), std::format("{:.2f}wu", distance) });
             }
 
+            for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
+            {
+               float distance = DistancePixels(bpor.m_EndPosition, m_ControlVBalls[controlVBallIndex]->m_d.m_pos);
+               statuses.push_back({ std::format("Pass<-->VBall {}", controlVBallIndex + 1), std::format("{:.2f}wu", distance) });
+            }
+
             if (bpor.m_AssociatedBallStartIndexes.size() == 0)
             {
                statuses.push_back({ "Associations", "<None>\n(Ignored!)" });
@@ -3238,6 +3285,12 @@ void BallHistory::ShowStatus(Player& player, int currentTimeMs)
                TrainerOptions::BallStartOptionsRecord& bsor = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecords[bsorIndex];
                float distance = DistancePixels(bfor.m_EndPosition, bsor.m_StartPosition);
                statuses.push_back({ std::format("Fail<-->Start {}", bsorIndex + 1), std::format("{:.2f}wu", distance) });
+            }
+
+            for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
+            {
+               float distance = DistancePixels(m_ControlVBalls[controlVBallIndex]->m_d.m_pos, bfor.m_EndPosition);
+               statuses.push_back({ std::format("Fail<-->VBall {}", controlVBallIndex + 1), std::format("{:.2f}wu", distance) });
             }
 
             if (bfor.m_AssociatedBallStartIndexes.size() == 0)
@@ -4266,7 +4319,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
       {
          std::size_t controlCount = 1;
-         if ((currentTimeMs - m_MenuOptions.m_SkipControlUsedMs) < MenuOptionsRecord::SkipControlIntervalMs)
+         if ((currentTimeMs - m_MenuOptions.m_SkipControlUsedMs) < MenuOptionsRecord::SkipControlSlowIntervalMs)
          {
             controlCount = MenuOptionsRecord::SkipControlStepFactor;
          }
@@ -4391,7 +4444,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
       {
          std::size_t controlCount = 1;
-         if ((currentTimeMs - m_MenuOptions.m_SkipControlUsedMs) < MenuOptionsRecord::SkipControlIntervalMs)
+         if ((currentTimeMs - m_MenuOptions.m_SkipControlUsedMs) < MenuOptionsRecord::SkipControlSlowIntervalMs)
          {
             controlCount = MenuOptionsRecord::SkipControlStepFactor;
          }
@@ -9257,9 +9310,48 @@ template <class T, class S> void BallHistory::ProcessMenuChangeValueDecSkip(T& v
 
 template <class T, class S> void BallHistory::ProcessMenuChangeValueSkip(T& value, S min, S max, int currentTimeMs)
 {
-   if (m_MenuOptions.m_SkipKeyPressed && (currentTimeMs - m_MenuOptions.m_SkipKeyPressedMs) > MenuOptionsRecord::SkipKeyIntervalMs)
+   if (m_MenuOptions.m_SkipKeyPressed)
    {
-      if ((currentTimeMs - m_MenuOptions.m_SkipKeyUsedMs) > MenuOptionsRecord::SkipKeyIntervalMs)
+      int intervalMs = 0;
+      const int heldMs = currentTimeMs - m_MenuOptions.m_SkipKeyPressedMs;
+
+      if ((heldMs > MenuOptionsRecord::SkipKeyFastPressedMs && (intervalMs = MenuOptionsRecord::SkipKeyFastIntervalMs)) ||
+         (heldMs > MenuOptionsRecord::SkipKeySlowPressedMs && (intervalMs = MenuOptionsRecord::SkipKeySlowIntervalMs)))
+      {
+         if ((currentTimeMs - m_MenuOptions.m_SkipKeyUsedMs) > intervalMs)
+         {
+            if (m_MenuOptions.m_SkipKeyLeft)
+               ProcessMenuChangeValueDecSkip(value, min, max);
+            else
+               ProcessMenuChangeValueIncSkip(value, min, max);
+
+            m_MenuOptions.m_SkipKeyUsedMs = currentTimeMs;
+         }
+      }
+   }
+}
+
+
+/*
+   if (m_MenuOptions.m_SkipKeyPressed && (currentTimeMs - m_MenuOptions.m_SkipKeyPressedMs) > MenuOptionsRecord::SkipKeyFastPressedMs)
+   {
+      if ((currentTimeMs - m_MenuOptions.m_SkipKeyUsedMs) > MenuOptionsRecord::SkipKeyFastIntervalMs)
+      {
+         if (m_MenuOptions.m_SkipKeyLeft == true)
+         {
+            ProcessMenuChangeValueDecSkip(value, min, max);
+         }
+         else
+         {
+            ProcessMenuChangeValueIncSkip(value, min, max);
+         }
+         m_MenuOptions.m_SkipKeyUsedMs = currentTimeMs;
+      }
+   }
+
+   if (m_MenuOptions.m_SkipKeyPressed && (currentTimeMs - m_MenuOptions.m_SkipKeyPressedMs) > MenuOptionsRecord::SkipKeySlowPressedMs)
+   {
+      if ((currentTimeMs - m_MenuOptions.m_SkipKeyUsedMs) > MenuOptionsRecord::SkipKeySlowIntervalMs)
       {
          if (m_MenuOptions.m_SkipKeyLeft == true)
          {
@@ -9273,7 +9365,7 @@ template <class T, class S> void BallHistory::ProcessMenuChangeValueSkip(T& valu
       }
    }
 }
-
+*/
 template <class T, class S> void BallHistory::ProcessMenuAction(MenuOptionsRecord::MenuActionType menuAction, MenuOptionsRecord::MenuStateType enterMenuState, T& value, S minimum, S maximum, int currentTimeMs)
 {
    switch (menuAction)
