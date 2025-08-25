@@ -8735,6 +8735,8 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
    int32_t runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
    if (runElapsedTimeMs == 0 || runElapsedTimeMs < (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * int32_t(OneSecondMs)))
    {
+      DrawTrainerModeVisuals(player, currentTimeMs);
+      
       for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
       {
          m_ControlVBalls[controlVBallIndex]->m_d.m_pos = currentRunRecord.m_StartPositions[controlVBallIndex];
