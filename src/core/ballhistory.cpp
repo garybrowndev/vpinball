@@ -1184,7 +1184,7 @@ void BallHistory::SetControl(bool control)
       if (m_Control)
       {
          StopAllSounds();
-         g_pplayer->PauseMusic();
+         g_pplayer->SetPlayState(!g_pplayer->IsPlaying());
          g_pplayer->m_noTimeCorrect = true;
          m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
          m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
@@ -1194,7 +1194,7 @@ void BallHistory::SetControl(bool control)
       else
       {
          SaveSettings(*g_pplayer);
-         g_pplayer->UnpauseMusic();
+         g_pplayer->SetPlayState(!g_pplayer->IsPlaying());
       }
    }
 }
