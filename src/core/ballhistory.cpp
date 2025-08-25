@@ -8750,11 +8750,11 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
       {
          if (m_MenuOptions.m_TrainerOptions.m_GameplayDifficulty == TrainerOptions::GameplayDifficultyDisabled)
          {
-            player.m_ptable->SetGlobalDifficulty(float(m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyTableDefault));
+            player.m_ptable->SetGlobalDifficulty(float(m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyTableDefault) / 100.0f);
          }
          else
          {
-            player.m_ptable->SetGlobalDifficulty(float(m_MenuOptions.m_TrainerOptions.m_GameplayDifficulty));
+            player.m_ptable->SetGlobalDifficulty(float(m_MenuOptions.m_TrainerOptions.m_GameplayDifficulty) / 100.0f);
          }
 
          if (player.m_ptable->m_overridePhysics == 0 && m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord > 0)
