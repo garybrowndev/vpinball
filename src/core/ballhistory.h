@@ -434,6 +434,7 @@ public:
 
    static const char * ImGuiDrawAutoControlVertexLabels[];
    static const char * ImGuiDrawRecallVertexLabels[];
+   static const char * ImGuiBallControlVBallLabels[];
 
    static const std::size_t RecallControlIndexDisabled = -1;
    static const std::size_t AutoControlVerticesMax = 256;
@@ -644,11 +645,14 @@ private:
          ModeType_COUNT
       };
 
-      static const int SkipKeyPressHoldMs;
-      static const int SkipKeyIntervalMs;
+      static const int SkipKeySlowPressedMs;
+      static const int SkipKeyFastPressedMs;
+
+      static const int SkipKeySlowIntervalMs;
+      static const int SkipKeyFastIntervalMs;
       static const int32_t SkipKeyStepFactor;
 
-      static const int SkipControlIntervalMs;
+      static const int SkipControlSlowIntervalMs;
       static const int32_t SkipControlStepFactor;
 
       static const float DefaultBallRadius;
@@ -818,6 +822,7 @@ private:
    void DrawLineRotate(Rubber &drawnLine, const Vertex3Ds& center, const Vertex3Ds& start, const Vertex3Ds& end);
    void DrawLine(Player &player, const std::string& name, const Vertex3Ds &positionA, const Vertex3Ds &positionB, DWORD color, int thickness);
    void DrawIntersectionCircle(Player &player, const std::string& name, Vertex3Ds &position, float intersectionRadius, DWORD color);
+   void DrawControlVBalls(Player &player);
    void DrawNormalModeVisuals(Player &player, int currentTimeMs);
    void ClearDraws(Player &player);
    bool ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs);
