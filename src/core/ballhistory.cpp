@@ -368,27 +368,27 @@ void BallHistory::PrintScreenRecord::Init()
 
    if (NormalSmallFont == nullptr)
    {
-      NormalSmallFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, scalingValue / 70.0f);
+      NormalSmallFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, scalingValue / 50.0f);
    }
 
    if (NormalMediumFont == nullptr)
    {
-      NormalMediumFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, scalingValue / 60.0f);
+      NormalMediumFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, scalingValue / 40.0f);
    }
 
    if (BoldSmallFont == nullptr)
    {
-      BoldSmallFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, scalingValue / 70.0f);
+      BoldSmallFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, scalingValue / 50.0f);
    }
 
    if (BoldMediumFont == nullptr)
    {
-      BoldMediumFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, scalingValue / 60.0f);
+      BoldMediumFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, scalingValue / 40.0f);
    }
 
    if (BoldLargeFont == nullptr)
    {
-      BoldLargeFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, scalingValue / 50.0f);
+      BoldLargeFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, scalingValue / 30.0f);
    }
 }
 
@@ -465,7 +465,7 @@ void BallHistory::PrintScreenRecord::ShowText(const char* name, ImFont* font, co
 
    TransformPosition(positionX, positionY);
 
-   ImGui::SetNextWindowBgAlpha(0.25f);
+   ImGui::SetNextWindowBgAlpha(0.65f);
 
    ImGui::Begin(name, nullptr,
       ImGuiWindowFlags_NoTitleBar |
@@ -519,7 +519,7 @@ void BallHistory::PrintScreenRecord::ShowNameValueTable(const char* name, ImFont
 
          if (!calculatedTableWidth || *calculatedTableWidth > 0.0f)
          {
-            ImGui::SetNextWindowBgAlpha(0.25f);
+            ImGui::SetNextWindowBgAlpha(0.65f);
             windowName = overflow ? name + std::to_string(nameValuePairsIndex) : name;
          }
          else
@@ -4154,7 +4154,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
 
       ShowSection(SummarySectionTitle,
       {
-         "Welcome to Ball History"
+         "Welcome to Ball History",
          "Press Ball History Menu key '" + std::string(1, GetBallHistoryKey(player, eBallHistoryMenu)) + "' to show this menu",
          "Press Ball History Recall key '" + std::string(1, GetBallHistoryKey(player, eBallHistoryRecall)) + "' to show verbose status",
          "Use plunger and flippers to select/configure options"
@@ -8282,7 +8282,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       ShowSection(DescriptionSectionTitle,
       {
          "Use flippers to set countdown time, in seconds, before each training run",
-         "Countdown is indicated with visual and audible effects"
+         "Countdown is indicated with visual and audible effects",
          "Plunger accepts configuration"
       });
 
@@ -9333,41 +9333,6 @@ template <class T, class S> void BallHistory::ProcessMenuChangeValueSkip(T& valu
    }
 }
 
-
-/*
-   if (m_MenuOptions.m_SkipKeyPressed && (currentTimeMs - m_MenuOptions.m_SkipKeyPressedMs) > MenuOptionsRecord::SkipKeyFastPressedMs)
-   {
-      if ((currentTimeMs - m_MenuOptions.m_SkipKeyUsedMs) > MenuOptionsRecord::SkipKeyFastIntervalMs)
-      {
-         if (m_MenuOptions.m_SkipKeyLeft == true)
-         {
-            ProcessMenuChangeValueDecSkip(value, min, max);
-         }
-         else
-         {
-            ProcessMenuChangeValueIncSkip(value, min, max);
-         }
-         m_MenuOptions.m_SkipKeyUsedMs = currentTimeMs;
-      }
-   }
-
-   if (m_MenuOptions.m_SkipKeyPressed && (currentTimeMs - m_MenuOptions.m_SkipKeyPressedMs) > MenuOptionsRecord::SkipKeySlowPressedMs)
-   {
-      if ((currentTimeMs - m_MenuOptions.m_SkipKeyUsedMs) > MenuOptionsRecord::SkipKeySlowIntervalMs)
-      {
-         if (m_MenuOptions.m_SkipKeyLeft == true)
-         {
-            ProcessMenuChangeValueDecSkip(value, min, max);
-         }
-         else
-         {
-            ProcessMenuChangeValueIncSkip(value, min, max);
-         }
-         m_MenuOptions.m_SkipKeyUsedMs = currentTimeMs;
-      }
-   }
-}
-*/
 template <class T, class S> void BallHistory::ProcessMenuAction(MenuOptionsRecord::MenuActionType menuAction, MenuOptionsRecord::MenuStateType enterMenuState, T& value, S minimum, S maximum, int currentTimeMs)
 {
    switch (menuAction)
