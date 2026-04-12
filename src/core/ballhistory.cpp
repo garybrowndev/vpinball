@@ -1256,66 +1256,61 @@ void BallHistory::ResetTrainerRunStartTime()
 bool BallHistory::GetSettingsFileName(Player& player, std::string& fileName)
 {
    fileName.clear();
-
-   HCRYPTPROV hCryptProv = NULL;
-   HCRYPTHASH hMd5Hash = NULL;
-   HANDLE hTableFile = INVALID_HANDLE_VALUE;
    bool success = false;
 
-   // Get a handle to a cryptography provider context.
-   if (CryptAcquireContext(&hCryptProv, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT) == FALSE || CryptCreateHash(hCryptProv, CALG_MD5, 0, 0, &hMd5Hash) == FALSE
-      || (hTableFile = CreateFile(player.m_ptable->m_filename.c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL)) == INVALID_HANDLE_VALUE)
+   HCRYPTPROV hCryptProv = NULL;
+   if (CryptAcquireContext(&hCryptProv, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT) != FALSE)
    {
-      goto cleanup;
-   }
-
-   {
-      static const int readBufferSize = 1024 * 1024;
-      std::vector<BYTE> readBuffer(readBufferSize);
-      BOOL readFileResult = FALSE;
-      DWORD bytesRead = 0;
-      while ((readFileResult = ReadFile(hTableFile, readBuffer.data(), readBufferSize, &bytesRead, NULL)) == TRUE)
+      HCRYPTHASH hMd5Hash = NULL;
+      if (CryptCreateHash(hCryptProv, CALG_MD5, 0, 0, &hMd5Hash) != FALSE)
       {
-         if (bytesRead == 0)
+         HANDLE hTableFile = CreateFile(player.m_ptable->m_filename.c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
+         if (hTableFile != INVALID_HANDLE_VALUE)
          {
-            break;
+            static const int readBufferSize = 1024 * 1024;
+            std::vector<BYTE> readBuffer(readBufferSize);
+            BOOL readFileResult = FALSE;
+            DWORD bytesRead = 0;
+            bool hashFailed = false;
+            while ((readFileResult = ReadFile(hTableFile, readBuffer.data(), readBufferSize, &bytesRead, NULL)) == TRUE)
+            {
+               if (bytesRead == 0)
+               {
+                  break;
+               }
+               if (CryptHashData(hMd5Hash, readBuffer.data(), bytesRead, 0) == FALSE)
+               {
+                  hashFailed = true;
+                  break;
+               }
+            }
+
+            if (!hashFailed && readFileResult != FALSE)
+            {
+               DWORD md5HashLen = 0;
+               if (CryptGetHashParam(hMd5Hash, HP_HASHVAL, NULL, &md5HashLen, 0) != FALSE)
+               {
+                  std::vector<BYTE> md5Hash(md5HashLen);
+                  if (CryptGetHashParam(hMd5Hash, HP_HASHVAL, md5Hash.data(), &md5HashLen, 0) != FALSE)
+                  {
+                     std::ostringstream fileNameStream;
+                     fileNameStream << std::hex << std::uppercase << std::setfill('0');
+                     for (DWORD x = 0; x < md5HashLen; x++)
+                     {
+                        fileNameStream << std::setw(2) << static_cast<int>(md5Hash[x]);
+                     }
+                     fileName = fileNameStream.str() + "." + SettingsFileExtension;
+                     success = true;
+                  }
+               }
+            }
+
+            CloseHandle(hTableFile);
          }
-         if (CryptHashData(hMd5Hash, readBuffer.data(), bytesRead, 0) == FALSE)
-         {
-            goto cleanup;
-         }
+         CryptDestroyHash(hMd5Hash);
       }
-
-      DWORD md5HashLen = 0;
-
-      if (readFileResult == FALSE || CryptGetHashParam(hMd5Hash, HP_HASHVAL, NULL, &md5HashLen, 0) == FALSE)
-      {
-         goto cleanup;
-      }
-
-      std::vector<BYTE> md5Hash(md5HashLen);
-      if (CryptGetHashParam(hMd5Hash, HP_HASHVAL, md5Hash.data(), &md5HashLen, 0) == FALSE)
-      {
-         goto cleanup;
-      }
-
-      std::ostringstream fileNameStream;
-      fileNameStream << std::hex << std::uppercase << std::setfill('0');
-      for (DWORD x = 0; x < md5HashLen; x++)
-      {
-         fileNameStream << std::setw(2) << static_cast<int>(md5Hash[x]);
-      }
-      fileName = fileNameStream.str() + "." + SettingsFileExtension;
-      success = true;
-   }
-
-cleanup:
-   if (hTableFile != INVALID_HANDLE_VALUE)
-      CloseHandle(hTableFile);
-   if (hMd5Hash != NULL)
-      CryptDestroyHash(hMd5Hash);
-   if (hCryptProv != NULL)
       CryptReleaseContext(hCryptProv, 0);
+   }
 
    return success;
 }
@@ -4020,7 +4015,7 @@ void BallHistory::ShowResult(std::size_t total, std::vector<DWORD>& timesMs, con
       results.push_back({ std::format("{} {} Percent", type, subType), "N/A" });
    }
 
-   std::size_t totalMs = std::accumulate(timesMs.begin(), timesMs.end(), DWORD(0));
+   std::size_t totalMs = std::accumulate(timesMs.begin(), timesMs.end(), 0u);
    if (totalMs > 0)
    {
       if (total)
