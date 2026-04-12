@@ -606,7 +606,7 @@ void BallHistory::PrintScreenRecord::ShowNameValueTable(const char* name, ImFont
          ImGui::TableSetColumnIndex(0);
          ImGui::TextUnformatted(row.first.c_str());
          ImGui::TableSetColumnIndex(1);
-         if (row.second[0] == ' ')
+         if (!row.second.empty() && row.second[0] == ' ')
          {
             ImGui::TextUnformatted(row.second.c_str() + 1);
          }
@@ -1255,64 +1255,69 @@ void BallHistory::ResetTrainerRunStartTime()
 
 bool BallHistory::GetSettingsFileName(Player& player, std::string& fileName)
 {
-   // TODO GARY fix potential leak of crypt context, crypt hash and file handles
-   // if return false happens, the handles will not be cleaned up
    fileName.clear();
 
    HCRYPTPROV hCryptProv = NULL;
    HCRYPTHASH hMd5Hash = NULL;
-   HANDLE hTableFile = NULL;
+   HANDLE hTableFile = INVALID_HANDLE_VALUE;
+   bool success = false;
 
    // Get a handle to a cryptography provider context.
    if (CryptAcquireContext(&hCryptProv, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT) == FALSE || CryptCreateHash(hCryptProv, CALG_MD5, 0, 0, &hMd5Hash) == FALSE
       || (hTableFile = CreateFile(player.m_ptable->m_filename.c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL)) == INVALID_HANDLE_VALUE)
    {
-      return false;
+      goto cleanup;
    }
 
-   static const int readBufferSize = 1024 * 1024;
-   std::vector<BYTE> readBuffer(readBufferSize);
-   BOOL readFileResult = FALSE;
-   DWORD bytesRead = 0;
-   while ((readFileResult = ReadFile(hTableFile, readBuffer.data(), readBufferSize, &bytesRead, NULL)) == TRUE)
    {
-      if (bytesRead == 0)
+      static const int readBufferSize = 1024 * 1024;
+      std::vector<BYTE> readBuffer(readBufferSize);
+      BOOL readFileResult = FALSE;
+      DWORD bytesRead = 0;
+      while ((readFileResult = ReadFile(hTableFile, readBuffer.data(), readBufferSize, &bytesRead, NULL)) == TRUE)
       {
-         break;
+         if (bytesRead == 0)
+         {
+            break;
+         }
+         if (CryptHashData(hMd5Hash, readBuffer.data(), bytesRead, 0) == FALSE)
+         {
+            goto cleanup;
+         }
       }
-      if (CryptHashData(hMd5Hash, readBuffer.data(), bytesRead, 0) == FALSE)
+
+      DWORD md5HashLen = 0;
+
+      if (readFileResult == FALSE || CryptGetHashParam(hMd5Hash, HP_HASHVAL, NULL, &md5HashLen, 0) == FALSE)
       {
-         return false;
+         goto cleanup;
       }
+
+      std::vector<BYTE> md5Hash(md5HashLen);
+      if (CryptGetHashParam(hMd5Hash, HP_HASHVAL, md5Hash.data(), &md5HashLen, 0) == FALSE)
+      {
+         goto cleanup;
+      }
+
+      std::ostringstream fileNameStream;
+      fileNameStream << std::hex << std::uppercase << std::setfill('0');
+      for (DWORD x = 0; x < md5HashLen; x++)
+      {
+         fileNameStream << std::setw(2) << static_cast<int>(md5Hash[x]);
+      }
+      fileName = fileNameStream.str() + "." + SettingsFileExtension;
+      success = true;
    }
 
-   DWORD md5HashLen = 0;
+cleanup:
+   if (hTableFile != INVALID_HANDLE_VALUE)
+      CloseHandle(hTableFile);
+   if (hMd5Hash != NULL)
+      CryptDestroyHash(hMd5Hash);
+   if (hCryptProv != NULL)
+      CryptReleaseContext(hCryptProv, 0);
 
-   if (readFileResult == FALSE || CryptGetHashParam(hMd5Hash, HP_HASHVAL, NULL, &md5HashLen, 0) == FALSE)
-   {
-      return false;
-   }
-
-   std::vector<BYTE> md5Hash(md5HashLen);
-   if (CryptGetHashParam(hMd5Hash, HP_HASHVAL, md5Hash.data(), &md5HashLen, 0) == FALSE)
-   {
-      return false;
-   }
-
-   std::ostringstream fileNameStream;
-   fileNameStream << std::hex << std::uppercase << std::setfill('0');
-   for (DWORD x = 0; x < md5HashLen; x++)
-   {
-      fileNameStream << std::setw(2) << static_cast<int>(md5Hash[x]);
-   }
-   fileName = fileNameStream.str() + "." + SettingsFileExtension;
-
-   if (CloseHandle(hTableFile) == FALSE || CryptDestroyHash(hMd5Hash) == FALSE || CryptReleaseContext(hCryptProv, 0) == FALSE)
-   {
-      return false;
-   }
-
-   return true;
+   return success;
 }
 
 
@@ -1333,8 +1338,6 @@ bool BallHistory::GetSettingsFolderPath(std::string& settingsFolderPath)
 void BallHistory::LoadSettings(Player& player)
 {
    std::istringstream tempStream;
-   float tempXFloat = 0.0f;
-   float tempYFloat = 0.0f;
 
    char delimeter;
 
@@ -1626,7 +1629,6 @@ void BallHistory::SaveSettings(Player& player)
    {
       // Normal Mode Settings
 
-      std::ostringstream autoControlVerticesPosition2D;
       std::ostringstream autoControlVerticesPosition3D;
       for (const NormalOptions::AutoControlVertex& acv : m_MenuOptions.m_NormalOptions.m_AutoControlVertices)
       {
@@ -1784,7 +1786,6 @@ void BallHistory::SaveSettings(Player& player)
       tempStr = ballPassOptionsAssociations.str();
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallPassAssociationsKeyName, tempStr.c_str());
 
-      std::ostringstream ballFailOptionsPos2D;
       std::ostringstream ballFailOptionsPosition3D;
       std::ostringstream ballFailOptionsRadiusPercent;
       std::ostringstream ballFailOptionsAssociations;
@@ -2062,6 +2063,7 @@ void BallHistory::ControlNext()
                   break;
                }
             }
+            lastBallHistoryRecord = &m_BallHistoryRecords[m_CurrentControlIndex];
          }
       }
       break;
@@ -2114,6 +2116,7 @@ void BallHistory::ControlPrev()
                   break;
                }
             }
+            lastBallHistoryRecord = &m_BallHistoryRecords[m_CurrentControlIndex];
          }
       }
       break;
@@ -2164,10 +2167,9 @@ void BallHistory::DrawBallHistory(Player& player)
    while (tempCurrentIndex != tailIndex && !anyMaxDistanceTraveled)
    {
       BallHistoryRecord& tempCurrentBhr = m_BallHistoryRecords[tempCurrentIndex];
-      for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < tempCurrentBhr.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
+      for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < tempCurrentBhr.m_BallHistoryStates.size() && ballHistoryStateIndex < ballCount; ++ballHistoryStateIndex)
       {
          BallHistoryState& ballHistoryState = tempCurrentBhr.m_BallHistoryStates[ballHistoryStateIndex];
-         HitBall* controlVBall = m_ControlVBalls[ballHistoryStateIndex];
 
          if (previousBhr)
          {
@@ -2218,12 +2220,12 @@ void BallHistory::DrawBallHistory(Player& player)
 
    // fill in color and texture
    tempCurrentIndex = m_CurrentControlIndex;
-   std::size_t drawBallCount = 0;
+   std::vector<std::size_t> drawBallCounts(ballCount, 0);
 
    while (tempCurrentIndex != tailIndex)
    {
       BallHistoryRecord& tempCurrentBhr = m_BallHistoryRecords[tempCurrentIndex];
-      for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < tempCurrentBhr.m_BallHistoryStates.size(); ++ballHistoryStateIndex)
+      for (std::size_t ballHistoryStateIndex = 0; ballHistoryStateIndex < tempCurrentBhr.m_BallHistoryStates.size() && ballHistoryStateIndex < ballCount; ++ballHistoryStateIndex)
       {
          BallHistoryState& ballHistoryState = tempCurrentBhr.m_BallHistoryStates[ballHistoryStateIndex];
          if (ballHistoryState.m_DrawRadius > 0.0f)
@@ -2234,14 +2236,15 @@ void BallHistory::DrawBallHistory(Player& player)
             }
             else
             {
-               if (ballHistoryState.m_DrawRadius > 0.0f)
+               float totalToRender = drawBallHistoryRecords[ballHistoryStateIndex].TotalToRender;
+               if (totalToRender > 0.0f)
                {
-                  unsigned char red = (unsigned char)(0xFF - drawBallCount * 0xFF / drawBallHistoryRecords[ballHistoryStateIndex].TotalToRender);
-                  unsigned char blue = (unsigned char)(drawBallCount * 0xFF / drawBallHistoryRecords[ballHistoryStateIndex].TotalToRender);
+                  unsigned char red = (unsigned char)(0xFF - drawBallCounts[ballHistoryStateIndex] * 0xFF / totalToRender);
+                  unsigned char blue = (unsigned char)(drawBallCounts[ballHistoryStateIndex] * 0xFF / totalToRender);
 
                   ballHistoryState.m_Color = 0x00 << 24 | blue << 16 | 0x00 << 8 | red;
 
-                  drawBallCount++;
+                  drawBallCounts[ballHistoryStateIndex]++;
                }
             }
          }
@@ -2475,7 +2478,8 @@ void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name
 
 void BallHistory::DrawControlVBalls(Player &player)
 {
-   for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); controlVBallIndex++)
+   static const std::size_t maxControlVBallLabels = sizeof(NormalOptions::ImGuiBallControlVBallLabels) / sizeof(NormalOptions::ImGuiBallControlVBallLabels[0]);
+   for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size() && controlVBallIndex < maxControlVBallLabels; controlVBallIndex++)
    {
       HitBall* controlVBall = m_ControlVBalls[controlVBallIndex];
       std::string controlVBallFakeBallName = "ControlVBall" + std::to_string(controlVBallIndex);
@@ -2500,11 +2504,14 @@ void BallHistory::DrawNormalModeVisuals(Player& player, int currentTimeMs)
 
    if ((currentTimeMs % OneSecondMs) >= ShouldDrawBlinkMs)
    {
+      static const std::size_t maxAutoControlLabels = sizeof(NormalOptions::ImGuiDrawAutoControlVertexLabels) / sizeof(NormalOptions::ImGuiDrawAutoControlVertexLabels[0]);
       for (std::size_t acvIndex = 0; acvIndex < m_MenuOptions.m_NormalOptions.m_AutoControlVertices.size(); acvIndex++)
       {
          NormalOptions::AutoControlVertex& acv = m_MenuOptions.m_NormalOptions.m_AutoControlVertices[acvIndex];
          std::string autoControlFakeBallName = "AutoControlBall" + std::to_string(acvIndex);
          DrawFakeBall(player, autoControlFakeBallName, acv.m_Position, ballRadius, m_AutoControlBallColor);
+         if (acvIndex >= maxAutoControlLabels)
+            continue;
          POINT screenPoint = Get2DPointFrom3D(player, acv.m_Position);
          PrintScreenRecord::Text(NormalOptions::ImGuiDrawAutoControlVertexLabels[acvIndex], float(screenPoint.x), float(screenPoint.y), std::format("{}", acvIndex + 1));
       }
@@ -2811,6 +2818,7 @@ void BallHistory::DrawTrainerModeVisuals(Player& player, int currentTimeMs)
       }
    }
 
+   static const std::size_t maxPassLabels = sizeof(TrainerOptions::BallEndOptionsRecord::ImGuiBallPassLabels) / sizeof(TrainerOptions::BallEndOptionsRecord::ImGuiBallPassLabels[0]);
    for (std::size_t bporIndex = 0; bporIndex < m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size(); bporIndex++)
    {
       if (ShouldDrawTrainerBallPasses(bporIndex, currentTimeMs))
@@ -2825,12 +2833,16 @@ void BallHistory::DrawTrainerModeVisuals(Player& player, int currentTimeMs)
                std::string ballPassIntersectionCircleName = "BallPassIntersectionCircle" + std::to_string(bporIndex);
                DrawIntersectionCircle(player, ballPassIntersectionCircleName, bpor.m_EndPosition, bpor.m_EndRadiusPercent, Color::Blue);
             }
-            POINT screenPoint = Get2DPointFrom3D(player, bpor.m_EndPosition);
-            PrintScreenRecord::Text(TrainerOptions::BallEndOptionsRecord::ImGuiBallPassLabels[bporIndex], float(screenPoint.x), float(screenPoint.y), std::format("P-{}", bporIndex + 1));
+            if (bporIndex < maxPassLabels)
+            {
+               POINT screenPoint = Get2DPointFrom3D(player, bpor.m_EndPosition);
+               PrintScreenRecord::Text(TrainerOptions::BallEndOptionsRecord::ImGuiBallPassLabels[bporIndex], float(screenPoint.x), float(screenPoint.y), std::format("P-{}", bporIndex + 1));
+            }
          }
       }
    }
 
+   static const std::size_t maxFailLabels = sizeof(TrainerOptions::BallEndOptionsRecord::ImGuiBallFailLabels) / sizeof(TrainerOptions::BallEndOptionsRecord::ImGuiBallFailLabels[0]);
    for (std::size_t bforIndex = 0; bforIndex < m_MenuOptions.m_TrainerOptions.m_BallFailOptionsRecords.size(); bforIndex++)
    {
       if (ShouldDrawTrainerBallFails(bforIndex, currentTimeMs))
@@ -2845,8 +2857,11 @@ void BallHistory::DrawTrainerModeVisuals(Player& player, int currentTimeMs)
                std::string ballFailIntersectionCircleName = "BallFailIntersectionCircle" + std::to_string(bforIndex);
                DrawIntersectionCircle(player, ballFailIntersectionCircleName, bfor.m_EndPosition, bfor.m_EndRadiusPercent, Color::Blue);
             }
-            POINT screenPoint = Get2DPointFrom3D(player, bfor.m_EndPosition);
-            PrintScreenRecord::Text(TrainerOptions::BallEndOptionsRecord::ImGuiBallFailLabels[bforIndex], float(screenPoint.x), float(screenPoint.y), std::format("F-{}", bforIndex + 1));
+            if (bforIndex < maxFailLabels)
+            {
+               POINT screenPoint = Get2DPointFrom3D(player, bfor.m_EndPosition);
+               PrintScreenRecord::Text(TrainerOptions::BallEndOptionsRecord::ImGuiBallFailLabels[bforIndex], float(screenPoint.x), float(screenPoint.y), std::format("F-{}", bforIndex + 1));
+            }
          }
       }
    }
@@ -2984,7 +2999,6 @@ void BallHistory::DrawAngleVelocityPreviewHelper(Player& player, TrainerOptions:
 {
    for (int32_t angleIndex = 0; angleIndex < bsor.m_TotalRangeAngles; angleIndex++)
    {
-      float height = bsor.m_StartPosition.z;
       float angle = std::fmodf(bsor.m_AngleRangeStart + (angleStep * angleIndex), TrainerOptions::BallStartOptionsRecord::AngleMaximum);
       for (int32_t velocityIndex = bsor.m_TotalRangeVelocities - 1; velocityIndex >= 0; velocityIndex--)
       {
@@ -3046,7 +3060,8 @@ void BallHistory::CalculateAngleVelocityStep(TrainerOptions::BallStartOptionsRec
 
 void BallHistory::UpdateBallState(BallHistoryRecord& ballHistoryRecord)
 {
-   for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
+   std::size_t count = std::min(m_ControlVBalls.size(), ballHistoryRecord.m_BallHistoryStates.size());
+   for (std::size_t controlVBallIndex = 0; controlVBallIndex < count; ++controlVBallIndex)
    {
       m_ControlVBalls[controlVBallIndex]->m_d.m_pos = ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_Position;
       if (!m_Control)
@@ -3530,7 +3545,6 @@ void BallHistory::ShowRemainingRunInfo()
 
    if (runsRemaining && m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord > 0)
    {
-      TrainerOptions::RunRecord& rr = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord];
       float averageRunMs = totalRunsMs / float(m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord);
       float approximateRemainingMs = averageRunMs * runsRemaining;
       printScreenTexts.push_back({ "Time", std::format("{:.2f}s", approximateRemainingMs / 1000.0f) });
@@ -3622,7 +3636,6 @@ void BallHistory::ShowCurrentRunRecord(int currentTimeMs)
    std::vector<std::pair<std::string, std::string>> printScreenTexts;
 
    std::size_t runsRemaining = m_MenuOptions.m_TrainerOptions.m_RunRecords.size() - m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord;
-   float runsRemainingPercent = runsRemaining / float(m_MenuOptions.m_TrainerOptions.m_RunRecords.size());
 
    printScreenTexts.push_back({ "Current", "" });
    if (runsRemaining)
@@ -4007,7 +4020,7 @@ void BallHistory::ShowResult(std::size_t total, std::vector<DWORD>& timesMs, con
       results.push_back({ std::format("{} {} Percent", type, subType), "N/A" });
    }
 
-   std::size_t totalMs = std::accumulate(timesMs.begin(), timesMs.end(), 0);
+   std::size_t totalMs = std::accumulate(timesMs.begin(), timesMs.end(), DWORD(0));
    if (totalMs > 0)
    {
       if (total)
@@ -4819,8 +4832,6 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
       {
          PrintScreenRecord::MenuTitleText("Current Configuration");
          
-         std::vector<std::pair<std::string, std::string>> ballPassConfig;
-
          std::vector<std::pair<std::string, std::string>> ballPassOptionsConfigs;
          GetBallPassOptionsConfigs(ballPassOptionsConfigs);
          PrintScreenRecord::Results(ballPassOptionsConfigs);
@@ -5157,6 +5168,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
                break;
             case TrainerOptions::RunRecord::ResultType::ResultType_FailedTimeElapsed:
                totalFailTimeElapsed++;
+               totalFailTimeElapsedTimeMs.push_back(rr.m_TotalTimeMs);
                break;
             case TrainerOptions::RunRecord::ResultType::ResultType_FailedKicker:
                totalFailKicker++;
@@ -5597,6 +5609,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
          {
             m_MenuOptions.m_BallPositionAxis = static_cast<MenuOptionsRecord::BallPositionAxisType>((m_MenuOptions.m_BallPositionAxis - 1 + MenuOptionsRecord::BallPositionAxisType_COUNT) % MenuOptionsRecord::BallPositionAxisType_COUNT);
             m_MenuOptions.m_SkipKeyLeftPressed = false;
+            break;
          }
          switch (m_MenuOptions.m_BallPositionAxis)
          {
@@ -5619,6 +5632,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
          {
             m_MenuOptions.m_BallPositionAxis = static_cast<MenuOptionsRecord::BallPositionAxisType>((m_MenuOptions.m_BallPositionAxis + 1) % MenuOptionsRecord::BallPositionAxisType_COUNT);
             m_MenuOptions.m_SkipKeyRightPressed = false;
+            break;
          }
          switch (m_MenuOptions.m_BallPositionAxis)
          {
@@ -6098,7 +6112,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectConfigModeOptions;
                break;
             default:
-               InvalidEnumValue("TrainerOptions::ConfigModeStateType", m_MenuOptions.m_TrainerOptions.m_BallEndCompleteMode);
+               InvalidEnumValue("TrainerOptions::ConfigModeStateType", m_MenuOptions.m_TrainerOptions.m_ConfigModeState);
                break;
             }
             m_MenuOptions.m_CurrentBallIndex = 0;
@@ -6338,10 +6352,10 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
          // do nothing
          break;
       case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
-         ProcessMenuChangeValueDec<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
+         ProcessMenuChangeValueDec<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_COUNT - 1);
          break;
       case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
-         ProcessMenuChangeValueInc<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
+         ProcessMenuChangeValueInc<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_COUNT - 1);
          break;
       case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
          switch (m_MenuOptions.m_TrainerOptions.m_BallPassFinishMode)
@@ -6896,10 +6910,10 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
          // do nothing
          break;
       case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
-         ProcessMenuChangeValueDec<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
+         ProcessMenuChangeValueDec<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_COUNT - 1);
          break;
       case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
-         ProcessMenuChangeValueInc<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndStopModeType_COUNT - 1);
+         ProcessMenuChangeValueInc<TrainerOptions::BallEndFinishModeType>(m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode, 0, TrainerOptions::BallEndFinishModeType::BallEndFinishModeType_COUNT - 1);
          break;
       case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
          switch (m_MenuOptions.m_TrainerOptions.m_BallFailFinishMode)
@@ -7017,8 +7031,11 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
          switch (m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode)
          {
          case TrainerOptions::BallEndAssociationModeType::BallEndAssociationModeType_Accept:
-            m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode = TrainerOptions::BallEndAssociationModeType::BallEndAssociationModeType_Select;
-            m_MenuOptions.m_CurrentAssociationIndex = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize - 1;
+            if (m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize)
+            {
+               m_MenuOptions.m_TrainerOptions.m_BallEndAssociationMode = TrainerOptions::BallEndAssociationModeType::BallEndAssociationModeType_Select;
+               m_MenuOptions.m_CurrentAssociationIndex = m_MenuOptions.m_TrainerOptions.m_BallStartOptionsRecordsSize - 1;
+            }
             break;
          case TrainerOptions::BallEndAssociationModeType::BallEndAssociationModeType_Select:
             if (m_MenuOptions.m_CurrentAssociationIndex == 0)
@@ -7147,7 +7164,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectConfigModeOptions;
                break;
             default:
-               InvalidEnumValue("TrainerOptions::ConfigModeStateType", m_MenuOptions.m_TrainerOptions.m_BallCorridorCompleteMode);
+               InvalidEnumValue("TrainerOptions::ConfigModeStateType", m_MenuOptions.m_TrainerOptions.m_ConfigModeState);
                break;
             }
             break;
@@ -7514,7 +7531,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectConfigModeOptions;
                break;
             default:
-               InvalidEnumValue("TrainerOptions::ConfigModeStateType", m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyConfigModeState);
+               InvalidEnumValue("TrainerOptions::ConfigModeStateType", m_MenuOptions.m_TrainerOptions.m_ConfigModeState);
                break;
             }
             break;
@@ -7710,7 +7727,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectConfigModeOptions;
                break;
             default:
-               InvalidEnumValue("TrainerOptions::ConfigModeStateType", m_MenuOptions.m_TrainerOptions.m_PhysicsVarianceConfigModeState);
+               InvalidEnumValue("TrainerOptions::ConfigModeStateType", m_MenuOptions.m_TrainerOptions.m_ConfigModeState);
                break;
             }
             break;
@@ -9227,7 +9244,7 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
                m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
                m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
                m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
-               if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled)
+               if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
                {
                   PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL);
                }
@@ -9286,7 +9303,7 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
             }
             break;
          default:
-            InvalidEnumValue("TrainerOptions::BallKickerBehaviorModeType", m_MenuOptions.m_ModeType);
+            InvalidEnumValue("TrainerOptions::BallKickerBehaviorModeType", m_MenuOptions.m_TrainerOptions.m_BallKickerBehaviorMode);
             break;
          }
       }
@@ -9673,7 +9690,7 @@ Vertex3Ds BallHistory::GetMin3D(Player &player)
 {
    float minZ = GetDefaultBallRadius();
    Vertex3Ds min3DPosition = Get3DPointFrom2D({ 0, 0 }, minZ);
-   Vertex3Ds max3DPosition = Get3DPointFrom2D({ g_pplayer->m_playfieldWnd->GetWidth(), g_pplayer->m_playfieldWnd->GetHeight() }, minZ);
+   Vertex3Ds max3DPosition = Get3DPointFrom2D({ player.m_playfieldWnd->GetWidth(), player.m_playfieldWnd->GetHeight() }, minZ);
    return { std::min(min3DPosition.x, max3DPosition.x), std::min(min3DPosition.y, max3DPosition.y), minZ };
 }
 
@@ -9681,7 +9698,7 @@ Vertex3Ds BallHistory::GetMax3D(Player &player)
 {
    float maxZ = player.m_ptable->m_glassTopHeight - GetDefaultBallRadius();
    Vertex3Ds min3DPosition = Get3DPointFrom2D({ 0, 0 }, maxZ);
-   Vertex3Ds max3DPosition = Get3DPointFrom2D({ g_pplayer->m_playfieldWnd->GetWidth(), g_pplayer->m_playfieldWnd->GetHeight() }, maxZ);
+   Vertex3Ds max3DPosition = Get3DPointFrom2D({ player.m_playfieldWnd->GetWidth(), player.m_playfieldWnd->GetHeight() }, maxZ);
    return { std::max(min3DPosition.x, max3DPosition.x), std::max(min3DPosition.y, max3DPosition.y), maxZ };
 }
 
@@ -9771,7 +9788,7 @@ bool BallHistory::BallCountIncreased() { return m_ControlVBalls.size() > m_Contr
 
 bool BallHistory::BallCountDecreased() { return m_ControlVBalls.size() < m_ControlVBallsPrevious.size(); }
 
-bool BallHistory::BallChanged() { return !std::equal(m_ControlVBalls.begin(), m_ControlVBalls.end(), m_ControlVBallsPrevious.begin()); }
+bool BallHistory::BallChanged() { return m_ControlVBalls.size() != m_ControlVBallsPrevious.size() || !std::equal(m_ControlVBalls.begin(), m_ControlVBalls.end(), m_ControlVBallsPrevious.begin()); }
 
 bool BallHistory::BallInsideAutoControlVertex(std::vector<HitBall*>& controlVBalls)
 {

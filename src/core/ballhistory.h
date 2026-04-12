@@ -127,7 +127,7 @@ public:
    {
       BallEndFinishModeType_Distance,
       BallEndFinishModeType_Stop,
-      BallEndStopModeType_COUNT
+      BallEndFinishModeType_COUNT
    };
 
    enum BallEndAssociationModeType
@@ -481,7 +481,7 @@ private:
       Black = 0x00000000,
       Blue = 0x00FF0000,
       Green = 0x0000FF00,
-      Red = 0x0000000FF,
+      Red = 0x000000FF,
       Yellow = 0x0000FFFF,
       White = 0x00FFFFFF,
       Purple = 0x00800080
