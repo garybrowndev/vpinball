@@ -645,12 +645,20 @@ private:
          ModeType_COUNT
       };
 
+      enum BallPositionAxisType
+      {
+         BallPositionAxisType_X,
+         BallPositionAxisType_Y,
+         BallPositionAxisType_Z,
+         BallPositionAxisType_COUNT
+      };
+
       static const int SkipKeySlowPressedMs;
       static const int SkipKeyFastPressedMs;
 
       static const int SkipKeySlowIntervalMs;
       static const int SkipKeyFastIntervalMs;
-      static const int32_t SkipKeyStepFactor;
+      static const float SkipKeyStepFactor;
 
       static const int SkipControlSlowIntervalMs;
       static const int32_t SkipControlStepFactor;
@@ -666,11 +674,15 @@ private:
       NormalOptions m_NormalOptions;
       TrainerOptions m_TrainerOptions;
 
-      bool m_SkipKeyPressed;
-      int m_SkipKeyPressedMs;
-      bool m_SkipKeyLeft;
-      int m_SkipKeyUsedMs;
+      int m_SkipAppliedMs; // ms when skip was last applied
+      bool m_SkipKeyLeftPressed; // is Key Left pressed?
+      int m_SkipKeyLeftPressedMs; // ms when Key Left was last pressed
+      bool m_SkipKeyRightPressed; // is Key Right pressed?
+      int m_SkipKeyRightPressedMs; // ms when Key Right was last pressed
       int m_SkipControlUsedMs;
+
+      BallPositionAxisType m_BallPositionAxis;
+
       std::size_t m_CurrentBallIndex;
       std::size_t m_CurrentAssociationIndex;
       std::size_t m_CurrentCompleteIndex;
@@ -902,6 +914,8 @@ private:
    Vertex3Ds Get3DPointFrom2D(const POINT &p, float heightZ);
    Vertex3Ds Get3DPointFromMousePosition(Player &player, float heightZ);
    bool Get2DMousePosition(Player &player, POINT &mousePosition2D, bool correct = true);
+   Vertex3Ds GetMin3D(Player &player);
+   Vertex3Ds GetMax3D(Player &player);
    Vertex3Ds GetKickerPosition(Kicker &kicker);
    void SetFlipperStrength(float flipperStrength);
    float GetFlipperStrength();
