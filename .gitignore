@@ -25,6 +25,11 @@ standalone/ios/VPinball/Frameworks
 standalone/android/app/src/main/assets
 standalone/android/app/src/main/jniLibs
 
+# debug/crash output
+refcount_trace.log
+crash.txt
+crash.dmp
+
 # local Microsoft Visual Studio files
 VisualPinball.sln
 /*.vcxproj

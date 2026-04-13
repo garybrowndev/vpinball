@@ -50,8 +50,8 @@ string ExtensionFromFilename(const string& filename)
 
 string TitleFromFilename(const string& filename)
 {
-   // Find the last path separator
-   size_t begin = filename.find_last_of(PATH_SEPARATOR_CHAR);
+   // Find the last path separator (accept both '\' and '/' on Windows)
+   size_t begin = filename.find_last_of("\\/");
    if (begin == string::npos)
       begin = 0;
    else

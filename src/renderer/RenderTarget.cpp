@@ -499,9 +499,10 @@ RenderTarget::~RenderTarget()
       glDeleteFramebuffers(m_nLayers, m_framebuffer_layers);
 
 #elif defined(ENABLE_DX9)
-   // Texture share its refcount with surface, it must be decremented, but it won't be 0 until surface is also released
+   // Texture and surface share refcount (GetSurfaceLevel adds a ref that won't reach 0 until both are released).
+   // DX9 may also hold an internal ref if the surface was bound as a render target during the current frame.
    SAFE_RELEASE_NO_RCC(m_color_tex);
-   SAFE_RELEASE(m_color_surface);
+   SAFE_RELEASE_NO_RCC(m_color_surface);
    if (m_has_depth && !m_shared_depth)
    {
       if (m_use_alternate_depth)

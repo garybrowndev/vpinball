@@ -268,9 +268,66 @@ namespace
 
    void WriteCallStack(FILE* f, PCONTEXT context)
    {
-      char callStack[2048] = {};
-      rde::StackTrace::GetCallStack(context, true, callStack, sizeof(callStack) - 1);
-      fprintf(f, "Call stack\n==========\n%s\n", callStack);
+      fprintf(f, "Call stack\n==========\n");
+
+      if (!context)
+      {
+         fprintf(f, "(no context)\n\n");
+         return;
+      }
+
+      HANDLE hProcess = GetCurrentProcess();
+      HANDLE hThread = GetCurrentThread();
+      SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
+      SymInitialize(hProcess, NULL, TRUE);
+
+      STACKFRAME64 stackFrame = {};
+#ifdef _WIN64
+      const DWORD machineType = IMAGE_FILE_MACHINE_AMD64;
+      stackFrame.AddrPC.Offset = context->Rip;
+      stackFrame.AddrFrame.Offset = context->Rbp;
+      stackFrame.AddrStack.Offset = context->Rsp;
+#else
+      const DWORD machineType = IMAGE_FILE_MACHINE_I386;
+      stackFrame.AddrPC.Offset = context->Eip;
+      stackFrame.AddrFrame.Offset = context->Ebp;
+      stackFrame.AddrStack.Offset = context->Esp;
+#endif
+      stackFrame.AddrPC.Mode = AddrModeFlat;
+      stackFrame.AddrFrame.Mode = AddrModeFlat;
+      stackFrame.AddrStack.Mode = AddrModeFlat;
+
+      char symBuf[sizeof(SYMBOL_INFO) + 256];
+      SYMBOL_INFO* symInfo = (SYMBOL_INFO*)symBuf;
+      symInfo->SizeOfStruct = sizeof(SYMBOL_INFO);
+      symInfo->MaxNameLen = 255;
+
+      for (int i = 0; i < 64; i++)
+      {
+         if (!StackWalk64(machineType, hProcess, hThread, &stackFrame, context, NULL,
+            SymFunctionTableAccess64, SymGetModuleBase64, NULL))
+            break;
+         if (stackFrame.AddrPC.Offset == 0)
+            break;
+
+         DWORD64 disp64 = 0;
+         DWORD disp32 = 0;
+         IMAGEHLP_LINE64 lineInfo = {};
+         lineInfo.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+
+         if (SymFromAddr(hProcess, stackFrame.AddrPC.Offset, &disp64, symInfo))
+         {
+            if (SymGetLineFromAddr64(hProcess, stackFrame.AddrPC.Offset, &disp32, &lineInfo))
+               fprintf(f, "  [%d] %s (%s:%u)\n", i, symInfo->Name, lineInfo.FileName, lineInfo.LineNumber);
+            else
+               fprintf(f, "  [%d] %s + 0x%llX\n", i, symInfo->Name, disp64);
+         }
+         else
+         {
+            fprintf(f, "  [%d] 0x%016llX\n", i, stackFrame.AddrPC.Offset);
+         }
+      }
+      fprintf(f, "\n");
    }
 
    volatile unsigned long s_inFilter = 0;
@@ -297,7 +354,9 @@ namespace
 	  {
 		  WriteHeader(f);
 		  WriteExceptionInfo(f, exceptionPtrs);
+		  fflush(f);
 		  WriteCallStack(f, exceptionPtrs->ContextRecord);
+		  fflush(f);
 
 		  WriteEnvironmentInfo(f);
 		  const rde::MemoryStatus memStatus = rde::MemoryStatus::GetCurrent();
