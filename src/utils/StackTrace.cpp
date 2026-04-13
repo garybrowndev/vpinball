@@ -144,7 +144,13 @@ int StackTrace::GetCallStack(void* vcontext, Address* callStack, int maxDepth,
     HANDLE thread	= GetCurrentThread(); 
 
 	int numEntries(0);
-	while (::StackWalk64(IMAGE_FILE_MACHINE_I386, process, thread, 
+	const DWORD machineType =
+#ifdef _WIN64
+		IMAGE_FILE_MACHINE_AMD64;
+#else
+		IMAGE_FILE_MACHINE_I386;
+#endif
+	while (::StackWalk64(machineType, process, thread,
 		&stackFrame, context, 0, SymFunctionTableAccess64, SymGetModuleBase64, nullptr) &&
 		stackFrame.AddrFrame.Offset != 0 && numEntries < maxDepth)
 	{
@@ -276,8 +282,14 @@ void StackTrace::GetCallStack(void* vcontext, bool includeArguments,
 	stackFrame.AddrFrame.Mode	= AddrModeFlat;
 	stackFrame.AddrStack.Mode	= AddrModeFlat;
 
+	const DWORD machineType =
+#ifdef _WIN64
+		IMAGE_FILE_MACHINE_AMD64;
+#else
+		IMAGE_FILE_MACHINE_I386;
+#endif
 	while (maxSymbolLen > 0 &&
-		::StackWalk64(IMAGE_FILE_MACHINE_I386,
+		::StackWalk64(machineType,
 			::GetCurrentProcess(), ::GetCurrentThread(), &stackFrame,
 			context, nullptr, /*Internal_ReadProcessMemory,*/
 			SymFunctionTableAccess64, SymGetModuleBase64, nullptr) != FALSE &&

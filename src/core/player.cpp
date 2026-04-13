@@ -967,8 +967,16 @@ Player::~Player()
    if ((m_ptable->m_settings.LoadValueWithDefault(Settings::Player, "CacheMode"s, 1) > 0) && FileExists(m_ptable->m_filename))
    {
       string dir = g_pvp->m_myPrefPath + "Cache" + PATH_SEPARATOR_CHAR + m_ptable->m_title + PATH_SEPARATOR_CHAR;
-      std::filesystem::create_directories(std::filesystem::path(dir));
+      std::error_code ec;
+      std::filesystem::create_directories(std::filesystem::path(dir), ec);
+      if (ec)
+      {
+         PLOGE << "Failed to create cache directory '" << dir << "': " << ec.message();
+         dir.clear();
+      }
 
+      if (!dir.empty())
+      {
       tinyxml2::XMLDocument xmlDoc;
       tinyxml2::XMLElement* root;
       ankerl::unordered_dense::map<string, tinyxml2::XMLElement*> textureAge;
@@ -1056,6 +1064,7 @@ Player::~Player()
       xmlDoc.Print(&prn);
       myfile << prn.CStr();
       myfile.close();
+      }
    }
 
    // Save adjusted VR settings
