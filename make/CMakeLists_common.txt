@@ -22,6 +22,8 @@ set(VPX_SOURCES
 
    src/core/AppCommands.cpp
    src/core/AppCommands.h
+   src/core/ballhistory.cpp
+   src/core/ballhistory.h
    src/core/def.h
    src/core/def.cpp
    src/core/dispid.h

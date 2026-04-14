@@ -93,7 +93,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>$(SolutionDir)../../third-party/include/winsdk;$(WindowsSDK_IncludePath);$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../plugins;$(SolutionDir)../../plugins;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ENABLE_DX9;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;ENABLE_DX9;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -152,7 +152,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>$(WindowsSDK_IncludePath);$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../plugins;$(SolutionDir)../../plugins;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ENABLE_OPENGL;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;ENABLE_OPENGL;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -211,7 +211,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>$(WindowsSDK_IncludePath);$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../plugins;$(SolutionDir)../../plugins;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>BX_CONFIG_DEBUG=1;ENABLE_BGFX;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;BX_CONFIG_DEBUG=1;ENABLE_BGFX;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -270,7 +270,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>$(SolutionDir)../../third-party/include/winsdk;$(WindowsSDK_IncludePath);$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../plugins;$(SolutionDir)../../plugins;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ENABLE_DX9;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;DEBUGPHYSICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;ENABLE_DX9;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;DEBUGPHYSICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -322,7 +322,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>$(WindowsSDK_IncludePath);$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../plugins;$(SolutionDir)../../plugins;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ENABLE_OPENGL;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;DEBUGPHYSICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;ENABLE_OPENGL;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;DEBUGPHYSICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -374,7 +374,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>$(WindowsSDK_IncludePath);$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../plugins;$(SolutionDir)../../plugins;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>BX_CONFIG_DEBUG=1;ENABLE_BGFX;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;BX_CONFIG_DEBUG=1;ENABLE_BGFX;WIN32;_DEBUG;DEBUG_REFCOUNT_TRIGGER;_WINDOWS;MYDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -429,7 +429,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <AdditionalIncludeDirectories>$(SolutionDir)../../third-party/include/winsdk;$(WindowsSDK_IncludePath);$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../plugins;$(SolutionDir)../../plugins;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ENABLE_DX9;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;ENABLE_DX9;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <ExceptionHandling>Sync</ExceptionHandling>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -491,7 +491,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <AdditionalIncludeDirectories>$(WindowsSDK_IncludePath);$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../plugins;$(SolutionDir)../../plugins;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ENABLE_OPENGL;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;ENABLE_OPENGL;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <ExceptionHandling>Sync</ExceptionHandling>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -554,7 +554,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <AdditionalIncludeDirectories>$(WindowsSDK_IncludePath);$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../plugins;$(SolutionDir)../../plugins;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>BX_CONFIG_DEBUG=0;ENABLE_BGFX;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;BX_CONFIG_DEBUG=0;ENABLE_BGFX;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <ExceptionHandling>Sync</ExceptionHandling>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -617,7 +617,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <AdditionalIncludeDirectories>$(SolutionDir)../../third-party/include/winsdk;$(WindowsSDK_IncludePath);$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../plugins;$(SolutionDir)../../plugins;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ENABLE_DX9;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;ENABLE_DX9;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <ExceptionHandling>Sync</ExceptionHandling>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -679,7 +679,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <AdditionalIncludeDirectories>$(WindowsSDK_IncludePath);$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../plugins;$(SolutionDir)../../plugins;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>ENABLE_OPENGL;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;ENABLE_OPENGL;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <ExceptionHandling>Sync</ExceptionHandling>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -741,7 +741,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <AdditionalIncludeDirectories>$(WindowsSDK_IncludePath);$(SolutionDir)../gen/;$(SolutionDir)../../src;$(SolutionDir)../../plugins;$(SolutionDir)../../plugins;$(SolutionDir)../../third-party/include;$(SolutionDir)../../third-party/include/compat/msvc;$(SolutionDir)../../third-party/include/glad/include;$(SolutionDir)../../third-party/include/win32xx/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>BX_CONFIG_DEBUG=0;ENABLE_BGFX;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>__BALLHISTORY_WIN32__;BX_CONFIG_DEBUG=0;ENABLE_BGFX;WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <StringPooling>true</StringPooling>
       <ExceptionHandling>Sync</ExceptionHandling>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -1027,6 +1027,7 @@
     <ClCompile Include="$(SolutionDir)/../../src/utils/bulb.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/utils/CrashHandler.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/core/AppCommands.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/core/ballhistory.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/core/def.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/utils/fileio.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/utils/Logger.cpp" />
@@ -1562,6 +1563,7 @@
     <ClInclude Include="$(SolutionDir)/../../plugins/plugins/ResURIResolver.h" />
     <ClInclude Include="$(SolutionDir)/../../src/core/VPApp.h" />
     <ClInclude Include="$(SolutionDir)/../../src/core/AppCommands.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/core/ballhistory.h" />
     <ClInclude Include="$(SolutionDir)/../../src/core/def.h" />
     <ClInclude Include="$(SolutionDir)/../../src/core/dispid.h" />
     <ClInclude Include="$(SolutionDir)/../../src/core/DynamicScript.h" />
