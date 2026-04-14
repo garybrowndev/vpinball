@@ -306,7 +306,9 @@ namespace
 	  {
 		  WriteHeader(f);
 		  WriteExceptionInfo(f, exceptionPtrs);
+		  fflush(f);
 		  WriteCallStack(f, exceptionPtrs->ContextRecord);
+		  fflush(f);
 
 		  WriteEnvironmentInfo(f);
 		  const rde::MemoryStatus memStatus = rde::MemoryStatus::GetCurrent();

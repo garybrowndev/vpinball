@@ -383,6 +383,12 @@ void LiveUI::RenderUI()
    else if (!m_inGameUI.IsOpened())
    { // No UI displayed: process ball control & throw balls
       m_ballControl.Update(width, height);
+
+      if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && g_pplayer->m_BallHistory.Control())
+      {
+         uint32_t tick = msec();
+         g_pplayer->m_BallHistory.ProcessMouse(*g_pplayer, tick);
+      }
    }
 
    // Display plumb state overlay
@@ -393,6 +399,14 @@ void LiveUI::RenderUI()
 
    // Display performance overlays
    m_perfUI.Update();
+
+   {
+      uint32_t tick = msec();
+      g_pplayer->m_BallHistory.DrawMenu = true;
+      g_pplayer->m_BallHistory.Process(*g_pplayer, tick);
+      g_pplayer->m_BallHistory.DrawMenu = false;
+      g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, EnumAssignKeys::eCKeys, false, tick, true);
+   }
 
    ImGui::PopFont();
 
