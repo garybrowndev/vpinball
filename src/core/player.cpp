@@ -500,6 +500,13 @@ Player::Player(PinTable *const table, const PlayMode playMode)
    wintimer_init();
    m_liveUI = new LiveUI(m_renderer->m_renderDevice);
    m_liveUI->m_ballControl.LoadSettings(m_ptable->m_settings);
+   { FILE* _f = nullptr; fopen_s(&_f, "C:\\code\\Pinball\\vpinball_ballhistory\\bh_player.log", "w"); if (_f) {
+#ifdef __BALLHISTORY_WIN32__
+      fprintf(_f, "BALLHISTORY_WIN32 IS defined\n");
+#else
+      fprintf(_f, "BALLHISTORY_WIN32 is NOT defined\n");
+#endif
+      fprintf(_f, "About to call m_BallHistory.Init\n"); fclose(_f); } }
    m_BallHistory.Init(*this, 0, true);
 
    m_ptable->m_tblMirrorEnabled = m_ptable->m_settings.GetPlayer_Mirror();

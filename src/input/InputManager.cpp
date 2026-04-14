@@ -729,6 +729,22 @@ void InputManager::CreateInputActions()
                m_player->m_liveUI->OpenInGameUI();
          }))->GetActionId();
 
+#ifdef __BALLHISTORY_WIN32__
+   // Ball History key actions
+   AddAction(std::make_unique<InputAction>(this, "BallHistoryMenu"s, "Ball History Menu"s, keyMapping(SDL_SCANCODE_C),
+      [this](const InputAction&, bool, bool isPressed)
+      {
+         uint32_t tick = msec();
+         m_player->m_BallHistory.ProcessKeys(*m_player, eBallHistoryMenu, isPressed, tick, true);
+      }));
+   AddAction(std::make_unique<InputAction>(this, "BallHistoryRecall"s, "Ball History Recall"s, keyMapping(SDL_SCANCODE_R),
+      [this](const InputAction&, bool, bool isPressed)
+      {
+         uint32_t tick = msec();
+         m_player->m_BallHistory.ProcessKeys(*m_player, eBallHistoryRecall, isPressed, tick, true);
+      }));
+#endif
+
    auto volumeDown = AddAction(std::make_unique<InputAction>(this, "VolumeDown"s, "Volume Down"s, keyMapping(SDL_SCANCODE_MINUS),
       [this](const InputAction&, bool, bool isPressed)
       {

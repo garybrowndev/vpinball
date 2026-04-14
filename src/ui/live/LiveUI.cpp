@@ -402,6 +402,22 @@ void LiveUI::RenderUI()
 
    {
       uint32_t tick = msec();
+
+      // Dispatch flipper/plunger keys to Ball History for menu navigation
+      // (C and R keys are handled via InputManager actions registered in InputManager.cpp)
+      struct { ImGuiKey key; EnumAssignKeys action; } bhNavKeys[] = {
+         { ImGuiKey_LeftShift, eLeftFlipperKey },
+         { ImGuiKey_RightShift, eRightFlipperKey },
+         { ImGuiKey_Enter, ePlungerKey },
+      };
+      for (auto& bk : bhNavKeys)
+      {
+         if (ImGui::IsKeyPressed(bk.key, false))
+            g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, bk.action, true, tick, true);
+         else if (ImGui::IsKeyReleased(bk.key))
+            g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, bk.action, false, tick, true);
+      }
+
       g_pplayer->m_BallHistory.DrawMenu = true;
       g_pplayer->m_BallHistory.Process(*g_pplayer, tick);
       g_pplayer->m_BallHistory.DrawMenu = false;

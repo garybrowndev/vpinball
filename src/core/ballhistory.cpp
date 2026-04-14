@@ -24,6 +24,12 @@ bool BallHistory::DrawMenu = false;
 #include "fonts/DroidSans.h"
 #include "fonts/DroidSansBold.h"
 
+#if defined(_DEBUG) && defined(__BALLHISTORY_WIN32__)
+std::mutex BHLog::s_mutex;
+std::deque<std::string> BHLog::s_buffer;
+std::string BHLog::s_logPath;
+#endif
+
 // ================================================================================================================================================================================================================================================
 
 BallHistoryState::BallHistoryState()
@@ -366,43 +372,23 @@ ImFont* BallHistory::PrintScreenRecord::BoldLargeFont = nullptr;
 
 void BallHistory::PrintScreenRecord::Init()
 {
-   ImGuiIO& io = ImGui::GetIO();
-
-   int scalingValue = std::min(g_pplayer->m_playfieldWnd->GetWidth(), g_pplayer->m_playfieldWnd->GetHeight());
-
-   if (NormalSmallFont == nullptr)
-   {
-      NormalSmallFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, scalingValue / 50.0f);
-   }
-
-   if (NormalMediumFont == nullptr)
-   {
-      NormalMediumFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, scalingValue / 40.0f);
-   }
-
-   if (BoldSmallFont == nullptr)
-   {
-      BoldSmallFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, scalingValue / 50.0f);
-   }
-
-   if (BoldMediumFont == nullptr)
-   {
-      BoldMediumFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, scalingValue / 40.0f);
-   }
-
-   if (BoldLargeFont == nullptr)
-   {
-      BoldLargeFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, scalingValue / 30.0f);
-   }
+   // In ImGui 1.92+, fonts added after atlas build are invalidated on rebuild.
+   // Use the default ImGui font (from LiveUI) instead of adding custom ones.
+   // All font pointers point to the default font; size differences are handled
+   // by PushFont's font_size_base_unscaled parameter in the future.
+   ImFont* defaultFont = ImGui::GetIO().FontDefault ? ImGui::GetIO().FontDefault : ImGui::GetFont();
+   NormalSmallFont = defaultFont;
+   NormalMediumFont = defaultFont;
+   BoldSmallFont = defaultFont;
+   BoldMediumFont = defaultFont;
+   BoldLargeFont = defaultFont;
 }
 
 void BallHistory::PrintScreenRecord::UnInit()
 {
-   NormalSmallFont = nullptr;
-   NormalMediumFont = nullptr;
-   BoldSmallFont = nullptr;
-   BoldMediumFont = nullptr;
-   BoldLargeFont = nullptr;
+   // Do NOT null out font pointers — they are owned by ImGui's font atlas.
+   // In ImGui 1.92+, adding fonts to an already-built atlas crashes.
+   // The fonts persist for the lifetime of the ImGui context.
 }
 
 void BallHistory::PrintScreenRecord::Text(const char *name, float positionX, float positionY, const std::string &message)
@@ -874,6 +860,7 @@ BallHistory::BallHistory(PinTable& pinTable)
    , m_ActiveBallKickerColor(Color::Yellow)
    , m_UseTrailsForBallsInitialValue(0)
 {
+   { FILE* _f = nullptr; fopen_s(&_f, "C:\\code\\Pinball\\vpinball_ballhistory\\bh_constructor.log", "w"); if (_f) { fprintf(_f, "BallHistory constructor called\n"); fclose(_f); } }
    m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyTableDefault = int32_t(pinTable.GetGlobalDifficulty());
    pinTable.get_Gravity(&m_MenuOptions.m_TrainerOptions.m_GravityTableDefault);
    pinTable.get_Friction((&m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionTableDefault));
@@ -884,6 +871,10 @@ BallHistory::BallHistory(PinTable& pinTable)
 
 void BallHistory::Init(Player& player, int currentTimeMs, bool loadSettings)
 {
+   // Direct file write to verify Init runs
+   { FILE* _f = nullptr; fopen_s(&_f, "C:\\code\\Pinball\\vpinball_ballhistory\\bh_direct.log", "a"); if (_f) { fprintf(_f, "Init called timeMs=%d loadSettings=%d\n", currentTimeMs, loadSettings); fclose(_f); } }
+
+   BHLOG("currentTimeMs=%d loadSettings=%d", currentTimeMs, loadSettings);
    SetControl(false);
    m_WasControlled = false;
    m_WasRecalled = false;
@@ -907,6 +898,9 @@ void BallHistory::Init(Player& player, int currentTimeMs, bool loadSettings)
       std::string settingsFolderPath;
       if (GetSettingsFolderPath(settingsFolderPath) == true)
       {
+         BHLog::SetLogFolder(settingsFolderPath);
+         BHLOG("settingsFolderPath=%s", settingsFolderPath.c_str());
+         BHLOG_FLUSH();
          BOOL createDir = CreateDirectory(settingsFolderPath.c_str(), NULL);
          if (createDir == TRUE || GetLastError() == ERROR_ALREADY_EXISTS)
          {
@@ -931,30 +925,15 @@ void BallHistory::Init(Player& player, int currentTimeMs, bool loadSettings)
 
 void BallHistory::UnInit(Player& player)
 {
+   BHLOG("start");
    SaveSettings(player);
    PrintScreenRecord::UnInit();
    m_ActiveBallKickers.clear();
    m_Flippers.clear();
 
    ClearDraws(player);
-
-   for (auto drawnBall : m_DrawnBalls)
-   {
-      drawnBall.second->RenderRelease();
-      drawnBall.second->Release();
-   }
-
-   for (auto drawnIntersectionCircle : m_DrawnIntersectionCircles)
-   {
-      drawnIntersectionCircle.second->RenderRelease();
-      drawnIntersectionCircle.second->Release();
-   }
-
-   for (auto drawnLine : m_DrawnLines)
-   {
-      drawnLine.second->RenderRelease();
-      drawnLine.second->Release();
-   }
+   BHLOG("done");
+   BHLOG_FLUSH();
 }
 
 void BallHistory::Process(Player& player, int currentTimeMs)
@@ -1073,6 +1052,13 @@ void BallHistory::Process(Player& player, int currentTimeMs)
 
 bool BallHistory::ProcessKeys(Player& player, EnumAssignKeys action, bool isPressed, int currentTimeMs, bool process)
 {
+   if (action != EnumAssignKeys::eCKeys)
+   {
+      { FILE* _f = nullptr; fopen_s(&_f, "C:\\code\\Pinball\\vpinball_ballhistory\\bh_direct.log", "a"); if (_f) { fprintf(_f, "ProcessKeys action=%d isPressed=%d timeMs=%d process=%d\n", action, isPressed, currentTimeMs, process); fclose(_f); } }
+      BHLOG("action=%d isPressed=%d timeMs=%d process=%d", action, isPressed, currentTimeMs, process);
+      BHLOG_FLUSH();
+   }
+
    if (!ImGui::IsKeyDown(ImGuiKey_LeftShift))
    {
       m_MenuOptions.m_SkipKeyLeftPressed = false;
@@ -1214,6 +1200,8 @@ bool BallHistory::Control()
 
 void BallHistory::SetControl(bool control)
 {
+   BHLOG("control=%d (was %d)", control, m_Control);
+   BHLOG_FLUSH();
    ClearDraws(*g_pplayer);
 
    if (m_Control != control)
@@ -2284,6 +2272,8 @@ void BallHistory::DrawFakeBall(Player& player, const std::string& name, const Ve
       CComObject<Ball>::CreateInstance(&drawnBall);
       drawnBall->AddRef();
       drawnBall->Init(0.0f, 0.0f, false, true);
+      drawnBall->m_wzName = std::wstring(name.begin(), name.end());
+      player.m_ptable->AddPart(drawnBall);
       drawnBall->RenderSetup(player.m_renderer->m_renderDevice);
       m_DrawnBalls[name] = drawnBall;
    }
@@ -2298,7 +2288,6 @@ void BallHistory::DrawFakeBall(Player& player, const std::string& name, const Ve
    drawnBall->m_hitBall.m_d.m_vel.SetZero();
    drawnBall->m_d.m_useTableRenderSettings = true;
    drawnBall->put_Color(color);
-   player.m_ptable->AddPart(drawnBall);
 }
 
 void BallHistory::DrawFakeBall(Player& player, const std::string& name, Vertex3Ds& position, float radius, DWORD ballColor, const Vertex3Ds* lineEndPosition, DWORD lineColor, int lineThickness)
@@ -2410,6 +2399,9 @@ void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex
 
    if (isNew)
    {
+      // Add to table first (sets m_ptable which RenderSetup needs)
+      pLine->m_wzName = std::wstring(name.begin(), name.end());
+      player.m_ptable->AddPart(pLine);
       // First-time GPU setup
       pLine->RenderSetup(player.m_renderer->m_renderDevice);
    }
@@ -2421,8 +2413,6 @@ void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex
          pLine->RenderSetup(g_pplayer->m_renderer->m_renderDevice);
       });
    }
-
-   player.m_ptable->AddPart(pLine);
 }
 
 void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name, Vertex3Ds& position, float intersectionRadiusPercent, DWORD color)
@@ -2460,6 +2450,9 @@ void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name
 
    if (isNew)
    {
+      // Add to table first (sets m_ptable which RenderSetup needs)
+      pIntersectionCircle->m_wzName = std::wstring(name.begin(), name.end());
+      g_pplayer->m_ptable->AddPart(pIntersectionCircle);
       // First-time GPU setup
       pIntersectionCircle->RenderSetup(g_pplayer->m_renderer->m_renderDevice);
    }
@@ -2471,8 +2464,6 @@ void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name
          pIntersectionCircle->RenderSetup(g_pplayer->m_renderer->m_renderDevice);
       });
    }
-
-   g_pplayer->m_ptable->AddPart(pIntersectionCircle);
 }
 
 void BallHistory::DrawControlVBalls(Player &player)
@@ -2534,23 +2525,34 @@ void BallHistory::DrawNormalModeVisuals(Player& player, int currentTimeMs)
 
 void BallHistory::ClearDraws(Player& player)
 {
-   for (auto drawnBall : m_DrawnBalls)
+   BHLOG("balls=%zu circles=%zu lines=%zu", m_DrawnBalls.size(), m_DrawnIntersectionCircles.size(), m_DrawnLines.size());
+   BHLOG_FLUSH();
+   for (auto& drawnBall : m_DrawnBalls)
    {
       if (player.m_ptable->HasPart(drawnBall.second))
-         player.m_ptable->RemovePart(drawnBall.second);
+         player.m_ptable->RemovePart(drawnBall.second); // RemovePart calls Release
+      else
+         drawnBall.second->Release();
    }
+   m_DrawnBalls.clear();
 
-   for (auto drawnIntersectionCircle : m_DrawnIntersectionCircles)
+   for (auto& drawnIntersectionCircle : m_DrawnIntersectionCircles)
    {
       if (player.m_ptable->HasPart(drawnIntersectionCircle.second))
          player.m_ptable->RemovePart(drawnIntersectionCircle.second);
+      else
+         drawnIntersectionCircle.second->Release();
    }
+   m_DrawnIntersectionCircles.clear();
 
-   for (auto drawnLines : m_DrawnLines)
+   for (auto& drawnLines : m_DrawnLines)
    {
       if (player.m_ptable->HasPart(drawnLines.second))
          player.m_ptable->RemovePart(drawnLines.second);
+      else
+         drawnLines.second->Release();
    }
+   m_DrawnLines.clear();
 }
 
 bool BallHistory::ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs)
@@ -4122,6 +4124,8 @@ std::size_t BallHistory::GetTotalPermutations()
 // in my defense, this is menu/ui handling and a huge switch statement, which is kinda like many functions
 void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs)
 {
+   BHLOG("menuAction=%d menuState=%d modeType=%d timeMs=%d", menuAction, m_MenuOptions.m_MenuState, m_MenuOptions.m_ModeType, currentTimeMs);
+   BHLOG_FLUSH();
    ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_ProcessMenuUsec);
 
    ClearDraws(player);
@@ -4138,14 +4142,21 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
    switch (m_MenuOptions.m_MenuState)
    {
    case MenuOptionsRecord::MenuStateType::MenuStateType_Root_SelectMode:
+      BHLOG("Root_SelectMode: about to call MenuTitleText"); BHLOG_FLUSH();
       PrintScreenRecord::MenuTitleText("Ball History Mode");
+      BHLOG("Root_SelectMode: MenuTitleText done"); BHLOG_FLUSH();
+      BHLOG("Root_SelectMode: calling MenuText Normal (selected=%d)", m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Normal); BHLOG_FLUSH();
       PrintScreenRecord::MenuText(m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Normal, "Normal");
+      BHLOG("Root_SelectMode: MenuText Normal done"); BHLOG_FLUSH();
       PrintScreenRecord::MenuText(m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Trainer, "Trainer");
+      BHLOG("Root_SelectMode: MenuText Trainer done"); BHLOG_FLUSH();
       PrintScreenRecord::MenuText(m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Disabled, "Disabled");
+      BHLOG("Root_SelectMode: MenuText Disabled done"); BHLOG_FLUSH();
 
       switch (m_MenuOptions.m_ModeType)
       {
       case MenuOptionsRecord::ModeType::ModeType_Normal:
+         BHLOG("Root_SelectMode: calling ShowSection Normal"); BHLOG_FLUSH();
          ShowSection(DescriptionSectionTitle,
          {
             "Use plunger to configure 'Normal' options",
