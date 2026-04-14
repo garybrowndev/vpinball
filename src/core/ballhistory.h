@@ -1,5 +1,40 @@
 #pragma once
 
+class Player;
+class PinTable;
+
+// EnumAssignKeys was previously in pininput.h which upstream removed.
+// Ball History is the sole consumer, so the enum lives here now.
+enum EnumAssignKeys
+{
+   eLeftFlipperKey,
+   eRightFlipperKey,
+   eStagedLeftFlipperKey,
+   eStagedRightFlipperKey,
+   eLeftTiltKey,
+   eRightTiltKey,
+   eCenterTiltKey,
+   ePlungerKey,
+   eFrameCount,
+   eDBGBalls,
+   eDebugger,
+   eAddCreditKey,
+   eAddCreditKey2,
+   eStartGameKey,
+   eMechanicalTilt,
+   eRightMagnaSave,
+   eLeftMagnaSave,
+   eExitGame,
+   eVolumeUp,
+   eVolumeDown,
+   eLockbarKey,
+   eEscape,
+   eTweak,
+   eBallHistoryMenu,
+   eBallHistoryRecall,
+   eCKeys
+};
+
 #ifndef __BALLHISTORY_WIN32__
 
 struct BallHistory 

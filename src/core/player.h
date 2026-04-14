@@ -13,6 +13,7 @@
 #include "plugins/VPXPlugin.h"
 #include "plugins/ResURIResolver.h"
 #include "audio/AudioPlayer.h"
+#include "core/ballhistory.h"
 #include "core/ScriptInterpreter.h"
 #include "VPXPluginAPIImpl.h"
 
@@ -121,6 +122,8 @@ public:
 
    Ball *m_pactiveball = nullptr; // ball the script user can get with ActiveBall
    Ball *m_pactiveballDebug = nullptr; // ball the debugger will use as ActiveBall when firing events
+
+   BallHistory m_BallHistory;
 
    MsgPI::MsgPluginManager m_pluginManager;
    VPXPluginAPIImpl m_pluginAPI;

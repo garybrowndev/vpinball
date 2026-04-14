@@ -99,6 +99,7 @@ Player::Player(PinTable *const table, const PlayMode playMode)
    , m_audioPlayer(std::make_unique<VPX::AudioPlayer>(
         table->m_settings.GetPlayer_SoundDeviceBG(), table->m_settings.GetPlayer_SoundDevice(), static_cast<VPX::SoundConfigTypes>(table->m_settings.GetPlayer_Sound3D())))
    , m_resURIResolver(m_pluginManager.GetMsgAPI(), m_pluginAPI.GetVPXEndPointId(), true, true, true, true)
+   , m_BallHistory(*m_ptable)
 {
    // For the time being, lots of access are made through the global singleton, so ensure we are unique, and define it as soon as needed
    assert(g_pplayer == nullptr);
@@ -499,6 +500,7 @@ Player::Player(PinTable *const table, const PlayMode playMode)
    wintimer_init();
    m_liveUI = new LiveUI(m_renderer->m_renderDevice);
    m_liveUI->m_ballControl.LoadSettings(m_ptable->m_settings);
+   m_BallHistory.Init(*this, 0, true);
 
    m_ptable->m_tblMirrorEnabled = m_ptable->m_settings.GetPlayer_Mirror();
    #ifndef __STANDALONE__
@@ -975,6 +977,8 @@ Player::~Player()
    // FIXME remove or at least move legacy ushock to a plugin
    ushock_output_shutdown();
 
+   m_BallHistory.UnInit(*this);
+
    delete m_physics;
    m_physics = nullptr;
 
@@ -1195,6 +1199,7 @@ void Player::ApplyPlayingState(const bool play)
    }
    else
    {
+      m_BallHistory.ResetTrainerRunStartTime();
       PauseMusic();
       PLOGI << "Pausing Game";
       if (!IsEditorMode())
