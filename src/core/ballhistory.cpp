@@ -14,6 +14,11 @@ bool BallHistory::DrawMenu = false;
 #include "freeimage.h"
 
 #include "player.h"
+#include "parts/ball.h"
+#include "parts/kicker.h"
+#include "parts/flipper.h"
+#include "parts/light.h"
+#include "parts/rubber.h"
 #include "renderer/Shader.h"
 #include "meshes/ballMesh.h"
 #include "fonts/DroidSans.h"
@@ -54,7 +59,6 @@ void BallHistoryRecord::Set(const HitBall* controlVBall, BallHistoryState& bhr)
    bhr.m_LastEventPos = controlVBall->m_lastEventPos;
    bhr.m_Orientation = controlVBall->m_orientation;
    memcpy(bhr.m_OldPos, controlVBall->m_oldpos, sizeof(bhr.m_OldPos));
-   bhr.m_RingCounter_OldPos = controlVBall->m_ringcounter_oldpos;
 }
 
 void BallHistoryRecord::Set(std::vector<HitBall*>& controlVBalls, int timeMs)
@@ -675,7 +679,7 @@ void BallHistory::PrintScreenRecord::TransformAspectRatio(float& positionX, floa
 {
    int width = g_pplayer->m_playfieldWnd->GetWidth();
    int height = g_pplayer->m_playfieldWnd->GetHeight();
-   float rotationDegrees = g_pplayer->m_ptable->mViewSetups[g_pplayer->m_ptable->m_BG_current_set].GetRotation(width, height);
+   float rotationDegrees = g_pplayer->m_ptable->GetViewSetup().GetRotation(width, height);
 
    if (rotationDegrees < 90.0f)
    {
@@ -1264,7 +1268,7 @@ bool BallHistory::GetSettingsFileName(Player& player, std::string& fileName)
       HCRYPTHASH hMd5Hash = NULL;
       if (CryptCreateHash(hCryptProv, CALG_MD5, 0, 0, &hMd5Hash) != FALSE)
       {
-         HANDLE hTableFile = CreateFile(player.m_ptable->m_filename.c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
+         HANDLE hTableFile = CreateFile(player.m_ptable->m_filename.string().c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
          if (hTableFile != INVALID_HANDLE_VALUE)
          {
             static const int readBufferSize = 1024 * 1024;
@@ -1614,7 +1618,7 @@ void BallHistory::SaveSettings(Player& player)
 
    CSimpleIni iniFile;
    {
-      iniFile.SetValue(TableInfoSectionName, FilePathKeyName, player.m_ptable->m_filename.c_str());
+      iniFile.SetValue(TableInfoSectionName, FilePathKeyName, player.m_ptable->m_filename.string().c_str());
       iniFile.SetValue(TableInfoSectionName, TableNameKeyName, player.m_ptable->m_tableName.c_str());
       iniFile.SetValue(TableInfoSectionName, AuthorKeyName, player.m_ptable->m_author.c_str());
       iniFile.SetValue(TableInfoSectionName, VersionKeyName, player.m_ptable->m_version.c_str());
@@ -1958,11 +1962,11 @@ void BallHistory::InitControlVBalls(Player& player)
    m_ControlVBallsPrevious.resize(m_ControlVBalls.size());
    std::copy(m_ControlVBalls.begin(), m_ControlVBalls.end(), m_ControlVBallsPrevious.begin());
    m_ControlVBalls.clear();
-   for (HitBall* controlVBall : player.m_vball)
+   for (Ball* ball : player.m_vball)
    {
-      if (!controlVBall->m_d.m_lockedInKicker)
+      if (!ball->m_hitBall.m_d.m_lockedInKicker)
       {
-         m_ControlVBalls.push_back(controlVBall);
+         m_ControlVBalls.push_back(&ball->m_hitBall);
       }
    }
    std::sort(m_ControlVBalls.begin(), m_ControlVBalls.end());
@@ -1976,7 +1980,7 @@ void BallHistory::InitControlVBalls(Player& player)
 void BallHistory::InitActiveBallKickers(PinTable& pinTable)
 {
    m_ActiveBallKickers.clear();
-   for (auto vedit : pinTable.m_vedit)
+   for (auto vedit : pinTable.GetParts())
    {
       if (vedit && vedit->GetItemType() == ItemTypeEnum::eItemKicker)
       {
@@ -2006,7 +2010,7 @@ void BallHistory::InitActiveBallKickers(PinTable& pinTable)
 void BallHistory::InitFlippers(PinTable& pinTable)
 {
    m_Flippers.clear();
-   for (auto vedit : pinTable.m_vedit)
+   for (auto vedit : pinTable.GetParts())
    {
       if (vedit && vedit->GetItemType() == ItemTypeEnum::eItemFlipper)
       {
@@ -2279,7 +2283,7 @@ void BallHistory::DrawFakeBall(Player& player, const std::string& name, const Ve
    {
       CComObject<Ball>::CreateInstance(&drawnBall);
       drawnBall->AddRef();
-      drawnBall->Init(player.m_ptable, 0.0f, 0.0f, false, false);
+      drawnBall->Init(0.0f, 0.0f, false, true);
       drawnBall->RenderSetup(player.m_renderer->m_renderDevice);
       m_DrawnBalls[name] = drawnBall;
    }
@@ -2294,7 +2298,7 @@ void BallHistory::DrawFakeBall(Player& player, const std::string& name, const Ve
    drawnBall->m_hitBall.m_d.m_vel.SetZero();
    drawnBall->m_d.m_useTableRenderSettings = true;
    drawnBall->put_Color(color);
-   player.m_vhitables.push_back(drawnBall);
+   player.m_ptable->AddPart(drawnBall);
 }
 
 void BallHistory::DrawFakeBall(Player& player, const std::string& name, Vertex3Ds& position, float radius, DWORD ballColor, const Vertex3Ds* lineEndPosition, DWORD lineColor, int lineThickness)
@@ -2393,7 +2397,7 @@ void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex
    }
 
    // Common setup/update
-   pLine->Init(player.m_ptable, 0.0f, 0.0f, false, true);
+   pLine->Init(0.0f, 0.0f, false, true);
    pLine->ClearForOverwrite();
    pLine->AddDragPoint(start);
    pLine->AddDragPoint(end);
@@ -2418,7 +2422,7 @@ void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex
       });
    }
 
-   player.m_vhitables.push_back(pLine);
+   player.m_ptable->AddPart(pLine);
 }
 
 void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name, Vertex3Ds& position, float intersectionRadiusPercent, DWORD color)
@@ -2446,7 +2450,7 @@ void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name
    }
 
    // Common setup/update
-   pIntersectionCircle->Init(g_pplayer->m_ptable, position.x, position.y, false, true);
+   pIntersectionCircle->Init(position.x, position.y, false, true);
    pIntersectionCircle->ClearForOverwrite();
    float defaultBallRadius = GetDefaultBallRadius();
    pIntersectionCircle->m_d.m_falloff = defaultBallRadius * (intersectionRadiusPercent / 100.0f);
@@ -2468,7 +2472,7 @@ void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name
       });
    }
 
-   g_pplayer->m_vhitables.push_back(pIntersectionCircle);
+   g_pplayer->m_ptable->AddPart(pIntersectionCircle);
 }
 
 void BallHistory::DrawControlVBalls(Player &player)
@@ -2532,50 +2536,20 @@ void BallHistory::ClearDraws(Player& player)
 {
    for (auto drawnBall : m_DrawnBalls)
    {
-      for (std::size_t hitableIndex = 0; hitableIndex < player.m_vhitables.size();)
-      {
-         Hitable* hitable = player.m_vhitables[hitableIndex]->GetIHitable();
-         if (hitable == drawnBall.second)
-         {
-            player.m_vhitables.erase(player.m_vhitables.begin() + hitableIndex);
-         }
-         else
-         {
-            hitableIndex++;
-         }
-      }
+      if (player.m_ptable->HasPart(drawnBall.second))
+         player.m_ptable->RemovePart(drawnBall.second);
    }
 
    for (auto drawnIntersectionCircle : m_DrawnIntersectionCircles)
    {
-      for (std::size_t hitableIndex = 0; hitableIndex < player.m_vhitables.size();)
-      {
-         Hitable* hitable = player.m_vhitables[hitableIndex]->GetIHitable();
-         if (hitable == drawnIntersectionCircle.second)
-         {
-            player.m_vhitables.erase(player.m_vhitables.begin() + hitableIndex);
-         }
-         else
-         {
-            hitableIndex++;
-         }
-      }
+      if (player.m_ptable->HasPart(drawnIntersectionCircle.second))
+         player.m_ptable->RemovePart(drawnIntersectionCircle.second);
    }
 
    for (auto drawnLines : m_DrawnLines)
    {
-      for (std::size_t hitableIndex = 0; hitableIndex < player.m_vhitables.size();)
-      {
-         Hitable* hitable = player.m_vhitables[hitableIndex]->GetIHitable();
-         if (hitable == drawnLines.second)
-         {
-            player.m_vhitables.erase(player.m_vhitables.begin() + hitableIndex);
-         }
-         else
-         {
-            hitableIndex++;
-         }
-      }
+      if (player.m_ptable->HasPart(drawnLines.second))
+         player.m_ptable->RemovePart(drawnLines.second);
    }
 }
 
@@ -3066,7 +3040,6 @@ void BallHistory::UpdateBallState(BallHistoryRecord& ballHistoryRecord)
          m_ControlVBalls[controlVBallIndex]->m_lastEventPos = ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_LastEventPos;
          m_ControlVBalls[controlVBallIndex]->m_orientation = ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_Orientation;
          memcpy(m_ControlVBalls[controlVBallIndex]->m_oldpos, ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_OldPos, sizeof(m_ControlVBalls[controlVBallIndex]->m_oldpos));
-         m_ControlVBalls[controlVBallIndex]->m_ringcounter_oldpos = ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_RingCounter_OldPos;
       }
    }
 }
@@ -9606,7 +9579,16 @@ float BallHistory::DistanceToLineSegment(const Vertex3Ds& lineA, const Vertex3Ds
 
 float BallHistory::VelocityPixels(const Vertex3Ds& vel) { return sqrtf(powf(vel.x, 2) + powf(vel.y, 2) + powf(vel.z, 2)); }
 
-char BallHistory::GetBallHistoryKey(Player& player, EnumAssignKeys enumAssignKey) { return get_vk(player.m_rgKeys[enumAssignKey]); }
+char BallHistory::GetBallHistoryKey(Player& player, EnumAssignKeys enumAssignKey)
+{
+   // Old input system (m_rgKeys/get_vk) was removed. Return default key labels.
+   switch (enumAssignKey)
+   {
+   case eBallHistoryMenu: return 'C';
+   case eBallHistoryRecall: return 'V';
+   default: return '?';
+   }
+}
 
 bool BallHistory::BallsReadyForTrainer()
 {
@@ -9644,7 +9626,13 @@ bool BallHistory::BallCorridorReadyForTrainer()
 
 POINT BallHistory::Get2DPointFrom3D(Player& player, const Vertex3Ds& vertex)
 {
-   return player.m_renderer->Get2DPointFrom3D(player.m_playfieldWnd->GetWidth(), player.m_playfieldWnd->GetHeight(), vertex);
+   const int width = player.m_playfieldWnd->GetWidth();
+   const int height = player.m_playfieldWnd->GetHeight();
+   const Matrix3D& mvp = player.m_renderer->GetMVP().GetModelViewProj(0);
+   const Vertex3Ds projPoint = mvp * vertex;
+   const float screenX = (projPoint.x + 1.0f) * 0.5f * static_cast<float>(width);
+   const float screenY = (1.0f - projPoint.y) * 0.5f * static_cast<float>(height);
+   return POINT(static_cast<int>(screenX), static_cast<int>(screenY));
 }
 
 Vertex3Ds BallHistory::Get3DPointFrom2D(const POINT& p, float heightZ)
@@ -9668,9 +9656,9 @@ Vertex3Ds BallHistory::Get3DPointFromMousePosition(Player& player, float heightZ
 bool BallHistory::Get2DMousePosition(Player& player, POINT& mousePosition2D, bool correct)
 {
    bool retVal = false;
-   if (GetCursorPos(&mousePosition2D) == TRUE && ScreenToClient(player.m_pininput.GetFocusHWnd(), &mousePosition2D) == TRUE)
+   if (GetCursorPos(&mousePosition2D) == TRUE && ScreenToClient(player.m_playfieldWnd->GetNativeHWND(), &mousePosition2D) == TRUE)
    {
-      if (correct && player.m_ptable->mViewSetups[player.m_ptable->m_BG_current_set].mViewportRotation == 180.0f)
+      if (correct && player.m_ptable->GetViewSetup().mViewportRotation == 180.0f)
       {
          mousePosition2D.x = g_pplayer->m_playfieldWnd->GetWidth() - mousePosition2D.x;
          mousePosition2D.y = g_pplayer->m_playfieldWnd->GetHeight() - mousePosition2D.y;
@@ -9845,7 +9833,7 @@ std::vector<std::string> BallHistory::Split(const char* str, char delimeter)
 void BallHistory::CenterMouse(Player& player)
 {
    POINT p = { g_pplayer->m_playfieldWnd->GetWidth() / 2, g_pplayer->m_playfieldWnd->GetHeight() / 2 };
-   ClientToScreen(player.m_pininput.GetFocusHWnd(), &p);
+   ClientToScreen(player.m_playfieldWnd->GetNativeHWND(), &p);
    SetCursorPos(p.x, p.y);
 }
 

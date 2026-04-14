@@ -87,4 +87,7 @@ public:
 
 private:
    Vertex3Ds m_oldpos[MAX_BALL_TRAIL_POS]; // used for killing spin (see C_BALL_SPIN_HACK) and for ball trails
+
+   friend struct BallHistory;
+   friend struct BallHistoryRecord;
 };

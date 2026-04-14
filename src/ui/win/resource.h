@@ -1278,6 +1278,13 @@
 #define DZVALUE                         65535
 #define DZName                          65535
 
+// Ball History sound effect resource IDs
+#define ID_BALL_HISTORY_SOUND_EFFECT_PASS               5000
+#define ID_BALL_HISTORY_SOUND_EFFECT_FAIL               5001
+#define ID_BALL_HISTORY_SOUND_EFFECT_TIME_LOW           5002
+#define ID_BALL_HISTORY_SOUND_EFFECT_COUNTDOWN_GO       5003
+#define ID_BALL_HISTORY_SOUND_EFFECT_COUNTDOWN_READYSET 5004
+
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED

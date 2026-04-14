@@ -66,6 +66,9 @@ public:
 #include "renderer/typedefs3D.h"
 #include "imgui/imgui.h"
 #include "physics/HitBall.h"
+#include "parts/ball.h"
+#include "parts/light.h"
+#include "parts/rubber.h"
 
 struct BallHistoryState
 {
