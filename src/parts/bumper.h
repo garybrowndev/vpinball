@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "ui/resource.h"
+#include "ui/win/resource.h"
 
 class BumperData final : public BaseProperty
 {
@@ -14,7 +14,6 @@ public:
    float m_orientation;
    float m_ringSpeed;
    float m_ringDropOffset;
-   TimerDataRoot m_tdr;
    string m_szCapMaterial;
    string m_szBaseMaterial;
    string m_szSkirtMaterial;
@@ -37,11 +36,11 @@ class Bumper :
    public IProvideClassInfo2Impl<&CLSID_Bumper, &DIID_IBumperEvents, &LIBID_VPinballLib>,
    public ISelect,
    public IEditable,
-   public Hitable,
+   public IHitable,
+   public IRenderable,
    public IScriptable,
    public IFireEvents,
    public IPerPropertyBrowsing // Ability to fill in dropdown in property browser
-   //public EditableImpl<Bumper>
 {
 public:
 #ifdef __STANDALONE__
@@ -50,7 +49,7 @@ public:
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
-   Bumper();
+   Bumper() { m_d.m_ringDropOffset = 0.0f; }
    virtual ~Bumper();
 
    BEGIN_COM_MAP(Bumper)
@@ -66,7 +65,7 @@ public:
    // Remove the comment from the line above if you don't want your object to
    // support aggregation.
 
-   STANDARD_EDITABLE_DECLARES(Bumper, eItemBumper, BUMPER, 1)
+   STANDARD_EDITABLE_DECLARES(Bumper, eItemBumper, BUMPER, VIEW_PLAYFIELD)
 
    BEGIN_CONNECTION_POINT_MAP(Bumper)
       CONNECTION_POINT_ENTRY(DIID_IBumperEvents)
@@ -153,13 +152,11 @@ private:
    void GenerateRingMesh(Vertex3D_NoTex2 *buf) const;
    void GenerateCapMesh(Vertex3D_NoTex2 *buf) const;
 
-   PinTable *m_ptable;
-
    RenderDevice *m_rd = nullptr;
-   MeshBuffer *m_baseMeshBuffer = nullptr;
-   MeshBuffer *m_socketMeshBuffer = nullptr;
-   MeshBuffer *m_ringMeshBuffer = nullptr;
-   MeshBuffer *m_capMeshBuffer = nullptr;
+   std::shared_ptr<MeshBuffer> m_baseMeshBuffer;
+   std::shared_ptr<MeshBuffer> m_socketMeshBuffer;
+   std::shared_ptr<MeshBuffer> m_ringMeshBuffer;
+   std::shared_ptr<MeshBuffer> m_capMeshBuffer;
 
    Matrix3D m_fullMatrix;
    Vertex3D_NoTex2 *m_ringVertices = nullptr;

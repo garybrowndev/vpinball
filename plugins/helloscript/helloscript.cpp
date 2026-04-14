@@ -1,8 +1,8 @@
 // license:GPLv3+
 
-#include "MsgPlugin.h"
-#include "VPXPlugin.h"
-#include "ScriptablePlugin.h"
+#include "plugins/MsgPlugin.h"
+#include "plugins/VPXPlugin.h"
+#include "plugins/ScriptablePlugin.h"
 #include <cstring>
 
 namespace HelloScript {
@@ -10,6 +10,7 @@ namespace HelloScript {
 static const MsgPluginAPI* msgApi = nullptr;
 static VPXPluginAPI* vpxApi = nullptr;
 static ScriptablePluginAPI* scriptApi = nullptr;
+static unsigned int getVpxApiMsgId, getScriptApiMsgId;
 
 static uint32_t endpointId;
 
@@ -38,17 +39,19 @@ MSGPI_EXPORT void MSGPIAPI HelloScriptPluginLoad(const uint32_t sessionId, const
 {
    msgApi = api;
    endpointId = sessionId;
-   const unsigned int getVpxApiId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_API);
-   msgApi->BroadcastMsg(endpointId, getVpxApiId, &vpxApi);
-   msgApi->ReleaseMsgID(getVpxApiId);
-   const unsigned int getScriptApiId = msgApi->GetMsgID(SCRIPTPI_NAMESPACE, SCRIPTPI_MSG_GET_API);
-   msgApi->BroadcastMsg(endpointId, getScriptApiId, &scriptApi);
-   msgApi->ReleaseMsgID(getScriptApiId);
+   getVpxApiMsgId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_API);
+   msgApi->BroadcastMsg(endpointId, getVpxApiMsgId, &vpxApi);
+   getScriptApiMsgId = msgApi->GetMsgID(SCRIPTPI_NAMESPACE, SCRIPTPI_MSG_GET_API);
+   msgApi->BroadcastMsg(endpointId, getScriptApiMsgId, &scriptApi);
    scriptApi->RegisterScriptClass(&helloScriptClass);
+   scriptApi->SubmitTypeLibrary(endpointId);
 }
 
 MSGPI_EXPORT void MSGPIAPI HelloScriptPluginUnload()
 {
+   scriptApi->UnregisterScriptClass(&helloScriptClass);
+   msgApi->ReleaseMsgID(getVpxApiMsgId);
+   msgApi->ReleaseMsgID(getScriptApiMsgId);
    vpxApi = nullptr;
    msgApi = nullptr;
 }

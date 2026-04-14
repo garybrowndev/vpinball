@@ -1,6 +1,7 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
+#include "parts/ball.h"
 
 HitBall::HitBall()
 {
@@ -20,6 +21,18 @@ HitBall::~HitBall()
    delete m_d.m_vpVolObjs;
 }
 
+void HitBall::OnPhysicStepProcessed(uint64_t physicsTimeMs)
+{
+   // Store latest position every 10ms, in an array of 10 slots, so 100ms history
+   const int pos = static_cast<int>((physicsTimeMs / 10) % static_cast<uint64_t>(MAX_BALL_TRAIL_POS)); // 10ms steps
+   m_oldpos[pos] = m_d.m_pos;
+}
+
+const Vertex3Ds& HitBall::GetOldPosition(uint64_t physicsTimeMs) const
+{
+   const int pos = static_cast<int>((physicsTimeMs / 10) % static_cast<uint64_t>(MAX_BALL_TRAIL_POS)); // 10ms steps
+   return m_oldpos[pos];
+}
 
 // Ported at: VisualPinball.Unity/VisualPinball.Unity/VPT/Ball/BallCollider.cs
 
@@ -292,7 +305,7 @@ void HitBall::HandleStaticContact(const CollisionEvent& coll, const float fricti
       if (m_vel.Length() < 1.f) //!! 1.f=magic, also see below
       {
          vell = (1.f-vell)*(float)C_BALL_SPIN_HACK2;
-         const float damp = (1.0f - friction * clamp(-coll.m_hit_org_normalvelocity / C_CONTACTVEL, 0.0f,1.0f)) * vell + (1.0f-vell); // do not kill spin completely, otherwise stuck balls will happen during regular gameplay
+         const float damp = (1.0f - friction * saturate(-coll.m_hit_org_normalvelocity / C_CONTACTVEL)) * vell + (1.0f-vell); // do not kill spin completely, otherwise stuck balls will happen during regular gameplay
          m_angularmomentum *= damp;
       }
 #endif
@@ -396,15 +409,15 @@ void HitBall::CalcHitBBox()
 
 void HitBall::DrawUI(std::function<Vertex2D(Vertex3Ds)> project, ImDrawList* drawList, bool fill) const
 {
-   AntiStretchHelper ash;
+   const AntiStretchHelper ash;
    float xMin = FLT_MAX, yMin = FLT_MAX, xMax = -FLT_MAX, yMax = -FLT_MAX;
-   bool invalid = ash.computeProjBounds(project, m_d.m_pos.x, m_d.m_pos.y, m_d.m_pos.z, m_d.m_radius, xMin, xMax, yMin, yMax);
-   Vertex2D center = project(m_d.m_pos);
+   const bool invalid = ash.computeProjBounds(project, m_d.m_pos.x, m_d.m_pos.y, m_d.m_pos.z, m_d.m_radius, xMin, xMax, yMin, yMax);
+   const Vertex2D center = project(m_d.m_pos);
    const ImU32 lCol = ImGui::GetColorU32(ImGuiCol_PlotLines), fCol = ImGui::GetColorU32(ImGuiCol_PlotHistogram);
    Vertex2D p2;
    for (int i = 0; i <= 32; i++)
    {
-      float a = static_cast<float>(i) * static_cast<float>(2. * M_PI / 32.);
+      const float a = static_cast<float>(i) * static_cast<float>(2. * M_PI / 32.);
       const Vertex2D p1 = p2;
       p2.x = cosf(a);
       p2.y = sinf(a);
@@ -458,7 +471,7 @@ void HitBall::UpdateVelocities()
 {
    if (!m_d.m_lockedInKicker) // Gravity
    {
-      if (this == g_pplayer->m_liveUI->m_ballControl.GetDraggedBall())
+      if (m_pBall == g_pplayer->m_liveUI->m_ballControl.GetDraggedBall())
       {
          m_d.m_vel.x *= 0.5f; // Null out most of the X/Y velocity, want a little bit so the ball can sort of find its way out of obstacles.
          m_d.m_vel.y *= 0.5f;

@@ -1,3 +1,5 @@
+// license:GPLv3+
+
 #pragma once
 
 #include <cassert>
@@ -5,6 +7,7 @@
 #include <string>
 using std::string;
 using namespace std::string_literals;
+using namespace std::string_view_literals;
 
 #include <vector>
 using std::vector;
@@ -17,56 +20,43 @@ using std::vector;
 #include <cstdlib>
 #include <memory> // needed for std::shared_ptr on Linux
 #include <functional>
+#include <filesystem>
+#include <format>
 
 // Shared logging
-#include "LoggingPlugin.h"
+#include "plugins/LoggingPlugin.h"
 
 // Scriptable API
-#include "ScriptablePlugin.h"
+#include "plugins/ScriptablePlugin.h"
 
 // VPX main API
-#include "VPXPlugin.h"
+#include "plugins/VPXPlugin.h"
 
 namespace B2S
 {
 
-LPI_USE();
-#define LOGD LPI_LOGD
-#define LOGI LPI_LOGI
-#define LOGW LPI_LOGW
-#define LOGE LPI_LOGE
+LPI_USE_CPP();
+#define LOGD B2S::LPI_LOGD_CPP
+#define LOGI B2S::LPI_LOGI_CPP
+#define LOGW B2S::LPI_LOGW_CPP
+#define LOGE B2S::LPI_LOGE_CPP
 
 PSC_USE_ERROR();
 
-#ifdef _MSC_VER
-#define PATH_SEPARATOR_CHAR '\\'
-#else
-#define PATH_SEPARATOR_CHAR '/'
-#endif
-
-class vec2
+class vec4 final
 {
 public:
-   vec2() { }
-   vec2(float px, float py) : x(px), y(py) { }
-
-   float x = 0.f, y = 0.f;
-};
-
-class vec4
-{
-public:
-   vec4() { }
-   vec4(float px, float py, float pz, float pw) : x(px), y(py), z(pz), w(pw) { }
+   constexpr vec4() { }
+   constexpr vec4(float px, float py, float pz, float pw) : x(px), y(py), z(pz), w(pw) { }
 
    float x = 0.f, y = 0.f, z = 0.f, w = 0.f;
 };
 
-class ivec4
+class ivec4 final
 {
 public:
-   ivec4() { }
-   ivec4(int px, int py, int pz, int pw) : x(px), y(py), z(pz), w(pw) { }
+   constexpr ivec4() { }
+   constexpr ivec4(int px, int py, int pz, int pw) : x(px), y(py), z(pz), w(pw) { }
 
    int x = 0, y = 0, z = 0, w = 0;
 };
@@ -75,14 +65,18 @@ public:
 extern VPXTexture CreateTexture(uint8_t *rawData, int size);
 extern VPXTextureInfo* GetTextureInfo(VPXTexture texture);
 extern void DeleteTexture(VPXTexture texture);
-extern void UpdateTexture(VPXTexture *texture, int width, int height, VPXTextureFormat format, const uint8_t *image);
-
-int GetSettingInt(const MsgPluginAPI* pMsgApi, const string& section, const string& key, int def = 0);
-bool GetSettingBool(const MsgPluginAPI* pMsgApi, const string& section, const string& key, bool def = false);
+extern void UpdateTexture(VPXTexture *texture, int width, int height, VPXTextureFormat format, const void *image);
 
 // The following function are duplicates from the main VPX codebase
-string find_case_insensitive_file_path(const string &szPath);
-string TitleAndPathFromFilename(const string &filename);
-vector<unsigned char> base64_decode(string encoded_string);
+constexpr inline char cLower(char c)
+{
+   if (c >= 'A' && c <= 'Z')
+      c ^= 32; //ASCII convention
+   return c;
+}
+
+string string_to_lower(string str);
+std::filesystem::path find_case_insensitive_file_path(const std::filesystem::path &searchedFile);
+vector<uint8_t> base64_decode(const char * const __restrict value, const size_t size_bytes);
 
 }

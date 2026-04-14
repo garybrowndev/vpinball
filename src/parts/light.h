@@ -4,7 +4,8 @@
 
 #pragma once
 
-#include "ui/resource.h"
+#include "dragpoint.h"
+#include "ui/win/resource.h"
 #include "renderer/RenderDevice.h"
 
 enum ShadowMode : int // has to be int for loading
@@ -30,7 +31,7 @@ public:
    float m_falloff;
    float m_falloff_power;
    float m_intensity;
-   float m_intensity_scale;
+   float m_intensity_scale; // FIXME this is a transient state (not persisted, and as such, should not be part of the data block)
    float m_fadeSpeedUp;
    float m_fadeSpeedDown;
 
@@ -39,7 +40,6 @@ public:
    int m_blinkinterval;
    COLORREF m_color;
    COLORREF m_color2; // color full
-   TimerDataRoot m_tdr;
    Shape m_shape;
 
    float m_depthBias; // for determining depth sorting
@@ -71,7 +71,8 @@ class Light :
    public IProvideClassInfo2Impl<&CLSID_Light, &DIID_ILightEvents, &LIBID_VPinballLib>,
    public ISelect,
    public IEditable,
-   public Hitable,
+   public IHitable, // only used for UI picking
+   public IRenderable,
    public IHaveDragPoints,
    public IScriptable,
    public IFireEvents,
@@ -84,7 +85,7 @@ public:
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
-   Light();
+   Light() : m_lightcenter(this) { m_menuid = IDR_SURFACEMENU; m_d.m_depthBias = 0.0f; m_d.m_shape = ShapeCustom; m_d.m_visible = true; }
    virtual ~Light();
 
    BEGIN_COM_MAP(Light)
@@ -104,7 +105,7 @@ public:
       CONNECTION_POINT_ENTRY(DIID_ILightEvents)
    END_CONNECTION_POINT_MAP()
 
-   STANDARD_EDITABLE_DECLARES(Light, eItemLight, LIGHT, 3)
+   STANDARD_EDITABLE_DECLARES(Light, eItemLight, LIGHT, VIEW_PLAYFIELD | VIEW_BACKGLASS)
 
    DECLARE_REGISTRY_RESOURCEID(IDR_LIGHT)
    // ISupportsErrorInfo
@@ -117,8 +118,10 @@ public:
 
    void ClearForOverwrite() final;
 
+#ifndef __STANDALONE__
    void EditMenu(CMenu &menu) final;
    void DoCommand(int icmd, int x, int y) final;
+#endif
 
    void FlipY(const Vertex2D& pvCenter) final;
    void FlipX(const Vertex2D& pvCenter) final;
@@ -131,7 +134,7 @@ public:
    void PutCenter(const Vertex2D& pv) final { PutPointCenter(pv); }
    Vertex2D GetPointCenter() const final;
    void PutPointCenter(const Vertex2D& pv) final;
-   float GetCurrentHeight() const { return m_backglass ? 0.0f : m_initSurfaceHeight + m_d.m_height; }
+   float GetCurrentHeight() const { return m_desktopBackdrop ? 0.0f : m_initSurfaceHeight + m_d.m_height; }
 
 protected:
    RenderDevice *m_rd = nullptr;
@@ -165,10 +168,19 @@ private:
    public:
       LightCenter(Light *plight) : m_plight(plight) { }
 
+      void UIRenderPass1(Sur *const psur) override { /* Processed by light */ }
+      void UIRenderPass2(Sur *const psur) override { /* Processed by light */ }
+      void RenderBlueprint(Sur *psur, const bool solid) override { /* Processed by light */ }
+
+      bool IsUILocked() const override { return m_uiLocked; }
+      void SetUILock(bool lock) override { m_uiLocked = lock; }
+      bool IsUIVisible() const override { return m_uiVisible; }
+      void SetUIVisible(bool visible) override { m_uiVisible = visible; }
+
       HRESULT GetTypeName(BSTR *pVal) const override { return m_plight->GetTypeName(pVal); }
 
-      IDispatch *GetDispatch() override { return m_plight->GetDispatch(); }
-      const IDispatch *GetDispatch() const override { return m_plight->GetDispatch(); }
+      IDispatch *GetIDispatch() override { return m_plight->GetIDispatch(); }
+      const IDispatch *GetIDispatch() const override { return m_plight->GetIDispatch(); }
 
       void Delete() override { m_plight->Delete(); }
       void Uncreate() override { m_plight->Uncreate(); }
@@ -180,8 +192,6 @@ private:
 
       PinTable *GetPTable() override { return m_plight->GetPTable(); }
       const PinTable *GetPTable() const override { return m_plight->GetPTable(); }
-
-      bool LoadToken(const int id, BiffReader * const pbr) override { return true; }
 
       Vertex2D GetCenter() const override { return m_plight->m_d.m_vCenter; }
       void PutCenter(const Vertex2D& pv) override { m_plight->m_d.m_vCenter = pv; }
@@ -195,28 +205,26 @@ private:
 
    private:
       Light *m_plight;
+      bool m_uiLocked = false; // Can not be dragged in the editor
+      bool m_uiVisible = true; // UI visibility (not the same as rendering visibility which is a member of part data)
    };
-
-
-   PinTable *m_ptable;
 
    Material *m_surfaceMaterial;
    Texture  *m_surfaceTexture;
 
    LightCenter m_lightcenter;
 
-   MeshBuffer *m_lightmapMeshBuffer = nullptr;
-   MeshBuffer *m_bulbSocketMeshBuffer = nullptr;
-   MeshBuffer *m_bulbLightMeshBuffer = nullptr;
-   PropertyPane *m_propVisual;
+   std::shared_ptr<MeshBuffer> m_lightmapMeshBuffer;
+   std::shared_ptr<MeshBuffer> m_lightmapMeshEdgeBuffer;
+   std::shared_ptr<MeshBuffer> m_bulbSocketMeshBuffer;
+   std::shared_ptr<MeshBuffer> m_bulbLightMeshBuffer;
 
    vector<RenderVertex> m_vvertex;
 
    float m_initSurfaceHeight = 0.0f;
    float m_maxDist = 0.0f;
    bool  m_lightmapMeshBufferDirty = false;
-
-   bool  m_roundLight; // pre-VPX compatibility
+   void UpdateMeshBuffer();
 
    Vertex3Ds m_boundingSphereCenter;
    //float m_boundingSphereRadius = -1.f;

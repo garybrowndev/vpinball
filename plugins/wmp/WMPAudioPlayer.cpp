@@ -1,6 +1,9 @@
+// license:GPLv3+
+
 #include "WMPAudioPlayer.h"
 #include "WMPCore.h"
 #include <algorithm>
+#include <format>
 
 namespace WMP {
 
@@ -32,18 +35,21 @@ WMPAudioPlayer::WMPAudioPlayer(MsgPluginAPI* msgApi, uint32_t endpointId, unsign
 WMPAudioPlayer::~WMPAudioPlayer()
 {
    UnloadFile();
+   m_shouldStopStreaming = true;
+   if (m_thread.joinable())
+      m_thread.join();
 }
 
 bool WMPAudioPlayer::LoadFile(const string& filepath)
 {
    UnloadFile();
 
-   LOGI("Loading audio file: %s", filepath.c_str());
+   LOGI("Loading audio file: " + filepath);
 
    const ma_decoder_config config = wmp_ma_decoder_config_init(ma_format_f32, 0, 0);
    ma_result result = wmp_ma_decoder_init_file(filepath.c_str(), &config, &m_decoder);
    if (result != MA_SUCCESS) {
-      LOGE("Failed to initialize decoder for file: %s (error: %d)", filepath.c_str(), result);
+      LOGE("Failed to initialize decoder for file: " + filepath + " (error: " + std::to_string(result) + ')');
       return false;
    }
 
@@ -52,7 +58,7 @@ bool WMPAudioPlayer::LoadFile(const string& filepath)
    ma_uint32 sampleRate;
    result = wmp_ma_decoder_get_data_format(&m_decoder, &format, &channels, &sampleRate, nullptr, 0);
    if (result != MA_SUCCESS) {
-      LOGE("Failed to get decoder format info");
+      LOGE("Failed to get decoder format info"s);
       wmp_ma_decoder_uninit(&m_decoder);
       return false;
    }
@@ -62,7 +68,7 @@ bool WMPAudioPlayer::LoadFile(const string& filepath)
    m_loadedFile = filepath;
    m_isLoaded = true;
 
-   LOGD("Audio loaded: %d Hz, %d channels, format: f32", sampleRate, channels);
+   LOGD("Audio loaded: " + std::to_string(sampleRate) + " Hz, " + std::to_string(channels) + " channels, format: f32");
    return true;
 }
 
@@ -74,7 +80,7 @@ void WMPAudioPlayer::UnloadFile()
       wmp_ma_decoder_uninit(&m_decoder);
       m_isLoaded = false;
       m_loadedFile.clear();
-      LOGI("Audio file unloaded");
+      LOGI("Audio file unloaded"s);
    }
 }
 
@@ -86,7 +92,7 @@ void WMPAudioPlayer::Play()
    if (m_isPlaying && !m_isPaused)
       return;
 
-   LOGI("Starting playback");
+   LOGI("Starting playback"s);
 
    m_isPaused = false;
    m_isPlaying = true;
@@ -99,7 +105,7 @@ void WMPAudioPlayer::Pause()
    if (!m_isPlaying)
       return;
 
-   LOGI("Pausing playback");
+   LOGI("Pausing playback"s);
 
    m_isPaused = true;
    StopStreaming();
@@ -110,7 +116,7 @@ void WMPAudioPlayer::Stop()
    if (!m_isPlaying)
       return;
 
-   LOGI("Stopping playback");
+   LOGI("Stopping playback"s);
 
    m_isPlaying = false;
    m_isPaused = false;
@@ -129,7 +135,7 @@ double WMPAudioPlayer::GetPosition()
    const ma_result result = wmp_ma_decoder_get_cursor_in_pcm_frames(&m_decoder, &currentFrame);
 
    if (result != MA_SUCCESS) {
-      LOGE("Failed to get decoder cursor position");
+      LOGE("Failed to get decoder cursor position"s);
       return 0.0;
    }
 
@@ -145,29 +151,29 @@ void WMPAudioPlayer::SetPosition(double positionInSeconds)
    const ma_result result = wmp_ma_decoder_seek_to_pcm_frame(&m_decoder, targetFrame);
 
    if (result == MA_SUCCESS) {
-      LOGI("Seek to position: %.2f seconds (frame %llu)", positionInSeconds, targetFrame);
+      LOGI(std::format("Seek to position: {:.2f} seconds (frame {})", positionInSeconds, targetFrame));
    }
    else {
-      LOGE("Failed to seek to position: %.2f seconds", positionInSeconds);
+      LOGE(std::format("Failed to seek to position: {:.2f} seconds", positionInSeconds));
    }
 }
 
 void WMPAudioPlayer::SetVolume(float volume)
 {
    m_volume = volume;
-   LOGI("Volume set to: %.2f", m_volume.load());
+   LOGI(std::format("Volume set to: {:.2f}", m_volume.load()));
 }
 
-void WMPAudioPlayer::UpdateVolume(long volume, bool mute)
+void WMPAudioPlayer::UpdateVolume(int volume, bool mute)
 {
-   long clampedVolume = std::max(0L, std::min<long>(volume, 100L));
+   int clampedVolume = std::max(0, std::min(volume, 100));
 
    float audioVolume = static_cast<float>(clampedVolume) / 100.0f;
    if (mute)
       audioVolume = 0.0f;
 
    m_volume = audioVolume;
-   LOGI("Volume updated: %ld%s -> %.2f", clampedVolume, mute ? " (muted)" : "", m_volume.load());
+   LOGI(std::format("Volume updated: {}{} -> {:.2f}", clampedVolume, mute ? " (muted)" : "", m_volume.load()));
 }
 
 void WMPAudioPlayer::StartStreaming()
@@ -188,7 +194,7 @@ void WMPAudioPlayer::StartStreaming()
          const ma_result result = wmp_ma_decoder_read_pcm_frames(&m_decoder, audioBuffer, bufferSizeFrames, &framesRead);
 
          if (result != MA_SUCCESS || framesRead == 0) {
-            LOGI("End of audio stream reached");
+            LOGI("End of audio stream reached"s);
             break;
          }
 
@@ -198,10 +204,10 @@ void WMPAudioPlayer::StartStreaming()
                audioBuffer[i] *= volume;
          }
 
-         SendAudioChunk(audioBuffer, framesRead);
+         SendAudioChunk(audioBuffer, (size_t)framesRead);
 
          double bufferDurationMs = (double)framesRead / (double)m_sampleRate * 1000.0;
-         std::this_thread::sleep_for(std::chrono::microseconds((int)(bufferDurationMs * 800)));
+         std::this_thread::sleep_for(std::chrono::microseconds((int)(bufferDurationMs * 800.)));
       }
 
       if (!m_shouldStopStreaming) {
@@ -212,7 +218,7 @@ void WMPAudioPlayer::StartStreaming()
 
          AudioCallbackData* cbData = new AudioCallbackData{m_msgApi, m_endpointId, m_onAudioUpdateId, endMsg};
 
-         m_msgApi->RunOnMainThread(0, [](void* userData) {
+         m_msgApi->RunOnMainThread(m_endpointId, 0, [](void* userData) {
             AudioCallbackData* data = static_cast<AudioCallbackData*>(userData);
             data->msgApi->BroadcastMsg(data->endpointId, data->onAudioUpdateId, data->msg);
             delete data->msg;
@@ -224,7 +230,7 @@ void WMPAudioPlayer::StartStreaming()
 
       if (m_isPlaying && !m_shouldStopStreaming) {
          m_isPlaying = false;
-         LOGI("Playback completed");
+         LOGI("Playback completed"s);
       }
    });
 }
@@ -243,7 +249,7 @@ void WMPAudioPlayer::StopStreaming()
 
    AudioCallbackData* cbData = new AudioCallbackData{m_msgApi, m_endpointId, m_onAudioUpdateId, pAudioUpdateMsg};
 
-   m_msgApi->RunOnMainThread(0, [](void* userData) {
+   m_msgApi->RunOnMainThread(m_endpointId, 0, [](void* userData) {
       AudioCallbackData* data = static_cast<AudioCallbackData*>(userData);
       data->msgApi->BroadcastMsg(data->endpointId, data->onAudioUpdateId, data->msg);
       delete data->msg;
@@ -271,7 +277,7 @@ void WMPAudioPlayer::SendAudioChunk(const float* samples, size_t frameCount)
 
    AudioCallbackData* cbData = new AudioCallbackData{m_msgApi, m_endpointId, m_onAudioUpdateId, pAudioUpdateMsg};
 
-   m_msgApi->RunOnMainThread(0, [](void* userData) {
+   m_msgApi->RunOnMainThread(m_endpointId, 0, [](void* userData) {
       AudioCallbackData* data = static_cast<AudioCallbackData*>(userData);
       data->msgApi->BroadcastMsg(data->endpointId, data->onAudioUpdateId, data->msg);
       delete[] data->msg->buffer;

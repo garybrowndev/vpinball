@@ -4,6 +4,8 @@
 #include "VRDevice.h"
 #include "core/vpversion.h"
 
+#include "parts/primitive.h"
+
 // MSVC Concurrency Viewer support
 // This requires to add the MSVC Concurrency SDK to the project
 //#define MSVC_CONCURRENCY_VIEWER
@@ -18,112 +20,9 @@ extern marker_series series;
    #include "bgfx/bgfx.h"
    #include "bx/math.h"
    #include "bx/os.h"
-
-   #if BX_PLATFORM_WINDOWS
-      #define XR_USE_PLATFORM_WIN32
-      //#define XR_USE_GRAPHICS_API_VULKAN
-      #define XR_USE_GRAPHICS_API_OPENGL
-      #define XR_USE_GRAPHICS_API_OPENGL_ES
-      #define XR_USE_GRAPHICS_API_D3D11
-      //#define XR_USE_GRAPHICS_API_D3D12
-   #elif BX_PLATFORM_ANDROID
-      #define XR_USE_PLATFORM_ANDROID
-      //#define XR_USE_GRAPHICS_API_VULKAN
-      #define XR_USE_GRAPHICS_API_OPENGL_ES
-   #endif
-
-   // OpenXR Dependencies
-
-   #ifdef XR_USE_PLATFORM_ANDROID
-   #include <android/native_window.h>
-   #include <android/window.h>
-   #include <android/native_window_jni.h>
-   #endif  // XR_USE_PLATFORM_ANDROID
-
-   #ifdef XR_USE_PLATFORM_WIN32
-
-   #include <winapifamily.h>
-   #if !(WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP | WINAPI_PARTITION_SYSTEM))
-   // Enable desktop partition APIs, such as RegOpenKeyEx, LoadLibraryEx, PathFileExists etc.
-   #undef WINAPI_PARTITION_DESKTOP
-   #define WINAPI_PARTITION_DESKTOP 1
-   #endif
-
-   #ifndef NOMINMAX
-   #define NOMINMAX
-   #endif  // !NOMINMAX
-
-   #ifndef WIN32_LEAN_AND_MEAN
-   #define WIN32_LEAN_AND_MEAN
-   #endif  // !WIN32_LEAN_AND_MEAN
-
-   #include <windows.h>
-   #include <unknwn.h>
-
-   #endif  // XR_USE_PLATFORM_WIN32
-
-   #ifdef XR_USE_GRAPHICS_API_D3D11
-   #include <d3d11.h>
-   #endif  // XR_USE_GRAPHICS_API_D3D11
-
-   #ifdef XR_USE_GRAPHICS_API_D3D12
-   #include <d3d12.h>
-   #endif  // XR_USE_GRAPHICS_API_D3D12
-
-   #ifdef XR_USE_PLATFORM_XLIB
-   #include <X11/Xlib.h>
-   #include <X11/Xutil.h>
-   #endif  // XR_USE_PLATFORM_XLIB
-
-   #ifdef XR_USE_PLATFORM_XCB
-   #include <xcb/xcb.h>
-   #endif  // XR_USE_PLATFORM_XCB
-
-   #ifdef XR_USE_GRAPHICS_API_OPENGL
-   #if defined(XR_USE_PLATFORM_XLIB) || defined(XR_USE_PLATFORM_XCB)
-   #include <GL/glx.h>
-   #endif  // (XR_USE_PLATFORM_XLIB || XR_USE_PLATFORM_XCB)
-   #ifdef XR_USE_PLATFORM_XCB
-   #include <xcb/glx.h>
-   #endif  // XR_USE_PLATFORM_XCB
-   #ifdef XR_USE_PLATFORM_MACOS
-   #include <OpenCL/cl_gl_ext.h>
-   #endif  // XR_USE_PLATFORM_MACOS
-   #endif  // XR_USE_GRAPHICS_API_OPENGL
-
-   #ifdef XR_USE_GRAPHICS_API_OPENGL_ES
-   #include "sdl3/SDL_egl.h"
-   #endif  // XR_USE_GRAPHICS_API_OPENGL_ES
-
-   #ifdef XR_USE_GRAPHICS_API_VULKAN
-   #include <vulkan/vulkan.h>
-   #endif  // XR_USE_GRAPHICS_API_VULKAN
-
-   #ifdef XR_USE_PLATFORM_WAYLAND
-   #include "wayland-client.h"
-   #endif  // XR_USE_PLATFORM_WAYLAND
-
-   #ifdef XR_USE_PLATFORM_EGL
-   #include <EGL/egl.h>
-   #endif  // XR_USE_PLATFORM_EGL
-
-   #if defined(XR_USE_PLATFORM_XLIB) || defined(XR_USE_PLATFORM_XCB)
-   #ifdef Success
-   #undef Success
-   #endif  // Success
-
-   #ifdef Always
-   #undef Always
-   #endif  // Always
-
-   #ifdef None
-   #undef None
-   #endif  // None
-   #endif // defined(XR_USE_PLATFORM_XLIB) || defined(XR_USE_PLATFORM_XCB)
-
-   #include <openxr/openxr.h>
-   #include <openxr/openxr_platform.h>
-
+   #include <map>
+   #include <vector>
+   #include <time.h>
 
 static inline const char* GetXRErrorString(XrInstance xrInstance, XrResult result)
 {
@@ -134,10 +33,9 @@ static inline const char* GetXRErrorString(XrInstance xrInstance, XrResult resul
 
 #define OPENXR_CHECK(x, y)                                                                                                                                                                   \
    {                                                                                                                                                                                         \
-      const XrResult result = (x);                                                                                                                                                           \
-      if (!XR_SUCCEEDED(result) && g_pplayer->m_vrDevice)                                                                                                                                    \
+      if (const XrResult res = (x); !XR_SUCCEEDED(res))                                                                                                                                      \
       {                                                                                                                                                                                      \
-         PLOGE << "ERROR: OPENXR: " << int(result) << '(' << (m_xrInstance ? GetXRErrorString(m_xrInstance, result) : "") << ") " << (y);        \
+         PLOGE << "ERROR: OPENXR: " << int(res) << " (" << (m_xrInstance ? GetXRErrorString(m_xrInstance, res) : "") << ") " << (y);                                                         \
       }                                                                                                                                                                                      \
    }
 
@@ -148,40 +46,40 @@ inline static float XrRcpSqrt(const float x)
    return rcp;
 }
 
-inline static void XrVector3f_Lerp(XrVector3f* result, const XrVector3f* a, const XrVector3f* b, const float fraction) {
-    result->x = a->x + fraction * (b->x - a->x);
-    result->y = a->y + fraction * (b->y - a->y);
-    result->z = a->z + fraction * (b->z - a->z);
+inline static void XrVector3f_Lerp(XrVector3f* const result, const XrVector3f* const a, const XrVector3f* const b, const float fraction) {
+   result->x = a->x + fraction * (b->x - a->x);
+   result->y = a->y + fraction * (b->y - a->y);
+   result->z = a->z + fraction * (b->z - a->z);
 }
 
-inline static void XrVector3f_Scale(XrVector3f* result, const XrVector3f* a, const float scaleFactor) {
-    result->x = a->x * scaleFactor;
-    result->y = a->y * scaleFactor;
-    result->z = a->z * scaleFactor;
+inline static void XrVector3f_Scale(XrVector3f* const result, const XrVector3f* const a, const float scaleFactor) {
+   result->x = a->x * scaleFactor;
+   result->y = a->y * scaleFactor;
+   result->z = a->z * scaleFactor;
 }
 
-inline static void XrQuaternionf_Lerp(XrQuaternionf* result, const XrQuaternionf* a, const XrQuaternionf* b, const float fraction) {
-    const float s = a->x * b->x + a->y * b->y + a->z * b->z + a->w * b->w;
-    const float fa = 1.0f - fraction;
-    const float fb = (s < 0.0f) ? -fraction : fraction;
-    const float x = a->x * fa + b->x * fb;
-    const float y = a->y * fa + b->y * fb;
-    const float z = a->z * fa + b->z * fb;
-    const float w = a->w * fa + b->w * fb;
-    const float lengthRcp = XrRcpSqrt(x * x + y * y + z * z + w * w);
-    result->x = x * lengthRcp;
-    result->y = y * lengthRcp;
-    result->z = z * lengthRcp;
-    result->w = w * lengthRcp;
+inline static void XrQuaternionf_Lerp(XrQuaternionf* const result, const XrQuaternionf* const a, const XrQuaternionf* const b, const float fraction) {
+   const float s = a->x * b->x + a->y * b->y + a->z * b->z + a->w * b->w;
+   const float fa = 1.0f - fraction;
+   const float fb = (s < 0.0f) ? -fraction : fraction;
+   const float x = a->x * fa + b->x * fb;
+   const float y = a->y * fa + b->y * fb;
+   const float z = a->z * fa + b->z * fb;
+   const float w = a->w * fa + b->w * fb;
+   const float lengthRcp = XrRcpSqrt(x * x + y * y + z * z + w * w);
+   result->x = x * lengthRcp;
+   result->y = y * lengthRcp;
+   result->z = z * lengthRcp;
+   result->w = w * lengthRcp;
 }
 
 inline static void XrPosef_ToMatrix3D(Matrix3D* result, const XrPosef* pose)
 {
-   bx::Quaternion orientation(pose->orientation.x, pose->orientation.y, pose->orientation.z, pose->orientation.w);
-   bx::Quaternion invertOrientation = bx::invert(orientation);
+   const bx::Quaternion orientation(pose->orientation.x, pose->orientation.y, pose->orientation.z, pose->orientation.w);
+   const bx::Quaternion invertOrientation = bx::invert(orientation);
    bx::mtxFromQuaternion(&result->m[0][0], invertOrientation);
    result->Transpose();
-   bx::Quaternion position(pose->position.x, pose->position.y, pose->position.z, 0.f);
+   const bx::Quaternion position(pose->position.x, pose->position.y, pose->position.z, 0.f);
    bx::Quaternion invertPosition = bx::invert(position);
    invertPosition = bx::mul(invertPosition, orientation);
    invertPosition = bx::mul(invertOrientation, invertPosition);
@@ -190,193 +88,17 @@ inline static void XrPosef_ToMatrix3D(Matrix3D* result, const XrPosef* pose)
    result->m[3][2] += invertPosition.z;
 }
 
-class XRGraphicBackend
-{
-public:
-   virtual void* GetGraphicContext() const = 0;
-   virtual void* GetGraphicsBinding() = 0;
-
-   virtual XrSwapchainImageBaseHeader* AllocateSwapchainImageData(XrSwapchain swapchain, VRDevice::SwapchainType type, uint32_t count) = 0;
-   virtual void FreeSwapchainImageData(XrSwapchain swapchain) = 0;
-   virtual void* GetSwapchainImage(XrSwapchain swapchain, uint32_t index) = 0;
-
-   virtual void CreateImageViews(VRDevice::SwapchainInfo& swapchain) = 0;
-
-   virtual const std::vector<int64_t> GetSupportedColorSwapchainFormats() = 0;
-   virtual const std::vector<int64_t> GetSupportedDepthSwapchainFormats() = 0;
-
-   int64_t SelectColorSwapchainFormat(const std::vector<int64_t>& formats)
-   {
-      const std::vector<int64_t>& supportSwapchainFormats = GetSupportedColorSwapchainFormats();
-      const std::vector<int64_t>::const_iterator& swapchainFormatIt = std::find_first_of(formats.begin(), formats.end(), std::begin(supportSwapchainFormats), std::end(supportSwapchainFormats));
-      if (swapchainFormatIt == formats.end())
-      {
-         PLOGE << "ERROR: Unable to find supported Color Swapchain Format";
-         assert(false);
-         return 0;
-      }
-      return *swapchainFormatIt;
-   }
-
-   int64_t SelectDepthSwapchainFormat(const std::vector<int64_t>& formats)
-   {
-      const std::vector<int64_t>& supportSwapchainFormats = GetSupportedDepthSwapchainFormats();
-      const std::vector<int64_t>::const_iterator& swapchainFormatIt = std::find_first_of(formats.begin(), formats.end(), std::begin(supportSwapchainFormats), std::end(supportSwapchainFormats));
-      if (swapchainFormatIt == formats.end())
-      {
-         PLOGE << "ERROR: Unable to find supported Depth Swapchain Format";
-         assert(false);
-         return 0;
-      }
-      return *swapchainFormatIt;
-   }
-};
-
 
 #ifdef XR_USE_GRAPHICS_API_D3D11
-#include <d3d11_1.h>
-#include <dxgi1_6.h>
+#include "XRD3D11Backend.h"
+#endif
 
-#define D3D11_CHECK(x, y)                                                                                                                                                                    \
-   {                                                                                                                                                                                         \
-      const HRESULT result = (x);                                                                                                                                                            \
-      if (FAILED(result))                                                                                                                                                                    \
-      {                                                                                                                                                                                      \
-         PLOGE << "ERROR: D3D11: " << std::hex << "0x" << result << std::dec;                                                                                                                \
-         PLOGE << "ERROR: D3D11: " << (y);                                                                                                                                                     \
-      }                                                                                                                                                                                      \
-   }
+#ifdef XR_USE_GRAPHICS_API_D3D12
+#include "XRD3D12Backend.h"
+#endif
 
-#define D3D11_SAFE_RELEASE(p)                                                                                                                                                                \
-   {                                                                                                                                                                                         \
-      if (p)                                                                                                                                                                                 \
-      {                                                                                                                                                                                      \
-         (p)->Release();                                                                                                                                                                     \
-         (p) = nullptr;                                                                                                                                                                      \
-      }                                                                                                                                                                                      \
-   }
-
-class XRD3D11Backend final : public XRGraphicBackend
-{
-public:
-   XRD3D11Backend(const XrInstance& m_xrInstance, const XrSystemId& m_systemID)
-   {
-      xrGetD3D11GraphicsRequirementsKHR = nullptr;
-      OPENXR_CHECK(xrGetInstanceProcAddr(m_xrInstance, "xrGetD3D11GraphicsRequirementsKHR", (PFN_xrVoidFunction*)&xrGetD3D11GraphicsRequirementsKHR), "Failed to get InstanceProcAddr xrGetD3D11GraphicsRequirementsKHR.");
-      XrGraphicsRequirementsD3D11KHR graphicsRequirements { XR_TYPE_GRAPHICS_REQUIREMENTS_D3D11_KHR };
-      OPENXR_CHECK(xrGetD3D11GraphicsRequirementsKHR(m_xrInstance, m_systemID, &graphicsRequirements), "Failed to get Graphics Requirements for D3D11.");
-
-      static const char* dxgiDllName = "dxgi.dll";
-      m_dxgiDll = bx::dlopen(dxgiDllName);
-      typedef HRESULT(WINAPI * PFN_CREATE_DXGI_FACTORY)(REFIID _riid, void** _factory);
-      PFN_CREATE_DXGI_FACTORY CreateDXGIFactory = (PFN_CREATE_DXGI_FACTORY)bx::dlsym(m_dxgiDll, "CreateDXGIFactory1");
-
-      IDXGIFactory4* factory = nullptr;
-      D3D11_CHECK(CreateDXGIFactory(IID_PPV_ARGS(&factory)), "Failed to create DXGI factory.");
-      IDXGIAdapter* adapter = nullptr;
-      DXGI_ADAPTER_DESC adapterDesc = {};
-      for (UINT i = 0; factory->EnumAdapters(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
-      {
-         adapter->GetDesc(&adapterDesc);
-         if (memcmp(&graphicsRequirements.adapterLuid, &adapterDesc.AdapterLuid, sizeof(LUID)) == 0)
-            break; // We have the matching adapter that OpenXR wants.
-         adapter = nullptr; // If we don't get a match, reset adapter to nullptr to force a throw.
-      }
-      OPENXR_CHECK(adapter != nullptr ? XR_SUCCESS : XR_ERROR_VALIDATION_FAILURE, "Failed to find matching graphics adapter from xrGetD3D11GraphicsRequirementsKHR.");
-
-      static const char* d3d11DllName = "d3d11.dll";
-      m_d3d11Dll = bx::dlopen(d3d11DllName);
-      PFN_D3D11_CREATE_DEVICE D3D11CreateDevice = (PFN_D3D11_CREATE_DEVICE)bx::dlsym(m_d3d11Dll, "D3D11CreateDevice");
-      #ifdef DEBUG
-      {
-         // Try to create the device with the debug layer and fallback to default DX11 if DX SDK is not installed.
-         HRESULT result = D3D11CreateDevice(adapter, D3D_DRIVER_TYPE_UNKNOWN, 0, D3D11_CREATE_DEVICE_DEBUG, &graphicsRequirements.minFeatureLevel, 1, D3D11_SDK_VERSION, &m_device, nullptr, &m_immediateContext);
-         if (result == DXGI_ERROR_SDK_COMPONENT_MISSING)
-            result = D3D11CreateDevice(adapter, D3D_DRIVER_TYPE_UNKNOWN, 0, 0, &graphicsRequirements.minFeatureLevel, 1, D3D11_SDK_VERSION, &m_device, nullptr, &m_immediateContext);
-         if (FAILED(result))
-         {
-            PLOGE << "ERROR: D3D11: " << std::hex << "0x" << result << std::dec;
-            PLOGE << "ERROR: D3D11: Failed to create D3D11 Device.";
-         }
-      }
-      #else
-         D3D11_CHECK(D3D11CreateDevice(adapter, D3D_DRIVER_TYPE_UNKNOWN, 0, 0, &graphicsRequirements.minFeatureLevel, 1, D3D11_SDK_VERSION, &m_device, nullptr, &m_immediateContext), "Failed to create D3D11 Device.");
-      #endif
-      D3D11_SAFE_RELEASE(factory);
-   }
-
-   ~XRD3D11Backend()
-   {
-      D3D11_SAFE_RELEASE(m_immediateContext);
-      D3D11_SAFE_RELEASE(m_device);
-      if (m_dxgiDll)
-         bx::dlclose(m_dxgiDll);
-      if (m_d3d11Dll)
-         bx::dlclose(m_d3d11Dll);
-   }
-
-   void* GetGraphicContext() const override
-   {
-      return m_device;
-   }
-
-   void* GetGraphicsBinding() override
-   {
-      graphicsBinding = { XR_TYPE_GRAPHICS_BINDING_D3D11_KHR };
-      graphicsBinding.device = m_device;
-      return &graphicsBinding;
-   }
-
-   void CreateImageViews(VRDevice::SwapchainInfo& swapchain) override
-   {
-      // TODO BGFX_TEXTURE_BLIT_DST was added since we are blitting the depth instead of directly using it. Remove asap
-      uint64_t flags = BGFX_TEXTURE_RT;
-      swapchain.format = bgfx::TextureFormat::Enum::Count;
-      switch (swapchain.backendFormat)
-      { // Convert from values returned from GetSupportedColorSwapchainFormats / GetSupportedDepthSwapchainFormats
-      case DXGI_FORMAT_R8G8B8A8_UNORM: swapchain.format = bgfx::TextureFormat::RGBA8; break;
-      case DXGI_FORMAT_B8G8R8A8_UNORM: swapchain.format = bgfx::TextureFormat::BGRA8; break;
-      case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB: swapchain.format = bgfx::TextureFormat::RGBA8; flags |= BGFX_TEXTURE_SRGB; break;
-      case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB: swapchain.format = bgfx::TextureFormat::BGRA8; flags |= BGFX_TEXTURE_SRGB; break;
-      case DXGI_FORMAT_D32_FLOAT: swapchain.format = bgfx::TextureFormat::D32F; flags |= BGFX_TEXTURE_BLIT_DST; break;
-      case DXGI_FORMAT_D16_UNORM: swapchain.format = bgfx::TextureFormat::D16; flags |= BGFX_TEXTURE_BLIT_DST; break;
-      default: assert(false); break; // Unsupported format
-      };
-      for (size_t i = 0; i < swapchainImagesMap[swapchain.swapchain].second.size(); i++)
-      {
-         const bgfx::TextureHandle handle = bgfx::createTexture2D(swapchain.width, swapchain.height, false, swapchain.arraySize, swapchain.format, flags);
-         bgfx::frame(); // TODO This is needed for BGFX to actually create the texture, but this is somewhat hacky and suboptimal
-         uintptr_t nativePtr = bgfx::overrideInternal(handle, reinterpret_cast<uintptr_t>(GetSwapchainImage(swapchain.swapchain, (uint32_t)i)));
-         assert(nativePtr); // Override failed
-         swapchain.imageViews.push_back(handle);
-      }
-   }
-
-   XrSwapchainImageBaseHeader* AllocateSwapchainImageData(XrSwapchain swapchain, VRDevice::SwapchainType type, uint32_t count) override
-   {
-      swapchainImagesMap[swapchain].first = type;
-      swapchainImagesMap[swapchain].second.resize(count, { XR_TYPE_SWAPCHAIN_IMAGE_D3D11_KHR });
-      return reinterpret_cast<XrSwapchainImageBaseHeader*>(swapchainImagesMap[swapchain].second.data());
-   }
-   void* GetSwapchainImage(XrSwapchain swapchain, uint32_t index) override { return swapchainImagesMap[swapchain].second[index].texture; }
-   void FreeSwapchainImageData(XrSwapchain swapchain) override
-   {
-      swapchainImagesMap[swapchain].second.clear();
-      swapchainImagesMap.erase(swapchain);
-   }
-
-   const std::vector<int64_t> GetSupportedColorSwapchainFormats() override { return { DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB /*, DXGI_FORMAT_B8G8R8A8_UNORM_SRGB  not supported by BGFX */ }; }
-   const std::vector<int64_t> GetSupportedDepthSwapchainFormats() override { return { DXGI_FORMAT_D32_FLOAT, DXGI_FORMAT_D16_UNORM }; }
-
-private:
-   void* m_dxgiDll = nullptr;
-   void* m_d3d11Dll = nullptr;
-   ID3D11Device* m_device = nullptr;
-   ID3D11DeviceContext* m_immediateContext = nullptr;
-   PFN_xrGetD3D11GraphicsRequirementsKHR xrGetD3D11GraphicsRequirementsKHR = nullptr;
-   XrGraphicsBindingD3D11KHR graphicsBinding {};
-   ankerl::unordered_dense::map<XrSwapchain, std::pair<VRDevice::SwapchainType, std::vector<XrSwapchainImageD3D11KHR>>> swapchainImagesMap {};
-};
+#ifdef XR_USE_GRAPHICS_API_VULKAN
+#include "XRVulkanBackend.h"
 #endif
 
 #endif
@@ -389,32 +111,25 @@ private:
 
 
 
-VRDevice::VRDevice()
+VRDevice::VRDevice(const Settings& settings)
 {
-   Settings& settings = g_pvp->GetActiveTable()->m_settings;
-   #if defined(ENABLE_VR) || defined(ENABLE_XR)
       // Scene offset (vertical rotation and horizontal shift)
-      m_orientation = settings.LoadValueWithDefault(Settings::PlayerVR, "Orientation"s, 0.0f);
-      m_tablePos.x = settings.LoadValueFloat(Settings::PlayerVR, "TableX"s);
-      m_tablePos.y = settings.LoadValueFloat(Settings::PlayerVR, "TableY"s);
+      m_orientation = settings.GetPlayerVR_Orientation();
+      m_tablePos.x = settings.GetPlayerVR_TableX();
+      m_tablePos.y = settings.GetPlayerVR_TableY();
       // Offset of the playfield from the room ground is defined as an offset from the lockbar, minus bottom glass height and custom adjustment
       // (Note that for OpenVR offset is defined from the ground)
-      m_tablePos.z = settings.LoadValueFloat(Settings::PlayerVR, "TableZ"s);
-   #endif
+      m_tablePos.z = settings.GetPlayerVR_TableZ();
    #if defined(ENABLE_VR)
-      m_slope = settings.LoadValueWithDefault(Settings::PlayerVR, "Slope"s, 6.5f);
-   #endif
-   #if defined(ENABLE_XR)
-      m_sceneOffset.x = 0.f;
-      m_sceneOffset.y = 5.f; // Fixed value of 5 cm between playfield bottom and lockbar border
-      m_sceneOffset.z = g_pvp->m_settings.LoadValueFloat(Settings::Player, "LockbarHeight") - VPUTOCM(g_pplayer->m_ptable->m_glassTopHeight);
+      m_slope = settings.GetPlayerVR_Slope();
    #endif
    m_worldDirty = true;
-   
+
    #if defined(ENABLE_XR)
-      // Relative scale factor
-      m_lockbarWidth = settings.LoadValueFloat(Settings::Player, "LockbarWidth"s);
-      
+      // Relative scale factor and positioning
+      m_lockbarWidth = settings.GetPlayer_LockbarWidth();
+      m_lockbarHeight = settings.GetPlayer_LockbarHeight();
+
       // Fill out an XrApplicationInfo structure detailing the names and OpenXR version.
       // The application/engine name and version are user-defined. These may help IHVs or runtimes.
       XrApplicationInfo AI;
@@ -434,9 +149,9 @@ VRDevice::VRDevice()
 
       // Check the requested API layers against the ones from the OpenXR. If found add it to the Active API Layers.
       m_activeAPILayers.clear();
-      for (auto& requestLayer : m_apiLayers)
+      for (const auto& requestLayer : m_apiLayers)
       {
-         for (auto& layerProperty : apiLayerProperties)
+         for (const auto& layerProperty : apiLayerProperties)
          {
             if (requestLayer == layerProperty.layerName)
             {
@@ -453,7 +168,7 @@ VRDevice::VRDevice()
       extensionProperties.resize(extensionCount, { XR_TYPE_EXTENSION_PROPERTIES });
       OPENXR_CHECK(xrEnumerateInstanceExtensionProperties(nullptr, extensionCount, &extensionCount, extensionProperties.data()), "Failed to enumerate InstanceExtensionProperties.");
       #ifdef DEBUG
-         for (auto& extensionProperty : extensionProperties)
+         for (const auto& extensionProperty : extensionProperties)
          {
             PLOGD << "OpenXR supported extension: " << extensionProperty.extensionName << ", version " << extensionProperty.extensionVersion;
          }
@@ -472,29 +187,57 @@ VRDevice::VRDevice()
          }
          return false;
       };
-      // FIXME VRDevice is created before bgfx initialization (since it creates the graphic context expected by OpenXR), so bgfx::getRendererType() is not defined at this point. For the time being only D3D11 is supported (enforced in RenderDevice)
-      // const bgfx::RendererType::Enum renderer = bgfx::getRendererType();
-      constexpr bgfx::RendererType::Enum renderer = bgfx::RendererType::Enum::Direct3D11;
-      bool hasGraphicBackend = false;
-      switch (renderer)
-      {
-      case bgfx::RendererType::Enum::OpenGL: hasGraphicBackend = EnableExtensionIfSupported(XR_KHR_OPENGL_ENABLE_EXTENSION_NAME); assert(hasGraphicBackend); break;
-      case bgfx::RendererType::Enum::OpenGLES: hasGraphicBackend = EnableExtensionIfSupported(XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME); assert(hasGraphicBackend); break;
-      #ifdef XR_USE_GRAPHICS_API_VULKAN
-         case bgfx::RendererType::Enum::Vulkan: hasGraphicBackend = EnableExtensionIfSupported(XR_KHR_VULKAN_ENABLE_EXTENSION_NAME); assert(hasGraphicBackend); break;
+      // VRDevice is created before bgfx initialization (since it creates the graphic context expected by OpenXR), so bgfx::getRendererType() is not defined at this point.
+      // Renderer is determined at compile time based on platform: D3D11 for Windows, Vulkan for Android.
+      #if BX_PLATFORM_WINDOWS
+         const string gfxBackend = g_pplayer->m_ptable->m_settings.GetPlayer_GfxBackend();
+         if (gfxBackend == "Vulkan"sv)
+         #ifdef _DEBUG
+            m_rendererType = bgfx::RendererType::Enum::Vulkan;
+         #else
+         {
+            PLOGI << "Renderer backend enforced to Direct3D11 as Vulkan is still experimental and not enabled in release builds";
+            m_rendererType = bgfx::RendererType::Enum::Direct3D11;
+         }
+         #endif
+         else if (gfxBackend == "Direct3D12"sv)
+            m_rendererType = bgfx::RendererType::Enum::Direct3D12;
+         else
+            m_rendererType = bgfx::RendererType::Enum::Direct3D11; // Default to Direct3D 11
+      #elif BX_PLATFORM_ANDROID
+         m_rendererType = bgfx::RendererType::Enum::Vulkan;
+      #else
+         #error "Unsupported platform for OpenXR"
       #endif
-         case bgfx::RendererType::Enum::Direct3D11: hasGraphicBackend = EnableExtensionIfSupported(XR_KHR_D3D11_ENABLE_EXTENSION_NAME); assert(hasGraphicBackend); break;
+      bool hasGraphicBackend = false;
+      switch (m_rendererType)
+      {
+      #ifdef XR_USE_GRAPHICS_API_VULKAN
+         case bgfx::RendererType::Enum::Vulkan:
+            // According to https://github.khronos.org/OpenXR-Inventory/runtime_extension_support.html all runtimes that support XR_KHR_VULKAN_ENABLE_EXTENSION_NAME do support XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME
+            hasGraphicBackend = EnableExtensionIfSupported(XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME);
+            break;
+      #endif
+      #ifdef XR_USE_GRAPHICS_API_D3D11
+         case bgfx::RendererType::Enum::Direct3D11: hasGraphicBackend = EnableExtensionIfSupported(XR_KHR_D3D11_ENABLE_EXTENSION_NAME); break;
+      #endif
       #ifdef XR_USE_GRAPHICS_API_D3D12
-         case bgfx::RendererType::Enum::Direct3D12: hasGraphicBackend = EnableExtensionIfSupported(XR_KHR_D3D12_ENABLE_EXTENSION_NAME); assert(hasGraphicBackend); break;
+         case bgfx::RendererType::Enum::Direct3D12: hasGraphicBackend = EnableExtensionIfSupported(XR_KHR_D3D12_ENABLE_EXTENSION_NAME); break;
       #endif
       }
+      assert(hasGraphicBackend);
       if (!hasGraphicBackend)
          return;
 
-      m_depthExtensionSupported = EnableExtensionIfSupported(XR_KHR_COMPOSITION_LAYER_DEPTH_EXTENSION_NAME); // Should be supported but not yet implemented
+      m_depthExtensionSupported = EnableExtensionIfSupported(XR_KHR_COMPOSITION_LAYER_DEPTH_EXTENSION_NAME);
       m_colorSpaceExtensionSupported = EnableExtensionIfSupported(XR_FB_COLOR_SPACE_EXTENSION_NAME);
       m_visibilityMaskExtensionSupported = EnableExtensionIfSupported(XR_KHR_VISIBILITY_MASK_EXTENSION_NAME);
-      m_win32PerfCounterExtensionSupported = EnableExtensionIfSupported(XR_KHR_WIN32_CONVERT_PERFORMANCE_COUNTER_TIME_EXTENSION_NAME);
+      #if BX_PLATFORM_WINDOWS
+         m_win32PerfCounterExtensionSupported = EnableExtensionIfSupported(XR_KHR_WIN32_CONVERT_PERFORMANCE_COUNTER_TIME_EXTENSION_NAME);
+      #elif BX_PLATFORM_ANDROID
+         m_convertTimespecTimeExtensionSupported = EnableExtensionIfSupported(XR_KHR_CONVERT_TIMESPEC_TIME_EXTENSION_NAME);
+      #endif
+      m_passthroughExtensionSupported = EnableExtensionIfSupported(XR_FB_PASSTHROUGH_EXTENSION_NAME);
       #ifdef DEBUG
          m_debugUtilsExtensionSupported = EnableExtensionIfSupported(XR_EXT_DEBUG_UTILS_EXTENSION_NAME);
       #endif
@@ -514,6 +257,20 @@ VRDevice::VRDevice()
          return;
       }
 
+      #if BX_PLATFORM_WINDOWS
+      if (m_win32PerfCounterExtensionSupported)
+      {
+         OPENXR_CHECK(xrGetInstanceProcAddr(m_xrInstance, "xrConvertTimeToWin32PerformanceCounterKHR", (PFN_xrVoidFunction*)&m_xrConvertTimeToWin32PerformanceCounterKHR),
+            "Failed to get xrConvertTimeToWin32PerformanceCounterKHR.");
+      }
+      #elif BX_PLATFORM_ANDROID
+      if (m_convertTimespecTimeExtensionSupported)
+      {
+         OPENXR_CHECK(
+            xrGetInstanceProcAddr(m_xrInstance, "xrConvertTimeToTimespecTimeKHR", (PFN_xrVoidFunction*)&m_xrConvertTimeToTimespecTimeKHR),
+            "Failed to get xrConvertTimeToTimespecTimeKHR.");
+      }
+      #endif
       if (m_visibilityMaskExtensionSupported)
       {
          OPENXR_CHECK(xrGetInstanceProcAddr(m_xrInstance, "xrGetVisibilityMaskKHR", (PFN_xrVoidFunction*)&xrGetVisibilityMaskKHR), "Failed to get xrGetVisibilityMaskKHR.");
@@ -549,14 +306,14 @@ VRDevice::VRDevice()
       m_pHMD = nullptr;
       m_rTrackedDevicePose = nullptr;
       m_scale = 1.0f; // Scale factor from scene (in VP units) to VR view (in meters)
-      if (settings.LoadValueWithDefault(Settings::PlayerVR, "ScaleToFixedWidth"s, false))
+      if (settings.GetPlayerVR_ScaleToFixedWidth())
       {
          float width;
-         g_pvp->GetActiveTable()->get_Width(&width);
-         m_scale = settings.LoadValueWithDefault(Settings::PlayerVR, "ScaleAbsolute"s, 55.0f) * 0.01f / width;
+         g_pplayer->m_ptable->get_Width(&width);
+         m_scale = settings.GetPlayerVR_ScaleAbsolute() * 0.01f / width;
       }
       else
-         m_scale = VPUTOCM(0.01f) * g_pvp->GetActiveTable()->m_settings.LoadValueWithDefault(Settings::PlayerVR, "ScaleRelative"s, 1.0f);
+         m_scale = VPUTOCM(0.01f) * g_pplayer->m_ptable->m_settings.GetPlayerVR_ScaleRelative();
       if (m_scale < VPUTOCM(0.01f))
          m_scale = VPUTOCM(0.01f); // Scale factor for VPUnits to Meters
 
@@ -585,8 +342,8 @@ VRDevice::VRDevice()
       coords._31 =  0.f; coords._32 = 1.f; coords._33 =  0.f;
 
       float zNear, zFar;
-      g_pvp->GetActiveTable()->ComputeNearFarPlane(coords * sceneScale, m_scale, zNear, zFar);
-      zNear = g_pvp->GetActiveTable()->m_settings.LoadValueWithDefault(Settings::PlayerVR, "NearPlane"s, 5.0f) / 100.0f; // Replace near value to allow player to move near parts up to user defined value
+      g_pplayer->m_ptable->ComputeNearFarPlane(coords * sceneScale, m_scale, zNear, zFar);
+      zNear = g_pplayer->m_ptable->m_settings.GetPlayerVR_NearPlane() / 100.0f; // Replace near value to allow player to move near parts up to user defined value
       zFar *= 1.2f;
 
       if (m_pHMD == nullptr)
@@ -660,11 +417,33 @@ VRDevice::VRDevice()
 VRDevice::~VRDevice()
 {
    #if defined(ENABLE_XR)
+      if (m_leftControllerSpace != XR_NULL_HANDLE)
+         OPENXR_CHECK(xrDestroySpace(m_leftControllerSpace), "Failed to destroy Left Controller Space.")
+      if (m_rightControllerSpace != XR_NULL_HANDLE)
+         OPENXR_CHECK(xrDestroySpace(m_rightControllerSpace), "Failed to destroy Right Controller Space.")
       // Destroy the reference XrSpace.
       OPENXR_CHECK(xrDestroySpace(m_referenceSpace), "Failed to destroy Space.")
 
+      if (m_passthroughLayer != XR_NULL_HANDLE)
+      {
+         PFN_xrDestroyPassthroughLayerFB xrDestroyPassthroughLayerFB;
+         OPENXR_CHECK(xrGetInstanceProcAddr(m_xrInstance, "xrDestroyPassthroughLayerFB", (PFN_xrVoidFunction*)&xrDestroyPassthroughLayerFB), "Failed to get xrDestroyPassthroughLayerFB.");
+         OPENXR_CHECK(xrDestroyPassthroughLayerFB(m_passthroughLayer), "Failed to destroy passthrough layer.");
+         m_passthroughLayer = XR_NULL_HANDLE;
+      }
+
+      if (m_passthrough != XR_NULL_HANDLE)
+      {
+         PFN_xrDestroyPassthroughFB xrDestroyPassthroughFB;
+         OPENXR_CHECK(xrGetInstanceProcAddr(m_xrInstance, "xrDestroyPassthroughFB", (PFN_xrVoidFunction*)&xrDestroyPassthroughFB), "Failed to get xrDestroyPassthroughFB.");
+         OPENXR_CHECK(xrDestroyPassthroughFB(m_passthrough), "Failed to destroy passthrough.");
+         m_passthrough = XR_NULL_HANDLE;
+      }
+
       // Destroy the XrSession.
       OPENXR_CHECK(xrDestroySession(m_session), "Failed to destroy Session.");
+
+      m_backend = nullptr;
 
       if (m_debugUtilsExtensionSupported)
       {
@@ -697,28 +476,28 @@ XrBool32 VRDevice::OpenXRMessageCallbackFunction(XrDebugUtilsMessageSeverityFlag
       std::string msgFlags;
       if (messageSeverity & XR_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
       {
-         msgFlags += "VERBOSE";
+         msgFlags += "VERBOSE"sv;
          separator = true;
       }
       if (messageSeverity & XR_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
       {
          if (separator)
             msgFlags += ',';
-         msgFlags += "INFO";
+         msgFlags += "INFO"sv;
          separator = true;
       }
       if (messageSeverity & XR_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
       {
          if (separator)
             msgFlags += ',';
-         msgFlags += "WARN";
+         msgFlags += "WARN"sv;
          separator = true;
       }
       if (messageSeverity & XR_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
       {
          if (separator)
             msgFlags += ',';
-         msgFlags += "ERROR";
+         msgFlags += "ERROR"sv;
       }
       return msgFlags;
    };
@@ -730,21 +509,21 @@ XrBool32 VRDevice::OpenXRMessageCallbackFunction(XrDebugUtilsMessageSeverityFlag
       std::string msgFlags;
       if (messageType & XR_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT)
       {
-         msgFlags += "GEN";
+         msgFlags += "GEN"sv;
          separator = true;
       }
       if (messageType & XR_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)
       {
          if (separator)
             msgFlags += ',';
-         msgFlags += "SPEC";
+         msgFlags += "SPEC"sv;
          separator = true;
       }
       if (messageType & XR_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)
       {
          if (separator)
             msgFlags += ',';
-         msgFlags += "PERF";
+         msgFlags += "PERF"sv;
       }
       return msgFlags;
    };
@@ -768,13 +547,13 @@ XrBool32 VRDevice::OpenXRMessageCallbackFunction(XrDebugUtilsMessageSeverityFlag
    return XrBool32();
 }
 
-void* VRDevice::GetGraphicContext() const
-{
-   return m_backend->GetGraphicContext();
-}
+void* VRDevice::GetGraphicContext() const { return m_backend->GetGraphicContext(); }
+
+bgfx::RendererType::Enum VRDevice::GetGraphicContextType() const { return m_backend->GetRendererType(); }
 
 void VRDevice::SetupHMD()
 {
+   assert(m_backend == nullptr);
    assert(m_xrInstance != XR_NULL_HANDLE);
 
    // Get the XrSystemId from the instance and the supplied XrFormFactor.
@@ -847,7 +626,7 @@ void VRDevice::SetupHMD()
    m_environmentBlendModes.resize(environmentBlendModeCount);
    OPENXR_CHECK(xrEnumerateEnvironmentBlendModes(m_xrInstance, m_systemID, m_viewConfiguration, environmentBlendModeCount, &environmentBlendModeCount, m_environmentBlendModes.data()), "Failed to enumerate EnvironmentBlend Modes.");
    #ifdef DEBUG
-      for (auto& environmentBlendMode : m_environmentBlendModes)
+      for (const auto environmentBlendMode : m_environmentBlendModes)
       {
          static const char* blendModeNames[] = { "Opaque", "Additive", "Alpha" };
          PLOGD << "OpenXR supported blend mode: " << (1 <= environmentBlendMode && environmentBlendMode < 4 ? blendModeNames[environmentBlendMode - 1] : std::to_string(environmentBlendMode).c_str());
@@ -875,7 +654,7 @@ void VRDevice::SetupHMD()
    assert(m_viewConfigurationViews[0].recommendedSwapchainSampleCount == m_viewConfigurationViews[1].recommendedSwapchainSampleCount);
 
    // Let the user choose the down/super sampling
-   float resFactor = g_pplayer ? g_pplayer->m_ptable->m_settings.LoadValueWithDefault(Settings::PlayerVR, "ResFactor", -1.f) : -1.f;
+   const float resFactor = g_pplayer ? g_pplayer->m_ptable->m_settings.GetPlayerVR_ResFactor() : -1.f;
    if (resFactor <= 0.1f || resFactor > 10.f)
    {
       m_eyeWidth = m_viewConfigurationViews[0].recommendedImageRectWidth;
@@ -898,16 +677,36 @@ void VRDevice::SetupHMD()
    PLOGI << "Headset maximum resolution: " << m_viewConfigurationViews[0].maxImageRectWidth << 'x' << m_viewConfigurationViews[0].maxImageRectHeight;
    PLOGI << "Selected resolution: " << m_eyeWidth << 'x' << m_eyeHeight;
 
-   // Create the graphics backend as OpenXR impose some settings (adapter,...) and it is also needed to initialize BGFX
-   m_backend = new XRD3D11Backend(m_xrInstance, m_systemID);
+   // Create graphics backend early so GetGraphicContext() can provide Vulkan handles to BGFX
+   #if BX_PLATFORM_WINDOWS || BX_PLATFORM_ANDROID
+   if (m_rendererType == bgfx::RendererType::Vulkan)
+   {
+      PLOGI << "Creating Vulkan backend for OpenXR (before BGFX initialization)";
+      m_backend = std::make_unique<XRVulkanBackend>(m_xrInstance, m_systemID);
+   }
+   #endif
+   #if BX_PLATFORM_WINDOWS
+   if (m_rendererType == bgfx::RendererType::Direct3D11)
+   {
+      PLOGI << "Creating DX11 backend for OpenXR (before BGFX initialization)";
+      m_backend = std::make_unique<XRD3D11Backend>(m_xrInstance, m_systemID);
+   }
+   if (m_rendererType == bgfx::RendererType::Direct3D12)
+   {
+      PLOGI << "Creating DX12 backend for OpenXR (before BGFX initialization)";
+      m_backend = std::make_unique<XRD3D12Backend>(m_xrInstance, m_systemID);
+   }
+   #endif
+
+   assert(m_backend != nullptr);
 }
 
 void VRDevice::CreateSession()
 {
    assert(m_xrInstance != XR_NULL_HANDLE);
    assert(m_systemID != XR_NULL_SYSTEM_ID);
-   assert(m_backend != nullptr);
    assert(m_session == XR_NULL_HANDLE);
+   assert(m_backend != nullptr);
 
    m_visibilityMaskDirty = true;
 
@@ -917,7 +716,7 @@ void VRDevice::CreateSession()
    bounds.reserve(16);
    Vertex3Ds sceneMin(FLT_MAX, FLT_MAX, FLT_MAX);
    Vertex3Ds sceneMax(-FLT_MAX, -FLT_MAX, -FLT_MAX);
-   for (IEditable* editable : g_pplayer->m_ptable->m_vedit)
+   for (IEditable* editable : g_pplayer->m_ptable->GetParts())
    {
       bool prevVisibility;
       Primitive* prim = editable->GetItemType() == ItemTypeEnum::eItemPrimitive ? static_cast<Primitive*>(editable) : nullptr;
@@ -948,6 +747,30 @@ void VRDevice::CreateSession()
    sessionCI.createFlags = 0;
    sessionCI.systemId = m_systemID;
    OPENXR_CHECK(xrCreateSession(m_xrInstance, &sessionCI, &m_session), "Failed to create Session.");
+   assert(m_session);
+
+   // Initialize passthrough if supported (Meta Quest MR feature)
+   if (m_passthroughExtensionSupported)
+   {
+      PFN_xrCreatePassthroughFB xrCreatePassthroughFB;
+      OPENXR_CHECK(xrGetInstanceProcAddr(m_xrInstance, "xrCreatePassthroughFB", (PFN_xrVoidFunction*)&xrCreatePassthroughFB), "Failed to get xrCreatePassthroughFB.");
+
+      XrPassthroughCreateInfoFB passthroughCI { XR_TYPE_PASSTHROUGH_CREATE_INFO_FB };
+      passthroughCI.flags = XR_PASSTHROUGH_IS_RUNNING_AT_CREATION_BIT_FB;
+      OPENXR_CHECK(xrCreatePassthroughFB(m_session, &passthroughCI, &m_passthrough), "Failed to create passthrough.");
+
+      PFN_xrCreatePassthroughLayerFB xrCreatePassthroughLayerFB;
+      OPENXR_CHECK(xrGetInstanceProcAddr(m_xrInstance, "xrCreatePassthroughLayerFB", (PFN_xrVoidFunction*)&xrCreatePassthroughLayerFB), "Failed to get xrCreatePassthroughLayerFB.");
+
+      XrPassthroughLayerCreateInfoFB passthroughLayerCI { XR_TYPE_PASSTHROUGH_LAYER_CREATE_INFO_FB };
+      passthroughLayerCI.passthrough = m_passthrough;
+      passthroughLayerCI.purpose = XR_PASSTHROUGH_LAYER_PURPOSE_RECONSTRUCTION_FB;
+      passthroughLayerCI.flags = XR_PASSTHROUGH_IS_RUNNING_AT_CREATION_BIT_FB;
+      OPENXR_CHECK(xrCreatePassthroughLayerFB(m_session, &passthroughLayerCI, &m_passthroughLayer), "Failed to create passthrough layer.");
+
+      m_passthroughEnabled = true;
+      PLOGI << "Meta Quest passthrough initialized successfully";
+   }
 
    // Fill out an XrReferenceSpaceCreateInfo structure and create a reference XrSpace, specifying an identity pose as the origin and a stage space, defaulting to a local space.
    uint32_t referenceSpaceCount;
@@ -1001,19 +824,43 @@ void VRDevice::CreateSession()
       OPENXR_CHECK(xrEnumerateSwapchainImages(swapchain.swapchain, swapchainImageCount, &swapchainImageCount, swapchainImages), "Failed to enumerate Swapchain Images.");
       m_backend->CreateImageViews(swapchain);
    }
-   m_swapchainRenderTargets.resize(m_colorSwapchainInfo.imageViews.size() * m_depthSwapchainInfo.imageViews.size(), nullptr);
+   m_swapchainRenderTargets.resize(m_colorSwapchainInfo.imageViews.size() * m_depthSwapchainInfo.imageViews.size());
+
+   auto inputHandler = std::make_unique<XRInputHandler>(g_pplayer->m_pininput, m_xrInstance, m_session);
+   m_xrInputHandler = inputHandler.get();
+   g_pplayer->m_pininput.AddInputHandler(std::move(inputHandler));
+
+   XrAction leftPoseAction = m_xrInputHandler->GetAction("/user/hand/left/input/grip/pose");
+   if (leftPoseAction != XR_NULL_HANDLE)
+   {
+      XrActionSpaceCreateInfo actionSpaceInfo { XR_TYPE_ACTION_SPACE_CREATE_INFO };
+      actionSpaceInfo.action = leftPoseAction;
+      actionSpaceInfo.poseInActionSpace = { { 0.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 0.0f } };
+      OPENXR_CHECK(xrCreateActionSpace(m_session, &actionSpaceInfo, &m_leftControllerSpace), "Failed to create Left Controller Action Space.");
+   }
+
+   XrAction rightPoseAction = m_xrInputHandler->GetAction("/user/hand/right/input/grip/pose");
+   if (rightPoseAction != XR_NULL_HANDLE)
+   {
+      XrActionSpaceCreateInfo actionSpaceInfo { XR_TYPE_ACTION_SPACE_CREATE_INFO };
+      actionSpaceInfo.action = rightPoseAction;
+      actionSpaceInfo.poseInActionSpace = { { 0.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 0.0f } };
+      OPENXR_CHECK(xrCreateActionSpace(m_session, &actionSpaceInfo, &m_rightControllerSpace), "Failed to create Right Controller Action Space.");
+   }
 }
 
 void VRDevice::ReleaseSession()
 {
    assert(m_session);
 
+   g_pplayer->m_pininput.RemoveInputHandler(m_xrInputHandler);
+   m_xrInputHandler = nullptr;
+
    // Destroy the swapchian render targets, and color/depth image views
-   for (auto& rt : m_swapchainRenderTargets)
-      delete rt;
-   for (auto& imageView : m_colorSwapchainInfo.imageViews)
+   m_swapchainRenderTargets.clear();
+   for (const auto& imageView : m_colorSwapchainInfo.imageViews)
       bgfx::destroy(imageView);
-   for (auto& imageView : m_depthSwapchainInfo.imageViews)
+   for (const auto& imageView : m_depthSwapchainInfo.imageViews)
       bgfx::destroy(imageView);
 
    // Free the Swapchain Image Data.
@@ -1027,7 +874,6 @@ void VRDevice::ReleaseSession()
       OPENXR_CHECK(xrDestroySwapchain(m_colorSwapchainInfo.swapchain), "Failed to destroy Color Swapchain");
    if (m_depthSwapchainInfo.swapchain)
       OPENXR_CHECK(xrDestroySwapchain(m_depthSwapchainInfo.swapchain), "Failed to destroy Depth Swapchain");
-   delete m_backend;
 
    DiscardVisibilityMask();
 }
@@ -1161,8 +1007,8 @@ void VRDevice::UpdateVisibilityMask(RenderDevice* rd)
       }
       if ((indexCount > 0) && (vertexCount > 0))
       {
-         IndexBuffer* indexBuffer = new IndexBuffer(rd, indexCount, false, IndexBuffer::FMT_INDEX32);
-         VertexBuffer* vertexBuffer = new VertexBuffer(rd, vertexCount);
+         std::shared_ptr<IndexBuffer> indexBuffer = std::make_shared<IndexBuffer>(rd, indexCount, false, IndexBuffer::FMT_INDEX32);
+         std::shared_ptr<VertexBuffer> vertexBuffer = std::make_shared<VertexBuffer>(rd, vertexCount);
          XrVector2f* const vert2d = new XrVector2f[maxVertexCount];
          uint32_t* indices;
          indexBuffer->Lock(indices);
@@ -1200,7 +1046,7 @@ void VRDevice::UpdateVisibilityMask(RenderDevice* rd)
          indexBuffer->Unlock();
          vertexBuffer->Unlock();
          delete[] vert2d;
-         m_visibilityMask = new MeshBuffer(L"VisibilityMask", vertexBuffer, indexBuffer, true);
+         m_visibilityMask = std::make_shared<MeshBuffer>("VisibilityMask"s, vertexBuffer, indexBuffer, true);
          m_visibilityMaskDirty = false;
          PLOGI << "Headset visibility mask acquired";
       }
@@ -1213,7 +1059,7 @@ void VRDevice::UpdateVisibilityMask(RenderDevice* rd)
    }
 }
 
-void VRDevice::RenderFrame(RenderDevice* rd, std::function<void(RenderTarget* vrRenderTarget)> submitFrame)
+void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarget* vrRenderTarget)>& submitFrame)
 {
    assert(m_session);
 
@@ -1231,7 +1077,7 @@ void VRDevice::RenderFrame(RenderDevice* rd, std::function<void(RenderTarget* vr
    #endif
    g_pplayer->m_renderProfiler->EnterProfileSection(FrameProfiler::PROFILE_RENDER_FLIP);
    XrFrameState frameState { XR_TYPE_FRAME_STATE };
-   XrFrameWaitInfo frameWaitInfo { XR_TYPE_FRAME_WAIT_INFO };
+   constexpr XrFrameWaitInfo frameWaitInfo { XR_TYPE_FRAME_WAIT_INFO, nullptr };
    OPENXR_CHECK(xrWaitFrame(m_session, &frameWaitInfo, &frameState), "Failed to wait for XR Frame.");
    g_pplayer->m_renderProfiler->ExitProfileSection();
    #ifdef MSVC_CONCURRENCY_VIEWER
@@ -1239,25 +1085,36 @@ void VRDevice::RenderFrame(RenderDevice* rd, std::function<void(RenderTarget* vr
    #endif
 
    // Tell the OpenXR compositor that the application is beginning the frame.
-   XrFrameBeginInfo frameBeginInfo { XR_TYPE_FRAME_BEGIN_INFO };
+   constexpr XrFrameBeginInfo frameBeginInfo { XR_TYPE_FRAME_BEGIN_INFO, nullptr };
    OPENXR_CHECK(xrBeginFrame(m_session, &frameBeginInfo), "Failed to begin the XR Frame.");
 
    // Variables for rendering and layer composition.
    RenderLayerInfo renderLayerInfo;
    renderLayerInfo.predictedDisplayTime = frameState.predictedDisplayTime;
 
-   #ifdef _MSC_VER
-   if (m_win32PerfCounterExtensionSupported)
+   m_predictedDisplayTimestamp = static_cast<float>((double)usec() / 1000000.);
+   #if BX_PLATFORM_WINDOWS
+   if (m_xrConvertTimeToWin32PerformanceCounterKHR)
    {
-      PFN_xrConvertTimeToWin32PerformanceCounterKHR xrConvertTimeToWin32PerformanceCounterKHR;
-      OPENXR_CHECK(xrGetInstanceProcAddr(m_xrInstance, "xrConvertTimeToWin32PerformanceCounterKHR", (PFN_xrVoidFunction*)&xrConvertTimeToWin32PerformanceCounterKHR), "Failed to get xrConvertTimeToWin32PerformanceCounterKHR.");
-      LARGE_INTEGER now, displayTime;
-      xrConvertTimeToWin32PerformanceCounterKHR(m_xrInstance, frameState.predictedDisplayTime, &displayTime);
+      LARGE_INTEGER displayTime;
+      m_xrConvertTimeToWin32PerformanceCounterKHR(m_xrInstance, frameState.predictedDisplayTime, &displayTime);
+      LARGE_INTEGER now;
       QueryPerformanceCounter(&now);
       LARGE_INTEGER TimerFreq;
       QueryPerformanceFrequency(&TimerFreq);
-      m_predictedDisplayDelayInS = static_cast<float>(displayTime.QuadPart - now.QuadPart) / static_cast<float>(TimerFreq.QuadPart);
-      //PLOGD << "Delay " << m_predictedDisplayDelayInS;
+      m_predictedDisplayTimestamp += static_cast<float>(displayTime.QuadPart - now.QuadPart) / static_cast<float>(TimerFreq.QuadPart);
+   }
+   #elif BX_PLATFORM_ANDROID
+   if (m_xrConvertTimeToTimespecTimeKHR)
+   {
+      timespec displayTime;
+      m_xrConvertTimeToTimespecTimeKHR(m_xrInstance, frameState.predictedDisplayTime, &displayTime);
+      timespec now;
+      clock_gettime(CLOCK_MONOTONIC, &now);
+      time_t sec_diff = displayTime.tv_sec - now.tv_sec;
+      long long nsec_diff = displayTime.tv_nsec - now.tv_nsec;
+      int64_t total_nsec = sec_diff * 1000000000LL + nsec_diff;
+      m_predictedDisplayTimestamp += (float)(static_cast<double>(total_nsec) / 1000000000.0);
    }
    #endif
 
@@ -1277,7 +1134,7 @@ void VRDevice::RenderFrame(RenderDevice* rd, std::function<void(RenderTarget* vr
       viewLocateInfo.displayTime = renderLayerInfo.predictedDisplayTime;
       viewLocateInfo.space = m_referenceSpace;
       uint32_t viewCount = 0;
-      XrResult result = xrLocateViews(m_session, &viewLocateInfo, &viewState, static_cast<uint32_t>(views.size()), &viewCount, views.data());
+      const XrResult result = xrLocateViews(m_session, &viewLocateInfo, &viewState, static_cast<uint32_t>(views.size()), &viewCount, views.data());
       if (result != XR_SUCCESS)
       {
          PLOGE << "Failed to locate Views.";
@@ -1308,13 +1165,61 @@ void VRDevice::RenderFrame(RenderDevice* rd, std::function<void(RenderTarget* vr
          XrVector3f_Scale(&medianPoseInVPU.position , & medianPoseInVPU.position, 1.f / vpuToWorldScale); // Convert position from meters to VPU
          XrPosef_ToMatrix3D(&m_nextMedianView, &medianPoseInVPU);
 
-         if (m_recenterTable)
+         // Fixed value of 5 cm between playfield bottom and lockbar border
+         // We could (should ?) make this a table data but this does not vary that much so this seems fine for the time being
+         constexpr float lockbarToPlayfield = 5.f;
+
+         // Continuous space positionning based on controller pose (for setup where controllers can be placed along a VR cabinet and used for XR play)
+         if (m_controllerViewCentering)
          {
-            m_recenterTable = false;
+            bool leftControllerActive = false;
+            XrSpaceLocation leftSpaceLocation { XR_TYPE_SPACE_LOCATION };
+            if (m_leftControllerSpace != XR_NULL_HANDLE && xrLocateSpace(m_leftControllerSpace, m_referenceSpace, renderLayerInfo.predictedDisplayTime, &leftSpaceLocation) == XR_SUCCESS)
+               leftControllerActive = leftSpaceLocation.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT;
+
+            bool rightControllerActive = false;
+            XrSpaceLocation rightSpaceLocation { XR_TYPE_SPACE_LOCATION };
+            if (m_rightControllerSpace != XR_NULL_HANDLE && xrLocateSpace(m_rightControllerSpace, m_referenceSpace, renderLayerInfo.predictedDisplayTime, &rightSpaceLocation) == XR_SUCCESS)
+               rightControllerActive = rightSpaceLocation.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT;
+
+            if (leftControllerActive && rightControllerActive)
+            {
+               const PinTable* const table = g_pplayer->m_ptable;
+
+               const vec3 rightPos = vec3(rightSpaceLocation.pose.position.x, rightSpaceLocation.pose.position.y, rightSpaceLocation.pose.position.z);
+               const vec3 leftPos = vec3(leftSpaceLocation.pose.position.x, leftSpaceLocation.pose.position.y, leftSpaceLocation.pose.position.z);
+               const vec3 centerPos = -(rightPos + leftPos) * 0.5f * 100.f;
+               const vec3 lockbarAxis = rightPos - leftPos;
+               const float lockbarAngle = atan2f(-lockbarAxis.z, lockbarAxis.x);
+               m_headsetViewCentering = false;
+               m_lockbarWidth = lockbarAxis.Length() * 100.f * table->m_settings.GetPlayerVR_ControllerLockbarScale();
+               
+               // Update fixed scaling, considering lockbar size to be the width of the playfield + 2"1/4
+               const float tableWidth = VPUTOCM(table->m_right - table->m_left) + 2.25f * 2.54f;
+               const float scale = clamp(m_lockbarWidth / tableWidth, 0.1f, 2.0f);
+
+               const float c = cosf(lockbarAngle);
+               const float s = sinf(lockbarAngle);
+               const float dx = centerPos.x;
+               const float dy = centerPos.z;
+               m_lockbarHeight = -centerPos.y;
+               m_orientation = RADTOANG(lockbarAngle);
+               m_tablePos.x = dx * c - dy * s;
+               m_tablePos.y = dx * s + dy * c + table->m_settings.GetPlayerVR_ControllerCabYOffset() + lockbarToPlayfield * scale;
+               m_tablePos.z = 0.f;
+               m_worldDirty = true;
+            }
+         }
+
+         // Space positionning based on head pose (not continuous)
+         if (m_headsetViewCentering)
+         {
+            m_headsetViewCentering = false;
             m_orientation = RADTOANG(atan2f(m_nextMedianView.m[0][2], m_nextMedianView.m[0][0]));
-            m_tablePos.x = g_pvp->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerX") - VPUTOCM(medianPoseInVPU.position.x);
-            m_tablePos.y = g_pvp->m_settings.LoadValueFloat(Settings::Player, "ScreenPlayerY") - VPUTOCM(medianPoseInVPU.position.z);
-            m_tablePos.z = abs(m_tablePos.z) > 10.f ? 0.f : m_tablePos.z; // Keep user custom offset except if it seems out of normal range
+            m_tablePos.x = g_app->m_settings.GetPlayer_ScreenPlayerX() - VPUTOCM(medianPoseInVPU.position.x);
+            m_tablePos.y = g_app->m_settings.GetPlayer_ScreenPlayerY() - VPUTOCM(medianPoseInVPU.position.z);
+            m_tablePos.z = 0.f;
+            //m_tablePos.z = abs(m_tablePos.z) > 10.f ? 0.f : m_tablePos.z; // Keep user custom offset except if it seems out of normal range
             m_worldDirty = true;
          }
 
@@ -1324,51 +1229,92 @@ void VRDevice::RenderFrame(RenderDevice* rd, std::function<void(RenderTarget* vr
          // - Cabinet is the same as the cabinet feet but also applying depth offset (to match lockbar height)
          // - Playfield is the main space reference where the simulation happens (only one to support physics), relative to the cabinet, with inclination and table coordinate system
 
-         float slope = g_pplayer->m_ptable->GetPlayfieldSlope();
-         if (m_worldDirty || m_slope != slope)
+         // playfield is inclined at a fixed slope that should be defined with the table (it corresponds to the cabinet design),
+         // then player adjust the play angle by adjusting the feet casters, so the whole cab rotates.
+         const PinTable* const table = g_pplayer->m_ptable;
+         const float liveSlope = table->GetPlayfieldSlope();
+         if (m_worldDirty || m_slope != liveSlope)
          {
             m_worldDirty = false;
-            m_slope = slope;
+            m_slope = liveSlope;
 
             // Update fixed scaling, considering lockbar size to be the width of the playfield + 2"1/4
-            const float tableWidth = VPUTOCM(g_pplayer->m_ptable->m_right - g_pplayer->m_ptable->m_left) + 2.25f * 2.54f;
+            const float tableWidth = VPUTOCM(table->m_right - table->m_left) + 2.25f * 2.54f;
             m_scale = clamp(m_lockbarWidth / tableWidth, 0.1f, 2.0f);
 
             // Move table (in VPU coordinates), adjust coord from RH to LH system
             const Matrix3D coords = Matrix3D::MatrixScale(1.f, -1.f, 1.f);
             const Matrix3D rotz = Matrix3D::MatrixRotateZ(ANGTORAD(m_orientation));
             const Matrix3D rotx2 = Matrix3D::MatrixRotateX(ANGTORAD(-90.f));
+            const Matrix3D viewOrientation = rotz * rotx2;
+            const Matrix3D viewOrientationInv = Matrix3D::MatrixInverse(viewOrientation);
+
+            // The users define in their settings the real world height where they want the top of the lockbar to be.
+            // The real world playfield height is then computed by removing the glass distance at the playfield bottom (typically 2 to 3").
+            // The m_tablePos allows to slightly adjust this height on a per table basis.
+            // In the end Playfield height = m_tablePos.z (User adjustement) + m_lockBatHeight (Real world lockbar height) - glass distance * scale
+            const float scaledGlassHeight = m_scale * VPUTOCM(table->m_glassBottomHeight);
+
+            // The table defines the height of the lockbar of its cabinet model, as well as the playfield base inclination.
+            // This allows to fit the cabinet & playfield models to the real world space.
+            // If user adjust the inclination, then the cab is rotated as it would in real life (still missing the legs stretching a bit using caster adjustments)
+            const float groundToPlayfieldHeight = m_scale * table->m_groundToLockbarHeight - m_scale * table->m_glassBottomHeight;
+            const float baseSlope = lerp(table->m_angletiltMin, table->m_angletiltMax, table->m_difficulty);
 
             // Before 10.8.1, there weren't multiple space reference, so room used to be inclined to compensate the playfield inclination.
             // This may leads to slight visual artefact for old VR room (that is to say very slightly inclined room).
-            const Matrix3D rotx = Matrix3D::MatrixRotateX(ANGTORAD(m_slope));
-            const Matrix3D pfTrans1 = Matrix3D::MatrixTranslate(
-               - m_scale * (g_pplayer->m_ptable->m_right - g_pplayer->m_ptable->m_left) * 0.5f,
-               + m_scale * (g_pplayer->m_ptable->m_bottom - g_pplayer->m_ptable->m_top),
+            const Matrix3D playfieldSlope = Matrix3D::MatrixRotateX(ANGTORAD(liveSlope));
+            const Matrix3D playfieldSlopeInv = Matrix3D::MatrixRotateX(-ANGTORAD(liveSlope));
+            const Matrix3D tableCoords = Matrix3D::MatrixTranslate(
+               - m_scale * (table->m_right - table->m_left) * 0.5f,
+               + m_scale * (table->m_bottom - table->m_top),
                0.f);
-            const Matrix3D pfTrans2 = Matrix3D::MatrixTranslate(
-               -CMTOVPU(m_tablePos.x + m_sceneOffset.x),
-                CMTOVPU(m_tablePos.y + m_sceneOffset.y),
-                CMTOVPU(m_tablePos.z + m_sceneOffset.z));
-            m_pfWorld = coords * pfTrans1 * rotx * pfTrans2 * rotz * rotx2;
+            const Matrix3D playfieldPos = Matrix3D::MatrixTranslate(
+               -CMTOVPU(m_tablePos.x),
+                CMTOVPU(m_tablePos.y + lockbarToPlayfield),
+                CMTOVPU(m_tablePos.z + m_lockbarHeight - scaledGlassHeight)); 
+            const Matrix3D playfieldPosInv = Matrix3D::MatrixInverse(playfieldPos);
+            m_pfWorld = coords * tableCoords * playfieldSlope * playfieldPos * viewOrientation;
 
-            const Matrix3D cabTrans = Matrix3D::MatrixTranslate(
-               -CMTOVPU(m_tablePos.x + m_sceneOffset.x) - m_scale * (g_pplayer->m_ptable->m_right - g_pplayer->m_ptable->m_left) * 0.5f,
-                CMTOVPU(m_tablePos.y + m_sceneOffset.y) + m_scale * (g_pplayer->m_ptable->m_bottom - g_pplayer->m_ptable->m_top),
-                CMTOVPU(m_tablePos.z + m_sceneOffset.z));
-            m_cabWorld = coords * cabTrans * rotz * rotx2;
+            const Matrix3D cabinetSlope = playfieldPosInv * Matrix3D::MatrixRotateX(ANGTORAD(liveSlope - baseSlope)) * playfieldPos;
+            const Matrix3D pfToCab = viewOrientationInv // Revert view orientation
+               * playfieldPosInv * playfieldSlopeInv // Revert playfield slope
+               * Matrix3D::MatrixTranslate(
+                  -CMTOVPU(m_tablePos.x),
+                   CMTOVPU(m_tablePos.y + lockbarToPlayfield),
+                   // Cabinet model has its z origin at the feet level, m_groundToLockbarHeight corresponding to the playfield level, so we move it down (to real world ground) then up to match user seyup (where we placed the playfield)
+                   CMTOVPU(m_tablePos.z + m_lockbarHeight - scaledGlassHeight) - groundToPlayfieldHeight)
+               * cabinetSlope // Apply cabinet slope
+               * viewOrientation; // Reapply view orientation
+            m_cabWorld = m_pfWorld * pfToCab;
 
-            const Matrix3D feetTrans = Matrix3D::MatrixTranslate(
-               -CMTOVPU(m_tablePos.x + m_sceneOffset.x) - m_scale * (g_pplayer->m_ptable->m_right - g_pplayer->m_ptable->m_left) * 0.5f,
-                CMTOVPU(m_tablePos.y + m_sceneOffset.y) + m_scale * (g_pplayer->m_ptable->m_bottom - g_pplayer->m_ptable->m_top),
-                0.f);
-            m_feetWorld = coords * feetTrans * rotz * rotx2;
-            
-            const Matrix3D roomTrans = Matrix3D::MatrixTranslate(
-               -CMTOVPU(m_tablePos.x + m_sceneOffset.x) - (g_pplayer->m_ptable->m_right - g_pplayer->m_ptable->m_left) * 0.5f,
-                CMTOVPU(m_tablePos.y + m_sceneOffset.y) + (g_pplayer->m_ptable->m_bottom - g_pplayer->m_ptable->m_top),
-                0.f);
-            m_roomWorld = coords * roomTrans * rotz * rotx2;
+            // Feet are always touching the ground, scaled against the real world vs model defined playfield level
+            // Note that since we are rotating the cabinet with its feet, the feet may slightly leave or enter the ground.
+            const float feetScale = (m_tablePos.z + m_lockbarHeight - scaledGlassHeight) / VPUTOCM(groundToPlayfieldHeight);
+            const Matrix3D pfToFeet = viewOrientationInv // Revert view orientation
+               * playfieldPosInv * playfieldSlopeInv // Revert playfield slope
+               * Matrix3D::MatrixTranslate(
+                  -CMTOVPU(m_tablePos.x),
+                   CMTOVPU(m_tablePos.y + lockbarToPlayfield),
+                   CMTOVPU(m_tablePos.z)) // Feets are always at z=0 in real world, that is to say ground
+               * Matrix3D::MatrixScale(1.f, 1.f, feetScale) // Scale feets in order to match feet bottom to real world floor
+               * cabinetSlope // Apply cabinet slope
+               * viewOrientation; // Reapply view orientation
+            m_feetWorld = m_pfWorld * pfToFeet;
+
+            // Room does not apply the cabinet scaling nor any inclination, as it is the real world room
+            const Matrix3D pfToRoom = viewOrientationInv // Revert view orientation
+               * playfieldPosInv * playfieldSlopeInv // Revert playfield slope
+               * Matrix3D::MatrixTranslate( // Apply table coordinate but without table scale
+                   - (1.f - m_scale) * (table->m_right - table->m_left) * 0.5f,
+                   + (1.f - m_scale) * (table->m_bottom - table->m_top),
+                   0.f)
+               * Matrix3D::MatrixTranslate(
+                  -CMTOVPU(m_tablePos.x), // For the ease of positioning, align the room to the table view setting, except for z which must stay on ground
+                   CMTOVPU(m_tablePos.y + lockbarToPlayfield),
+                   CMTOVPU(m_tablePos.z))
+               * viewOrientation; // Reapply view orientation
+            m_roomWorld = m_pfWorld * pfToRoom;
          }
 
          // As we only have one view matrix for shading, each eye view is integrated in the projection matrix, by reverting the 'shading' view matrix then
@@ -1406,7 +1352,7 @@ void VRDevice::RenderFrame(RenderDevice* rd, std::function<void(RenderTarget* vr
          // Acquire and wait for an image from the swapchains (the timeout is infinite)
          uint32_t colorImageIndex = 0;
          uint32_t depthImageIndex = 0;
-         XrSwapchainImageAcquireInfo acquireInfo { XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO };
+         constexpr XrSwapchainImageAcquireInfo acquireInfo { XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO, nullptr };
          OPENXR_CHECK(xrAcquireSwapchainImage(m_colorSwapchainInfo.swapchain, &acquireInfo, &colorImageIndex), "Failed to acquire Image from the Color Swapchian");
          OPENXR_CHECK(xrAcquireSwapchainImage(m_depthSwapchainInfo.swapchain, &acquireInfo, &depthImageIndex), "Failed to acquire Image from the Depth Swapchian");
 
@@ -1446,20 +1392,19 @@ void VRDevice::RenderFrame(RenderDevice* rd, std::function<void(RenderTarget* vr
          // Prepare frame with the acquired views to limit position-visual latency (limit motion sickness)
          // This can't be done earlier since view acquisition is done for the predicted frame display time (which we have only after xrWaitFrame) 
          // and we also need OpenXR to selected color/depth render target from xrAcquireSwapchainImage
-         RenderTarget* vrRenderTarget = m_swapchainRenderTargets[colorImageIndex + depthImageIndex * m_colorSwapchainInfo.imageViews.size()];
+         RenderTarget* vrRenderTarget = m_swapchainRenderTargets[colorImageIndex + depthImageIndex * m_colorSwapchainInfo.imageViews.size()].get();
          if (vrRenderTarget == nullptr)
          {
-            uint16_t nViews = static_cast<uint16_t>(m_viewConfigurationViews.size());
+            const uint16_t nViews = static_cast<uint16_t>(m_viewConfigurationViews.size());
             bgfx::Attachment colorAttachment, depthAttachment;
             colorAttachment.init(m_colorSwapchainInfo.imageViews[colorImageIndex], bgfx::Access::Write, 0, nViews, 0, BGFX_RESOLVE_NONE);
             depthAttachment.init(m_depthSwapchainInfo.imageViews[depthImageIndex], bgfx::Access::Write, 0, nViews, 0, BGFX_RESOLVE_NONE);
             const bgfx::Attachment attachments[] = { colorAttachment, depthAttachment };
-            bgfx::FrameBufferHandle fbh = bgfx::createFrameBuffer(2, attachments);
-            vrRenderTarget = new RenderTarget(rd, SurfaceType::RT_STEREO, 
-               fbh, colorAttachment.handle, m_colorSwapchainInfo.format, depthAttachment.handle, m_depthSwapchainInfo.format,
-               "VRSwapchain [" + std::to_string(colorImageIndex) + '/' + std::to_string(depthImageIndex) + ']',
-               m_colorSwapchainInfo.width, m_colorSwapchainInfo.height, colorFormat::RGBA);
-            m_swapchainRenderTargets[colorImageIndex + depthImageIndex * m_colorSwapchainInfo.imageViews.size()] = vrRenderTarget;
+            const bgfx::FrameBufferHandle fbh = bgfx::createFrameBuffer(2, attachments);
+            m_swapchainRenderTargets[colorImageIndex + depthImageIndex * m_colorSwapchainInfo.imageViews.size()]
+               = std::make_unique<RenderTarget>(rd, SurfaceType::RT_STEREO, fbh, colorAttachment.handle, m_colorSwapchainInfo.format, depthAttachment.handle, m_depthSwapchainInfo.format,
+                  std::format("VRSwapchain [{}/{}]", colorImageIndex, depthImageIndex), m_colorSwapchainInfo.width, m_colorSwapchainInfo.height, colorFormat::RGBA);
+            vrRenderTarget = m_swapchainRenderTargets[colorImageIndex + depthImageIndex * m_colorSwapchainInfo.imageViews.size()].get();
          }
          submitFrame(vrRenderTarget);
 
@@ -1470,9 +1415,18 @@ void VRDevice::RenderFrame(RenderDevice* rd, std::function<void(RenderTarget* vr
          renderLayerInfo.layerProjection.views = renderLayerInfo.layerProjectionViews.data();
 
          // Give the swapchain image back to OpenXR, allowing the compositor to use the image.
-         XrSwapchainImageReleaseInfo releaseInfo { XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
+         constexpr XrSwapchainImageReleaseInfo releaseInfo { XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO, nullptr };
          OPENXR_CHECK(xrReleaseSwapchainImage(m_colorSwapchainInfo.swapchain, &releaseInfo), "Failed to release Image back to the Color Swapchain");
          OPENXR_CHECK(xrReleaseSwapchainImage(m_depthSwapchainInfo.swapchain, &releaseInfo), "Failed to release Image back to the Depth Swapchain");
+
+         // Add passthrough layer first (background)
+         if (m_passthroughEnabled && m_passthroughLayer != XR_NULL_HANDLE)
+         {
+            renderLayerInfo.layerPassthrough.layerHandle = m_passthroughLayer;
+            renderLayerInfo.layerPassthrough.flags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+            renderLayerInfo.layerPassthrough.space = XR_NULL_HANDLE;
+            renderLayerInfo.layers.push_back(reinterpret_cast<XrCompositionLayerBaseHeader*>(&renderLayerInfo.layerPassthrough));
+         }
 
          renderLayerInfo.layers.push_back(reinterpret_cast<XrCompositionLayerBaseHeader*>(&renderLayerInfo.layerProjection));
       }
@@ -1492,25 +1446,16 @@ void VRDevice::RenderFrame(RenderDevice* rd, std::function<void(RenderTarget* vr
 }
 #endif
 
+void VRDevice::OffsetTable(float dx, float dy, float dz)
+{
+   m_tablePos.x = clamp(m_tablePos.x + dx, -100.0f, 100.0f);
+   m_tablePos.y = clamp(m_tablePos.y + dy, -100.0f, 100.0f);
+   m_tablePos.z = clamp(m_tablePos.z + dz, -100.0f, 100.0f);
+   m_worldDirty = true;
+}
+
 #ifdef ENABLE_VR
-void VRDevice::TableUp()
-{
-   m_tablePos.z += 1.0f;
-   if (m_tablePos.z > 250.0f)
-      m_tablePos.z = 250.0f;
-   m_worldDirty = true;
-}
-
-void VRDevice::TableDown()
-{
-   m_tablePos.z -= 1.0f;
-   if (m_tablePos.z < 0.0f)
-      m_tablePos.z = 0.0f;
-   m_worldDirty = true;
-}
-
-bool VRDevice::IsVRinstalled()
-{
+bool VRDevice::IsVRinstalled() {
    return vr::VR_IsRuntimeInstalled();
 }
 
@@ -1540,7 +1485,7 @@ bool VRDevice::IsVRReady() const
    return m_pHMD != nullptr;
 }
 
-void VRDevice::SubmitFrame(std::shared_ptr<Sampler> leftEye, std::shared_ptr<Sampler> rightEye)
+void VRDevice::SubmitFrame(const std::shared_ptr<Sampler>& leftEye, const std::shared_ptr<Sampler>& rightEye)
 {
       #if defined(ENABLE_OPENGL)
          vr::Texture_t leftEyeTexture = { (void*)(__int64)leftEye->GetCoreTexture(), vr::TextureType_OpenGL, vr::ColorSpace_Gamma };
@@ -1675,8 +1620,9 @@ void VRDevice::UpdateVRPosition(PartGroupData::SpaceReference spaceRef, ModelVie
 void VRDevice::RecenterTable()
 {
    #ifdef ENABLE_XR
-      m_recenterTable = true;
-      
+      m_headsetViewCentering = true;
+      m_controllerViewCentering = false;
+
    #elif defined(ENABLE_VR)
       float headX = 0.f, headY = 0.f;
       const float w = m_scale * (g_pplayer->m_ptable->m_right - g_pplayer->m_ptable->m_left) * 0.5f;
@@ -1699,10 +1645,8 @@ void VRDevice::RecenterTable()
 
 void VRDevice::SaveVRSettings(Settings& settings) const
 {
-#if defined(ENABLE_VR) || defined(ENABLE_XR)
-   settings.SaveValue(Settings::PlayerVR, "Orientation"s, m_orientation);
-   settings.SaveValue(Settings::PlayerVR, "TableX"s, m_tablePos.x);
-   settings.SaveValue(Settings::PlayerVR, "TableY"s, m_tablePos.y);
-   settings.SaveValue(Settings::PlayerVR, "TableZ"s, m_tablePos.z);
-#endif
+   settings.SetPlayerVR_Orientation(m_orientation, false);
+   settings.SetPlayerVR_TableX(m_tablePos.x, false);
+   settings.SetPlayerVR_TableY(m_tablePos.y, false);
+   settings.SetPlayerVR_TableZ(m_tablePos.z, false);
 }

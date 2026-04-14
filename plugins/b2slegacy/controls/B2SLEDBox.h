@@ -1,8 +1,6 @@
 #pragma once
 
-
 #include "B2SBaseBox.h"
-#include "../utils/VPXGraphics.h"
 
 namespace B2SLegacy {
 
@@ -21,7 +19,7 @@ public:
    void SetLEDType(eLEDType ledType);
    int GetValue() const { return m_value; }
    void SetValue(int value, bool refresh = false);
-   string GetText() const { return m_text; }
+   const string& GetText() const { return m_text; }
    void SetText(const string& text);
 
 private:
@@ -31,8 +29,6 @@ private:
    eLEDType m_ledType;
    int m_value;
    string m_text;
-
-   std::unique_ptr<VPXGraphics> m_pGraphics;
 };
 
 }

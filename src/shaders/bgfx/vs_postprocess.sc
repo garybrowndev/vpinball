@@ -17,5 +17,11 @@ void main()
       gl_Layer = gl_InstanceID;
       v_eye = layer.x + gl_InstanceID;
    #endif
-   v_texcoord0 = a_texcoord0;
+   
+   #if TEX_V_IS_UP
+      v_texcoord0.x = a_texcoord0.x;
+      v_texcoord0.y = 1.0 - a_texcoord0.y;
+   #else
+      v_texcoord0.xy = a_texcoord0.xy;
+   #endif
 }

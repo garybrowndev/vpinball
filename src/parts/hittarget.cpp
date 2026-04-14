@@ -2,7 +2,9 @@
 
 // implementation of the HitTarget class.
 
-#include "core/stdafx.h" 
+#include "core/stdafx.h"
+#include "hittarget.h"
+
 #include "utils/objloader.h"
 #include "meshes/dropTargetT2Mesh.h"
 #include "meshes/dropTargetT3Mesh.h"
@@ -17,27 +19,14 @@
 #include "renderer/VertexBuffer.h"
 #include "renderer/IndexBuffer.h"
 
-HitTarget::HitTarget()
-{
-   m_d.m_depthBias = 0.0f;
-   m_d.m_reflectionEnabled = true;
-
-   m_propPosition = nullptr;
-   m_propVisual = nullptr;
-   m_moveAnimation = false;
-   m_moveDown = true;
-   m_moveAnimationOffset = 0.0f;
-   m_timeStamp = 0;
-}
-
 HitTarget::~HitTarget()
 {
    assert(m_rd == nullptr);
 }
 
-HitTarget *HitTarget::CopyForPlay(PinTable *live_table) const
+HitTarget *HitTarget::CopyForPlay() const
 {
-   STANDARD_EDITABLE_COPY_FOR_PLAY_IMPL(HitTarget, live_table)
+   STANDARD_EDITABLE_COPY_FOR_PLAY_IMPL(HitTarget)
    dst->m_hitEvent = m_hitEvent;
    return dst;
 }
@@ -119,103 +108,82 @@ void HitTarget::SetMeshType(const TargetType type)
     }
 }
 
-HRESULT HitTarget::Init(PinTable *const ptable, const float x, const float y, const bool fromMouseClick, const bool forPlay)
+HRESULT HitTarget::Init(const float x, const float y, const bool fromMouseClick, const bool forPlay)
 {
-   m_ptable = ptable;
    SetDefaults(false);
    m_d.m_vPosition.x = x;
    m_d.m_vPosition.y = y;
-   m_hitEvent = false;
    UpdateStatusBarInfo();
-   return forPlay ? S_OK : InitVBA(true, nullptr);
+   return S_OK;
 }
 
+#define LinkProp(field, prop) field = fromMouseClick ? g_app->m_settings.GetDefaultPropsHitTarget_##prop() : Settings::GetDefaultPropsHitTarget_##prop##_Default()
 void HitTarget::SetDefaults(const bool fromMouseClick)
 {
-#define strKeyName Settings::DefaultPropsHitTarget
-
-   m_d.m_legacy = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "LegacyMode"s, false) : false;
-   m_d.m_tdr.m_TimerEnabled = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "TimerEnabled"s, false) : false;
-   m_d.m_tdr.m_TimerInterval = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "TimerInterval"s, 100) : 100;
-   m_d.m_hitEvent = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "HitEvent"s, true) : true;
-   m_d.m_visible = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "Visible"s, true) : true;
-   m_d.m_isDropped = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "IsDropped"s, false) : false;
-
-   // Position (X and Y is already set by the click of the user)
-   m_d.m_vPosition.z = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "Position_Z"s, 0.0f) : 0.0f;
-
-   // Size
-   m_d.m_vSize.x = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "ScaleX"s, 32.0f) : 32.0f;
-   m_d.m_vSize.y = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "ScaleY"s, 32.0f) : 32.0f;
-   m_d.m_vSize.z = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "ScaleZ"s, 32.0f) : 32.0f;
-
-   // Rotation and Transposition
-   m_d.m_rotZ = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "Orientation"s, 0.0f) : 0.0f;
-
-   const bool hr = g_pvp->m_settings.LoadValue(strKeyName, "Image"s, m_d.m_szImage);
-   if (!hr && fromMouseClick)
-      m_d.m_szImage.clear();
-
-   m_d.m_targetType = fromMouseClick ? (TargetType)g_pvp->m_settings.LoadValueWithDefault(strKeyName, "TargetType"s, (int)DropTargetSimple) : DropTargetSimple;
-   m_d.m_threshold = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "HitThreshold"s, 2.0f) : 2.0f;
-   if (m_d.m_targetType == DropTargetBeveled || m_d.m_targetType == DropTargetSimple || m_d.m_targetType == DropTargetFlatSimple)
-       m_d.m_dropSpeed = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "DropSpeed"s, 0.5f) : 0.5f;
-   else
-       m_d.m_dropSpeed = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "DropSpeed"s, 0.2f) : 0.2f;
-
+   LinkProp(m_d.m_legacy, LegacyMode);
+   LinkProp(m_d.m_visible, Visible);
+   LinkProp(m_d.m_isDropped, IsDropped);
+   LinkProp(m_d.m_vSize.x, ScaleX);
+   LinkProp(m_d.m_vSize.y, ScaleY);
+   LinkProp(m_d.m_vSize.z, ScaleZ);
+   LinkProp(m_d.m_vPosition.z, Position_Z);
+   LinkProp(m_d.m_rotZ, Orientation);
+   LinkProp(m_d.m_szImage, Image);
+   LinkProp(m_d.m_hitEvent, HitEvent);
+   LinkProp(m_d.m_threshold, HitThreshold);
+   LinkProp(m_d.m_targetType, TargetType);
+   LinkProp(m_d.m_collidable, Collidable);
+   LinkProp(m_d.m_disableLightingTop, DisableLighting);
+   LinkProp(m_d.m_disableLightingBelow, DisableLightingBelow);
+   LinkProp(m_d.m_raiseDelay, RaiseDelay);
+   LinkProp(m_d.m_reflectionEnabled, ReflectionEnabled);
+   LinkProp(m_timerEnabled, TimerEnabled);
+   LinkProp(m_timerInterval, TimerInterval);
    SetDefaultPhysics(fromMouseClick);
-
-   m_d.m_collidable = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "Collidable"s, true) : true;
-   m_d.m_disableLightingTop = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "DisableLighting"s, 0.f) : 0.f;
-   m_d.m_disableLightingBelow = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "DisableLightingBelow"s, 1.f) : 1.f;
-   m_d.m_reflectionEnabled = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "ReflectionEnabled"s, true) : true;
-   m_d.m_raiseDelay = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "RaiseDelay"s, 100) : 100;
-
-#undef strKeyName
 }
+
+void HitTarget::SetDefaultPhysics(const bool fromMouseClick)
+{
+   LinkProp(m_d.m_elasticity, Elasticity);
+   LinkProp(m_d.m_elasticityFalloff, ElasticityFalloff);
+   LinkProp(m_d.m_friction, Friction);
+   LinkProp(m_d.m_scatter, Scatter);
+}
+#undef LinkProp
 
 void HitTarget::WriteRegDefaults()
 {
-#define strKeyName Settings::DefaultPropsHitTarget
-
-   g_pvp->m_settings.SaveValue(strKeyName, "LegacyMode"s, m_d.m_legacy);
-   g_pvp->m_settings.SaveValue(strKeyName, "TimerEnabled"s, m_d.m_tdr.m_TimerEnabled);
-   g_pvp->m_settings.SaveValue(strKeyName, "TimerInterval"s, m_d.m_tdr.m_TimerInterval);
-   g_pvp->m_settings.SaveValue(strKeyName, "Visible"s, m_d.m_visible);
-   g_pvp->m_settings.SaveValue(strKeyName, "IsDropped"s, m_d.m_isDropped);
-
-   g_pvp->m_settings.SaveValue(strKeyName, "Position_Z"s, m_d.m_vPosition.z);
-   g_pvp->m_settings.SaveValue(strKeyName, "DropSpeed"s, m_d.m_dropSpeed);
-
-   g_pvp->m_settings.SaveValue(strKeyName, "ScaleX"s, m_d.m_vSize.x);
-   g_pvp->m_settings.SaveValue(strKeyName, "ScaleY"s, m_d.m_vSize.y);
-   g_pvp->m_settings.SaveValue(strKeyName, "ScaleZ"s, m_d.m_vSize.z);
-
-   g_pvp->m_settings.SaveValue(strKeyName, "Orientation"s, m_d.m_rotZ);
-
-   g_pvp->m_settings.SaveValue(strKeyName, "Image"s, m_d.m_szImage);
-   g_pvp->m_settings.SaveValue(strKeyName, "HitEvent"s, m_d.m_hitEvent);
-   g_pvp->m_settings.SaveValue(strKeyName, "HitThreshold"s, m_d.m_threshold);
-   g_pvp->m_settings.SaveValue(strKeyName, "Elasticity"s, m_d.m_elasticity);
-   g_pvp->m_settings.SaveValue(strKeyName, "ElasticityFalloff"s, m_d.m_elasticityFalloff);
-   g_pvp->m_settings.SaveValue(strKeyName, "Friction"s, m_d.m_friction);
-   g_pvp->m_settings.SaveValue(strKeyName, "Scatter"s, m_d.m_scatter);
-
-   g_pvp->m_settings.SaveValue(strKeyName, "TargetType"s, m_d.m_targetType);
-
-   g_pvp->m_settings.SaveValue(strKeyName, "Collidable"s, m_d.m_collidable);
-   g_pvp->m_settings.SaveValue(strKeyName, "DisableLighting"s, m_d.m_disableLightingTop);
-   g_pvp->m_settings.SaveValue(strKeyName, "DisableLightingBelow"s, m_d.m_disableLightingBelow);
-   g_pvp->m_settings.SaveValue(strKeyName, "ReflectionEnabled"s, m_d.m_reflectionEnabled);
-   g_pvp->m_settings.SaveValue(strKeyName, "RaiseDelay"s, m_d.m_raiseDelay);
-
-#undef strKeyName
+#define LinkProp(field, prop) g_app->m_settings.SetDefaultPropsHitTarget_##prop(field, false)
+   LinkProp(m_d.m_legacy, LegacyMode);
+   LinkProp(m_d.m_visible, Visible);
+   LinkProp(m_d.m_isDropped, IsDropped);
+   LinkProp(m_d.m_vSize.x, ScaleX);
+   LinkProp(m_d.m_vSize.y, ScaleY);
+   LinkProp(m_d.m_vSize.z, ScaleZ);
+   LinkProp(m_d.m_vPosition.z, Position_Z);
+   LinkProp(m_d.m_rotZ, Orientation);
+   LinkProp(m_d.m_szImage, Image);
+   LinkProp(m_d.m_hitEvent, HitEvent);
+   LinkProp(m_d.m_threshold, HitThreshold);
+   LinkProp(m_d.m_targetType, TargetType);
+   LinkProp(m_d.m_collidable, Collidable);
+   LinkProp(m_d.m_disableLightingTop, DisableLighting);
+   LinkProp(m_d.m_disableLightingBelow, DisableLightingBelow);
+   LinkProp(m_d.m_raiseDelay, RaiseDelay);
+   LinkProp(m_d.m_elasticity, Elasticity);
+   LinkProp(m_d.m_elasticityFalloff, ElasticityFalloff);
+   LinkProp(m_d.m_friction, Friction);
+   LinkProp(m_d.m_scatter, Scatter);
+   LinkProp(m_d.m_reflectionEnabled, ReflectionEnabled);
+   LinkProp(m_timerEnabled, TimerEnabled);
+   LinkProp(m_timerInterval, TimerInterval);
+#undef LinkProp
 }
 
 // Ported at: VisualPinball.Engine/VPT/HitTarget/HitTargetHitGenerator.cs
 
 constexpr unsigned int num_dropTargetHitPlaneVertices = 16;
-static const Vertex3Ds dropTargetHitPlaneVertices[num_dropTargetHitPlaneVertices] =
+static constexpr Vertex3Ds dropTargetHitPlaneVertices[num_dropTargetHitPlaneVertices] =
 {
    Vertex3Ds(-0.300000f, 0.001737f, -0.160074f),
    Vertex3Ds(-0.300000f, 0.001738f, 0.439926f),
@@ -236,7 +204,7 @@ static const Vertex3Ds dropTargetHitPlaneVertices[num_dropTargetHitPlaneVertices
 };
 
 constexpr unsigned int num_dropTargetHitPlaneIndices = 42;
-constexpr WORD dropTargetHitPlaneIndices[num_dropTargetHitPlaneIndices] =
+static constexpr WORD dropTargetHitPlaneIndices[num_dropTargetHitPlaneIndices] =
 {
    0, 1, 2, 2, 3, 0, 1, 4, 5, 6, 7, 2, 5, 6, 1,
    2, 1, 6, 4, 8, 9, 9, 5, 4, 8, 10, 11, 11, 9, 8,
@@ -248,6 +216,11 @@ constexpr WORD dropTargetHitPlaneIndices[num_dropTargetHitPlaneIndices] =
 
 void HitTarget::PhysicSetup(PhysicsEngine* physics, const bool isUI)
 {
+   m_hitEvent = false;
+
+   if (!isUI && GetPartGroup() != nullptr && GetPartGroup()->GetReferenceSpace() != PartGroupData::SpaceReference::SR_PLAYFIELD)
+      return;
+
    TransformVertices();
 
    if (m_d.m_targetType == DropTargetBeveled || m_d.m_targetType == DropTargetFlatSimple || m_d.m_targetType == DropTargetSimple)
@@ -509,7 +482,7 @@ void HitTarget::UIRenderPass2(Sur * const psur)
        psur->Line(C->x, C->y, A->x, A->y);
     }
 
-    if (m_selectstate == eNotSelected)
+    if (m_selectstate == SelectState::NotSelected)
        return;
 
     const float radangle = ANGTORAD(m_d.m_rotZ-180.0f);
@@ -569,10 +542,9 @@ void HitTarget::RenderSetup(RenderDevice *device)
    m_transformedVertices.resize(m_numVertices);
 
    GenerateMesh(m_transformedVertices);
-   delete m_meshBuffer;
-   VertexBuffer *vertexBuffer = new VertexBuffer(m_rd, m_numVertices, (float *)m_transformedVertices.data(), true);
-   IndexBuffer *indexBuffer = new IndexBuffer(m_rd, m_numIndices, m_indices);
-   m_meshBuffer = new MeshBuffer(m_wzName, vertexBuffer, indexBuffer, true);
+   std::shared_ptr<VertexBuffer> vertexBuffer = std::make_shared<VertexBuffer>(m_rd, m_numVertices, (float *)m_transformedVertices.data(), true);
+   std::shared_ptr<IndexBuffer> indexBuffer = std::make_shared<IndexBuffer>(m_rd, m_numIndices, m_indices);
+   m_meshBuffer = std::make_shared<MeshBuffer>(GetName(), vertexBuffer, indexBuffer, true);
 
    m_moveAnimationOffset = 0.0f;
    if (m_d.m_targetType == DropTargetBeveled || m_d.m_targetType == DropTargetSimple || m_d.m_targetType == DropTargetFlatSimple)
@@ -590,7 +562,6 @@ void HitTarget::RenderSetup(RenderDevice *device)
 void HitTarget::RenderRelease()
 {
    assert(m_rd != nullptr);
-   delete m_meshBuffer;
    m_meshBuffer = nullptr;
    m_rd = nullptr;
 }
@@ -689,10 +660,11 @@ void HitTarget::UpdateAnimation(const float diff_time_msec)
 void HitTarget::Render(const unsigned int renderMask)
 {
    assert(m_rd != nullptr);
-   assert(!m_backglass);
+   assert(!m_desktopBackdrop);
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
    const bool isReflectionPass = renderMask & Renderer::REFLECTION_PASS;
+   const bool isUIPass = renderMask & Renderer::UI_EDGES || renderMask & Renderer::UI_FILL;
    TRACE_FUNCTION();
    
    if (isStaticOnly 
@@ -700,27 +672,21 @@ void HitTarget::Render(const unsigned int renderMask)
    || (isReflectionPass && !m_d.m_reflectionEnabled))
       return;
 
-   m_rd->ResetRenderState();
-   m_rd->m_basicShader->SetVector(SHADER_fDisableLighting_top_below, m_d.m_disableLightingTop, m_d.m_disableLightingBelow, 0.f, 0.f);
-   const Material * const mat = m_ptable->GetMaterial(m_d.m_szMaterial);
-   m_rd->m_basicShader->SetBasic(mat, m_ptable->GetImage(m_d.m_szImage));
-   #ifdef TWOSIDED_TRANSPARENCY
-   if (mat->m_bOpacityActive)
+   if (isUIPass)
    {
-      RenderState::RenderStateValue cullMode = m_rd->GetRenderState().GetRenderState(RenderState::CULLMODE);
-      m_rd->SetRenderState(RenderState::CULLMODE, cullMode == RenderState::CULL_CCW ? RenderState::CULL_CW : RenderState::CULL_CCW);
-      m_rd->DrawMesh(m_rd->m_basicShader, mat->m_bOpacityActive, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
-      m_rd->SetRenderState(RenderState::CULLMODE, cullMode);
-      m_rd->DrawMesh(m_rd->m_basicShader, mat->m_bOpacityActive, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
+      if (renderMask & Renderer::UI_FILL)
+         m_rd->DrawMesh(m_rd->m_basicShader, true, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
+      // FIXME render wireframe
    }
    else
    {
+      m_rd->ResetRenderState();
+      m_rd->m_basicShader->SetVector(SHADER_fDisableLighting_top_below, m_d.m_disableLightingTop, m_d.m_disableLightingBelow, 0.f, 0.f);
+      const Material *const mat = m_ptable->GetMaterial(m_d.m_szMaterial);
+      m_rd->m_basicShader->SetBasic(mat, m_ptable->GetImage(m_d.m_szImage));
       m_rd->DrawMesh(m_rd->m_basicShader, mat->m_bOpacityActive, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
+      m_rd->m_basicShader->SetVector(SHADER_fDisableLighting_top_below, 0.f, 0.f, 0.f, 0.f);
    }
-   #else
-   m_rd->DrawMesh(m_rd->m_basicShader, mat->m_bOpacityActive, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
-   #endif
-   m_rd->m_basicShader->SetVector(SHADER_fDisableLighting_top_below, 0.f, 0.f, 0.f, 0.f);
 }
 
 void HitTarget::UpdateTarget()
@@ -805,107 +771,88 @@ void HitTarget::PutCenter(const Vertex2D& pv)
 // Save and Load
 //////////////////////////////
 
-HRESULT HitTarget::SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool saveForUndo)
+void HitTarget::Save(IObjectWriter& writer, const bool saveForUndo)
 {
-   BiffWriter bw(pstm, hcrypthash);
-
-   /*
-    * Someone decided that it was a good idea to write these vectors including
-    * the fourth padding float that they used to have, so now we have to write
-    * them padded to 4 floats to maintain compatibility.
-    */
-   bw.WriteVector3Padded(FID(VPOS), m_d.m_vPosition);
-   bw.WriteVector3Padded(FID(VSIZ), m_d.m_vSize);
-   bw.WriteFloat(FID(ROTZ), m_d.m_rotZ);
-   bw.WriteString(FID(IMAG), m_d.m_szImage);
-   bw.WriteInt(FID(TRTY), m_d.m_targetType);
-   bw.WriteWideString(FID(NAME), m_wzName);
-   bw.WriteString(FID(MATR), m_d.m_szMaterial);
-   bw.WriteBool(FID(TVIS), m_d.m_visible);
-   bw.WriteBool(FID(LEMO), m_d.m_legacy);
-   bw.WriteBool(FID(HTEV), m_d.m_hitEvent);
-   bw.WriteFloat(FID(THRS), m_d.m_threshold);
-   bw.WriteFloat(FID(ELAS), m_d.m_elasticity);
-   bw.WriteFloat(FID(ELFO), m_d.m_elasticityFalloff);
-   bw.WriteFloat(FID(RFCT), m_d.m_friction);
-   bw.WriteFloat(FID(RSCT), m_d.m_scatter);
-   bw.WriteBool(FID(CLDR), m_d.m_collidable);
-   bw.WriteFloat(FID(DILT), m_d.m_disableLightingTop);
-   bw.WriteFloat(FID(DILB), m_d.m_disableLightingBelow);
-   bw.WriteBool(FID(REEN), m_d.m_reflectionEnabled);
-   bw.WriteFloat(FID(PIDB), m_d.m_depthBias);
-   bw.WriteBool(FID(ISDR), m_d.m_isDropped);
-   bw.WriteFloat(FID(DRSP), m_d.m_dropSpeed);
-   bw.WriteBool(FID(TMON), m_d.m_tdr.m_TimerEnabled);
-   bw.WriteInt(FID(TMIN), m_d.m_tdr.m_TimerInterval);
-   bw.WriteInt(FID(RADE), m_d.m_raiseDelay);
-   bw.WriteString(FID(MAPH), m_d.m_szPhysicsMaterial);
-   bw.WriteBool(FID(OVPH), m_d.m_overwritePhysics);
-
-   ISelect::SaveData(pstm, hcrypthash);
-
-   bw.WriteTag(FID(ENDB));
-
-   return S_OK;
+   writer.WriteVector4(FID(VPOS), vec4(m_d.m_vPosition.x, m_d.m_vPosition.y, m_d.m_vPosition.z, 0.f));
+   writer.WriteVector4(FID(VSIZ), vec4(m_d.m_vSize.x, m_d.m_vSize.y, m_d.m_vSize.z, 0.f));
+   writer.WriteFloat(FID(ROTZ), m_d.m_rotZ);
+   writer.WriteString(FID(IMAG), m_d.m_szImage);
+   writer.WriteInt(FID(TRTY), m_d.m_targetType);
+   writer.WriteWideString(FID(NAME), m_wzName);
+   writer.WriteString(FID(MATR), m_d.m_szMaterial);
+   writer.WriteBool(FID(TVIS), m_d.m_visible);
+   writer.WriteBool(FID(LEMO), m_d.m_legacy);
+   writer.WriteBool(FID(HTEV), m_d.m_hitEvent);
+   writer.WriteFloat(FID(THRS), m_d.m_threshold);
+   writer.WriteFloat(FID(ELAS), m_d.m_elasticity);
+   writer.WriteFloat(FID(ELFO), m_d.m_elasticityFalloff);
+   writer.WriteFloat(FID(RFCT), m_d.m_friction);
+   writer.WriteFloat(FID(RSCT), m_d.m_scatter);
+   writer.WriteBool(FID(CLDR), m_d.m_collidable);
+   writer.WriteFloat(FID(DILT), m_d.m_disableLightingTop);
+   writer.WriteFloat(FID(DILB), m_d.m_disableLightingBelow);
+   writer.WriteBool(FID(REEN), m_d.m_reflectionEnabled);
+   writer.WriteFloat(FID(PIDB), m_d.m_depthBias);
+   writer.WriteBool(FID(ISDR), m_d.m_isDropped);
+   writer.WriteFloat(FID(DRSP), m_d.m_dropSpeed);
+   writer.WriteBool(FID(TMON), m_timerEnabled);
+   writer.WriteInt(FID(TMIN), m_timerInterval);
+   writer.WriteInt(FID(RADE), m_d.m_raiseDelay);
+   writer.WriteString(FID(MAPH), m_d.m_szPhysicsMaterial);
+   writer.WriteBool(FID(OVPH), m_d.m_overwritePhysics);
+   SaveSharedEditableFields(writer);
+   writer.EndObject();
 }
 
-HRESULT HitTarget::InitLoad(IStream *pstm, PinTable *ptable, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey)
+void HitTarget::Load(IObjectReader& reader)
 {
    SetDefaults(false);
-
-   BiffReader br(pstm, this, version, hcrypthash, hcryptkey);
-
-   m_ptable = ptable;
-
-   br.Load();
-
-   UpdateStatusBarInfo();
-   return S_OK;
+   reader.AsObject(
+      [this](int tag, IObjectReader& reader)
+      {
+         switch (tag)
+         {
+         case FID(PIID): reader.AsInt(); break;
+         case FID(VPOS): m_d.m_vPosition = reader.AsVector4().xyz(); break;
+         case FID(VSIZ): m_d.m_vSize = reader.AsVector4().xyz(); break;
+         case FID(ROTZ): m_d.m_rotZ = reader.AsFloat(); break;
+         case FID(IMAG): m_d.m_szImage = reader.AsString(); break;
+         case FID(TRTY): m_d.m_targetType = static_cast<TargetType>(reader.AsInt()); break;
+         case FID(NAME): m_wzName = reader.AsWideString(); break;
+         case FID(MATR): m_d.m_szMaterial = reader.AsString(); break;
+         case FID(TVIS): m_d.m_visible = reader.AsBool(); break;
+         case FID(LEMO): m_d.m_legacy = reader.AsBool(); break;
+         case FID(ISDR): m_d.m_isDropped = reader.AsBool(); break;
+         case FID(DRSP): m_d.m_dropSpeed = reader.AsFloat(); break;
+         case FID(REEN): m_d.m_reflectionEnabled = reader.AsBool(); break;
+         case FID(HTEV): m_d.m_hitEvent = reader.AsBool(); break;
+         case FID(THRS): m_d.m_threshold = reader.AsFloat(); break;
+         case FID(ELAS): m_d.m_elasticity = reader.AsFloat(); break;
+         case FID(ELFO): m_d.m_elasticityFalloff = reader.AsFloat(); break;
+         case FID(RFCT): m_d.m_friction = reader.AsFloat(); break;
+         case FID(RSCT): m_d.m_scatter = reader.AsFloat(); break;
+         case FID(CLDR): m_d.m_collidable = reader.AsBool(); break;
+         case FID(DILI):
+         {
+            int tmp;
+            tmp = reader.AsInt();
+            m_d.m_disableLightingTop = (tmp == 1) ? 1.f : dequantizeUnsigned<8>(tmp);
+            break;
+         } // Pre 10.8 compatible hacky loading!
+         case FID(DILT): m_d.m_disableLightingTop = reader.AsFloat(); break;
+         case FID(DILB): m_d.m_disableLightingBelow = reader.AsFloat(); break;
+         case FID(PIDB): m_d.m_depthBias = reader.AsFloat(); break;
+         case FID(TMON): m_timerEnabled = reader.AsBool(); break;
+         case FID(TMIN): m_timerInterval = reader.AsInt(); break;
+         case FID(RADE): m_d.m_raiseDelay = reader.AsInt(); break;
+         case FID(MAPH): m_d.m_szPhysicsMaterial = reader.AsString(); break;
+         case FID(OVPH): m_d.m_overwritePhysics = reader.AsBool(); break;
+         default: LoadSharedEditableField(tag, reader); break;
+         }
+         return true;
+      });
 }
 
-bool HitTarget::LoadToken(const int id, BiffReader * const pbr)
-{
-   switch(id)
-   {
-   case FID(PIID): { int pid; pbr->GetInt(&pid); } break;
-   case FID(VPOS): pbr->GetVector3Padded(m_d.m_vPosition); break;
-   case FID(VSIZ): pbr->GetVector3Padded(m_d.m_vSize); break;
-   case FID(ROTZ): pbr->GetFloat(m_d.m_rotZ); break;
-   case FID(IMAG): pbr->GetString(m_d.m_szImage); break;
-   case FID(TRTY): pbr->GetInt(&m_d.m_targetType); break;
-   case FID(NAME): pbr->GetWideString(m_wzName, std::size(m_wzName)); break;
-   case FID(MATR): pbr->GetString(m_d.m_szMaterial); break;
-   case FID(TVIS): pbr->GetBool(m_d.m_visible); break;
-   case FID(LEMO): pbr->GetBool(m_d.m_legacy); break;
-   case FID(ISDR): pbr->GetBool(m_d.m_isDropped); break;
-   case FID(DRSP): pbr->GetFloat(m_d.m_dropSpeed); break;
-   case FID(REEN): pbr->GetBool(m_d.m_reflectionEnabled); break;
-   case FID(HTEV): pbr->GetBool(m_d.m_hitEvent); break;
-   case FID(THRS): pbr->GetFloat(m_d.m_threshold); break;
-   case FID(ELAS): pbr->GetFloat(m_d.m_elasticity); break;
-   case FID(ELFO): pbr->GetFloat(m_d.m_elasticityFalloff); break;
-   case FID(RFCT): pbr->GetFloat(m_d.m_friction); break;
-   case FID(RSCT): pbr->GetFloat(m_d.m_scatter); break;
-   case FID(CLDR): pbr->GetBool(m_d.m_collidable); break;
-   case FID(DILI): { int tmp; pbr->GetInt(tmp); m_d.m_disableLightingTop = (tmp == 1) ? 1.f : dequantizeUnsigned<8>(tmp); break; } // Pre 10.8 compatible hacky loading!
-   case FID(DILT): pbr->GetFloat(m_d.m_disableLightingTop); break;
-   case FID(DILB): pbr->GetFloat(m_d.m_disableLightingBelow); break;
-   case FID(PIDB): pbr->GetFloat(m_d.m_depthBias); break;
-   case FID(TMON): pbr->GetBool(m_d.m_tdr.m_TimerEnabled); break;
-   case FID(TMIN): pbr->GetInt(m_d.m_tdr.m_TimerInterval); break;
-   case FID(RADE): pbr->GetInt(m_d.m_raiseDelay); break;
-   case FID(MAPH): pbr->GetString(m_d.m_szPhysicsMaterial); break;
-   case FID(OVPH): pbr->GetBool(m_d.m_overwritePhysics); break;
-   default: ISelect::LoadToken(id, pbr); break;
-   }
-   return true;
-}
-
-HRESULT HitTarget::InitPostLoad()
-{
-   UpdateStatusBarInfo();
-   return S_OK;
-}
 
 //////////////////////////////
 // Standard methods
@@ -965,7 +912,8 @@ STDMETHODIMP HitTarget::put_Visible(VARIANT_BOOL newVal)
 STDMETHODIMP HitTarget::get_X(float *pVal)
 {
    *pVal = m_d.m_vPosition.x;
-   m_vpinball->SetStatusBarUnitInfo(string(), true);
+   if (m_vpinball)
+      m_vpinball->SetStatusBarUnitInfo(string(), true);
 
    return S_OK;
 }
@@ -1105,7 +1053,7 @@ STDMETHODIMP HitTarget::get_Friction(float *pVal)
 
 STDMETHODIMP HitTarget::put_Friction(float newVal)
 {
-   m_d.m_friction = clamp(newVal, 0.f, 1.f);
+   m_d.m_friction = saturate(newVal);
    return S_OK;
 }
 
@@ -1186,18 +1134,6 @@ STDMETHODIMP HitTarget::put_ReflectionEnabled(VARIANT_BOOL newVal)
 {
    m_d.m_reflectionEnabled = VBTOb(newVal);
    return S_OK;
-}
-
-void HitTarget::SetDefaultPhysics(const bool fromMouseClick)
-{
-#define strKeyName Settings::DefaultPropsHitTarget
-
-   m_d.m_elasticity = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "Elasticity"s, 0.35f) : 0.35f;
-   m_d.m_elasticityFalloff = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "ElasticityFalloff"s, 0.5f) : 0.5f;
-   m_d.m_friction = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "Friction"s, 0.2f) : 0.2f;
-   m_d.m_scatter = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "Scatter"s, 5.f) : 5.f;
-
-#undef strKeyName
 }
 
 STDMETHODIMP HitTarget::get_DepthBias(float *pVal)

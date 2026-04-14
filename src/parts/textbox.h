@@ -4,7 +4,8 @@
 
 #pragma once
 
-#include "ui/resource.h"
+#include "ui/win/resource.h"
+#include "utils/fileio.h"
 
 #ifdef __STANDALONE__
 #include <SDL3_ttf/SDL_ttf.h>
@@ -18,11 +19,11 @@ public:
    COLORREF m_fontcolor;
    float m_intensity_scale;
    string m_text;
-   TimerDataRoot m_tdr;
    TextAlignment m_talign;
    bool m_transparent;
    bool m_visible;
    bool m_isDMD;
+   FontDesc m_font;
 };
 
 class Textbox :
@@ -38,7 +39,8 @@ class Textbox :
    public IEditable,
    public IScriptable,
    public IFireEvents,
-   public Hitable
+   //public IHitable, // FIXME implement UI picking
+   public IRenderable
 {
 public:
 #ifdef __STANDALONE__
@@ -47,7 +49,7 @@ public:
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
-   Textbox();
+   Textbox() { m_desktopBackdrop = true; } // Textbox is always located on backdrop
    virtual ~Textbox();
 
    BEGIN_COM_MAP(Textbox)
@@ -66,14 +68,13 @@ public:
       CONNECTION_POINT_ENTRY(DIID_ITextboxEvents)
    END_CONNECTION_POINT_MAP()
 
-   STANDARD_EDITABLE_DECLARES(Textbox, eItemTextbox, TEXTBOX, 2)
+   STANDARD_EDITABLE_DECLARES_NO_HITABLE(Textbox, eItemTextbox, TEXTBOX, VIEW_BACKGLASS)
 
    void MoveOffset(const float dx, const float dy) final;
    void SetObjectPos() final;
    // Multi-object manipulation
    Vertex2D GetCenter() const final { return m_d.m_v1; }
    void PutCenter(const Vertex2D& pv) final;
-   ItemTypeEnum HitableGetItemType() const final { return eItemTextbox; }
 
    void WriteRegDefaults() final;
 
@@ -81,24 +82,11 @@ public:
    // ISupportsErrorInfo
    STDMETHOD(InterfaceSupportsErrorInfo)(REFIID riid);
 
-   string GetFontName();
-   HFONT GetFont();
-
-   IFont *m_pIFont = nullptr;
-#ifdef __STANDALONE__
-   bool m_fontItalic;
-   bool m_fontUnderline;
-   bool m_fontStrikeThrough;
-   bool m_fontBold;
-   float m_fontSize;
-   string m_fontName;
-#endif
+   const string& GetFontName() const;
 
    TextboxData m_d;
 
 private:
-   PinTable *m_ptable = nullptr;
-   
    RenderDevice *m_rd = nullptr;
    bool m_textureDirty = true;
    std::shared_ptr<BaseTexture> m_texture = nullptr;

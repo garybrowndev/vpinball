@@ -4,13 +4,13 @@
 
 #pragma once
 
-#include "ui/resource.h"
+#include "dragpoint.h"
+#include "ui/win/resource.h"
 #include "unordered_dense.h"
 
 class RubberData final : public BaseProperty
 {
 public:
-   TimerDataRoot m_tdr;
    float m_height;
    float m_hitHeight;
    int m_thickness;
@@ -32,7 +32,8 @@ class Rubber :
    public IProvideClassInfo2Impl<&CLSID_Rubber, &DIID_IRubberEvents, &LIBID_VPinballLib>,
    public ISelect,
    public IEditable,
-   public Hitable,
+   public IHitable,
+   public IRenderable,
    public IScriptable,
    public IHaveDragPoints,
    public IFireEvents,
@@ -45,7 +46,14 @@ public:
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
-   Rubber();
+   Rubber()
+   {
+      m_menuid = IDR_SURFACEMENU;
+      m_d.m_collidable = true;
+      m_d.m_visible = true;
+      m_timerEnabled = false;
+      m_timerInterval = 0;
+   }
    virtual ~Rubber();
 
    BEGIN_COM_MAP(Rubber)
@@ -62,7 +70,7 @@ public:
       CONNECTION_POINT_ENTRY(DIID_IRubberEvents)
    END_CONNECTION_POINT_MAP()
 
-   STANDARD_EDITABLE_DECLARES(Rubber, eItemRubber, RUBBER, 1)
+   STANDARD_EDITABLE_DECLARES(Rubber, eItemRubber, RUBBER, VIEW_PLAYFIELD)
 
       //DECLARE_NOT_AGGREGATABLE(Rubber)
       // Remove the comment from the line above if you don't want your object to
@@ -79,7 +87,9 @@ public:
    void MoveOffset(const float dx, const float dy) final;
    void SetObjectPos() final;
 
+#ifndef __STANDALONE__
    void DoCommand(int icmd, int x, int y) final;
+#endif
 
    int GetMinimumPoints() const final { return 2; }
 
@@ -114,10 +124,9 @@ private:
    void AddHitEdge(class PhysicsEngine *physics, ankerl::unordered_dense::set<std::pair<unsigned, unsigned>> &addedEdges, const unsigned i, const unsigned j, const bool isUI);
    void SetupHitObject(class PhysicsEngine *physics, HitObject *obj, const bool isUI);
 
-   PinTable *m_ptable;
-
    RenderDevice *m_rd = nullptr;
-   MeshBuffer *m_meshBuffer = nullptr;
+   std::shared_ptr<MeshBuffer> m_meshBuffer;
+   std::shared_ptr<MeshBuffer> m_meshEdgeBuffer;
    bool m_dynamicVertexBufferRegenerate;
    bool m_bboxDirty = true;
    Vertex3Ds m_bboxMin;
@@ -132,8 +141,6 @@ private:
    vector<WORD> m_ringIndices;
 
    Vertex3Ds m_middlePoint;
-
-   PropertyPane *m_propVisual;
 
    void GetCentralCurve(vector<RenderVertex> &vv, const float _accuracy = -1.f) const;
 

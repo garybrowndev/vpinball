@@ -10,6 +10,7 @@
 #undef _WIN64
 #endif
 #include "bx/readerwriter.h"
+#define BGFX_PLATFORM_SUPPORTS_WGSL 0
 #include "bgfx/embedded_shader.h"
 #ifdef __STANDALONE__
 #pragma pop_macro("_WIN64")
@@ -44,28 +45,32 @@
 #define SHADER_TECHNIQUE(name, ...) SHADER_TECHNIQUE_##name
 enum ShaderTechniques
 {
-   SHADER_TECHNIQUE(LiveUI, SHADER_matWorldView, SHADER_tex_base_color, SHADER_staticColor_Alpha),
-   SHADER_TECHNIQUE(RenderBall, SHADER_matProj, SHADER_matWorldViewProj, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverse, SHADER_ballLightEmission, SHADER_ballLightPos,
-      SHADER_Roughness_WrapL_Edge_Thickness, SHADER_cBase_Alpha, SHADER_fDisableLighting_top_below, SHADER_fenvEmissionScale_TexWidth, SHADER_cAmbient_LightRange, SHADER_tex_diffuse_env,
-      SHADER_orientation, SHADER_invTableRes_reflection, SHADER_w_h_disableLighting, SHADER_tex_ball_color, SHADER_tex_ball_playfield, SHADER_tex_ball_decal),
-   SHADER_TECHNIQUE(RenderBall_DecalMode, SHADER_matProj, SHADER_matWorldViewProj, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverse, SHADER_ballLightEmission,
+   SHADER_TECHNIQUE(LiveUI, SHADER_matWorldView, SHADER_tex_base_color, SHADER_staticColor_Alpha, SHADER_clip_plane),
+   SHADER_TECHNIQUE(RenderBall, SHADER_layer, SHADER_matProj, SHADER_matWorldViewProj, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverse, SHADER_ballLightEmission,
       SHADER_ballLightPos, SHADER_Roughness_WrapL_Edge_Thickness, SHADER_cBase_Alpha, SHADER_fDisableLighting_top_below, SHADER_fenvEmissionScale_TexWidth, SHADER_cAmbient_LightRange,
-      SHADER_tex_diffuse_env, SHADER_orientation, SHADER_invTableRes_reflection, SHADER_w_h_disableLighting, SHADER_tex_ball_color, SHADER_tex_ball_playfield, SHADER_tex_ball_decal),
-   SHADER_TECHNIQUE(RenderBall_SphericalMap, SHADER_matProj, SHADER_matWorldViewProj, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverse, SHADER_ballLightEmission,
+      SHADER_tex_diffuse_env, SHADER_orientation, SHADER_invTableRes_reflection, SHADER_w_h_disableLighting, SHADER_tex_ball_color, SHADER_tex_ball_playfield, SHADER_tex_ball_decal,
+      SHADER_clip_plane),
+   SHADER_TECHNIQUE(RenderBall_DecalMode, SHADER_layer, SHADER_matProj, SHADER_matWorldViewProj, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverse, SHADER_ballLightEmission,
       SHADER_ballLightPos, SHADER_Roughness_WrapL_Edge_Thickness, SHADER_cBase_Alpha, SHADER_fDisableLighting_top_below, SHADER_fenvEmissionScale_TexWidth, SHADER_cAmbient_LightRange,
-      SHADER_tex_diffuse_env, SHADER_orientation, SHADER_invTableRes_reflection, SHADER_w_h_disableLighting, SHADER_tex_ball_color, SHADER_tex_ball_playfield, SHADER_tex_ball_decal),
-   SHADER_TECHNIQUE(RenderBall_SphericalMap_DecalMode, SHADER_matProj, SHADER_matWorldViewProj, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverse, SHADER_ballLightEmission,
+      SHADER_tex_diffuse_env, SHADER_orientation, SHADER_invTableRes_reflection, SHADER_w_h_disableLighting, SHADER_tex_ball_color, SHADER_tex_ball_playfield, SHADER_tex_ball_decal,
+      SHADER_clip_plane),
+   SHADER_TECHNIQUE(RenderBall_SphericalMap, SHADER_layer, SHADER_matProj, SHADER_matWorldViewProj, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverse, SHADER_ballLightEmission,
       SHADER_ballLightPos, SHADER_Roughness_WrapL_Edge_Thickness, SHADER_cBase_Alpha, SHADER_fDisableLighting_top_below, SHADER_fenvEmissionScale_TexWidth, SHADER_cAmbient_LightRange,
-      SHADER_tex_diffuse_env, SHADER_orientation, SHADER_invTableRes_reflection, SHADER_w_h_disableLighting, SHADER_tex_ball_color, SHADER_tex_ball_playfield, SHADER_tex_ball_decal),
-   SHADER_TECHNIQUE(RenderBall_Debug, SHADER_matWorldViewProj, SHADER_matWorldView, SHADER_matWorldViewInverse, SHADER_orientation),
-   SHADER_TECHNIQUE(RenderBallTrail, SHADER_matWorldViewProj, SHADER_matWorldView, SHADER_matWorldViewInverse, SHADER_cBase_Alpha, SHADER_fenvEmissionScale_TexWidth, SHADER_orientation,
-      SHADER_w_h_disableLighting, SHADER_tex_ball_color),
+      SHADER_tex_diffuse_env, SHADER_orientation, SHADER_invTableRes_reflection, SHADER_w_h_disableLighting, SHADER_tex_ball_color, SHADER_tex_ball_playfield, SHADER_tex_ball_decal,
+      SHADER_clip_plane),
+   SHADER_TECHNIQUE(RenderBall_SphericalMap_DecalMode, SHADER_layer, SHADER_matProj, SHADER_matWorldViewProj, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverse,
+      SHADER_ballLightEmission, SHADER_ballLightPos, SHADER_Roughness_WrapL_Edge_Thickness, SHADER_cBase_Alpha, SHADER_fDisableLighting_top_below, SHADER_fenvEmissionScale_TexWidth,
+      SHADER_cAmbient_LightRange, SHADER_tex_diffuse_env, SHADER_orientation, SHADER_invTableRes_reflection, SHADER_w_h_disableLighting, SHADER_tex_ball_color, SHADER_tex_ball_playfield,
+      SHADER_tex_ball_decal, SHADER_clip_plane),
+   SHADER_TECHNIQUE(RenderBall_Debug, SHADER_layer, SHADER_matWorldViewProj, SHADER_matWorldView, SHADER_matWorldViewInverse, SHADER_orientation, SHADER_clip_plane),
+   SHADER_TECHNIQUE(
+      RenderBallTrail, SHADER_layer, SHADER_matWorldViewProj, SHADER_cBase_Alpha, SHADER_fenvEmissionScale_TexWidth, SHADER_w_h_disableLighting, SHADER_tex_ball_color, SHADER_clip_plane),
    // OpenGL only has the first variant. DX9 needs all of them due to shader compiler limitation
-   SHADER_TECHNIQUE(basic_with_texture, SHADER_matProj, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose,
+   SHADER_TECHNIQUE(basic_with_texture, SHADER_layer, SHADER_matProj, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose,
       SHADER_lightCenter_doShadow, SHADER_balls, SHADER_staticColor_Alpha, SHADER_w_h_height, SHADER_basicLightEmission, SHADER_basicLightPos, SHADER_Roughness_WrapL_Edge_Thickness,
       SHADER_cBase_Alpha, SHADER_fDisableLighting_top_below, SHADER_fenvEmissionScale_TexWidth, SHADER_cAmbient_LightRange, SHADER_tex_env, SHADER_tex_diffuse_env,
       SHADER_cClearcoat_EdgeAlpha, SHADER_cGlossy_ImageLerp, SHADER_u_basic_shade_mode, SHADER_refractionTint_thickness, SHADER_mirrorNormal_factor, SHADER_objectSpaceNormalMap,
-      SHADER_tex_base_color, SHADER_tex_base_transmission, SHADER_tex_base_normalmap, SHADER_tex_reflection, SHADER_tex_refraction, SHADER_tex_probe_depth),
+      SHADER_tex_base_color, SHADER_tex_base_transmission, SHADER_tex_base_normalmap, SHADER_tex_reflection, SHADER_tex_refraction, SHADER_tex_probe_depth, SHADER_clip_plane),
    SHADER_TECHNIQUE(basic_with_texture_isMetal),
    SHADER_TECHNIQUE(basic_with_texture_normal),
    SHADER_TECHNIQUE(basic_with_texture_normal_isMetal),
@@ -82,11 +87,12 @@ enum ShaderTechniques
    SHADER_TECHNIQUE(basic_with_texture_refr_refl_normal),
    SHADER_TECHNIQUE(basic_with_texture_refr_refl_normal_isMetal),
    // OpenGL only has the first variant. DX9 needs all of them due to shader compiler limitation
-   SHADER_TECHNIQUE(basic_with_texture_at, SHADER_alphaTestValue, SHADER_matProj, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matView, SHADER_matWorldView,
+   SHADER_TECHNIQUE(basic_with_texture_at, SHADER_layer, SHADER_alphaTestValue, SHADER_matProj, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matView, SHADER_matWorldView,
       SHADER_matWorldViewInverseTranspose, SHADER_lightCenter_doShadow, SHADER_balls, SHADER_staticColor_Alpha, SHADER_w_h_height, SHADER_basicLightEmission, SHADER_basicLightPos,
       SHADER_Roughness_WrapL_Edge_Thickness, SHADER_cBase_Alpha, SHADER_fDisableLighting_top_below, SHADER_fenvEmissionScale_TexWidth, SHADER_cAmbient_LightRange, SHADER_tex_env,
       SHADER_tex_diffuse_env, SHADER_cClearcoat_EdgeAlpha, SHADER_cGlossy_ImageLerp, SHADER_u_basic_shade_mode, SHADER_refractionTint_thickness, SHADER_mirrorNormal_factor,
-      SHADER_objectSpaceNormalMap, SHADER_tex_base_color, SHADER_tex_base_transmission, SHADER_tex_base_normalmap, SHADER_tex_reflection, SHADER_tex_refraction, SHADER_tex_probe_depth),
+      SHADER_objectSpaceNormalMap, SHADER_tex_base_color, SHADER_tex_base_transmission, SHADER_tex_base_normalmap, SHADER_tex_reflection, SHADER_tex_refraction, SHADER_tex_probe_depth,
+      SHADER_clip_plane),
    SHADER_TECHNIQUE(basic_with_texture_at_isMetal),
    SHADER_TECHNIQUE(basic_with_texture_at_normal),
    SHADER_TECHNIQUE(basic_with_texture_at_normal_isMetal),
@@ -103,11 +109,11 @@ enum ShaderTechniques
    SHADER_TECHNIQUE(basic_with_texture_at_refr_refl_normal),
    SHADER_TECHNIQUE(basic_with_texture_at_refr_refl_normal_isMetal),
    // OpenGL only has the first variant. DX9 needs all of them due to shader compiler limitation
-   SHADER_TECHNIQUE(basic_without_texture, SHADER_matProj, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose,
+   SHADER_TECHNIQUE(basic_without_texture, SHADER_layer, SHADER_matProj, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose,
       SHADER_lightCenter_doShadow, SHADER_balls, SHADER_staticColor_Alpha, SHADER_w_h_height, SHADER_basicLightEmission, SHADER_basicLightPos, SHADER_Roughness_WrapL_Edge_Thickness,
       SHADER_cBase_Alpha, SHADER_fDisableLighting_top_below, SHADER_fenvEmissionScale_TexWidth, SHADER_cAmbient_LightRange, SHADER_tex_env, SHADER_tex_diffuse_env,
       SHADER_cClearcoat_EdgeAlpha, SHADER_cGlossy_ImageLerp, SHADER_u_basic_shade_mode, SHADER_refractionTint_thickness, SHADER_mirrorNormal_factor, SHADER_tex_base_transmission,
-      SHADER_tex_reflection, SHADER_tex_refraction, SHADER_tex_probe_depth),
+      SHADER_tex_reflection, SHADER_tex_refraction, SHADER_tex_probe_depth, SHADER_clip_plane),
    SHADER_TECHNIQUE(basic_without_texture_isMetal),
    SHADER_TECHNIQUE(basic_without_texture_refl),
    SHADER_TECHNIQUE(basic_without_texture_refl_isMetal),
@@ -117,183 +123,196 @@ enum ShaderTechniques
    SHADER_TECHNIQUE(basic_without_texture_refr_refl_isMetal),
 
    // Unshaded
-   SHADER_TECHNIQUE(unshaded_without_texture, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose, SHADER_staticColor_Alpha),
+   SHADER_TECHNIQUE(unshaded_without_texture, SHADER_layer, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose, SHADER_staticColor_Alpha,
+      SHADER_clip_plane),
+   SHADER_TECHNIQUE(unshaded_with_texture, SHADER_layer, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose, SHADER_staticColor_Alpha,
+      SHADER_tex_base_color, SHADER_clip_plane),
+   SHADER_TECHNIQUE(unshaded_without_texture_shadow, SHADER_layer, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose,
+      SHADER_lightCenter_doShadow, SHADER_balls, SHADER_staticColor_Alpha, SHADER_clip_plane),
+   SHADER_TECHNIQUE(unshaded_with_texture_shadow, SHADER_layer, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose,
+      SHADER_lightCenter_doShadow, SHADER_balls, SHADER_staticColor_Alpha, SHADER_tex_base_color, SHADER_clip_plane),
+
+   SHADER_TECHNIQUE(basic_reflection_only, SHADER_layer, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose, SHADER_staticColor_Alpha,
+      SHADER_w_h_height, SHADER_mirrorNormal_factor, SHADER_tex_reflection, SHADER_clip_plane),
+
+   SHADER_TECHNIQUE(vr_mask, SHADER_matWorldViewProj, SHADER_staticColor_Alpha),
+
    SHADER_TECHNIQUE(
-      unshaded_with_texture, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose, SHADER_staticColor_Alpha, SHADER_tex_base_color),
-   SHADER_TECHNIQUE(unshaded_without_texture_shadow, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose, SHADER_lightCenter_doShadow,
-      SHADER_balls, SHADER_staticColor_Alpha),
-   SHADER_TECHNIQUE(unshaded_with_texture_shadow, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose, SHADER_lightCenter_doShadow,
-      SHADER_balls, SHADER_staticColor_Alpha, SHADER_tex_base_color),
+      bg_decal_without_texture, SHADER_layer, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose, SHADER_cBase_Alpha, SHADER_clip_plane),
+   SHADER_TECHNIQUE(bg_decal_with_texture, SHADER_layer, SHADER_alphaTestValue, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose,
+      SHADER_cBase_Alpha, SHADER_tex_base_color, SHADER_clip_plane),
 
-   SHADER_TECHNIQUE(basic_reflection_only, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose, SHADER_staticColor_Alpha, SHADER_w_h_height,
-      SHADER_mirrorNormal_factor, SHADER_tex_reflection),
-
-   SHADER_TECHNIQUE(vr_mask, SHADER_matWorldViewProj),
-
-   SHADER_TECHNIQUE(bg_decal_without_texture, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose, SHADER_cBase_Alpha),
-   SHADER_TECHNIQUE(bg_decal_with_texture, SHADER_alphaTestValue, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose, SHADER_cBase_Alpha,
-      SHADER_tex_base_color),
-
-   SHADER_TECHNIQUE(kickerBoolean, SHADER_matProj, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose,
+   SHADER_TECHNIQUE(kickerBoolean, SHADER_layer, SHADER_matProj, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose,
       SHADER_lightCenter_doShadow, SHADER_balls, SHADER_staticColor_Alpha, SHADER_w_h_height, SHADER_basicLightEmission, SHADER_basicLightPos, SHADER_Roughness_WrapL_Edge_Thickness,
       SHADER_cBase_Alpha, SHADER_fDisableLighting_top_below, SHADER_fenvEmissionScale_TexWidth, SHADER_cAmbient_LightRange, SHADER_tex_env, SHADER_tex_diffuse_env,
       SHADER_cClearcoat_EdgeAlpha, SHADER_cGlossy_ImageLerp, SHADER_u_basic_shade_mode, SHADER_refractionTint_thickness, SHADER_mirrorNormal_factor, SHADER_tex_base_transmission,
-      SHADER_tex_reflection, SHADER_tex_refraction, SHADER_tex_probe_depth),
-   SHADER_TECHNIQUE(kickerBoolean_isMetal, SHADER_matProj, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose,
+      SHADER_tex_reflection, SHADER_tex_refraction, SHADER_tex_probe_depth, SHADER_clip_plane),
+   SHADER_TECHNIQUE(kickerBoolean_isMetal, SHADER_layer, SHADER_matProj, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose,
       SHADER_lightCenter_doShadow, SHADER_balls, SHADER_staticColor_Alpha, SHADER_w_h_height, SHADER_basicLightEmission, SHADER_basicLightPos, SHADER_Roughness_WrapL_Edge_Thickness,
       SHADER_cBase_Alpha, SHADER_fDisableLighting_top_below, SHADER_fenvEmissionScale_TexWidth, SHADER_cAmbient_LightRange, SHADER_tex_env, SHADER_tex_diffuse_env,
       SHADER_cClearcoat_EdgeAlpha, SHADER_cGlossy_ImageLerp, SHADER_u_basic_shade_mode, SHADER_refractionTint_thickness, SHADER_mirrorNormal_factor, SHADER_tex_base_transmission,
-      SHADER_tex_reflection, SHADER_tex_refraction, SHADER_tex_probe_depth),
+      SHADER_tex_reflection, SHADER_tex_refraction, SHADER_tex_probe_depth, SHADER_clip_plane),
 
-   SHADER_TECHNIQUE(light_with_texture, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose, SHADER_basicLightEmission,
-      SHADER_basicLightPos, SHADER_Roughness_WrapL_Edge_Thickness, SHADER_cBase_Alpha, SHADER_fDisableLighting_top_below, SHADER_fenvEmissionScale_TexWidth, SHADER_cAmbient_LightRange,
-      SHADER_tex_env, SHADER_tex_diffuse_env, SHADER_cClearcoat_EdgeAlpha, SHADER_cGlossy_ImageLerp, SHADER_u_basic_shade_mode, SHADER_lightCenter_maxRange, SHADER_lightColor2_falloff_power,
-      SHADER_lightColor_intensity, SHADER_lightingOff, SHADER_tex_light_color),
-   SHADER_TECHNIQUE(light_without_texture, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose, SHADER_basicLightEmission,
-      SHADER_basicLightPos, SHADER_Roughness_WrapL_Edge_Thickness, SHADER_cBase_Alpha, SHADER_fDisableLighting_top_below, SHADER_fenvEmissionScale_TexWidth, SHADER_cAmbient_LightRange,
-      SHADER_tex_env, SHADER_tex_diffuse_env, SHADER_cClearcoat_EdgeAlpha, SHADER_cGlossy_ImageLerp, SHADER_u_basic_shade_mode, SHADER_lightCenter_maxRange, SHADER_lightColor2_falloff_power,
-      SHADER_lightColor_intensity, SHADER_lightingOff),
-   SHADER_TECHNIQUE(light_with_texture_isMetal, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose, SHADER_basicLightEmission,
-      SHADER_basicLightPos, SHADER_Roughness_WrapL_Edge_Thickness, SHADER_cBase_Alpha, SHADER_fDisableLighting_top_below, SHADER_fenvEmissionScale_TexWidth, SHADER_cAmbient_LightRange,
-      SHADER_tex_env, SHADER_tex_diffuse_env, SHADER_cClearcoat_EdgeAlpha, SHADER_cGlossy_ImageLerp, SHADER_u_basic_shade_mode, SHADER_lightCenter_maxRange, SHADER_lightColor2_falloff_power,
-      SHADER_lightColor_intensity, SHADER_lightingOff, SHADER_tex_light_color),
-   SHADER_TECHNIQUE(light_without_texture_isMetal, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose,
+   SHADER_TECHNIQUE(light_with_texture, SHADER_layer, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose,
       SHADER_basicLightEmission, SHADER_basicLightPos, SHADER_Roughness_WrapL_Edge_Thickness, SHADER_cBase_Alpha, SHADER_fDisableLighting_top_below, SHADER_fenvEmissionScale_TexWidth,
       SHADER_cAmbient_LightRange, SHADER_tex_env, SHADER_tex_diffuse_env, SHADER_cClearcoat_EdgeAlpha, SHADER_cGlossy_ImageLerp, SHADER_u_basic_shade_mode, SHADER_lightCenter_maxRange,
-      SHADER_lightColor2_falloff_power, SHADER_lightColor_intensity, SHADER_lightingOff),
+      SHADER_lightColor2_falloff_power, SHADER_lightColor_intensity, SHADER_lightingOff, SHADER_tex_light_color, SHADER_clip_plane),
+   SHADER_TECHNIQUE(light_without_texture, SHADER_layer, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose,
+      SHADER_basicLightEmission, SHADER_basicLightPos, SHADER_Roughness_WrapL_Edge_Thickness, SHADER_cBase_Alpha, SHADER_fDisableLighting_top_below, SHADER_fenvEmissionScale_TexWidth,
+      SHADER_cAmbient_LightRange, SHADER_tex_env, SHADER_tex_diffuse_env, SHADER_cClearcoat_EdgeAlpha, SHADER_cGlossy_ImageLerp, SHADER_u_basic_shade_mode, SHADER_lightCenter_maxRange,
+      SHADER_lightColor2_falloff_power, SHADER_lightColor_intensity, SHADER_lightingOff, SHADER_clip_plane),
+   SHADER_TECHNIQUE(light_with_texture_isMetal, SHADER_layer, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose,
+      SHADER_basicLightEmission, SHADER_basicLightPos, SHADER_Roughness_WrapL_Edge_Thickness, SHADER_cBase_Alpha, SHADER_fDisableLighting_top_below, SHADER_fenvEmissionScale_TexWidth,
+      SHADER_cAmbient_LightRange, SHADER_tex_env, SHADER_tex_diffuse_env, SHADER_cClearcoat_EdgeAlpha, SHADER_cGlossy_ImageLerp, SHADER_u_basic_shade_mode, SHADER_lightCenter_maxRange,
+      SHADER_lightColor2_falloff_power, SHADER_lightColor_intensity, SHADER_lightingOff, SHADER_tex_light_color, SHADER_clip_plane),
+   SHADER_TECHNIQUE(light_without_texture_isMetal, SHADER_layer, SHADER_matWorldViewProj, SHADER_matWorld, SHADER_matView, SHADER_matWorldView, SHADER_matWorldViewInverseTranspose,
+      SHADER_basicLightEmission, SHADER_basicLightPos, SHADER_Roughness_WrapL_Edge_Thickness, SHADER_cBase_Alpha, SHADER_fDisableLighting_top_below, SHADER_fenvEmissionScale_TexWidth,
+      SHADER_cAmbient_LightRange, SHADER_tex_env, SHADER_tex_diffuse_env, SHADER_cClearcoat_EdgeAlpha, SHADER_cGlossy_ImageLerp, SHADER_u_basic_shade_mode, SHADER_lightCenter_maxRange,
+      SHADER_lightColor2_falloff_power, SHADER_lightColor_intensity, SHADER_lightingOff, SHADER_clip_plane),
 
-   SHADER_TECHNIQUE(basic_DMD, SHADER_glassArea, SHADER_vRes_Alpha_time, SHADER_vColor_Intensity, SHADER_tex_dmd),
-   SHADER_TECHNIQUE(basic_DMD_world, SHADER_glassArea, SHADER_matWorldViewProj, SHADER_vRes_Alpha_time, SHADER_vColor_Intensity, SHADER_tex_dmd),
-   SHADER_TECHNIQUE(basic_DMD_ext, SHADER_glassArea, SHADER_vRes_Alpha_time, SHADER_vColor_Intensity, SHADER_tex_dmd),
-   SHADER_TECHNIQUE(basic_DMD_world_ext, SHADER_glassArea, SHADER_matWorldViewProj, SHADER_vRes_Alpha_time, SHADER_vColor_Intensity, SHADER_tex_dmd),
+   SHADER_TECHNIQUE(basic_DMD, SHADER_glassPad, SHADER_glassArea, SHADER_vRes_Alpha_time, SHADER_vColor_Intensity, SHADER_tex_dmd),
+   SHADER_TECHNIQUE(basic_DMD_world, SHADER_glassPad, SHADER_glassArea, SHADER_matWorldViewProj, SHADER_vRes_Alpha_time, SHADER_vColor_Intensity, SHADER_tex_dmd, SHADER_clip_plane),
 
-   SHADER_TECHNIQUE(display_DMD, SHADER_vRes_Alpha_time, SHADER_w_h_height, SHADER_displayProperties, SHADER_glassPad, SHADER_glassArea, SHADER_glassTint_Roughness, SHADER_displayGlass, SHADER_vColor_Intensity, SHADER_staticColor_Alpha, SHADER_displayTex),
-   SHADER_TECHNIQUE(display_DMD_world, SHADER_matWorldViewProj, SHADER_vRes_Alpha_time, SHADER_w_h_height, SHADER_displayProperties, SHADER_glassPad, SHADER_glassArea, SHADER_glassTint_Roughness, SHADER_displayGlass, SHADER_vColor_Intensity, SHADER_staticColor_Alpha, SHADER_displayTex),
-   SHADER_TECHNIQUE(display_Seg, SHADER_alphaSegState, SHADER_glassPad, SHADER_glassArea, SHADER_glassTint_Roughness, SHADER_displayProperties, SHADER_displayGlass, SHADER_vColor_Intensity, SHADER_staticColor_Alpha, SHADER_w_h_height, SHADER_displayTex),
-   SHADER_TECHNIQUE(display_Seg_world, SHADER_matWorldViewProj, SHADER_alphaSegState, SHADER_glassPad, SHADER_glassArea, SHADER_glassTint_Roughness, SHADER_displayProperties, SHADER_displayGlass, SHADER_vColor_Intensity, SHADER_staticColor_Alpha, SHADER_w_h_height, SHADER_displayTex),
-   SHADER_TECHNIQUE(display_CRT, SHADER_glassPad, SHADER_glassArea, SHADER_glassTint_Roughness, SHADER_displayGlass, SHADER_vColor_Intensity, SHADER_staticColor_Alpha, SHADER_w_h_height, SHADER_displayTex),
-   SHADER_TECHNIQUE(display_CRT_world, SHADER_matWorldViewProj, SHADER_glassPad, SHADER_glassArea, SHADER_glassTint_Roughness, SHADER_displayGlass, SHADER_vColor_Intensity, SHADER_staticColor_Alpha, SHADER_w_h_height, SHADER_displayTex),
+   SHADER_TECHNIQUE(display_DMD, SHADER_vRes_Alpha_time, SHADER_w_h_height, SHADER_displayProperties, SHADER_glassPad, SHADER_glassArea, SHADER_glassTint_Roughness, SHADER_displayGlass,
+      SHADER_vColor_Intensity, SHADER_staticColor_Alpha, SHADER_displayTex),
+   SHADER_TECHNIQUE(display_DMD_world, SHADER_matWorldViewProj, SHADER_vRes_Alpha_time, SHADER_w_h_height, SHADER_displayProperties, SHADER_glassPad, SHADER_glassArea,
+      SHADER_glassTint_Roughness, SHADER_displayGlass, SHADER_vColor_Intensity, SHADER_staticColor_Alpha, SHADER_displayTex, SHADER_clip_plane),
+   SHADER_TECHNIQUE(display_Seg, SHADER_alphaSegState, SHADER_glassPad, SHADER_glassArea, SHADER_glassTint_Roughness, SHADER_displayGlass, SHADER_vColor_Intensity, SHADER_staticColor_Alpha,
+      SHADER_w_h_height, SHADER_displayTex),
+   SHADER_TECHNIQUE(display_Seg_world, SHADER_matWorldViewProj, SHADER_alphaSegState, SHADER_glassPad, SHADER_glassArea, SHADER_glassTint_Roughness, SHADER_displayGlass,
+      SHADER_vColor_Intensity, SHADER_staticColor_Alpha, SHADER_w_h_height, SHADER_displayTex, SHADER_clip_plane),
+   SHADER_TECHNIQUE(display_CRT, SHADER_vRes_Alpha_time, SHADER_glassPad, SHADER_glassArea, SHADER_glassTint_Roughness, SHADER_displayGlass, SHADER_vColor_Intensity,
+      SHADER_staticColor_Alpha, SHADER_w_h_height, SHADER_displayTex, SHADER_displayProperties),
+   SHADER_TECHNIQUE(display_CRT_world, SHADER_matWorldViewProj, SHADER_vRes_Alpha_time, SHADER_glassPad, SHADER_glassArea, SHADER_glassTint_Roughness, SHADER_displayGlass,
+      SHADER_vColor_Intensity, SHADER_staticColor_Alpha, SHADER_w_h_height, SHADER_displayTex, SHADER_displayProperties, SHADER_clip_plane),
 
-   SHADER_TECHNIQUE(basic_noDMD, SHADER_glassArea, SHADER_alphaTestValue, SHADER_vColor_Intensity, SHADER_tex_sprite),
-   SHADER_TECHNIQUE(basic_noDMD_notex, SHADER_vColor_Intensity),
-   SHADER_TECHNIQUE(basic_noDMD_world, SHADER_glassArea, SHADER_alphaTestValue, SHADER_matWorldViewProj, SHADER_vColor_Intensity, SHADER_tex_sprite),
+   SHADER_TECHNIQUE(basic_noDMD, SHADER_glassPad, SHADER_glassArea, SHADER_alphaTestValue, SHADER_vColor_Intensity, SHADER_tex_sprite, SHADER_u_basic_shade_mode),
+   SHADER_TECHNIQUE(basic_noDMD_notex, SHADER_glassPad, SHADER_glassArea, SHADER_vColor_Intensity),
+   SHADER_TECHNIQUE(basic_noDMD_world, SHADER_glassPad, SHADER_glassArea, SHADER_alphaTestValue, SHADER_matWorldViewProj, SHADER_vColor_Intensity, SHADER_tex_sprite,
+      SHADER_u_basic_shade_mode, SHADER_clip_plane),
 
    SHADER_TECHNIQUE(basic_noLight, SHADER_matWorldViewProj, SHADER_lightCenter_doShadow, SHADER_balls, SHADER_staticColor_Alpha, SHADER_alphaTestValueAB_filterMode_addBlend,
-      SHADER_amount_blend_modulate_vs_add_flasherMode, SHADER_tex_flasher_A, SHADER_tex_flasher_B),
+      SHADER_amount_blend_modulate_vs_add_flasherMode, SHADER_tex_flasher_A, SHADER_tex_flasher_B, SHADER_clip_plane),
 
-   SHADER_TECHNIQUE(bulb_light, SHADER_matWorldViewProj, SHADER_blend_modulate_vs_add, SHADER_lightCenter_maxRange, SHADER_lightColor2_falloff_power, SHADER_lightColor_intensity),
+   SHADER_TECHNIQUE(
+      bulb_light, SHADER_matWorldViewProj, SHADER_blend_modulate_vs_add, SHADER_lightCenter_maxRange, SHADER_lightColor2_falloff_power, SHADER_lightColor_intensity, SHADER_clip_plane),
    SHADER_TECHNIQUE(bulb_light_with_ball_shadows, SHADER_matWorldViewProj, SHADER_balls, SHADER_blend_modulate_vs_add, SHADER_lightCenter_maxRange, SHADER_lightColor2_falloff_power,
-      SHADER_lightColor_intensity),
+      SHADER_lightColor_intensity, SHADER_clip_plane),
 
-   SHADER_TECHNIQUE(fb_rhtonemap, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut,
-      SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_rhtonemap_AO, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_filtered, SHADER_tex_bloom,
-      SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_rhtonemap_no_filter, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_unfiltered, SHADER_tex_bloom,
+   SHADER_TECHNIQUE(
+      fb_rhtonemap, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_depth),
+   SHADER_TECHNIQUE(fb_rhtonemap_AO, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut,
+      SHADER_tex_ao, SHADER_tex_depth),
+   SHADER_TECHNIQUE(fb_rhtonemap_no_filter, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_unfiltered, SHADER_tex_bloom,
       SHADER_tex_color_lut, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_rhtonemap_AO_no_filter, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_unfiltered, SHADER_tex_bloom,
+   SHADER_TECHNIQUE(fb_rhtonemap_AO_no_filter, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_unfiltered, SHADER_tex_bloom,
       SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth),
-   /*
-   SHADER_TECHNIQUE(fb_tmtonemap, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut,
-      SHADER_tex_depth, SHADER_tex_tonemap_lut),
-   SHADER_TECHNIQUE(fb_tmtonemap_AO, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_filtered, SHADER_tex_bloom,
-      SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth, SHADER_tex_tonemap_lut),
-   SHADER_TECHNIQUE(fb_tmtonemap_no_filter, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_unfiltered, SHADER_tex_bloom,
-      SHADER_tex_color_lut, SHADER_tex_depth, SHADER_tex_tonemap_lut),
-   SHADER_TECHNIQUE(fb_tmtonemap_AO_no_filter, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_unfiltered, SHADER_tex_bloom,
-      SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth, SHADER_tex_tonemap_lut),
-   */
-   SHADER_TECHNIQUE(fb_fmtonemap, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut,
-      SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_fmtonemap_AO, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_filtered, SHADER_tex_bloom,
-      SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_fmtonemap_no_filter, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_unfiltered, SHADER_tex_bloom,
+   SHADER_TECHNIQUE(
+      fb_fmtonemap, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_depth),
+   SHADER_TECHNIQUE(fb_fmtonemap_AO, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut,
+      SHADER_tex_ao, SHADER_tex_depth),
+   SHADER_TECHNIQUE(fb_fmtonemap_no_filter, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_unfiltered, SHADER_tex_bloom,
       SHADER_tex_color_lut, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_fmtonemap_AO_no_filter, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_unfiltered, SHADER_tex_bloom,
+   SHADER_TECHNIQUE(fb_fmtonemap_AO_no_filter, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_unfiltered, SHADER_tex_bloom,
       SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_nttonemap, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut,
-      SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_nttonemap_AO, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_filtered, SHADER_tex_bloom,
-      SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_nttonemap_no_filter, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_unfiltered, SHADER_tex_bloom,
+   SHADER_TECHNIQUE(
+      fb_nttonemap, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_depth),
+   SHADER_TECHNIQUE(fb_nttonemap_AO, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut,
+      SHADER_tex_ao, SHADER_tex_depth),
+   SHADER_TECHNIQUE(fb_nttonemap_no_filter, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_unfiltered, SHADER_tex_bloom,
       SHADER_tex_color_lut, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_nttonemap_AO_no_filter, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_unfiltered, SHADER_tex_bloom,
+   SHADER_TECHNIQUE(fb_nttonemap_AO_no_filter, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_unfiltered, SHADER_tex_bloom,
       SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_agxtonemap, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_agxtonemap_AO, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_agxtonemap_no_filter, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_unfiltered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_agxtonemap_AO_no_filter, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_unfiltered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_agxptonemap, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_agxptonemap_AO, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_agxptonemap_no_filter, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_unfiltered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_agxptonemap_AO_no_filter, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_unfiltered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_agxgtonemap, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_agxgtonemap_AO, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_agxgtonemap_no_filter, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_unfiltered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_agxgtonemap_AO_no_filter, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_unfiltered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_wcgtonemap, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_wcgtonemap_AO, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_wcgtonemap_no_filter, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_unfiltered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_depth),
-   SHADER_TECHNIQUE(fb_wcgtonemap_AO_no_filter, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_unfiltered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth),
+   SHADER_TECHNIQUE(
+      fb_agxtonemap, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_depth),
+   SHADER_TECHNIQUE(fb_agxtonemap_AO, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut,
+      SHADER_tex_ao, SHADER_tex_depth),
+   SHADER_TECHNIQUE(fb_agxtonemap_no_filter, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_unfiltered, SHADER_tex_bloom,
+      SHADER_tex_color_lut, SHADER_tex_depth),
+   SHADER_TECHNIQUE(fb_agxtonemap_AO_no_filter, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_unfiltered, SHADER_tex_bloom,
+      SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth),
+   SHADER_TECHNIQUE(
+      fb_agxptonemap, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_depth),
+   SHADER_TECHNIQUE(fb_agxptonemap_AO, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut,
+      SHADER_tex_ao, SHADER_tex_depth),
+   SHADER_TECHNIQUE(fb_agxptonemap_no_filter, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_unfiltered, SHADER_tex_bloom,
+      SHADER_tex_color_lut, SHADER_tex_depth),
+   SHADER_TECHNIQUE(fb_agxptonemap_AO_no_filter, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_unfiltered, SHADER_tex_bloom,
+      SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth),
+   SHADER_TECHNIQUE(
+      fb_agxgtonemap, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_depth),
+   SHADER_TECHNIQUE(fb_agxgtonemap_AO, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_filtered, SHADER_tex_bloom, SHADER_tex_color_lut,
+      SHADER_tex_ao, SHADER_tex_depth),
+   SHADER_TECHNIQUE(fb_agxgtonemap_no_filter, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_unfiltered, SHADER_tex_bloom,
+      SHADER_tex_color_lut, SHADER_tex_depth),
+   SHADER_TECHNIQUE(fb_agxgtonemap_AO_no_filter, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_tex_fb_unfiltered, SHADER_tex_bloom,
+      SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth),
+   SHADER_TECHNIQUE(fb_wcgtonemap, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_filtered,
+      SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_depth),
+   SHADER_TECHNIQUE(fb_wcgtonemap_AO, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_filtered,
+      SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth),
+   SHADER_TECHNIQUE(fb_wcgtonemap_no_filter, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2, SHADER_tex_fb_unfiltered,
+      SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_depth),
+   SHADER_TECHNIQUE(fb_wcgtonemap_AO_no_filter, SHADER_layer, SHADER_w_h_height, SHADER_bloom_dither_colorgrade, SHADER_exposure_wcg, SHADER_spline1, SHADER_spline2,
+      SHADER_tex_fb_unfiltered, SHADER_tex_bloom, SHADER_tex_color_lut, SHADER_tex_ao, SHADER_tex_depth),
 
-   SHADER_TECHNIQUE(fb_blur_horiz7x7, SHADER_w_h_height, SHADER_tex_fb_filtered),
-   SHADER_TECHNIQUE(fb_blur_vert7x7, SHADER_w_h_height, SHADER_tex_fb_filtered),
-   SHADER_TECHNIQUE(fb_blur_horiz9x9, SHADER_w_h_height, SHADER_tex_fb_filtered),
-   SHADER_TECHNIQUE(fb_blur_vert9x9, SHADER_w_h_height, SHADER_tex_fb_filtered),
-   SHADER_TECHNIQUE(fb_blur_horiz11x11, SHADER_w_h_height, SHADER_tex_fb_filtered),
-   SHADER_TECHNIQUE(fb_blur_vert11x11, SHADER_w_h_height, SHADER_tex_fb_filtered),
-   SHADER_TECHNIQUE(fb_blur_horiz13x13, SHADER_w_h_height, SHADER_tex_fb_filtered),
-   SHADER_TECHNIQUE(fb_blur_vert13x13, SHADER_w_h_height, SHADER_tex_fb_filtered),
-   SHADER_TECHNIQUE(fb_blur_horiz15x15, SHADER_w_h_height, SHADER_tex_fb_filtered),
-   SHADER_TECHNIQUE(fb_blur_vert15x15, SHADER_w_h_height, SHADER_tex_fb_filtered),
-   SHADER_TECHNIQUE(fb_blur_horiz19x19, SHADER_w_h_height, SHADER_tex_fb_filtered),
-   SHADER_TECHNIQUE(fb_blur_vert19x19, SHADER_w_h_height, SHADER_tex_fb_filtered),
-   SHADER_TECHNIQUE(fb_blur_horiz23x23, SHADER_w_h_height, SHADER_tex_fb_filtered),
-   SHADER_TECHNIQUE(fb_blur_vert23x23, SHADER_w_h_height, SHADER_tex_fb_filtered),
-   SHADER_TECHNIQUE(fb_blur_horiz27x27, SHADER_w_h_height, SHADER_tex_fb_filtered),
-   SHADER_TECHNIQUE(fb_blur_vert27x27, SHADER_w_h_height, SHADER_tex_fb_filtered),
-   SHADER_TECHNIQUE(fb_blur_horiz39x39, SHADER_w_h_height, SHADER_tex_fb_filtered),
-   SHADER_TECHNIQUE(fb_blur_vert39x39, SHADER_w_h_height, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(fb_blur_horiz7x7, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(fb_blur_vert7x7, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(fb_blur_horiz9x9, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(fb_blur_vert9x9, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(fb_blur_horiz11x11, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(fb_blur_vert11x11, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(fb_blur_horiz13x13, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(fb_blur_vert13x13, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(fb_blur_horiz15x15, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(fb_blur_vert15x15, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(fb_blur_horiz19x19, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(fb_blur_vert19x19, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(fb_blur_horiz23x23, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(fb_blur_vert23x23, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(fb_blur_horiz27x27, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(fb_blur_vert27x27, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(fb_blur_horiz39x39, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(fb_blur_vert39x39, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered),
 
-   SHADER_TECHNIQUE(AO, SHADER_w_h_height, SHADER_AO_scale_timeblur, SHADER_tex_fb_filtered, SHADER_tex_depth, SHADER_tex_ao_dither),
-   SHADER_TECHNIQUE(fb_AO, SHADER_w_h_height, SHADER_tex_ao), // Display debug AO
-   SHADER_TECHNIQUE(fb_AO_static, SHADER_w_h_height, SHADER_tex_fb_filtered, SHADER_tex_ao), // Apply AO during static prerender pass (no tonemapping)
-   SHADER_TECHNIQUE(fb_AO_no_filter_static, SHADER_w_h_height, SHADER_tex_fb_filtered, SHADER_tex_ao), // Apply AO during static prerender pass (no tonemapping)
-   SHADER_TECHNIQUE(fb_motionblur, SHADER_w_h_height, SHADER_tex_bloom, SHADER_tex_fb_filtered, SHADER_tex_depth, SHADER_matProj, SHADER_matProjInv, SHADER_balls),
-   SHADER_TECHNIQUE(fb_bloom, SHADER_w_h_height, SHADER_tex_fb_filtered),
-   SHADER_TECHNIQUE(fb_mirror, SHADER_w_h_height, SHADER_tex_fb_unfiltered),
-   SHADER_TECHNIQUE(fb_copy, SHADER_tex_fb_filtered),
-   SHADER_TECHNIQUE(SSReflection, SHADER_w_h_height, SHADER_SSR_bumpHeight_fresnelRefl_scale_FS, SHADER_tex_fb_filtered, SHADER_tex_depth, SHADER_tex_ao_dither),
+   SHADER_TECHNIQUE(AO, SHADER_layer, SHADER_w_h_height, SHADER_AO_scale_timeblur, SHADER_tex_fb_filtered, SHADER_tex_depth, SHADER_tex_ao_dither),
+   SHADER_TECHNIQUE(fb_AO, SHADER_layer, SHADER_w_h_height, SHADER_tex_ao), // Display debug AO
+   SHADER_TECHNIQUE(fb_AO_static, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered, SHADER_tex_ao), // Apply AO during static prerender pass (no tonemapping)
+   SHADER_TECHNIQUE(fb_AO_no_filter_static, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_unfiltered, SHADER_tex_ao), // Apply AO during static prerender pass (no tonemapping)
+   SHADER_TECHNIQUE(fb_motionblur, SHADER_layer, SHADER_w_h_height, SHADER_tex_bloom, SHADER_tex_fb_filtered, SHADER_tex_depth, SHADER_matProj, SHADER_matProjInv, SHADER_balls),
+   SHADER_TECHNIQUE(fb_bloom, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(fb_mirror, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_unfiltered),
+   SHADER_TECHNIQUE(fb_copy, SHADER_layer, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(SSReflection, SHADER_layer, SHADER_w_h_height, SHADER_SSR_bumpHeight_fresnelRefl_scale_FS, SHADER_tex_fb_filtered, SHADER_tex_depth, SHADER_tex_ao_dither),
 
-   SHADER_TECHNIQUE(NFAA, SHADER_w_h_height, SHADER_tex_fb_filtered, SHADER_tex_depth),
-   SHADER_TECHNIQUE(DLAA_edge, SHADER_w_h_height, SHADER_tex_fb_filtered),
-   SHADER_TECHNIQUE(DLAA, SHADER_w_h_height, SHADER_tex_fb_filtered, SHADER_tex_depth),
-   SHADER_TECHNIQUE(FXAA1, SHADER_w_h_height, SHADER_tex_fb_filtered, SHADER_tex_depth),
-   SHADER_TECHNIQUE(FXAA2, SHADER_w_h_height, SHADER_tex_fb_filtered, SHADER_tex_depth),
-   SHADER_TECHNIQUE(FXAA3, SHADER_w_h_height, SHADER_tex_fb_filtered, SHADER_tex_depth),
-   SHADER_TECHNIQUE(CAS, SHADER_w_h_height, SHADER_tex_fb_unfiltered, SHADER_tex_depth),
-   SHADER_TECHNIQUE(BilateralSharp_CAS, SHADER_w_h_height, SHADER_tex_fb_unfiltered, SHADER_tex_depth),
+   SHADER_TECHNIQUE(NFAA, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered, SHADER_tex_depth),
+   SHADER_TECHNIQUE(DLAA_edge, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered),
+   SHADER_TECHNIQUE(DLAA, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered, SHADER_tex_depth),
+   SHADER_TECHNIQUE(FXAA1, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered, SHADER_tex_depth),
+   SHADER_TECHNIQUE(FXAA2, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered, SHADER_tex_depth),
+   SHADER_TECHNIQUE(FXAA3, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered, SHADER_tex_depth),
+   SHADER_TECHNIQUE(FAAA, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_filtered, SHADER_tex_depth),
+   SHADER_TECHNIQUE(CAS, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_unfiltered, SHADER_tex_depth),
+   SHADER_TECHNIQUE(BilateralSharp_CAS, SHADER_layer, SHADER_w_h_height, SHADER_tex_fb_unfiltered, SHADER_tex_depth),
 #ifndef __OPENGLES__
    SHADER_TECHNIQUE(SMAA_ColorEdgeDetection, SHADER_w_h_height, SHADER_tex_fb_filtered),
    SHADER_TECHNIQUE(SMAA_BlendWeightCalculation, SHADER_w_h_height, SHADER_edgesTex, SHADER_areaTex, SHADER_searchTex),
    SHADER_TECHNIQUE(SMAA_NeighborhoodBlending, SHADER_w_h_height, SHADER_tex_fb_filtered, SHADER_blendTex),
 #endif
 
-   SHADER_TECHNIQUE(stereo_SBS, SHADER_w_h_height, SHADER_tex_stereo_fb, SHADER_tex_stereo_depth, SHADER_Stereo_MS_ZPD_YAxis),
-   SHADER_TECHNIQUE(stereo_TB, SHADER_w_h_height, SHADER_tex_stereo_fb, SHADER_tex_stereo_depth, SHADER_Stereo_MS_ZPD_YAxis),
-   SHADER_TECHNIQUE(stereo_Int, SHADER_w_h_height, SHADER_tex_stereo_fb, SHADER_tex_stereo_depth, SHADER_Stereo_MS_ZPD_YAxis),
-   SHADER_TECHNIQUE(stereo_Flipped_Int, SHADER_w_h_height, SHADER_tex_stereo_fb, SHADER_tex_stereo_depth, SHADER_Stereo_MS_ZPD_YAxis),
-   SHADER_TECHNIQUE(Stereo_sRGBAnaglyph, SHADER_w_h_height, SHADER_tex_stereo_fb, SHADER_tex_stereo_depth, SHADER_Stereo_MS_ZPD_YAxis, SHADER_Stereo_LeftMat, SHADER_Stereo_RightMat),
-   SHADER_TECHNIQUE(Stereo_GammaAnaglyph, SHADER_w_h_height, SHADER_tex_stereo_fb, SHADER_tex_stereo_depth, SHADER_Stereo_MS_ZPD_YAxis, SHADER_Stereo_LeftMat, SHADER_Stereo_RightMat,
-      SHADER_Stereo_LeftLuminance_Gamma),
-   SHADER_TECHNIQUE(Stereo_sRGBDynDesatAnaglyph, SHADER_w_h_height, SHADER_tex_stereo_fb, SHADER_tex_stereo_depth, SHADER_Stereo_MS_ZPD_YAxis, SHADER_Stereo_LeftMat, SHADER_Stereo_RightMat,
-      SHADER_Stereo_LeftLuminance_Gamma, SHADER_Stereo_RightLuminance_DynDesat),
-   SHADER_TECHNIQUE(Stereo_GammaDynDesatAnaglyph, SHADER_w_h_height, SHADER_tex_stereo_fb, SHADER_tex_stereo_depth, SHADER_Stereo_MS_ZPD_YAxis, SHADER_Stereo_LeftMat, SHADER_Stereo_RightMat,
-      SHADER_Stereo_LeftLuminance_Gamma, SHADER_Stereo_RightLuminance_DynDesat),
-   SHADER_TECHNIQUE(Stereo_DeghostAnaglyph, SHADER_w_h_height, SHADER_tex_stereo_fb, SHADER_tex_stereo_depth, SHADER_Stereo_MS_ZPD_YAxis, SHADER_Stereo_LeftMat, SHADER_Stereo_RightMat,
-      SHADER_Stereo_DeghostGamma, SHADER_Stereo_DeghostFilter),
+   SHADER_TECHNIQUE(stereo_SBS, SHADER_tex_stereo_fb),
+   SHADER_TECHNIQUE(stereo_TB, SHADER_tex_stereo_fb),
+   SHADER_TECHNIQUE(stereo_Int, SHADER_tex_stereo_fb),
+   SHADER_TECHNIQUE(stereo_Flipped_Int, SHADER_tex_stereo_fb),
+   SHADER_TECHNIQUE(Stereo_sRGBAnaglyph, SHADER_tex_stereo_fb, SHADER_Stereo_LeftMat, SHADER_Stereo_RightMat),
+   SHADER_TECHNIQUE(Stereo_GammaAnaglyph, SHADER_tex_stereo_fb, SHADER_Stereo_LeftMat, SHADER_Stereo_RightMat, SHADER_Stereo_LeftLuminance_Gamma),
+   SHADER_TECHNIQUE(
+      Stereo_sRGBDynDesatAnaglyph, SHADER_tex_stereo_fb, SHADER_Stereo_LeftMat, SHADER_Stereo_RightMat, SHADER_Stereo_LeftLuminance_Gamma, SHADER_Stereo_RightLuminance_DynDesat),
+   SHADER_TECHNIQUE(
+      Stereo_GammaDynDesatAnaglyph, SHADER_tex_stereo_fb, SHADER_Stereo_LeftMat, SHADER_Stereo_RightMat, SHADER_Stereo_LeftLuminance_Gamma, SHADER_Stereo_RightLuminance_DynDesat),
+   SHADER_TECHNIQUE(Stereo_DeghostAnaglyph, SHADER_tex_stereo_fb, SHADER_Stereo_LeftMat, SHADER_Stereo_RightMat, SHADER_Stereo_DeghostGamma, SHADER_Stereo_DeghostFilter),
 
-   SHADER_TECHNIQUE(irradiance, SHADER_tex_env),
+   SHADER_TECHNIQUE(irradiance, SHADER_layer, SHADER_tex_env),
 
    SHADER_TECHNIQUE_COUNT,
    SHADER_TECHNIQUE_INVALID
@@ -496,8 +515,8 @@ public:
    void SetTechnique(const ShaderTechniques technique);
    void SetTechniqueMaterial(ShaderTechniques technique, const Material& mat, const bool doAlphaTest = false, const bool doNormalMapping = false, const bool doReflection = false, const bool doRefraction = false);
    void SetBasic(const Material * const mat, Texture * const pin);
-   ShaderTechniques GetCurrentTechnique() const { return m_technique; }
    static void SetDefaultSamplerFilter(const ShaderUniforms sampler, const SamplerFilter sf);
+   static SamplerFilter GetDefaultSamplerFilter(const ShaderUniforms sampler);
 
    void SetMaterial(const Material * const mat, const bool has_alpha = true);
    void SetAlphaTestValue(const float value);
@@ -521,18 +540,18 @@ public:
    void SetMatrix(const ShaderUniforms uniformName, const Matrix3D* const pMatrix, const unsigned int count = 1);
    void SetVector(const ShaderUniforms uniformName, const vec4* const pVector);
    void SetVector(const ShaderUniforms uniformName, const float x, const float y, const float z, const float w);
+   vec4 GetVector(const ShaderUniforms uniformName) const;
    void SetFloat4v(const ShaderUniforms uniformName, const vec4* const pData, const unsigned int count);
-   void SetTexture(const ShaderUniforms uniformName, const std::shared_ptr<const Sampler> sampler, const SamplerFilter filter = SF_UNDEFINED, const SamplerAddressMode clampU = SA_UNDEFINED, const SamplerAddressMode clampV = SA_UNDEFINED);
+   void SetTexture(const ShaderUniforms uniformName, const std::shared_ptr<const Sampler>& sampler, const SamplerFilter filter = SF_UNDEFINED, const SamplerAddressMode clampU = SA_UNDEFINED, const SamplerAddressMode clampV = SA_UNDEFINED);
    void SetTextureNull(const ShaderUniforms uniformName);
    void SetTexture(const ShaderUniforms uniformName, ITexManCacheable* const texel, const bool force_linear_rgb = false, const SamplerFilter filter = SF_UNDEFINED, const SamplerAddressMode clampU = SA_UNDEFINED, const SamplerAddressMode clampV = SA_UNDEFINED);
-   
+
    class ShaderState* m_state = nullptr; // State that will be applied for the next begin/end pair
 
 private:
    RenderDevice* const m_renderDevice;
    const ShaderId m_shaderId;
    const bool m_isStereo;
-   ShaderTechniques m_technique;
    string m_shaderCodeName;
 
    static Shader* current_shader;
@@ -587,7 +606,7 @@ public:
       UniformDesc uniform_desc[SHADER_UNIFORM_COUNT];
    };
    ShaderTechnique* m_techniques[SHADER_TECHNIQUE_COUNT];
-   string m_shaderPath;
+   std::filesystem::path m_shaderPath;
 
    bool UseGeometryShader() const;
    bool parseFile(const string& fileNameRoot, const string& filename, int level, ankerl::unordered_dense::map<string, string>& values, const string& parentMode);
@@ -675,18 +694,20 @@ public:
       return m_state.data() + m_stateOffsets[uniformName];
    }
 
-   void CopyTo(const bool copyTo, ShaderState* const other, const ShaderTechniques technique = SHADER_TECHNIQUE_INVALID)
+   void CopyTo(const bool copyTo, ShaderState* const other)
    {
       assert(other->m_stateOffsets == m_stateOffsets);
       if (copyTo)
       {
          other->m_state = m_state;
          other->m_samplers = m_samplers;
+         other->m_technique = m_technique;
       }
       else
       {
          m_state = other->m_state;
          m_samplers = other->m_samplers;
+         m_technique = other->m_technique;
       }
    }
 
@@ -831,6 +852,16 @@ public:
       }
    }
 
+   const Matrix3D& GetMatrix(const ShaderUniforms uniformName) const
+   {
+      assert(0 <= uniformName && uniformName < SHADER_UNIFORM_COUNT);
+      assert(m_stateOffsets[uniformName] != -1);
+      assert(ShaderUniform::coreUniforms[uniformName].type == SUT_Float3x4 || ShaderUniform::coreUniforms[uniformName].type == SUT_Float4x3
+         || ShaderUniform::coreUniforms[uniformName].type == SUT_Float4x4);
+      Matrix3D* m = (Matrix3D*)(m_state.data() + m_stateOffsets[uniformName]);
+      return *m;
+   }
+
    void SetUniformBlock(const ShaderUniforms uniformName, const float* const pMatrix)
    {
       assert(Shader::GetCurrentShader() == nullptr);
@@ -918,7 +949,19 @@ public:
       return pos > 0 ? m_samplers[pos - 1] : nullptr;
    }
 
+   void SetTechnique(ShaderTechniques technique)
+   {
+      assert(Shader::GetCurrentShader() == nullptr);
+      m_technique = technique;
+   }
+
+   ShaderTechniques GetTechnique() const
+   {
+      return m_technique;
+   }
+
    vector<uint8_t> m_state;
+   ShaderTechniques m_technique = ShaderTechniques::SHADER_TECHNIQUE_INVALID;
    vector<std::shared_ptr<const Sampler>> m_samplers;
    static bool m_disableMipmaps;
 

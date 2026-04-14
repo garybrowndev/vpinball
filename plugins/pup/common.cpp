@@ -1,3 +1,5 @@
+// license:GPLv3+
+
 #include "common.h"
 
 #include <algorithm>
@@ -84,31 +86,33 @@ vector<string> parse_csv_line(const string& line)
       }
    }
 
-   parts.push_back(field);
+   parts.push_back(std::move(field));
 
    return parts;
 }
 
 string string_replace_all(const string& szStr, const string& szFrom, const string& szTo, const size_t offs)
 {
-   size_t startPos = szStr.find(szFrom, offs);
-   if (startPos == string::npos)
-      return szStr;
-
-   string szNewStr = szStr;
-   szNewStr.replace(startPos, szFrom.length(), szTo);
-   return string_replace_all(szNewStr, szFrom, szTo, startPos+szTo.length());
+   string result = szStr;
+   size_t pos = offs;
+   while ((pos = result.find(szFrom, pos)) != string::npos)
+   {
+      result.replace(pos, szFrom.length(), szTo);
+      pos += szTo.length();
+   }
+   return result;
 }
 
 string string_replace_all(const string& szStr, const string& szFrom, const char szTo, const size_t offs)
 {
-   size_t startPos = szStr.find(szFrom, offs);
-   if (startPos == string::npos)
-      return szStr;
-
-   string szNewStr = szStr;
-   szNewStr.replace(startPos, szFrom.length(), 1, szTo);
-   return string_replace_all(szNewStr, szFrom, szTo, startPos+1);
+   string result = szStr;
+   size_t pos = offs;
+   while ((pos = result.find(szFrom, pos)) != string::npos)
+   {
+      result.replace(pos, szFrom.length(), 1, szTo);
+      ++pos;
+   }
+   return result;
 }
 
 constexpr inline char cLower(char c)
@@ -118,11 +122,25 @@ constexpr inline char cLower(char c)
    return c;
 }
 
-CONSTEXPR inline void StrToLower(string& str) {
+CONSTEXPR inline void StrToLower(string& str)
+{
    std::ranges::transform(str.begin(), str.end(), str.begin(), cLower);
 }
 
 string lowerCase(string input)
+{
+   StrToLower(input);
+   return input;
+}
+
+inline void StrToLower(std::filesystem::path& path)
+{
+   std::string str = path.string();
+   std::ranges::transform(str.begin(), str.end(), str.begin(), cLower);
+   path = str;
+}
+
+std::filesystem::path lowerCase(std::filesystem::path input)
 {
    StrToLower(input);
    return input;
@@ -138,10 +156,11 @@ string normalize_path_separators(const string& szPath)
 {
    string szResult = szPath;
 
-   if (PATH_SEPARATOR_CHAR == '/')
+   #if '/' == PATH_SEPARATOR_CHAR
       std::ranges::replace(szResult.begin(), szResult.end(), '\\', PATH_SEPARATOR_CHAR);
-   else
+   #else
       std::ranges::replace(szResult.begin(), szResult.end(), '/', PATH_SEPARATOR_CHAR);
+   #endif
 
    auto end = std::unique(szResult.begin(), szResult.end(),
       [](char a, char b) { return a == b && a == PATH_SEPARATOR_CHAR; });
@@ -150,97 +169,73 @@ string normalize_path_separators(const string& szPath)
    return szResult;
 }
 
-string find_case_insensitive_file_path(const string& szPath)
+std::filesystem::path find_case_insensitive_file_path(const std::filesystem::path& searchedFile)
 {
-   auto fn = [&](auto& self, const string& s) -> string {
-      string path = normalize_path_separators(s);
-      std::filesystem::path p = std::filesystem::path(path).lexically_normal();
+   auto fn = [](const auto& self, std::filesystem::path path)
+   {
       std::error_code ec;
+      path = path.lexically_normal();
+      if (std::filesystem::exists(path, ec))
+         return path;
 
-      if (std::filesystem::exists(p, ec))
-         return p.string();
+      const auto& parent = path.parent_path();
+      std::filesystem::path base = (parent.empty() || parent == path) ? std::filesystem::path("."s) : self(self, parent);
+      if (base.empty())
+         return base;
 
-      auto parent = p.parent_path();
-      string base;
-      if (parent.empty() || parent == p) {
-         base = ".";
-      } else {
-         base = self(self, parent.string());
-         if (base.empty())
-            return string();
-      }
-
-      for (auto& ent : std::filesystem::directory_iterator(base, ec)) {
-         if (!ec && StrCompareNoCase(ent.path().filename().string(), p.filename().string())) {
-            auto found = ent.path().string();
-            if (found != path) {
-               LOGI("case insensitive file match: requested \"%s\", actual \"%s\"", path.c_str(), found.c_str());
+      for (const auto& ent : std::filesystem::directory_iterator(base, ec))
+      {
+         if (!ec && StrCompareNoCase(ent.path().filename().string(), path.filename().string()))
+         {
+            const auto& found = ent.path();
+            if (found != path)
+            {
+               LOGI(std::format("Case insensitive file match: requested \"{}\", actual \"{}\"", path.string(), found.string()));
             }
             return found;
          }
       }
 
-      return string();
+      return std::filesystem::path();
    };
 
-   string result = fn(fn, szPath);
-   if (!result.empty()) {
-      std::filesystem::path p = std::filesystem::absolute(result);
-      return p.string();
-   }
-   return string();
+   const std::filesystem::path result = fn(fn, searchedFile);
+   return result.empty() ? result : std::filesystem::absolute(result);
 }
 
-string find_case_insensitive_directory_path(const string& szPath)
+std::filesystem::path find_case_insensitive_directory_path(const std::filesystem::path& searchedFile)
 {
-   auto fn = [&](auto& self, const string& s) -> string {
-      string path = normalize_path_separators(s);
-      std::filesystem::path p = std::filesystem::path(path).lexically_normal();
+   auto fn = [](const auto& self, std::filesystem::path path)
+   {
       std::error_code ec;
+      path = path.lexically_normal();
+      if (std::filesystem::exists(path, ec) && std::filesystem::is_directory(path, ec))
+         return path;
 
-      if (std::filesystem::exists(p, ec) && std::filesystem::is_directory(p, ec)) {
-         string exact = p.string();
-         if (!exact.empty() && exact.back() != PATH_SEPARATOR_CHAR)
-            exact.push_back(PATH_SEPARATOR_CHAR);
-         return exact;
-      }
+      const auto& parent = path.parent_path();
+      std::filesystem::path base = (parent.empty() || parent == path) ? std::filesystem::path("."s) : self(self, parent);
+      if (base.empty())
+         return base;
 
-      auto parent = p.parent_path();
-      string base;
-      if (parent.empty() || parent == p) {
-         base = ".";
-      } else {
-         base = self(self, parent.string());
-         if (base.empty())
-            return string();
-      }
-
-      for (auto& ent : std::filesystem::directory_iterator(base, ec)) {
+      for (const auto& ent : std::filesystem::directory_iterator(base, ec))
+      {
          if (ec || !ent.is_directory(ec))
             continue;
-         if (StrCompareNoCase(ent.path().filename().string(), p.filename().string())) {
-            string found = ent.path().string();
-            if (!found.empty() && found.back() != PATH_SEPARATOR_CHAR)
-               found.push_back(PATH_SEPARATOR_CHAR);
-            if (found != path) {
-               LOGI("case insensitive directory match: requested \"%s\", actual \"%s\"", path.c_str(), found.c_str());
-            }
-            return found;
+         if (ec || !StrCompareNoCase(ent.path().filename().string(), path.filename().string()))
+            continue;
+         const auto& found = ent.path();
+         if (found != path)
+         {
+            LOGI(std::format("Case insensitive directory match: requested \"{}\", actual \"{}\"", path.string(), found.string()));
          }
+         return found;
       }
 
-      return string();
+      return std::filesystem::path();
    };
 
-   string result = fn(fn, szPath);
-   if (!result.empty()) {
-      std::filesystem::path p = std::filesystem::absolute(result);
-      string exact = p.string();
-      if (!exact.empty() && exact.back() != PATH_SEPARATOR_CHAR)
-         exact.push_back(PATH_SEPARATOR_CHAR);
-      return exact;
-   }
-   return string();
+   const std::filesystem::path result = fn(fn, searchedFile);
+   return result.empty() ? result : std::filesystem::absolute(result);
 }
 
 bool StrCompareNoCase(const string& strA, const string& strB)
@@ -250,9 +245,51 @@ bool StrCompareNoCase(const string& strA, const string& strB)
          [](char a, char b) { return cLower(a) == cLower(b); });
 }
 
+// We render all screens to a shared surface, so clip manually by adjusting texture source and destination rects
+#define PUP_CLIP_LABELS 1
+
+void ClipDrawImage(VPXRenderContext2D* ctx, VPXTexture texture,
+   float tintR, float tintG, float tintB, float alpha,
+   float texX, float texY, float texW, float texH,
+   float pivotX, float pivotY, float rotation,
+   const SDL_FRect& dest, const SDL_Rect& clipRect)
+{
+#if PUP_CLIP_LABELS
+   // TNA uses angle=1 (0.1) which prevents clipping. If rotation is near zero, clip anyway
+   if (fabsf(rotation) < 0.5f)
+   {
+      const float cl = fmaxf(dest.x, static_cast<float>(clipRect.x));
+      const float ct = fmaxf(dest.y, static_cast<float>(clipRect.y));
+      const float cr = fminf(dest.x + dest.w, static_cast<float>(clipRect.x + clipRect.w));
+      const float cb = fminf(dest.y + dest.h, static_cast<float>(clipRect.y + clipRect.h));
+      if (cl >= cr || ct >= cb)
+         return;
+
+      const float lf = (cl - dest.x) / dest.w;
+      const float tf = (ct - dest.y) / dest.h;
+      const float rf = (dest.x + dest.w - cr) / dest.w;
+      const float bf = (dest.y + dest.h - cb) / dest.h;
+
+      ctx->DrawImage(ctx, texture, tintR, tintG, tintB, alpha,
+         texX + lf * texW, texY + bf * texH, texW * (1.f - lf - rf), texH * (1.f - tf - bf),
+         pivotX, pivotY, rotation,
+         cl, ct, cr - cl, cb - ct);
+      return;
+   }
+#endif
+   ctx->DrawImage(ctx, texture, tintR, tintG, tintB, alpha,
+      texX, texY, texW, texH,
+      pivotX, pivotY, rotation,
+      dest.x, dest.y, dest.w, dest.h);
+}
+
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #include <locale>
 void SetThreadName(const string& name)

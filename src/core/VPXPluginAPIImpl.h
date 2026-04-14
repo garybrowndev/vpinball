@@ -5,7 +5,11 @@
 #include "plugins/VPXPlugin.h"
 #include "plugins/ScriptablePlugin.h"
 #include "plugins/LoggingPlugin.h"
+
+#include "plugins/MsgPluginManager.h"
+
 #include "core/DynamicScript.h"
+
 #include "unordered_dense.h"
 
 // VPX serves as a plugin host, using the generic messaging plugin API
@@ -20,75 +24,103 @@
 class VPXPluginAPIImpl
 {
 public:
-   static VPXPluginAPIImpl& GetInstance();
+   VPXPluginAPIImpl(MsgPI::MsgPluginManager& msgApi);
+   ~VPXPluginAPIImpl();
 
    const VPXPluginAPI& getAPI() const { return m_api; }
    unsigned int GetVPXEndPointId() const { return m_vpxPlugin->m_endpointId; }
-   void BroadcastVPXMsg(const unsigned int msgId, void* data) const { MsgPluginManager::GetInstance().GetMsgAPI().BroadcastMsg(m_vpxPlugin->m_endpointId, msgId, data); }
+   void BroadcastVPXMsg(const unsigned int msgId, void* data) const;
 
-   static unsigned int GetMsgID(const char* name_space, const char* name) { return MsgPluginManager::GetInstance().GetMsgAPI().GetMsgID(name_space, name); }
-   static void ReleaseMsgID(const unsigned int msgId) { MsgPluginManager::GetInstance().GetMsgAPI().ReleaseMsgID(msgId); }
+   unsigned int GetMsgID(const char* name_space, const char* name);
+   void ReleaseMsgID(const unsigned int msgId);
 
-   string ApplyScriptCOMObjectOverrides(string& script) const;
+   string ApplyScriptCOMObjectOverrides(const string& script) const;
    IDispatch* CreateCOMPluginObject(const string& classId);
 
    std::shared_ptr<BaseTexture> GetTexture(VPXTexture texture) const;
+
+   bool IsScriptContributor(const unsigned int endpointId) const;
+
+   struct PluginSetting
+   {
+      string pluginId;
+      VPX::Properties::PropertyRegistry::PropId propId;
+      MsgSettingDef* setting;
+   };
+   const vector<PluginSetting>& GetPluginSettings() const { return m_pluginSettings; }
 
    void OnGameStart();
    void UpdateDMDSource(Flasher* flasher, bool isAdd);
    void OnGameEnd();
 
 private:
-   VPXPluginAPIImpl();
+   const MsgPluginAPI& m_msgApi;
 
    // VPX API
-   std::shared_ptr<MsgPlugin> m_vpxPlugin;
+   std::shared_ptr<MsgPI::MsgPlugin> m_vpxPlugin;
    static void OnGetVPXPluginAPI(const unsigned int msgId, void* userData, void* msgData);
    VPXPluginAPI m_api;
    const std::thread::id m_apiThread;
+   const unsigned int m_getVPXAPIMsgId;
+   const unsigned int m_onGameStartMsgId;
+   const unsigned int m_onGameEndMsgId;
 
-   static void GetVpxInfo(VPXInfo* info);
-   static void GetTableInfo(VPXTableInfo* info);
+   static void MSGPIAPI GetVpxInfo(VPXInfo* info);
+   static void MSGPIAPI GetTableInfo(VPXTableInfo* info);
 
-   static float GetOption(const char* pageId, const char* optionId, const unsigned int showMask, const char* optionName, const float minValue, const float maxValue, const float step, const float defaultValue, const VPXPluginAPI::OptionUnit unit, const char** values);
-   static unsigned int PushNotification(const char* msg, const int lengthMs);
-   static void UpdateNotification(const unsigned int handle, const char* msg, const int lengthMs);
+   static unsigned int MSGPIAPI PushNotification(const char* msg, const int lengthMs);
+   static void MSGPIAPI UpdateNotification(const unsigned int handle, const char* msg, const int lengthMs);
 
-   static void DisableStaticPrerendering(const BOOL disable);
-   static void GetActiveViewSetup(VPXViewSetupDef* view);
-   static void SetActiveViewSetup(VPXViewSetupDef* view);
+   static void MSGPIAPI DisableStaticPrerendering(const BOOL disable);
+   static void MSGPIAPI GetActiveViewSetup(VPXViewSetupDef* view);
+   static void MSGPIAPI SetActiveViewSetup(VPXViewSetupDef* view);
 
-   static void GetInputState(uint64_t* keyState, float* nudgeX, float* nudgeY, float* plunger);
-   static void SetInputState(const uint64_t keyState, const float nudgeX, const float nudgeY, const float plunger);
+   static void MSGPIAPI SetActionState(const VPXAction actionId, const int isPressed);
+   static void MSGPIAPI SetNudgeState(const int stateMask, const float nudgeAccelerationX, const float nudgeAccelerationY); // Bit 0 = override state
+   static void MSGPIAPI SetPlungerState(const int stateMask, const float plungerPos, const float plungerSpeed); // Bit 0 = override state, bit 1 = hasSpeedSensor
+   ankerl::unordered_dense::map<VPXAction, std::pair<unsigned int, int>> m_actionMap;
 
-   static VPXTexture CreateTexture(uint8_t* rawData, int size);
-   static void UpdateTexture(VPXTexture* texture, int width, int height, VPXTextureFormat format, const uint8_t* image);
-   static VPXTextureInfo* GetTextureInfo(VPXTexture texture);
-   static void DeleteTexture(VPXTexture texture);
+   static double MSGPIAPI GetGameTime();
+
+   static VPXTexture MSGPIAPI CreateTexture(uint8_t* rawData, int size);
+   static void MSGPIAPI UpdateTexture(VPXTexture* texture, int width, int height, VPXTextureFormat format, const void* image);
+   static VPXTextureInfo* MSGPIAPI GetTextureInfo(VPXTexture texture);
+   static void MSGPIAPI DeleteTexture(VPXTexture texture);
+
+   // Plugin settings
+   void UpdateSetting(const std::string& pluginId, MsgPI::MsgPluginManager::SettingAction action, MsgSettingDef* settingDef);
+   vector<PluginSetting> m_pluginSettings;
 
    // Plugin logging API
-   static void OnGetLoggingPluginAPI(const unsigned int msgId, void* userData, void* msgData);
-   static void PluginLog(unsigned int level, const char* message);
+   static void MSGPIAPI OnGetLoggingPluginAPI(const unsigned int msgId, void* userData, void* msgData);
+   static void MSGPIAPI PluginLog(unsigned int level, const char* message);
 
    LoggingPluginAPI m_loggingApi;
+   const unsigned int m_getLoggingAPIMsgId;
 
    // Scriptable plugin API
-   static void OnGetScriptablePluginAPI(const unsigned int msgId, void* userData, void* msgData);
-   static void RegisterScriptClass(ScriptClassDef* classDef);
-   static void RegisterScriptTypeAlias(const char* name, const char* aliasedType);
-   static void RegisterScriptArray(ScriptArrayDef *arrayDef);
-   static void SubmitTypeLibrary();
-   static void OnScriptError(unsigned int type, const char* message);
-   static void SetCOMObjectOverride(const char* className, const ScriptClassDef* classDef);
-   static ScriptClassDef* GetClassDef(const char* typeName);
+   static void MSGPIAPI OnGetScriptablePluginAPI(const unsigned int msgId, void* userData, void* msgData);
+   static void MSGPIAPI RegisterScriptClass(ScriptClassDef* classDef);
+   static void MSGPIAPI RegisterScriptTypeAlias(const char* name, const char* aliasedType);
+   static void MSGPIAPI RegisterScriptArray(ScriptArrayDef* arrayDef);
+   static void MSGPIAPI SubmitTypeLibrary(const unsigned int endpointId);
+   static void MSGPIAPI OnScriptError(unsigned int type, const char* message);
+   static void MSGPIAPI SetCOMObjectOverride(const char* className, const ScriptClassDef* classDef);
+   static ScriptClassDef* MSGPIAPI GetClassDef(const char* typeName);
+   static void MSGPIAPI UnregisterScriptClass(ScriptClassDef* classDef);
+   static void MSGPIAPI UnregisterScriptTypeAlias(const char* name);
+   static void MSGPIAPI UnregisterScriptArray(ScriptArrayDef* arrayDef);
+   vector<unsigned int> m_scriptContributors;
 
    ankerl::unordered_dense::map<string, const ScriptClassDef*> m_scriptCOMObjectOverrides;
    DynamicTypeLibrary m_dynamicTypeLibrary;
    ScriptablePluginAPI m_scriptableApi;
+   const unsigned int m_getScriptingAPIMsgId;
 
    // Contribute VPX script controlled DMD through controller plugin API
-   unsigned int m_onDisplaySrcChg = 0;
    vector<Flasher*> m_dmdSources;
    static void ControllerOnGetDMDSrc(const unsigned int msgId, void* userData, void* msgData);
    static DisplayFrame ControllerOnGetRenderDMD(const CtlResId id);
+   const unsigned int m_onDisplaySrcChgMsgId;
+   const unsigned int m_onDisplayGetSrcMsgId;
 };

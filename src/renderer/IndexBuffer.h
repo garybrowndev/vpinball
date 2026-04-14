@@ -13,7 +13,7 @@ protected:
 public:
    unsigned int GetCount() const { return m_count; }
    bool IsShared() const { return m_buffers.size() > 1; }
-   bool IsEmpty() const { return m_buffers.size() == 0; }
+   bool IsEmpty() const { return m_buffers.empty(); }
 
    unsigned int Add(Buf* buffer)
    {
@@ -105,10 +105,10 @@ public:
    };
 
    IndexBuffer(RenderDevice* rd, const unsigned int numIndices, const bool isDynamic = false, const IndexBuffer::Format format = IndexBuffer::Format::FMT_INDEX16);
-   IndexBuffer(RenderDevice* rd, const unsigned int numIndices, const unsigned int* indices);
-   IndexBuffer(RenderDevice* rd, const unsigned int numIndices, const WORD* indices);
-   IndexBuffer(RenderDevice* rd, const vector<unsigned int>& indices);
-   IndexBuffer(RenderDevice* rd, const vector<WORD>& indices);
+   IndexBuffer(RenderDevice* rd, const unsigned int numIndices, const unsigned int* indices, const bool isDynamic = false);
+   IndexBuffer(RenderDevice* rd, const unsigned int numIndices, const WORD* indices, const bool isDynamic = false);
+   IndexBuffer(RenderDevice* rd, const vector<unsigned int>& indices, const bool isDynamic = false);
+   IndexBuffer(RenderDevice* rd, const vector<WORD>& indices, const bool isDynamic = false);
    ~IndexBuffer();
 
    // Position of buffer in a bigger shared data block
@@ -121,7 +121,7 @@ public:
    void Unlock();
    void Upload();
 
-   void ApplyOffset(VertexBuffer* vb);
+   void ApplyOffset(std::shared_ptr<VertexBuffer> vb);
 
    RenderDevice* const m_rd;
    const unsigned int m_count;
@@ -146,6 +146,6 @@ public:
 private:
    unsigned int m_offset = 0; // Offset in bytes of the data inside the native GPU array
    unsigned int m_indexOffset = 0; // Offset in indices of the data inside the native GPU array
-   SharedIndexBuffer* m_sharedBuffer = nullptr;
+   std::shared_ptr<SharedIndexBuffer> m_sharedBuffer;
    void LockUntyped(void*& data, const unsigned int offset = 0, const unsigned int size = 0);
 };

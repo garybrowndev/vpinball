@@ -67,7 +67,7 @@ void BitmapFont::Load(const string& filename)
    fontFile.open(filename, std::ifstream::in);
 
    if (!fontFile.is_open()) {
-      // PLOGE << "Failed to open bitmap font file: " << filename;
+      LOGE("Failed to open bitmap font file: " + filename);
       return;
    }
 
@@ -155,12 +155,10 @@ SDL_Rect BitmapFont::MeasureFont(const string& text, double maxWidth)
 
    for (size_t i = 0; i < length; i++)
    {
-      const char* const chars = text.c_str();
-
-      const char character = chars[i];
+      const char character = text[i];
 
       if (character == '\n' || character == '\r') {
-         if (character == '\n' || i + 1 == length || chars[i + 1] != '\n') {
+         if (character == '\n' || i + 1 == length || text[i + 1] != '\n') {
             lineHeights.push_back(currentLineHeight);
             blockWidth = max(blockWidth, currentLineWidth);
             currentLineWidth = 0;
@@ -170,7 +168,7 @@ SDL_Rect BitmapFont::MeasureFont(const string& text, double maxWidth)
       else {
          const auto it = m_characters.find(character);
          if (it != m_characters.end()) {
-            Character* data = it->second;
+            const Character* const data = it->second;
             int width = data->GetXAdvance() + GetKerning(previousCharacter, character);
             if (maxWidth != NoMaxWidth && currentLineWidth + width >= maxWidth) {
                lineHeights.push_back(currentLineHeight);

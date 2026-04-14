@@ -1,27 +1,24 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
+#include "flasher.h"
+#include "light.h"
+
 #include "renderer/Shader.h"
 #include "renderer/IndexBuffer.h"
 #include "renderer/VertexBuffer.h"
-#ifndef __STANDALONE__
-#include "renderer/captureExt.h"
-#endif
 #include "core/VPXPluginAPIImpl.h"
+#include "ui/win/DragPointDialogs.h"
 
-Flasher::Flasher()
-{
-   m_menuid = IDR_SURFACEMENU;
-}
 
 Flasher::~Flasher()
 {
-   assert(m_rd == nullptr); // RenderRelease must be explicitely called before deleting this object
+   assert(m_rd == nullptr); // RenderRelease must be explicitly called before deleting this object
 }
 
-Flasher *Flasher::CopyForPlay(PinTable *live_table) const
+Flasher *Flasher::CopyForPlay() const
 {
-   STANDARD_EDITABLE_WITH_DRAGPOINT_COPY_FOR_PLAY_IMPL(Flasher, live_table, m_vdpoint)
+   STANDARD_EDITABLE_WITH_DRAGPOINT_COPY_FOR_PLAY_IMPL(Flasher, m_vdpoint)
    return dst;
 }
 
@@ -66,9 +63,37 @@ void Flasher::InitShape()
    }
 }
 
-HRESULT Flasher::Init(PinTable *const ptable, const float x, const float y, const bool fromMouseClick, const bool forPlay)
+void Flasher::UpdateCenter()
 {
-   m_ptable = ptable;
+   if (m_centerClean)
+      return;
+
+   m_minx = FLT_MAX;
+   m_miny = FLT_MAX;
+   m_maxx = -FLT_MAX;
+   m_maxy = -FLT_MAX;
+
+   vector<RenderVertex> vvertex;
+   GetRgVertex(vvertex);
+
+   for (const RenderVertex& pv0 : vvertex)
+   {
+      if (pv0.x > m_maxx)
+         m_maxx = pv0.x;
+      if (pv0.x < m_minx)
+         m_minx = pv0.x;
+      if (pv0.y > m_maxy)
+         m_maxy = pv0.y;
+      if (pv0.y < m_miny)
+         m_miny = pv0.y;
+   }
+
+   m_d.m_vCenter.x = 0.5f * (m_minx + m_maxx);
+   m_d.m_vCenter.y = 0.5f * (m_miny + m_maxy);
+}
+
+HRESULT Flasher::Init(const float x, const float y, const bool fromMouseClick, const bool forPlay)
+{
    SetDefaults(fromMouseClick);
    m_d.m_isVisible = true;
    m_d.m_vCenter.x = x;
@@ -77,70 +102,59 @@ HRESULT Flasher::Init(PinTable *const ptable, const float x, const float y, cons
    m_d.m_rotY = 0.0f;
    m_d.m_rotZ = 0.0f;
    InitShape();
-   return forPlay ? S_OK : InitVBA(true, nullptr);
+   return S_OK;
 }
 
 void Flasher::SetDefaults(const bool fromMouseClick)
 {
-#define regKey Settings::DefaultPropsFlasher
-
-   m_d.m_height = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Height"s, 50.f) : 50.f;
-   m_d.m_rotX = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "RotX"s, 0.f) : 0.f;
-   m_d.m_rotY = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "RotY"s, 0.f) : 0.f;
-   m_d.m_rotZ = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "RotZ"s, 0.f) : 0.f;
-   m_d.m_color = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Color"s, (int)RGB(50,200,50)) : RGB(50,200,50);
-   m_d.m_tdr.m_TimerEnabled = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "TimerEnabled"s, false) : false;
-   m_d.m_tdr.m_TimerInterval = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "TimerInterval"s, 100) : 100;
-
-   bool hr = g_pvp->m_settings.LoadValue(regKey, "ImageA"s, m_d.m_szImageA);
-   if (!hr || !fromMouseClick)
-      m_d.m_szImageA.clear();
-
-   hr = g_pvp->m_settings.LoadValue(regKey, "ImageB"s, m_d.m_szImageB);
-   if (!hr || !fromMouseClick)
-      m_d.m_szImageB.clear();
-
-   m_d.m_alpha = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Opacity"s, 100) : 100;
-
+#define LinkProp(field, prop) field = fromMouseClick ? g_app->m_settings.GetDefaultPropsFlasher_##prop() : Settings::GetDefaultPropsFlasher_##prop##_Default()
+   LinkProp(m_d.m_height, Height);
+   LinkProp(m_d.m_rotX, RotX);
+   LinkProp(m_d.m_rotY, RotY);
+   LinkProp(m_d.m_rotZ, RotZ);
+   LinkProp(m_d.m_color, Color);
+   LinkProp(m_d.m_szImageA, ImageA);
+   LinkProp(m_d.m_szImageB, ImageB);
+   LinkProp(m_d.m_alpha, Opacity);
+   LinkProp(m_d.m_modulate_vs_add, ModulateVsAdd);
+   LinkProp(m_d.m_filterAmount, FilterAmount);
+   LinkProp(m_d.m_isVisible, Visible);
+   LinkProp(m_d.m_addBlend, AddBlend);
+   int renderMode;
+   LinkProp(renderMode, RenderMode);
+   m_d.m_renderMode = (FlasherData::RenderMode)renderMode;
+   LinkProp(m_d.m_displayTexture, DisplayTexture);
+   LinkProp(m_d.m_imagealignment, ImageMode);
+   LinkProp(m_d.m_filter, Filter);
+   LinkProp(m_timerEnabled, TimerEnabled);
+   LinkProp(m_timerInterval, TimerInterval);
    m_d.m_intensity_scale = 1.0f;
-
-   m_d.m_modulate_vs_add = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "ModulateVsAdd"s, 0.9f) : 0.9f;
-   m_d.m_filterAmount = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "FilterAmount"s, 100) : 100;
-   m_d.m_isVisible = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Visible"s, true) : true;
    m_inPlayState = m_d.m_isVisible;
-   m_d.m_addBlend = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "AddBlend"s, false) : false;
-   m_d.m_renderMode = fromMouseClick ? static_cast<FlasherData::RenderMode>(g_pvp->m_settings.LoadValueWithDefault(regKey, "RenderMode"s, 0)) : FlasherData::FLASHER;
-   m_d.m_displayTexture = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "DisplayTexture"s, false) : false;
-   m_d.m_imagealignment = fromMouseClick ? (RampImageAlignment)g_pvp->m_settings.LoadValueWithDefault(regKey, "ImageMode"s, (int)ImageModeWrap) : ImageModeWrap;
-   m_d.m_filter = fromMouseClick ? (Filters)g_pvp->m_settings.LoadValueWithDefault(regKey, "Filter"s, (int)Filter_Overlay) : Filter_Overlay;
-
-#undef regKey
+#undef LinkProp
 }
 
 void Flasher::WriteRegDefaults()
 {
-#define regKey Settings::DefaultPropsFlasher
-
-   g_pvp->m_settings.SaveValue(regKey, "Height"s, m_d.m_height);
-   g_pvp->m_settings.SaveValue(regKey, "RotX"s, m_d.m_rotX);
-   g_pvp->m_settings.SaveValue(regKey, "RotY"s, m_d.m_rotY);
-   g_pvp->m_settings.SaveValue(regKey, "RotZ"s, m_d.m_rotZ);
-   g_pvp->m_settings.SaveValue(regKey, "Color"s, (int)m_d.m_color);
-   g_pvp->m_settings.SaveValue(regKey, "TimerEnabled"s, m_d.m_tdr.m_TimerEnabled);
-   g_pvp->m_settings.SaveValue(regKey, "TimerInterval"s, m_d.m_tdr.m_TimerInterval);
-   g_pvp->m_settings.SaveValue(regKey, "ImageA"s, m_d.m_szImageA);
-   g_pvp->m_settings.SaveValue(regKey, "ImageB"s, m_d.m_szImageB);
-   g_pvp->m_settings.SaveValue(regKey, "Alpha"s, m_d.m_alpha);
-   g_pvp->m_settings.SaveValue(regKey, "ModulateVsAdd"s, m_d.m_modulate_vs_add);
-   g_pvp->m_settings.SaveValue(regKey, "Visible"s, m_d.m_isVisible);
-   g_pvp->m_settings.SaveValue(regKey, "DisplayTexture"s, m_d.m_displayTexture);
-   g_pvp->m_settings.SaveValue(regKey, "AddBlend"s, m_d.m_addBlend);
-   g_pvp->m_settings.SaveValue(regKey, "RenderMode"s, m_d.m_renderMode);
-   g_pvp->m_settings.SaveValue(regKey, "ImageMode"s, (int)m_d.m_imagealignment);
-   g_pvp->m_settings.SaveValue(regKey, "Filter"s, m_d.m_filter);
-   g_pvp->m_settings.SaveValue(regKey, "FilterAmount"s, (int)m_d.m_filterAmount);
-
-#undef regKey
+#define LinkProp(field, prop) g_app->m_settings.SetDefaultPropsFlasher_##prop(field, false)
+   LinkProp(m_d.m_height, Height);
+   LinkProp(m_d.m_rotX, RotX);
+   LinkProp(m_d.m_rotY, RotY);
+   LinkProp(m_d.m_rotZ, RotZ);
+   LinkProp(m_d.m_color, Color);
+   LinkProp(m_d.m_szImageA, ImageA);
+   LinkProp(m_d.m_szImageB, ImageB);
+   LinkProp(m_d.m_alpha, Opacity);
+   LinkProp(m_d.m_modulate_vs_add, ModulateVsAdd);
+   LinkProp(m_d.m_filterAmount, FilterAmount);
+   LinkProp(m_d.m_isVisible, Visible);
+   LinkProp(m_d.m_addBlend, AddBlend);
+   LinkProp(m_d.m_renderMode, RenderMode);
+   LinkProp(m_d.m_displayTexture, DisplayTexture);
+   LinkProp(m_d.m_imagealignment, ImageMode);
+   LinkProp(m_d.m_filter, Filter);
+   LinkProp(m_timerEnabled, TimerEnabled);
+   LinkProp(m_timerInterval, TimerInterval);
+#undef LinkProp
 }
 
 void Flasher::UIRenderPass1(Sur * const psur)
@@ -156,7 +170,9 @@ void Flasher::UIRenderPass1(Sur * const psur)
    vector<RenderVertex> vvertex;
    GetRgVertex(vvertex);
    if (!m_ptable->RenderSolid() || !m_d.m_displayTexture)
+   {
       psur->Polygon(vvertex);
+   }
    else if (const Texture *const ppi = m_ptable->GetImage(m_d.m_szImageA); ppi && ppi->GetGDIBitmap())
    {
       if (m_d.m_imagealignment == ImageModeWrap)
@@ -165,12 +181,12 @@ void Flasher::UIRenderPass1(Sur * const psur)
          float _miny = FLT_MAX;
          float _maxx = -FLT_MAX;
          float _maxy = -FLT_MAX;
-         for (size_t i = 0; i < vvertex.size(); i++)
+         for (const auto& v : vvertex)
          {
-            if (vvertex[i].x < _minx) _minx = vvertex[i].x;
-            if (vvertex[i].x > _maxx) _maxx = vvertex[i].x;
-            if (vvertex[i].y < _miny) _miny = vvertex[i].y;
-            if (vvertex[i].y > _maxy) _maxy = vvertex[i].y;
+            if (v.x < _minx) _minx = v.x;
+            if (v.x > _maxx) _maxx = v.x;
+            if (v.y < _miny) _miny = v.y;
+            if (v.y > _maxy) _maxy = v.y;
          }
 
          psur->PolygonImage(vvertex, ppi->GetGDIBitmap(), _minx, _miny, _minx + (_maxx - _minx), _miny + (_maxy - _miny), ppi->m_width, ppi->m_height);
@@ -181,7 +197,9 @@ void Flasher::UIRenderPass1(Sur * const psur)
       }
    }
    else
+   {
       psur->Polygon(vvertex);
+   }
 }
 
 void Flasher::UIRenderPass2(Sur * const psur)
@@ -191,22 +209,35 @@ void Flasher::UIRenderPass2(Sur * const psur)
    psur->SetObject(this); // For selected formatting
    psur->SetObject(nullptr);
 
+   vector<RenderVertex> vvertex; //!! check/reuse from UIRenderPass1
+   GetRgVertex(vvertex);
+   psur->Polygon(vvertex);
+
+   // Except for flasher mode, shape is simplified before rendering into its bounding rectangle
+   if (m_d.m_renderMode != FlasherData::RenderMode::FLASHER)
    {
-      vector<RenderVertex> vvertex; //!! check/reuse from UIRenderPass1
-      GetRgVertex(vvertex);
-      psur->Polygon(vvertex);
+      float _minx = FLT_MAX;
+      float _miny = FLT_MAX;
+      float _maxx = -FLT_MAX;
+      float _maxy = -FLT_MAX;
+      for (const auto& v : vvertex)
+      {
+         if (v.x < _minx) _minx = v.x;
+         if (v.x > _maxx) _maxx = v.x;
+         if (v.y < _miny) _miny = v.y;
+         if (v.y > _maxy) _maxy = v.y;
+      }
+      psur->Rectangle(_minx, _miny, _maxx, _maxy);
    }
 
    // if the item is selected then draw the dragpoints (or if we are always to draw dragpoints)
-   bool drawDragpoints = ((m_selectstate != eNotSelected) || m_vpinball->m_alwaysDrawDragPoints);
-
+   bool drawDragpoints = ((m_selectstate != SelectState::NotSelected) || m_vpinball->m_alwaysDrawDragPoints);
    if (!drawDragpoints)
    {
       // if any of the dragpoints of this object are selected then draw all the dragpoints
-      for (size_t i = 0; i < m_vdpoint.size(); i++)
+      for (const auto& pdp : m_vdpoint)
       {
-         const CComObject<DragPoint> * const pdp = m_vdpoint[i];
-         if (pdp->m_selectstate != eNotSelected)
+         if (pdp->m_selectstate != SelectState::NotSelected)
          {
             drawDragpoints = true;
             break;
@@ -215,15 +246,19 @@ void Flasher::UIRenderPass2(Sur * const psur)
    }
 
    if (drawDragpoints)
-   for (size_t i = 0; i < m_vdpoint.size(); i++)
    {
-      CComObject<DragPoint> * const pdp = m_vdpoint[i];
       psur->SetFillColor(-1);
-      psur->SetBorderColor(pdp->m_dragging ? RGB(0, 255, 0) : RGB(255, 0, 0), false, 0);
-      psur->SetObject(pdp);
-
-      psur->Ellipse2(pdp->m_v.x, pdp->m_v.y, 8);
+      for (const auto &pdp : m_vdpoint)
+      {
+         psur->SetBorderColor(pdp->m_dragging ? RGB(0, 255, 0) : RGB(255, 0, 0), false, 0);
+         psur->SetObject(pdp);
+         psur->Ellipse2(pdp->m_v.x, pdp->m_v.y, 8);
+      }
    }
+
+   // Little cross at the object center
+   psur->Line(m_d.m_vCenter.x - 10.0f, m_d.m_vCenter.y, m_d.m_vCenter.x + 10.0f, m_d.m_vCenter.y);
+   psur->Line(m_d.m_vCenter.x, m_d.m_vCenter.y - 10.0f, m_d.m_vCenter.x, m_d.m_vCenter.y + 10.0f);
 }
 
 void Flasher::RenderBlueprint(Sur *psur, const bool solid)
@@ -242,15 +277,17 @@ void Flasher::PhysicSetup(PhysicsEngine* physics, const bool isUI)
 
       const int cvertex = (int)vvertex.size();
       Vertex3Ds *const rgv3d = new Vertex3Ds[cvertex];
+      
+      assert(m_rd != nullptr); // as m_min, m_max are only defined between RenderSetup/RenderRelease
 
       const float height = m_d.m_height;
-      const float movx = m_minx + (m_maxx - m_minx)*0.5f;
-      const float movy = m_miny + (m_maxy - m_miny)*0.5f;
-      const Matrix3D tempMatrix = Matrix3D::MatrixTranslate(-movx /* -m_d.m_vCenter.x */, -movy /* -m_d.m_vCenter.y */, 0.f)
+      const float centerX = m_minx + (m_maxx - m_minx)*0.5f;
+      const float centerY = m_miny + (m_maxy - m_miny)*0.5f;
+      const Matrix3D tempMatrix = Matrix3D::MatrixTranslate(-centerX, -centerY, 0.f)
                              * (((Matrix3D::MatrixRotateZ(ANGTORAD(m_d.m_rotZ))
                                 * Matrix3D::MatrixRotateY(ANGTORAD(m_d.m_rotY)))
                                 * Matrix3D::MatrixRotateX(ANGTORAD(m_d.m_rotX)))
-                                * Matrix3D::MatrixTranslate(m_d.m_vCenter.x, m_d.m_vCenter.y, height));
+                                * Matrix3D::MatrixTranslate(centerX, centerY, height));
 
       for (int i = 0; i < cvertex; i++)
       {
@@ -301,17 +338,26 @@ void Flasher::Translate(const Vertex2D &pvOffset)
 
 void Flasher::MoveOffset(const float dx, const float dy)
 {
-   m_d.m_vCenter.x += dx;
-   m_d.m_vCenter.y += dy;
-   for (size_t i = 0; i < m_vdpoint.size(); i++)
+   for (auto& pdp : m_vdpoint)
    {
-      CComObject<DragPoint> * const pdp = m_vdpoint[i];
-
       pdp->m_v.x += dx;
       pdp->m_v.y += dy;
    }
+   for (auto &vert : m_vertices)
+   {
+      vert.x += dx;
+      vert.y += dy;
+   }
+   m_minx += dx;
+   m_maxx += dx;
+   m_miny += dy;
+   m_maxy += dy;
+   m_d.m_vCenter.x += dx;
+   m_d.m_vCenter.y += dy;
+   m_dynamicVertexBufferRegenerate = true;
 }
 
+#ifndef __STANDALONE__
 void Flasher::DoCommand(int icmd, int x, int y)
 {
    ISelect::DoCommand(icmd, x, y);
@@ -327,15 +373,15 @@ void Flasher::DoCommand(int icmd, int x, int y)
       break;
 
    case ID_WALLMENU_ROTATE:
-      RotateDialog();
+      VPX::WinUI::RotatePointsDialog(this);
       break;
 
    case ID_WALLMENU_SCALE:
-      ScaleDialog();
+      VPX::WinUI::ScalePointsDialog(this);
       break;
 
    case ID_WALLMENU_TRANSLATE:
-      TranslateDialog();
+      VPX::WinUI::TranslatePointsDialog(this);
       break;
 
    case ID_WALLMENU_ADDPOINT:
@@ -343,6 +389,7 @@ void Flasher::DoCommand(int icmd, int x, int y)
       break;
    }
 }
+#endif
 
 void Flasher::AddPoint(int x, int y, const bool smooth)
 {
@@ -381,51 +428,43 @@ void Flasher::UpdatePoint(int index, float x, float y)
      pdp->m_v.y = y;
 }
 
-HRESULT Flasher::SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool saveForUndo)
+void Flasher::Save(IObjectWriter& writer, const bool saveForUndo)
 {
-   BiffWriter bw(pstm, hcrypthash);
-
-   bw.WriteFloat(FID(FHEI), m_d.m_height);
-   bw.WriteFloat(FID(FLAX), m_d.m_vCenter.x);
-   bw.WriteFloat(FID(FLAY), m_d.m_vCenter.y);
-   bw.WriteFloat(FID(FROX), m_d.m_rotX);
-   bw.WriteFloat(FID(FROY), m_d.m_rotY);
-   bw.WriteFloat(FID(FROZ), m_d.m_rotZ);
-   bw.WriteInt(FID(COLR), m_d.m_color);
-   bw.WriteBool(FID(TMON), m_d.m_tdr.m_TimerEnabled);
-   bw.WriteInt(FID(TMIN), m_d.m_tdr.m_TimerInterval);
-   bw.WriteWideString(FID(NAME), m_wzName);
-   bw.WriteString(FID(IMAG), m_d.m_szImageA);
-   bw.WriteString(FID(IMAB), m_d.m_szImageB);
-   bw.WriteInt(FID(FALP), m_d.m_alpha);
-   bw.WriteFloat(FID(MOVA), m_d.m_modulate_vs_add);
-   bw.WriteBool(FID(FVIS), m_d.m_isVisible);
-   bw.WriteBool(FID(DSPT), m_d.m_displayTexture);
-   bw.WriteBool(FID(ADDB), m_d.m_addBlend);
-   bw.WriteInt(FID(RDMD), m_d.m_renderMode);
-   bw.WriteInt(FID(RSTL), m_d.m_renderStyle);
-   bw.WriteFloat(FID(GRGH), m_d.m_glassRoughness);
-   bw.WriteInt(FID(GAMB), m_d.m_glassAmbient);
-   bw.WriteFloat(FID(GTOP), m_d.m_glassPadTop);
-   bw.WriteFloat(FID(GBOT), m_d.m_glassPadBottom);
-   bw.WriteFloat(FID(GLFT), m_d.m_glassPadLeft);
-   bw.WriteFloat(FID(GRHT), m_d.m_glassPadRight);
-   bw.WriteString(FID(LINK), m_d.m_imageSrcLink);
-   bw.WriteFloat(FID(FLDB), m_d.m_depthBias);
-   bw.WriteInt(FID(ALGN), m_d.m_imagealignment);
-   bw.WriteInt(FID(FILT), m_d.m_filter);
-   bw.WriteInt(FID(FIAM), m_d.m_filterAmount);
-   bw.WriteString(FID(LMAP), m_d.m_szLightmap);
-   bw.WriteBool(FID(BGLS), m_backglass);
-   ISelect::SaveData(pstm, hcrypthash);
-
-   HRESULT hr;
-   if (FAILED(hr = SavePointData(pstm, hcrypthash)))
-      return hr;
-
-   bw.WriteTag(FID(ENDB));
-
-   return S_OK;
+   writer.WriteFloat(FID(FHEI), m_d.m_height);
+   writer.WriteFloat(FID(FLAX), m_d.m_vCenter.x); // Just for information, as it is computed from dragpoints
+   writer.WriteFloat(FID(FLAY), m_d.m_vCenter.y); // Just for information, as it is computed from dragpoints
+   writer.WriteFloat(FID(FROX), m_d.m_rotX);
+   writer.WriteFloat(FID(FROY), m_d.m_rotY);
+   writer.WriteFloat(FID(FROZ), m_d.m_rotZ);
+   writer.WriteInt(FID(COLR), m_d.m_color);
+   writer.WriteBool(FID(TMON), m_timerEnabled);
+   writer.WriteInt(FID(TMIN), m_timerInterval);
+   writer.WriteWideString(FID(NAME), m_wzName);
+   writer.WriteString(FID(IMAG), m_d.m_szImageA);
+   writer.WriteString(FID(IMAB), m_d.m_szImageB);
+   writer.WriteInt(FID(FALP), m_d.m_alpha);
+   writer.WriteFloat(FID(MOVA), m_d.m_modulate_vs_add);
+   writer.WriteBool(FID(FVIS), m_d.m_isVisible);
+   writer.WriteBool(FID(DSPT), m_d.m_displayTexture);
+   writer.WriteBool(FID(ADDB), m_d.m_addBlend);
+   writer.WriteInt(FID(RDMD), m_d.m_renderMode);
+   writer.WriteInt(FID(RSTL), m_d.m_renderStyle);
+   writer.WriteFloat(FID(GRGH), m_d.m_glassRoughness);
+   writer.WriteInt(FID(GAMB), m_d.m_glassAmbient);
+   writer.WriteFloat(FID(GTOP), m_d.m_glassPadTop);
+   writer.WriteFloat(FID(GBOT), m_d.m_glassPadBottom);
+   writer.WriteFloat(FID(GLFT), m_d.m_glassPadLeft);
+   writer.WriteFloat(FID(GRHT), m_d.m_glassPadRight);
+   writer.WriteString(FID(LINK), m_d.m_imageSrcLink);
+   writer.WriteFloat(FID(FLDB), m_d.m_depthBias);
+   writer.WriteInt(FID(ALGN), m_d.m_imagealignment);
+   writer.WriteInt(FID(FILT), m_d.m_filter);
+   writer.WriteInt(FID(FIAM), m_d.m_filterAmount);
+   writer.WriteString(FID(LMAP), m_d.m_szLightmap);
+   writer.WriteBool(FID(BGLS), m_desktopBackdrop);
+   SaveSharedEditableFields(writer);
+   SavePoints(writer);
+   writer.EndObject();
 }
 
 void Flasher::ClearForOverwrite()
@@ -434,81 +473,60 @@ void Flasher::ClearForOverwrite()
 }
 
 
-HRESULT Flasher::InitLoad(IStream *pstm, PinTable *ptable, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey)
+void Flasher::Load(IObjectReader& reader)
 {
    SetDefaults(false);
-
-   BiffReader br(pstm, this, version, hcrypthash, hcryptkey);
-
-   m_ptable = ptable;
-
-   br.Load();
-
+   reader.AsObject(
+      [this](int tag, IObjectReader& reader)
+      {
+         switch (tag)
+         {
+         case FID(FHEI): m_d.m_height = reader.AsFloat(); break;
+         case FID(FLAX): m_d.m_vCenter.x = reader.AsFloat(); break; // Just for information, as it is computed from dragpoints (it will be overwritten)
+         case FID(FLAY): m_d.m_vCenter.y = reader.AsFloat(); break; // Just for information, as it is computed from dragpoints (it will be overwritten)
+         case FID(FROX): m_d.m_rotX = reader.AsFloat(); break;
+         case FID(FROY): m_d.m_rotY = reader.AsFloat(); break;
+         case FID(FROZ): m_d.m_rotZ = reader.AsFloat(); break;
+         case FID(COLR): m_d.m_color = reader.AsInt(); break;
+         case FID(TMON): m_timerEnabled = reader.AsBool(); break;
+         case FID(TMIN): m_timerInterval = reader.AsInt(); break;
+         case FID(IMAG): m_d.m_szImageA = reader.AsString(); break;
+         case FID(IMAB): m_d.m_szImageB = reader.AsString(); break;
+         case FID(FALP): m_d.m_alpha = max(0, reader.AsInt()); break;
+         case FID(MOVA): m_d.m_modulate_vs_add = reader.AsFloat(); break;
+         case FID(NAME): m_wzName = reader.AsWideString(); break;
+         case FID(FVIS): m_d.m_isVisible = reader.AsBool(); break;
+         case FID(ADDB): m_d.m_addBlend = reader.AsBool(); break;
+         case FID(IDMD):
+         {
+            bool m;
+            m = reader.AsBool();
+            m_d.m_renderMode = m ? FlasherData::DMD : FlasherData::FLASHER;
+         }
+         break; // Backward compatibility for table 10.8 and before
+         case FID(RDMD): m_d.m_renderMode = static_cast<FlasherData::RenderMode>(reader.AsInt()); break;
+         case FID(RSTL): m_d.m_renderStyle = reader.AsInt(); break;
+         case FID(LINK): m_d.m_imageSrcLink = reader.AsString(); break;
+         case FID(GRGH): m_d.m_glassRoughness = reader.AsFloat(); break;
+         case FID(GAMB): m_d.m_glassAmbient = reader.AsInt(); break;
+         case FID(GTOP): m_d.m_glassPadTop = reader.AsFloat(); break;
+         case FID(GBOT): m_d.m_glassPadBottom = reader.AsFloat(); break;
+         case FID(GLFT): m_d.m_glassPadLeft = reader.AsFloat(); break;
+         case FID(GRHT): m_d.m_glassPadRight = reader.AsFloat(); break;
+         case FID(BGLS): m_desktopBackdrop = reader.AsBool(); break;
+         case FID(DSPT): m_d.m_displayTexture = reader.AsBool(); break;
+         case FID(FLDB): m_d.m_depthBias = reader.AsFloat(); break;
+         case FID(ALGN): m_d.m_imagealignment = static_cast<RampImageAlignment>(reader.AsInt()); break;
+         case FID(FILT): m_d.m_filter = static_cast<Filters>(reader.AsInt()); break;
+         case FID(FIAM): m_d.m_filterAmount = reader.AsInt(); break;
+         case FID(LMAP): m_d.m_szLightmap = reader.AsString(); break;
+         case FID(DPNT): LoadPointToken(reader); break;
+         default: LoadSharedEditableField(tag, reader); break;
+         }
+         return true;
+      });
    m_inPlayState = m_d.m_isVisible;
-
-   return S_OK;
-}
-
-bool Flasher::LoadToken(const int id, BiffReader * const pbr)
-{
-   switch(id)
-   {
-   case FID(PIID): { int pid; pbr->GetInt(&pid); } break;
-   case FID(FHEI): pbr->GetFloat(m_d.m_height); break;
-   case FID(FLAX): pbr->GetFloat(m_d.m_vCenter.x); break;
-   case FID(FLAY): pbr->GetFloat(m_d.m_vCenter.y); break;
-   case FID(FROX): pbr->GetFloat(m_d.m_rotX); break;
-   case FID(FROY): pbr->GetFloat(m_d.m_rotY); break;
-   case FID(FROZ): pbr->GetFloat(m_d.m_rotZ); break;
-   case FID(COLR): pbr->GetInt(m_d.m_color); break;
-   case FID(TMON): pbr->GetBool(m_d.m_tdr.m_TimerEnabled); break;
-   case FID(TMIN): pbr->GetInt(m_d.m_tdr.m_TimerInterval); break;
-   case FID(IMAG): pbr->GetString(m_d.m_szImageA); break;
-   case FID(IMAB): pbr->GetString(m_d.m_szImageB); break;
-   case FID(FALP):
-   {
-      int iTmp;
-      pbr->GetInt(iTmp);
-      //if (iTmp>100) iTmp=100;
-      if (iTmp < 0) iTmp = 0;
-      m_d.m_alpha = iTmp;
-      break;
-   }
-   case FID(MOVA): pbr->GetFloat(m_d.m_modulate_vs_add); break;
-   case FID(NAME): pbr->GetWideString(m_wzName, std::size(m_wzName)); break;
-   case FID(FVIS): pbr->GetBool(m_d.m_isVisible); break;
-   case FID(ADDB): pbr->GetBool(m_d.m_addBlend); break;
-   case FID(IDMD): { bool m; pbr->GetBool(m); m_d.m_renderMode = m ? FlasherData::DMD : FlasherData::FLASHER; } break; // Backward compatibility for table 10.8 and before
-   case FID(RDMD): pbr->GetInt(&m_d.m_renderMode); break;
-   case FID(RSTL): pbr->GetInt(&m_d.m_renderStyle); break;
-   case FID(LINK): pbr->GetString(m_d.m_imageSrcLink); break;
-   case FID(GRGH): pbr->GetFloat(m_d.m_glassRoughness); break;
-   case FID(GAMB): pbr->GetInt(m_d.m_glassAmbient); break;
-   case FID(GTOP): pbr->GetFloat(m_d.m_glassPadTop); break;
-   case FID(GBOT): pbr->GetFloat(m_d.m_glassPadBottom); break;
-   case FID(GLFT): pbr->GetFloat(m_d.m_glassPadLeft); break;
-   case FID(GRHT): pbr->GetFloat(m_d.m_glassPadRight); break;
-   case FID(BGLS): pbr->GetBool(m_backglass); break;
-   case FID(DSPT): pbr->GetBool(m_d.m_displayTexture); break;
-   case FID(FLDB): pbr->GetFloat(m_d.m_depthBias); break;
-   case FID(ALGN): pbr->GetInt(&m_d.m_imagealignment); break;
-   case FID(FILT): pbr->GetInt(&m_d.m_filter); break;
-   case FID(FIAM): pbr->GetInt(m_d.m_filterAmount); break;
-   case FID(LMAP): pbr->GetString(m_d.m_szLightmap); break;
-   default:
-   {
-      if (id == FID(DPNT))
-         LoadPointToken(pbr);
-      ISelect::LoadToken(id, pbr);
-      break;
-   }
-   }
-   return true;
-}
-
-HRESULT Flasher::InitPostLoad()
-{
-   return S_OK;
+   UpdateCenter();
 }
 
 STDMETHODIMP Flasher::InterfaceSupportsErrorInfo(REFIID riid)
@@ -527,36 +545,35 @@ STDMETHODIMP Flasher::InterfaceSupportsErrorInfo(REFIID riid)
 
 STDMETHODIMP Flasher::get_X(float *pVal)
 {
+   UpdateCenter();
    *pVal = m_d.m_vCenter.x;
-   m_vpinball->SetStatusBarUnitInfo(string(), true);
+   if (m_vpinball)
+      m_vpinball->SetStatusBarUnitInfo(string(), true);
 
    return S_OK;
 }
 
 STDMETHODIMP Flasher::put_X(float newVal)
 {
+   UpdateCenter();
    if (m_d.m_vCenter.x != newVal)
-   {
-      m_d.m_vCenter.x = newVal;
-      m_dynamicVertexBufferRegenerate = true;
-   }
+      MoveOffset(newVal - m_d.m_vCenter.x, 0.f);
 
    return S_OK;
 }
 
 STDMETHODIMP Flasher::get_Y(float *pVal)
 {
+   UpdateCenter();
    *pVal = m_d.m_vCenter.y;
    return S_OK;
 }
 
 STDMETHODIMP Flasher::put_Y(float newVal)
 {
+   UpdateCenter();
    if (m_d.m_vCenter.y != newVal)
-   {
-      m_d.m_vCenter.y = newVal;
-      m_dynamicVertexBufferRegenerate = true;
-   }
+      MoveOffset(0.f, newVal - m_d.m_vCenter.y);
 
    return S_OK;
 }
@@ -667,19 +684,18 @@ STDMETHODIMP Flasher::put_ImageB(BSTR newVal)
 
 STDMETHODIMP Flasher::get_Filter(BSTR *pVal)
 {
-   const WCHAR *wz;
-
+   wstring wz;
    switch (m_d.m_filter)
    {
-   case Filter_Additive: wz = L"Additive"; break;
-   case Filter_Multiply: wz = L"Multiply"; break;
-   case Filter_Overlay:  wz = L"Overlay"; break;
-   case Filter_Screen:   wz = L"Screen"; break;
+   case Filter_Additive: wz = L"Additive"sv; break;
+   case Filter_Multiply: wz = L"Multiply"sv; break;
+   case Filter_Overlay:  wz = L"Overlay"sv; break;
+   case Filter_Screen:   wz = L"Screen"sv; break;
    default:
       assert(!"Invalid Flasher Filter");
-   case Filter_None:     wz = L"None"; break;
+   case Filter_None:     wz = L"None"sv; break;
    }
-   *pVal = SysAllocString(wz);
+   *pVal = SysAllocStringLen(wz.c_str(),static_cast<UINT>(wz.length()));
 
    return S_OK;
 }
@@ -810,9 +826,6 @@ STDMETHODIMP Flasher::put_DMDHeight(int pVal)
    return S_OK;
 }
 
-// Implementation included in pintable.cpp
-void upscale(uint32_t *const data, const int2 &res, const bool is_brightness_data);
-
 STDMETHODIMP Flasher::put_DMDPixels(VARIANT pVal) // assumes VT_UI1 as input //!! use 64bit instead of 8bit to reduce overhead??
 {
 
@@ -820,37 +833,17 @@ STDMETHODIMP Flasher::put_DMDPixels(VARIANT pVal) // assumes VT_UI1 as input //!
    if (psa == nullptr || m_dmdSize.x <= 0 || m_dmdSize.y <= 0)
       return E_FAIL;
 
-   #ifdef DMD_UPSCALE
-      constexpr int scale = 3;
-   #else
-      constexpr int scale = 1;
-   #endif
-
-   BaseTexture::Update(m_dmdFrame, m_dmdSize.x * scale, m_dmdSize.y * scale, BaseTexture::BW, nullptr);
+   BaseTexture::Update(m_dmdFrame, m_dmdSize.x, m_dmdSize.y, BaseTexture::BW_FP32, nullptr);
    const int size = m_dmdSize.x * m_dmdSize.y;
-   // Convert from gamma compressed [0..100] luminance to linear [0..255] luminance, eventually applying ScaleFX upscaling
+   // Convert from linear [0..100] luminance
    VARIANT *p;
    SafeArrayAccessData(psa, (void **)&p);
-   if (g_pplayer->m_scaleFX_DMD)
-   {
-      uint32_t * const __restrict rgba = new uint32_t[size * scale * scale];
-      for (int ofs = 0; ofs < size; ++ofs)
-         rgba[ofs] = V_UI4(&p[ofs]); 
-      upscale(rgba, m_dmdSize, true);
-      uint8_t * const __restrict data = m_dmdFrame->data();
-      for (int ofs = 0; ofs < size; ++ofs)
-         data[ofs] = static_cast<uint8_t>(InvsRGB((float)(rgba[ofs] & 0xFF) * (float)(1.0 / 100.)) * 255.f);
-      delete[] rgba;
-   }
-   else
-   {
-      uint8_t *const data = m_dmdFrame->data();
-      for (int ofs = 0; ofs < size; ++ofs)
-         data[ofs] = static_cast<uint8_t>(InvsRGB((float)V_UI4(&p[ofs]) * (float)(1.0 / 100.)) * 255.f);
-   }
+   float *const data = static_cast<float*>(m_dmdFrame->data());
+   for (int ofs = 0; ofs < size; ++ofs)
+      data[ofs] = (float)V_UI4(&p[ofs]) * (float)(1.0 / 100.);
    SafeArrayUnaccessData(psa);
    m_dmdFrameId++;
-   VPXPluginAPIImpl::GetInstance().UpdateDMDSource(this, true);
+   g_pplayer->m_pluginAPI.UpdateDMDSource(this, true);
    return S_OK;
 }
 
@@ -860,22 +853,15 @@ STDMETHODIMP Flasher::put_DMDColoredPixels(VARIANT pVal) //!! assumes VT_UI4 as 
    if (psa == nullptr || m_dmdSize.x <= 0 || m_dmdSize.y <= 0)
       return E_FAIL;
 
-   #ifdef DMD_UPSCALE
-      constexpr int scale = 3;
-   #else
-      constexpr int scale = 1;
-   #endif
-
-   BaseTexture::Update(m_dmdFrame, m_dmdSize.x * scale, m_dmdSize.y * scale, BaseTexture::SRGBA, nullptr);
+   BaseTexture::Update(m_dmdFrame, m_dmdSize.x, m_dmdSize.y, BaseTexture::SRGBA, nullptr);
    const int size = m_dmdSize.x * m_dmdSize.y;
    uint32_t *const __restrict data = reinterpret_cast<uint32_t *>(m_dmdFrame->data());
+   // gamma compressed [0..255] sRGB
    VARIANT *p;
    SafeArrayAccessData(psa, (void **)&p);
    for (int ofs = 0; ofs < size; ++ofs)
       data[ofs] = V_UI4(&p[ofs]) | 0xFF000000u;
    SafeArrayUnaccessData(psa);
-   if (g_pplayer->m_scaleFX_DMD)
-      upscale(data, m_dmdSize, false);
    m_dmdFrameId++;
    return S_OK;
 }
@@ -921,9 +907,7 @@ STDMETHODIMP Flasher::put_VideoCapUpdate(BSTR cWinTitle)
     }
 
     if (m_isVideoCap == false) {  // VideoCap has not started because no sourcewin found
-        char * const szWinTitle = MakeChar(cWinTitle);
-        m_videoCapHwnd = ::FindWindow(nullptr, szWinTitle);
-        delete [] szWinTitle;
+        m_videoCapHwnd = ::FindWindowW(nullptr, cWinTitle);
         if (m_videoCapHwnd == nullptr)
             return S_FALSE;
 
@@ -937,7 +921,7 @@ STDMETHODIMP Flasher::put_VideoCapUpdate(BSTR cWinTitle)
         catch (...)
         {
            m_videoCapTex = nullptr;
-           return S_FAIL;
+           return E_FAIL;
         }
     }
 
@@ -1043,6 +1027,9 @@ void Flasher::RenderSetup(RenderDevice *device)
 
    m_lightmap = m_ptable->GetLight(m_d.m_szLightmap);
 
+   UpdateCenter();
+   m_centerClean = true; // Modifying points is not allowed while rendering, so center stays clean
+
    vector<RenderVertex> vvertex;
    GetRgVertex(vvertex);
 
@@ -1054,37 +1041,8 @@ void Flasher::RenderSetup(RenderDevice *device)
        return;
    }
 
-   vector<WORD> vtri;
-   
-   {
-      vector<unsigned int> vpoly(m_numVertices);
-      for (unsigned int i = 0; i < m_numVertices; i++)
-         vpoly[i] = i;
-
-      PolygonToTriangles(vvertex, vpoly, vtri, false);
-   }
-
-   m_numPolys = (int)(vtri.size()/3);
-   if (m_numPolys == 0)
-   {
-      // no polys to render leave vertex buffer undefined 
-      return;
-   }
-
-   IndexBuffer* dynamicIndexBuffer = new IndexBuffer(m_rd, m_numPolys * 3, false, IndexBuffer::FMT_INDEX16);
-
-   WORD* bufi;
-   dynamicIndexBuffer->Lock(bufi);
-   memcpy(bufi, vtri.data(), vtri.size()*sizeof(WORD));
-   dynamicIndexBuffer->Unlock();
-
-   VertexBuffer* dynamicVertexBuffer = new VertexBuffer(m_rd, m_numVertices, nullptr, true);
-
-   delete m_meshBuffer;
-   m_meshBuffer = new MeshBuffer(m_wzName, dynamicVertexBuffer, dynamicIndexBuffer, true);
-
-   m_vertices = new Vertex3D_NoTex2[m_numVertices];
-   m_transformedVertices = new Vertex3D_NoTex2[m_numVertices];
+   m_vertices.resize(m_numVertices);
+   m_transformedVertices.resize(m_numVertices);
 
    m_minx = FLT_MAX;
    m_miny = FLT_MAX;
@@ -1097,48 +1055,78 @@ void Flasher::RenderSetup(RenderDevice *device)
 
       m_vertices[i].x = pv0->x;
       m_vertices[i].y = pv0->y;
-      m_vertices[i].z = 0;
+      m_vertices[i].z = 0.f;
+
+      m_vertices[i].nx = 0.f;
+      m_vertices[i].ny = 0.f;
+      m_vertices[i].nz = 1.f;
 
       if (pv0->x > m_maxx) m_maxx = pv0->x;
       if (pv0->x < m_minx) m_minx = pv0->x;
       if (pv0->y > m_maxy) m_maxy = pv0->y;
       if (pv0->y < m_miny) m_miny = pv0->y;
    }
-   
+
    const float inv_width = 1.0f / (m_maxx - m_minx);
    const float inv_height = 1.0f / (m_maxy - m_miny);
    const float inv_tablewidth = 1.0f / (m_ptable->m_right - m_ptable->m_left);
    const float inv_tableheight = 1.0f / (m_ptable->m_bottom - m_ptable->m_top);
-   m_d.m_vCenter.x = m_minx + ((m_maxx - m_minx)*0.5f);
-   m_d.m_vCenter.y = m_miny + ((m_maxy - m_miny)*0.5f);
-
-   for (unsigned int i = 0; i < m_numVertices; i++)
+   for (auto& v : m_vertices)
    {
       if (m_d.m_imagealignment == ImageModeWrap)
       {
-         m_vertices[i].tu = (m_vertices[i].x - m_minx)*inv_width;
-         m_vertices[i].tv = (m_vertices[i].y - m_miny)*inv_height;
+         v.tu = (v.x - m_minx) * inv_width;
+         v.tv = (v.y - m_miny) * inv_height;
       }
       else
       {
-         m_vertices[i].tu = m_vertices[i].x*inv_tablewidth;
-         m_vertices[i].tv = m_vertices[i].y*inv_tableheight;
+         v.tu = v.x * inv_tablewidth;
+         v.tv = v.y * inv_tableheight;
       }
    }
 
+   if (m_d.m_renderMode != FlasherData::RenderMode::FLASHER)
+   {
+      m_numVertices = 4;
+      m_vertices.resize(m_numVertices);
+      m_transformedVertices.resize(m_numVertices);
+      m_vertices[0] = { m_minx, m_miny, 0.f, 0.f, 0.f, 1.0f, 0.f, 0.f };
+      m_vertices[1] = { m_minx, m_maxy, 0.f, 0.f, 0.f, 1.0f, 0.f, 1.f };
+      m_vertices[2] = { m_maxx, m_maxy, 0.f, 0.f, 0.f, 1.0f, 1.f, 1.f };
+      m_vertices[3] = { m_maxx, m_miny, 0.f, 0.f, 0.f, 1.0f, 1.f, 0.f };
+   }
+
+   vector<WORD> vtri;
+   {
+      vector<unsigned int> vpoly(m_numVertices);
+      for (unsigned int i = 0; i < m_numVertices; i++)
+         vpoly[i] = i;
+      PolygonToTriangles(vvertex, vpoly, vtri, false);
+   }
+   m_numPolys = static_cast<int>(vtri.size() / 3);
+   if (m_numPolys == 0)
+   {
+      // no polys to render leave vertex buffer undefined 
+      return;
+   }
+
    m_dynamicVertexBufferRegenerate = true;
+
+   std::shared_ptr<IndexBuffer> dynamicIndexBuffer = std::make_shared<IndexBuffer>(m_rd, vtri, true);
+   std::shared_ptr<VertexBuffer> dynamicVertexBuffer = std::make_shared<VertexBuffer>(m_rd, m_numVertices, nullptr, true);
+   m_meshBuffer = std::make_shared<MeshBuffer>(GetName(), dynamicVertexBuffer, dynamicIndexBuffer, true);
 }
 
 void Flasher::RenderRelease()
 {
    assert(m_rd != nullptr);
    ResetVideoCap();
-   delete m_meshBuffer;
-   delete[] m_vertices;
-   delete[] m_transformedVertices;
+   m_centerClean = false;
    m_meshBuffer = nullptr;
-   m_vertices = nullptr;
-   m_transformedVertices = nullptr;
+   m_meshEdgeBuffer = nullptr;
+   m_vertices.clear();
+   m_transformedVertices.clear();
+   m_meshBuffer = nullptr;
    m_renderFrame = nullptr;
    m_dmdFrame = nullptr;
    m_dmdSize = int2(0, 0);
@@ -1155,13 +1143,8 @@ void Flasher::Render(const unsigned int renderMask)
    assert(m_rd != nullptr);
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isReflectionPass = renderMask & Renderer::REFLECTION_PASS;
+   const bool isUIPass = renderMask & Renderer::UI_EDGES || renderMask & Renderer::UI_FILL;
    TRACE_FUNCTION();
-
-   // FIXME BGFX DX12 will crash on this
-   #ifdef ENABLE_BGFX
-   if (bgfx::getRendererType() == bgfx::RendererType::Direct3D12)
-      return;
-   #endif
 
    // Flashers are always dynamic parts
    if (isStaticOnly)
@@ -1186,20 +1169,20 @@ void Flasher::Render(const unsigned int renderMask)
          alpha = 0.f;
    }
 
-   if (m_d.m_color == 0 || alpha == 0.0f || m_d.m_intensity_scale == 0.0f)
+   if (!isUIPass && (m_d.m_color == 0 || alpha == 0.0f || m_d.m_intensity_scale == 0.0f))
       return;
 
    if (m_dynamicVertexBufferRegenerate)
    {
       m_dynamicVertexBufferRegenerate = false;
       const float height = m_d.m_height;
-      const float movx = m_minx + (m_maxx - m_minx)*0.5f;
-      const float movy = m_miny + (m_maxy - m_miny)*0.5f;
-      const Matrix3D tempMatrix = Matrix3D::MatrixTranslate(-movx /* -m_d.m_vCenter.x */, -movy /* -m_d.m_vCenter.y */, 0.f)
+      const float centerX = m_minx + (m_maxx - m_minx) * 0.5f; // Should match m_vCenter.x at all time
+      const float centerY = m_miny + (m_maxy - m_miny) * 0.5f; // Should match m_vCenter.y at all time
+      const Matrix3D tempMatrix = Matrix3D::MatrixTranslate(-centerX, -centerY, 0.f)
                              * (((Matrix3D::MatrixRotateZ(ANGTORAD(m_d.m_rotZ))
                                 * Matrix3D::MatrixRotateY(ANGTORAD(m_d.m_rotY)))
                                 * Matrix3D::MatrixRotateX(ANGTORAD(m_d.m_rotX)))
-                                * Matrix3D::MatrixTranslate(m_d.m_vCenter.x, m_d.m_vCenter.y, height));
+                                * Matrix3D::MatrixTranslate(centerX, centerY, height));
 
       Vertex3D_NoTex2 *buf;
       m_meshBuffer->m_vb->Lock(buf);
@@ -1207,7 +1190,7 @@ void Flasher::Render(const unsigned int renderMask)
       {
          Vertex3D_NoTex2 vert = m_vertices[i];
          tempMatrix.MultiplyVector(vert);
-         if (m_backglass)
+         if (m_desktopBackdrop)
             vert.z = 1.f;
          m_transformedVertices[i] = vert;
          buf[i] = vert;
@@ -1215,25 +1198,35 @@ void Flasher::Render(const unsigned int renderMask)
       m_meshBuffer->m_vb->Unlock();
    }
 
-   if (m_backglass)
+   const Vertex3Ds pos(0.5f * (m_minx + m_maxx), 0.5f * (m_miny + m_maxy), m_d.m_height);
+
+   if (m_desktopBackdrop)
+      g_pplayer->m_renderer->UpdateDesktopBackdropShaderMatrix(m_d.m_renderMode == FlasherData::EXT_RENDER, false, true);
+
+   if (isUIPass)
    {
-      Matrix3D matWorldViewProj[2];
-      matWorldViewProj[0] = Matrix3D::MatrixIdentity(); // MVP to move from back buffer space (0..w, 0..h) to clip space (-1..1, -1..1)
-      matWorldViewProj[0]._11 = 2.0f / static_cast<float>(EDITOR_BG_WIDTH /* m_rd->GetCurrentRenderTarget()->GetWidth() */);
-      matWorldViewProj[0]._41 = -1.0f;
-      matWorldViewProj[0]._22 = -2.0f / static_cast<float>(EDITOR_BG_HEIGHT /* m_rd->GetCurrentRenderTarget()->GetHeight() */);
-      matWorldViewProj[0]._42 = 1.0f;
-      const int eyes = m_rd->GetCurrentRenderTarget()->m_nLayers;
-      if (eyes > 1)
-         matWorldViewProj[1] = matWorldViewProj[0];
-      m_rd->m_flasherShader->SetMatrix(SHADER_matWorldViewProj, &matWorldViewProj[0], eyes);
-      m_rd->m_DMDShader->SetMatrix(SHADER_matWorldViewProj, &matWorldViewProj[0], eyes);
+      if (renderMask & Renderer::UI_FILL)
+         m_rd->DrawMesh(m_rd->m_basicShader, true, pos, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numPolys * 3);
+      if (renderMask & Renderer::UI_EDGES && m_meshEdgeBuffer == nullptr)
+      {
+         vector<unsigned int> indices(m_numVertices * 2);
+         for (unsigned int i = 0; i < m_numVertices; i++)
+         {
+            indices[i * 2] = i;
+            indices[i * 2 + 1] = (i + 1) % m_numVertices;
+         }
+         m_meshEdgeBuffer = std::make_shared<MeshBuffer>(m_meshBuffer->m_vb, std::make_shared<IndexBuffer>(m_rd, indices), true);
+      }
+      if (renderMask & Renderer::UI_EDGES)
+         m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_meshEdgeBuffer, RenderDevice::LINELIST, 0, m_numVertices * 2);
+      if (m_desktopBackdrop)
+         g_pplayer->m_renderer->UpdateBasicShaderMatrix();
+      return;
    }
 
    m_rd->ResetRenderState();
    m_rd->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
 
-   Vertex3Ds pos(m_d.m_vCenter.x, m_d.m_vCenter.y, m_d.m_height);
    const vec4 color = convertColor(m_d.m_color, alpha * m_d.m_intensity_scale / 100.0f);
    const float clampedModulateVsAdd = min(max(m_d.m_modulate_vs_add, 0.00001f), 0.9999f); // avoid 0, as it disables the blend and avoid 1 as it looks not good with day->night changes
    switch (m_d.m_renderMode)
@@ -1306,7 +1299,6 @@ void Flasher::Render(const unsigned int renderMask)
       }
 
       case FlasherData::DMD:
-      {
          if (m_dmdFrame)
             m_renderFrame = m_dmdFrame;
          else
@@ -1315,123 +1307,115 @@ void Flasher::Render(const unsigned int renderMask)
             if (!m_d.m_imageSrcLink.empty())
                dmd = g_pplayer->m_resURIResolver.GetDisplayState(m_d.m_imageSrcLink);
             if (dmd.state.frame == nullptr)
-               dmd = g_pplayer->m_resURIResolver.GetDisplayState("ctrl://default/display");
+               dmd = g_pplayer->m_resURIResolver.GetDisplayState("ctrl://default/display"s);
             if (dmd.state.frame != nullptr)
                BaseTexture::Update(m_renderFrame, dmd.source->width, dmd.source->height,
-                              dmd.source->frameFormat == CTLPI_DISPLAY_FORMAT_LUM8    ? BaseTexture::BW
+                              dmd.source->frameFormat == CTLPI_DISPLAY_FORMAT_LUM32F  ? BaseTexture::BW_FP32
                             : dmd.source->frameFormat == CTLPI_DISPLAY_FORMAT_SRGB565 ? BaseTexture::SRGB565
                                                                                       : BaseTexture::SRGB, dmd.state.frame);
          }
-         if (m_renderFrame == nullptr)
+         if (m_renderFrame != nullptr)
          {
-            if (m_backglass)
-               g_pplayer->m_renderer->UpdateBasicShaderMatrix();
-            return;
+            Texture *const glass = m_ptable->GetImage(m_d.m_szImageA);
+            if (m_d.m_modulate_vs_add < 1.f)
+               m_rd->EnableAlphaBlend(m_d.m_addBlend);
+            else
+               m_rd->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
+            m_rd->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
+            const vec3 dotTint = m_renderFrame->m_format == BaseTexture::BW_FP32 ? vec3(color.x, color.y, color.z) : vec3(1.f, 1.f, 1.f);
+            const int dmdProfile = clamp(m_d.m_renderStyle, 0, 7);
+            g_pplayer->m_renderer->SetupDMDRender(dmdProfile, false, dotTint, color.w, m_renderFrame, m_d.m_modulate_vs_add, m_desktopBackdrop ? Renderer::Reinhard : Renderer::Linear,
+               m_transformedVertices.data(), vec4(m_d.m_glassPadLeft, m_d.m_glassPadTop, m_d.m_glassPadRight, m_d.m_glassPadBottom), vec3(1.f, 1.f, 1.f), m_d.m_glassRoughness,
+               glass ? glass : nullptr, vec4(0.f, 0.f, 1.f, 1.f), vec3(GetRValue(m_d.m_glassAmbient) / 255.f, GetGValue(m_d.m_glassAmbient) / 255.f, GetBValue(m_d.m_glassAmbient) / 255.f));
+            // DMD flasher are rendered transparent. They used to be drawn as a separate pass after opaque parts and before other transparents.
+            // There we shift the depthbias to reproduce this behavior for backward compatibility.
+            m_rd->DrawMesh(m_rd->m_DMDShader, true, pos, m_d.m_depthBias - 10000.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numPolys * 3);
          }
-         Texture *const glass = m_ptable->GetImage(m_d.m_szImageA);
-         if (m_d.m_modulate_vs_add < 1.f)
-            m_rd->EnableAlphaBlend(m_d.m_addBlend);
-         else
-            m_rd->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
-         m_rd->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
-         const vec3 dotTint = m_renderFrame->m_format == BaseTexture::BW ? vec3(color.x, color.y, color.z) : vec3(1.f, 1.f, 1.f);
-         const int dmdProfile = clamp(m_d.m_renderStyle, 0, 7);
-         g_pplayer->m_renderer->SetupDMDRender(dmdProfile, false, dotTint, color.w, m_renderFrame, m_d.m_modulate_vs_add, m_backglass ? Renderer::Reinhard : Renderer::Linear, m_transformedVertices,
-            vec4(m_d.m_glassPadLeft, m_d.m_glassPadTop, m_d.m_glassPadRight, m_d.m_glassPadBottom),
-            vec3(1.f, 1.f, 1.f), m_d.m_glassRoughness, 
-            glass ? glass : nullptr, vec4(0.f, 0.f, 1.f, 1.f), vec3(GetRValue(m_d.m_glassAmbient) / 255.f, GetGValue(m_d.m_glassAmbient) / 255.f, GetBValue(m_d.m_glassAmbient) / 255.f));
-         // DMD flasher are rendered transparent. They used to be drawn as a separate pass after opaque parts and before other transparents.
-         // There we shift the depthbias to reproduce this behavior for backward compatibility.
-         m_rd->DrawMesh(m_rd->m_DMDShader, true, pos, m_d.m_depthBias - 10000.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numPolys * 3);
          break;
-      }
 
       case FlasherData::DISPLAY:
-      {
-         ResURIResolver::DisplayState display = g_pplayer->m_resURIResolver.GetDisplayState(m_d.m_imageSrcLink);
-         if (display.state.frame == nullptr)
+         if (const ResURIResolver::DisplayState display = g_pplayer->m_resURIResolver.GetDisplayState(m_d.m_imageSrcLink); display.state.frame != nullptr)
          {
-            if (m_backglass)
-               g_pplayer->m_renderer->UpdateBasicShaderMatrix();
-            return;
-         }
-         BaseTexture::Update(m_renderFrame, display.source->width, display.source->height, 
-                          display.source->frameFormat == CTLPI_DISPLAY_FORMAT_LUM8 ? BaseTexture::BW
-                     : display.source->frameFormat == CTLPI_DISPLAY_FORMAT_SRGB565 ? BaseTexture::SRGB565
-                                                                                   : BaseTexture::SRGB,
-            display.state.frame);
-         if (m_d.m_modulate_vs_add < 1.f)
-            m_rd->EnableAlphaBlend(m_d.m_addBlend);
-         else
-            m_rd->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
-         const int displayProfile = clamp(m_d.m_renderStyle, 0, 1);  // 4);
-         switch (displayProfile)
-         {
-         case 0: // Pixelated
-            m_rd->m_flasherShader->SetTexture(SHADER_tex_flasher_A, m_renderFrame.get(), false, SF_NONE);
-            m_rd->m_flasherShader->SetVector(SHADER_staticColor_Alpha, color.x * color.w, color.y * color.w, color.z * color.w, 1.f);
-            m_rd->m_flasherShader->SetVector(SHADER_alphaTestValueAB_filterMode_addBlend, -1.f, -1.f, 0.f, m_d.m_addBlend ? 1.f : 0.f);
-            m_rd->m_flasherShader->SetVector(SHADER_amount_blend_modulate_vs_add_flasherMode, 0.f, clampedModulateVsAdd, 0.f, 0.f);
+            BaseTexture::Update(m_renderFrame, display.source->width, display.source->height,
+               display.source->frameFormat == CTLPI_DISPLAY_FORMAT_LUM32F       ? BaseTexture::BW_FP32
+                  : display.source->frameFormat == CTLPI_DISPLAY_FORMAT_SRGB565 ? BaseTexture::SRGB565
+                                                                                : BaseTexture::SRGB,
+               display.state.frame);
+            Texture *const glass = m_ptable->GetImage(m_d.m_szImageA);
+            if (m_d.m_modulate_vs_add < 1.f)
+               m_rd->EnableAlphaBlend(m_d.m_addBlend);
+            else
+               m_rd->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
             m_rd->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
-            m_rd->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_TRUE);
-            m_rd->SetRenderState(RenderState::SRCBLEND, RenderState::SRC_ALPHA);
-            m_rd->SetRenderState(RenderState::DESTBLEND, m_d.m_addBlend ? RenderState::INVSRC_COLOR : RenderState::INVSRC_ALPHA);
-            m_rd->SetRenderState(RenderState::BLENDOP, m_d.m_addBlend ? RenderState::BLENDOP_REVSUBTRACT : RenderState::BLENDOP_ADD);
-            m_rd->m_flasherShader->SetTechnique(SHADER_TECHNIQUE_basic_noLight);
-            break;
-         case 1: // Smoothed
-            m_rd->m_flasherShader->SetTexture(SHADER_tex_flasher_A, m_renderFrame.get(), false, SF_TRILINEAR);
-            m_rd->m_flasherShader->SetVector(SHADER_staticColor_Alpha, color.x * color.w, color.y * color.w, color.z * color.w, 1.f);
-            m_rd->m_flasherShader->SetVector(SHADER_alphaTestValueAB_filterMode_addBlend, -1.f, -1.f, 0.f, m_d.m_addBlend ? 1.f : 0.f);
-            m_rd->m_flasherShader->SetVector(SHADER_amount_blend_modulate_vs_add_flasherMode, 0.f, clampedModulateVsAdd, 0.f, 0.f);
-            m_rd->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
-            m_rd->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_TRUE);
-            m_rd->SetRenderState(RenderState::SRCBLEND, RenderState::SRC_ALPHA);
-            m_rd->SetRenderState(RenderState::DESTBLEND, m_d.m_addBlend ? RenderState::INVSRC_COLOR : RenderState::INVSRC_ALPHA);
-            m_rd->SetRenderState(RenderState::BLENDOP, m_d.m_addBlend ? RenderState::BLENDOP_REVSUBTRACT : RenderState::BLENDOP_ADD);
-            m_rd->m_flasherShader->SetTechnique(SHADER_TECHNIQUE_basic_noLight);
-            break;
-         case 2: // ScaleFX
-            assert(false); // Not yet implemented
-            break;
-         case 3: // Vertical CRT
-            assert(false); // Not yet implemented
-            break;
-         case 4: // Horizontal CRT
-            assert(false); // Not yet implemented
-            break;
+            const vec3 crtTint = vec3(color.x, color.y, color.z);
+            const int crtProfile = clamp(m_d.m_renderStyle, 0, 2);
+            g_pplayer->m_renderer->SetupCRTRender(crtProfile, false, crtTint, color.w, m_renderFrame, m_d.m_modulate_vs_add, m_desktopBackdrop ? Renderer::Reinhard : Renderer::Linear,
+               m_transformedVertices.data(), vec4(m_d.m_glassPadLeft, m_d.m_glassPadTop, m_d.m_glassPadRight, m_d.m_glassPadBottom), vec3(1.f, 1.f, 1.f), m_d.m_glassRoughness,
+               glass ? glass : nullptr, vec4(0.f, 0.f, 1.f, 1.f), vec3(GetRValue(m_d.m_glassAmbient) / 255.f, GetGValue(m_d.m_glassAmbient) / 255.f, GetBValue(m_d.m_glassAmbient) / 255.f));
+            // We also apply the depth bias shift, not for backward compatibility (as display did not exist before 10.8.1) but for consistency between DMD and Display mode
+            m_rd->DrawMesh(m_rd->m_DMDShader, true, pos, m_d.m_depthBias - 10000.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numPolys * 3);
          }
-         // We also apply the depth bias shift, not for backward compatibility (as display did not exist before 10.8.1) but for consistency between DMD and Display mode
-         m_rd->DrawMesh(m_rd->m_flasherShader, true, pos, m_d.m_depthBias - 10000.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numPolys * 3);
          break;
-      }
 
       case FlasherData::ALPHASEG:
-      {
-         ResURIResolver::SegDisplayState segs = g_pplayer->m_resURIResolver.GetSegDisplayState(m_d.m_imageSrcLink);
-         if (segs.state.frame == nullptr || segs.source->nElements == 0)
-            return;
-         Texture *const glass = m_ptable->GetImage(m_d.m_szImageA);
-         // We always use max blending as segment may overlap in the glass diffuse: we retain the most lighted one which is wrong but looks ok (otherwise we would have to deal with colorspace conversions and layering between glass and emitter)
-         m_rd->SetRenderState(RenderState::BLENDOP, RenderState::BLENDOP_MAX);
-         m_rd->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_TRUE);
-         m_rd->SetRenderState(RenderState::SRCBLEND, RenderState::SRC_ALPHA);
-         m_rd->SetRenderState(RenderState::DESTBLEND, RenderState::ONE);
-         m_rd->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
-         const int renderStyle = clamp(m_d.m_renderStyle % 8, 0, 7); // Shading settings
-         const Renderer::SegmentFamily segFamily = static_cast<Renderer::SegmentFamily>(clamp(m_d.m_renderStyle / 8, 0, 4)); // Segments shape
-         g_pplayer->m_renderer->SetupSegmentRenderer(renderStyle, false, vec3(color.x, color.y, color.z), color.w,
-            segFamily, segs.source->elementType[0], segs.state.frame, m_backglass ? Renderer::Reinhard : Renderer::Linear, m_transformedVertices,
-            vec4(m_d.m_glassPadLeft, m_d.m_glassPadTop, m_d.m_glassPadRight, m_d.m_glassPadBottom),
-            vec3(1.f, 1.f, 1.f), m_d.m_glassRoughness, glass ? glass : nullptr, vec4(0.f, 0.f , 1.f, 1.f), 
-            vec3(GetRValue(m_d.m_glassAmbient)/255.f, GetGValue(m_d.m_glassAmbient)/255.f, GetBValue(m_d.m_glassAmbient)/255.f));
-         // We also apply the depth bias shift, not for backward compatibility (as alphaseg display did not exist before 10.8.1) but for consistency between DMD and Display mode
-         m_rd->DrawMesh(m_rd->m_DMDShader, true, pos, m_d.m_depthBias - 10000.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numPolys * 3);
+         if (const ResURIResolver::SegDisplayState segs = g_pplayer->m_resURIResolver.GetSegDisplayState(m_d.m_imageSrcLink); segs.state.frame != nullptr && segs.source->nElements != 0)
+         {
+            Texture *const glass = m_ptable->GetImage(m_d.m_szImageA);
+            // We always use max blending as segment may overlap in the glass diffuse: we retain the most lighted one which is wrong but looks ok (otherwise we would have to deal with colorspace conversions and layering between glass and emitter)
+            m_rd->SetRenderState(RenderState::BLENDOP, RenderState::BLENDOP_MAX);
+            m_rd->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_TRUE);
+            m_rd->SetRenderState(RenderState::SRCBLEND, RenderState::SRC_ALPHA);
+            m_rd->SetRenderState(RenderState::DESTBLEND, RenderState::ONE);
+            m_rd->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
+            const int renderStyle = clamp(m_d.m_renderStyle % 8, 0, 7); // Shading settings
+            const Renderer::SegmentFamily segFamily = static_cast<Renderer::SegmentFamily>(clamp(m_d.m_renderStyle / 8, 0, 4)); // Segments shape
+            g_pplayer->m_renderer->SetupSegmentRenderer(renderStyle, false, vec3(color.x, color.y, color.z), color.w, segFamily, segs.source->elementType[0], segs.state.frame,
+               m_desktopBackdrop ? Renderer::Reinhard : Renderer::Linear, m_transformedVertices.data(),
+               vec4(m_d.m_glassPadLeft, m_d.m_glassPadTop, m_d.m_glassPadRight, m_d.m_glassPadBottom),
+               vec3(1.f, 1.f, 1.f), m_d.m_glassRoughness, glass ? glass : nullptr, vec4(0.f, 0.f, 1.f, 1.f),
+               vec3(GetRValue(m_d.m_glassAmbient) / 255.f, GetGValue(m_d.m_glassAmbient) / 255.f, GetBValue(m_d.m_glassAmbient) / 255.f));
+            // We also apply the depth bias shift, not for backward compatibility (as alphaseg display did not exist before 10.8.1) but for consistency between DMD and Display mode
+            m_rd->DrawMesh(m_rd->m_DMDShader, true, pos, m_d.m_depthBias - 10000.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numPolys * 3);
+         }
+         break;
+
+      case FlasherData::EXT_RENDER:
+         if (m_d.m_renderStyle >= VPXWindowId::VPXWINDOW_Backglass && m_d.m_renderStyle <= VPXWindowId::VPXWINDOW_Topper)
+         {
+            const float width = m_maxx - m_minx;
+            const float height = m_maxy - m_miny;
+            m_rd->ResetRenderState();
+            m_rd->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
+            // Draw a solid black background using the common flasher mesh and transform
+            m_rd->m_basicShader->SetTechnique(SHADER_TECHNIQUE_unshaded_without_texture);
+            m_rd->m_basicShader->SetVector(SHADER_staticColor_Alpha, 0.f, 0.f, 0.f, 1.f);
+            m_rd->DrawMesh(m_rd->m_basicShader, true, Vertex3Ds(0.f, 0.f, 0.f), m_d.m_depthBias - m_d.m_height, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numPolys * 3);
+            m_rd->m_basicShader->SetVector(SHADER_staticColor_Alpha, 1.f, 1.f, 1.f, 1.f);
+            // Vertices are emitted in (0,0) -> (1,1). We must scale & rotate around center then translate to fit flasher's position
+            if (m_desktopBackdrop)
+               g_pplayer->m_renderer->UpdateDesktopBackdropShaderMatrix(true, false, true, //
+                  Matrix3D::MatrixTranslate(-0.5f, -0.5f, 0.f) //
+                  * Matrix3D::MatrixScale(width, height, 0.f) // Desktop backdrop must be rendered with z=0, so no X and y rotation nor height (and a z scale at 0)
+                  * Matrix3D::MatrixRotateZ(ANGTORAD(m_d.m_rotZ)) //
+                  * Matrix3D::MatrixTranslate(m_minx + 0.5f * width, m_miny + 0.5f * height, 0.f));
+            else
+               g_pplayer->m_renderer->UpdateBasicShaderMatrix( //
+                  Matrix3D::MatrixTranslate(-0.5f, -0.5f, 0.f) //
+                  * Matrix3D::MatrixScale(width, height, 0.f) //
+                  * ((Matrix3D::MatrixRotateZ(ANGTORAD(m_d.m_rotZ)) * Matrix3D::MatrixRotateY(ANGTORAD(m_d.m_rotY))) * Matrix3D::MatrixRotateX(ANGTORAD(m_d.m_rotX))) //
+                  * Matrix3D::MatrixTranslate(m_minx + 0.5f * width, m_miny + 0.5f * height, m_d.m_height));
+            VPXRenderContext2D &context
+               = g_pplayer->m_renderer->GetAncillaryRenderContext(static_cast<VPXWindowId>(m_d.m_renderStyle), width, height, m_desktopBackdrop, true, m_d.m_depthBias - m_d.m_height);
+            for (auto &renderer : g_pplayer->m_ancillaryWndRenderers[m_d.m_renderStyle])
+               if (renderer.Render(&context, renderer.context))
+                  break;
+            g_pplayer->m_renderer->UpdateBasicShaderMatrix();
+         }
          break;
       }
-   }
 
-   if (m_backglass)
+
+   if (m_desktopBackdrop)
       g_pplayer->m_renderer->UpdateBasicShaderMatrix();
 }
 

@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "ui/resource.h"
+#include "ui/win/resource.h"
 #include "unordered_dense.h"
 
 // Indices for RotAndTra:
@@ -25,8 +25,6 @@ public:
    Vertex3Ds m_vSize;
    float m_rotZ;
    TargetType m_targetType;
-
-   TimerDataRoot m_tdr;
 
    float m_elasticityFalloff;
    float m_dropSpeed;
@@ -51,7 +49,8 @@ class HitTarget :
 
    public ISelect,
    public IEditable,
-   public Hitable,
+   public IHitable,
+   public IRenderable,
    public IScriptable,
    public IFireEvents,
    public IPerPropertyBrowsing // Ability to fill in dropdown in property browser
@@ -66,7 +65,7 @@ public:
 
    static constexpr float DROP_TARGET_LIMIT = 52.0f;
 
-   HitTarget();
+   HitTarget() { m_d.m_depthBias = 0.0f; m_d.m_reflectionEnabled = true; }
    virtual ~HitTarget();
 
    BEGIN_COM_MAP(HitTarget)
@@ -85,7 +84,7 @@ public:
        CONNECTION_POINT_ENTRY(DIID_IHitTargetEvents)
    END_CONNECTION_POINT_MAP()
 
-   STANDARD_EDITABLE_DECLARES(HitTarget, eItemHitTarget, TARGET, 1)
+   STANDARD_EDITABLE_DECLARES(HitTarget, eItemHitTarget, TARGET, VIEW_PLAYFIELD)
 
    DECLARE_REGISTRY_RESOURCEID(IDR_HITTARGET)
 
@@ -177,7 +176,7 @@ public:
 
    HitTargetData m_d;
 
-   bool m_hitEvent;
+   bool m_hitEvent = false;
 
 private:
    void UpdateTarget();
@@ -185,25 +184,20 @@ private:
    void AddHitEdge(class PhysicsEngine *physics, ankerl::unordered_dense::set<std::pair<unsigned, unsigned>> &addedEdges, const unsigned i, const unsigned j, const Vertex3Ds &vi,
       const Vertex3Ds &vj, const bool setHitObject, const bool isUI);
 
-   PinTable        *m_ptable = nullptr;
-
    RenderDevice    *m_rd = nullptr;
    const Vertex3D_NoTex2 *m_vertices = nullptr; // pointer just to the existing hittargets hardcoded in arrays
    const WORD      *m_indices = nullptr; // dto.
    unsigned int     m_numVertices = 0;
    unsigned int     m_numIndices = 0;
-   MeshBuffer      *m_meshBuffer = nullptr;
-
-   PropertyPane *m_propVisual = nullptr;
-   PropertyPane *m_propPosition = nullptr;
+   std::shared_ptr<MeshBuffer> m_meshBuffer;
 
    vector<HitObject*> m_vhoCollidable; // Objects to that may be collide selectable
 
    // Vertices for editor display & hit shape
    vector<Vertex3Ds> m_hitUIVertices;
    vector<Vertex3D_NoTex2> m_transformedVertices;
-   uint32_t m_timeStamp;
-   float m_moveAnimationOffset;
-   bool  m_moveAnimation;
-   bool  m_moveDown;
+   uint32_t m_timeStamp = 0;
+   float m_moveAnimationOffset = 0.0f;
+   bool  m_moveAnimation = false;
+   bool  m_moveDown = true;
 };

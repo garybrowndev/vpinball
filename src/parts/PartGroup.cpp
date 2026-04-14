@@ -1,29 +1,21 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
+#include "PartGroup.h"
 
 
-PartGroup::PartGroup()
+PartGroup *PartGroup::CopyForPlay() const
 {
-}
-
-PartGroup::~PartGroup()
-{
-}
-
-PartGroup *PartGroup::CopyForPlay(PinTable *live_table) const
-{
-   STANDARD_EDITABLE_COPY_FOR_PLAY_IMPL(PartGroup, live_table)
+   STANDARD_EDITABLE_COPY_FOR_PLAY_IMPL(PartGroup)
    return dst;
 }
 
-HRESULT PartGroup::Init(PinTable *const ptable, const float x, const float y, const bool fromMouseClick, const bool forPlay)
+HRESULT PartGroup::Init(const float x, const float y, const bool fromMouseClick, const bool forPlay)
 {
-   m_ptable = ptable;
    SetDefaults(fromMouseClick);
    m_d.m_v.x = x;
    m_d.m_v.y = y;
-   return forPlay ? S_OK : InitVBA(true, nullptr);
+   return S_OK;
 }
 
 STDMETHODIMP PartGroup::InterfaceSupportsErrorInfo(REFIID riid)
@@ -45,14 +37,18 @@ STDMETHODIMP PartGroup::InterfaceSupportsErrorInfo(REFIID riid)
 
 void PartGroup::SetDefaults(const bool fromMouseClick)
 {
-   m_d.m_tdr.m_TimerEnabled = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultPropsPartGroup, "TimerEnabled"s, true) : true;
-   m_d.m_tdr.m_TimerInterval = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultPropsPartGroup, "TimerInterval"s, 100) : 100;
+#define LinkProp(field, prop) field = fromMouseClick ? g_app->m_settings.GetDefaultPropsPartGroup_##prop() : Settings::GetDefaultPropsPartGroup_##prop##_Default()
+   LinkProp(m_timerEnabled, TimerEnabled);
+   LinkProp(m_timerInterval, TimerInterval);
+#undef LinkProp
 }
 
 void PartGroup::WriteRegDefaults()
 {
-   g_pvp->m_settings.SaveValue(Settings::DefaultPropsPartGroup, "TimerEnabled"s, m_d.m_tdr.m_TimerEnabled);
-   g_pvp->m_settings.SaveValue(Settings::DefaultPropsPartGroup, "TimerInterval"s, m_d.m_tdr.m_TimerInterval);
+#define LinkProp(field, prop) g_app->m_settings.SetDefaultPropsPartGroup_##prop(field, false)
+   LinkProp(m_timerEnabled, TimerEnabled);
+   LinkProp(m_timerInterval, TimerInterval);
+#undef LinkProp
 }
 
 void PartGroup::SetObjectPos()
@@ -91,26 +87,13 @@ void PartGroup::RenderBlueprint(Sur *psur, const bool solid)
 #pragma endregion
 
 
-#pragma region Physics
-
-void PartGroup::PhysicSetup(PhysicsEngine* physics, const bool isUI)
-{
-}
-
-void PartGroup::PhysicRelease(PhysicsEngine* physics, const bool isUI)
-{
-}
-
-#pragma endregion
-
-
 #pragma region Rendering
 
-unsigned int PartGroup::GetVisibilityMask() const
+unsigned int PartGroup::GetPlayerModeVisibilityMask() const
 {
    if (GetPartGroup() != nullptr)
-      return m_d.m_visibilityMask & GetPartGroup()->GetVisibilityMask();
-   return m_d.m_visibilityMask;
+      return m_d.m_playerModeVisibilityMask & GetPartGroup()->GetPlayerModeVisibilityMask();
+   return m_d.m_playerModeVisibilityMask;
 }
 
 PartGroupData::SpaceReference PartGroup::GetReferenceSpace() const
@@ -122,78 +105,42 @@ PartGroupData::SpaceReference PartGroup::GetReferenceSpace() const
    return PartGroupData::SpaceReference::SR_PLAYFIELD;
 }
 
-void PartGroup::RenderSetup(RenderDevice *device)
-{
-}
-
-void PartGroup::UpdateAnimation(const float diff_time_msec)
-{
-}
-
-void PartGroup::Render(const unsigned int renderMask)
-{
-}
-
-void PartGroup::RenderRelease()
-{
-}
-
 #pragma endregion
 
 
 #pragma region Serialization
 
-HRESULT PartGroup::SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool saveForUndo)
+void PartGroup::Save(IObjectWriter& writer, const bool saveForUndo)
 {
-   BiffWriter bw(pstm, hcrypthash);
-   // Default properties
-   bw.WriteWideString(FID(NAME), m_wzName);
-   bw.WriteVector2(FID(VCEN), m_d.m_v);
-   bw.WriteBool(FID(TMON), m_d.m_tdr.m_TimerEnabled);
-   bw.WriteInt(FID(TMIN), m_d.m_tdr.m_TimerInterval);
-   bw.WriteBool(FID(BGLS), m_backglass);
-   // PartGroup properties
-   bw.WriteInt(FID(VMSK), static_cast<int>(m_d.m_visibilityMask));
-   bw.WriteInt(FID(SPRF), static_cast<int>(m_d.m_spaceReference));
-   ISelect::SaveData(pstm, hcrypthash);
-   bw.WriteTag(FID(ENDB));
-   return S_OK;
+   writer.WriteWideString(FID(NAME), m_wzName);
+   writer.WriteVector2(FID(VCEN), m_d.m_v);
+   writer.WriteBool(FID(TMON), m_timerEnabled);
+   writer.WriteInt(FID(TMIN), m_timerInterval);
+   writer.WriteUInt(FID(PMSK), static_cast<int>(m_d.m_playerModeVisibilityMask));
+   writer.WriteInt(FID(SPRF), static_cast<int>(m_d.m_spaceReference));
+   SaveSharedEditableFields(writer);
+   writer.EndObject();
 }
 
-HRESULT PartGroup::InitLoad(IStream *pstm, PinTable *ptable, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey)
+void PartGroup::Load(IObjectReader& reader)
 {
    SetDefaults(false);
-
-   BiffReader br(pstm, this, version, hcrypthash, hcryptkey);
-
-   m_ptable = ptable;
-
-   br.Load();
-   return S_OK;
-}
-
-bool PartGroup::LoadToken(const int id, BiffReader * const pbr)
-{
-   switch(id)
-   {
-   // Default properties
-   case FID(PIID): { int pid; pbr->GetInt(&pid); } break;
-   case FID(VCEN): pbr->GetVector2(m_d.m_v); break;
-   case FID(TMON): pbr->GetBool(m_d.m_tdr.m_TimerEnabled); break;
-   case FID(TMIN): pbr->GetInt(m_d.m_tdr.m_TimerInterval); break;
-   case FID(NAME): pbr->GetWideString(m_wzName, std::size(m_wzName)); break;
-   case FID(BGLS): pbr->GetBool(m_backglass); break;
-   // PartGroup properties
-   case FID(VMSK): pbr->GetInt(&m_d.m_visibilityMask); break;
-   case FID(SPRF): pbr->GetInt(&m_d.m_spaceReference); break;
-   default: ISelect::LoadToken(id, pbr); break;
-   }
-   return true;
-}
-
-HRESULT PartGroup::InitPostLoad()
-{
-   return S_OK;
+   reader.AsObject(
+      [this](int tag, IObjectReader& reader)
+      {
+         switch (tag)
+         {
+         case FID(PIID): reader.AsInt(); break;
+         case FID(VCEN): m_d.m_v = reader.AsVector2(); break;
+         case FID(TMON): m_timerEnabled = reader.AsBool(); break;
+         case FID(TMIN): m_timerInterval = reader.AsInt(); break;
+         case FID(NAME): m_wzName = reader.AsWideString(); break;
+         case FID(PMSK): m_d.m_playerModeVisibilityMask = reader.AsUInt(); break;
+         case FID(SPRF): m_d.m_spaceReference = static_cast<PartGroupData::SpaceReference>(reader.AsInt()); break;
+         default: LoadSharedEditableField(tag, reader); break;
+         }
+         return true;
+      });
 }
 
 #pragma endregion

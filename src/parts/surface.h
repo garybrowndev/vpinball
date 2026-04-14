@@ -4,12 +4,12 @@
 
 #pragma once
 
-#include "ui/resource.h"
+#include "dragpoint.h"
+#include "ui/win/resource.h"
 
 class SurfaceData final : public BaseProperty
 {
 public:
-   TimerDataRoot m_tdr;
    float m_slingshot_threshold;	// speed at which ball needs to trigger slingshot 
    string m_szSideImage;
    string m_szTopMaterial;
@@ -29,7 +29,6 @@ public:
    bool m_isBottomSolid;         // is the bottom closed (lower side of the 'cube') or not (legacy behavior has bottom open, e.g. balls can drop into walls from below, or leave them if inside walls (if bottom area is large enough of course))
    bool m_slingshotAnimation;
    bool m_topBottomVisible;
-   bool m_inner; //!! Deprecated, do not use! Always true after loading! (was: Inside or outside wall)
 };
 
 class Surface :
@@ -41,12 +40,12 @@ class Surface :
    public IProvideClassInfo2Impl<&CLSID_Wall, &DIID_IWallEvents, &LIBID_VPinballLib>,
    public ISelect,
    public IEditable,
-   public Hitable,
+   public IHitable,
+   public IRenderable,
    public IHaveDragPoints,
    public IScriptable,
    public IFireEvents,
    public IPerPropertyBrowsing // Ability to fill in dropdown in property browser
-   //public EditableImpl<Surface>
 {
 public:
 #ifdef __STANDALONE__
@@ -56,12 +55,18 @@ public:
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
 
-   Surface();
+   Surface()
+   {
+      m_menuid = IDR_SURFACEMENU;
+      m_d.m_collidable = true;
+      m_d.m_slingshotAnimation = true;
+      m_d.m_isBottomSolid = false;
+   }
    virtual ~Surface();
 
    //HRESULT InitTarget(PinTable * const ptable, const float x, const float y, const bool fromMouseClick);
 
-   STANDARD_EDITABLE_DECLARES(Surface, eItemSurface, WALL, 1)
+   STANDARD_EDITABLE_DECLARES(Surface, eItemSurface, WALL, VIEW_PLAYFIELD)
 
    BEGIN_COM_MAP(Surface)
       COM_INTERFACE_ENTRY(IWall)
@@ -99,7 +104,9 @@ public:
    Vertex2D GetCenter() const final { return GetPointCenter(); }
    void PutCenter(const Vertex2D& pv) final { PutPointCenter(pv); }
 
+#ifndef __STANDALONE__
    void DoCommand(int icmd, int x, int y) final;
+#endif
    // end ISelect
 
    float GetDepth(const Vertex3Ds& viewDir) const final { return viewDir.z * m_d.m_heighttop; }
@@ -151,8 +158,6 @@ private:
 
    void GenerateMesh(vector<Vertex3D_NoTex2> &topBuf, vector<Vertex3D_NoTex2> &sideBuf, vector<WORD> &topBottomIndices, vector<WORD> &sideIndices);
 
-   PinTable *m_ptable = nullptr;
-
    vector<LineSegSlingshot*> m_vlinesling;
 
    vector<HitObject*> m_vhoDrop; // Objects to disable when dropped
@@ -160,8 +165,9 @@ private:
 
    unsigned int m_numVertices = 0, m_numPolys = 0;
 
-   MeshBuffer *m_slingshotMeshBuffer = nullptr;
-   MeshBuffer *m_meshBuffer = nullptr;
+   std::shared_ptr<MeshBuffer> m_slingshotMeshBuffer;
+   std::shared_ptr<MeshBuffer> m_meshBuffer;
+   std::shared_ptr<MeshBuffer> m_meshEdgeBuffer;
 
    bool m_isWall = true;
    bool m_isDynamic = false;

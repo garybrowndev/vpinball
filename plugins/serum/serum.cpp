@@ -7,29 +7,30 @@
 #include <mutex>
 #include <thread>
 
-#include "MsgPlugin.h"
-#include "VPXPlugin.h"
-#include "ControllerPlugin.h"
+#include "plugins/MsgPlugin.h"
+#include "plugins/VPXPlugin.h"
+#include "plugins/ControllerPlugin.h"
 #include "common.h"
 #include "serum-decode.h"
 
 #include <filesystem>
 
-#include "LoggingPlugin.h"
+#include "plugins/LoggingPlugin.h"
 
 using namespace std::string_literals;
+using namespace std::string_view_literals;
 
 namespace Serum {
 
-LPI_IMPLEMENT
+LPI_IMPLEMENT_CPP // Implement shared log support
 
 ///////////////////////////////////////////////////////////////////////////////
 // Serum Colorization plugin
 //
 // This plugin only rely on the generic message plugin API, the generic controller
 // plugin API and the following messages:
-// - PinMame/OnGameStart: msgData is PinMame game identifier (rom name)
-// - PinMame/OnGameEnd
+// - PinMAME/OnGameStart: msgData is PinMAME game identifier (rom name)
+// - PinMAME/OnGameEnd
 
 static const MsgPluginAPI* msgApi = nullptr;
 static VPXPluginAPI* vpxApi = nullptr;
@@ -42,10 +43,12 @@ static bool isRunning = false;
 static std::mutex sourceMutex;
 static std::mutex stateMutex;
 static std::thread colorizeThread;
-static DisplaySrcId dmdId = { 0 };
+static DisplaySrcId dmdId = {};
 
 static Serum_Frame_Struc* pSerum = nullptr;
 static unsigned int lastRawFrameId = 0;
+
+MSGPI_STRING_VAL_SETTING(serumPathProp, "SerumPath", "Serum Path", "Folder that cotains Serum colorization files (cRZ, cROMc)", true, "", 1024);
 
 class ColorizationState final
 {
@@ -122,18 +125,21 @@ static void ColorizeThread()
    while (isRunning)
    {
       // Original PinMAME code would evaluate DMD frames at a fixed 60 FPS and color rotation are also based on a 60FPS rate. So update at this pace.
-      std::this_thread::sleep_for(std::chrono::nanoseconds(16666));
+      std::this_thread::sleep_for(std::chrono::microseconds(16666));
 
       std::lock_guard<std::mutex> lock1(sourceMutex);
       if (dmdId.id.id == 0)
          continue;
 
       const DisplayFrame frame = dmdId.GetIdentifyFrame(dmdId.id);
+      if (frame.frame == nullptr)
+         break;
+
       if (frame.frameId != lastFrameId)
       {
          // We received a new identify frame to match & colorize
          lastFrameId = frame.frameId;
-         const uint32_t firstrot = Serum_Colorize(const_cast<uint8_t*>(frame.frame));
+         const uint32_t firstrot = Serum_Colorize(const_cast<uint8_t*>(static_cast<const uint8_t*>(frame.frame)));
          if (firstrot != IDENTIFY_NO_FRAME)
          {
             // New frame, eventually starting a new animation
@@ -167,12 +173,12 @@ static void ColorizeThread()
                   state->UpdateFrame64V2();
             }
             
-            // This supposes that we won't decode another frame with a pup trigger before the message will be processed on main thread (should be ok)
+            // This assumes that we won't decode another frame with a pup trigger before the message will be processed on main thread (should be ok)
             if (pSerum->triggerID != 0xffffffff)
-               msgApi->RunOnMainThread(0, [](void* userData) { msgApi->BroadcastMsg(endpointId, onDmdTrigger, &pSerum->triggerID); }, nullptr);
+               msgApi->RunOnMainThread(endpointId, 0, [](void* userData) { msgApi->BroadcastMsg(endpointId, onDmdTrigger, &pSerum->triggerID); }, nullptr);
 
             if (newState)
-               msgApi->RunOnMainThread(0, [](void* userData) { msgApi->BroadcastMsg(endpointId, onDmdSrcChangedId, nullptr); }, nullptr);
+               msgApi->RunOnMainThread(endpointId, 0, [](void* userData) { msgApi->BroadcastMsg(endpointId, onDmdSrcChangedId, nullptr); }, nullptr);
          }
       }
       else if (state && state->m_hasAnimation)
@@ -225,11 +231,12 @@ static void OnGetRenderDMDSrc(const unsigned int eventId, void* userData, void* 
    {
       if (msg.count < msg.maxEntryCount)
       {
-         msg.entries[msg.count] = { 0 };
-         msg.entries[msg.count].id = { endpointId, 0 };
+         msg.entries[msg.count] = {};
+         msg.entries[msg.count].id = { { endpointId, 0 } };
          msg.entries[msg.count].overrideId = dmdId.id;
          msg.entries[msg.count].width = state->m_width32;
          msg.entries[msg.count].height = 32;
+         msg.entries[msg.count].hardware = CTLPI_DISPLAY_HARDWARE_RGB_LED;
          msg.entries[msg.count].frameFormat = CTLPI_DISPLAY_FORMAT_SRGB565;
          msg.entries[msg.count].GetRenderFrame = &GetRenderFrame;
       }
@@ -239,11 +246,12 @@ static void OnGetRenderDMDSrc(const unsigned int eventId, void* userData, void* 
    {
       if (msg.count < msg.maxEntryCount)
       {
-         msg.entries[msg.count] = { 0 };
-         msg.entries[msg.count].id = { endpointId, 0 };
+         msg.entries[msg.count] = {};
+         msg.entries[msg.count].id = { { endpointId, 0 } };
          msg.entries[msg.count].overrideId = dmdId.id;
          msg.entries[msg.count].width = state->m_width;
          msg.entries[msg.count].height = state->m_height;
+         msg.entries[msg.count].hardware = CTLPI_DISPLAY_HARDWARE_RGB_LED;
          msg.entries[msg.count].frameFormat = CTLPI_DISPLAY_FORMAT_SRGB888;
          msg.entries[msg.count].GetRenderFrame = &GetRenderFrame;
       }
@@ -253,11 +261,12 @@ static void OnGetRenderDMDSrc(const unsigned int eventId, void* userData, void* 
    {
       if (msg.count < msg.maxEntryCount)
       {
-         msg.entries[msg.count] = { 0 };
-         msg.entries[msg.count].id = { endpointId, 1 };
+         msg.entries[msg.count] = {};
+         msg.entries[msg.count].id = { { endpointId, 1 } };
          msg.entries[msg.count].overrideId = dmdId.id;
          msg.entries[msg.count].width = state->m_width64;
          msg.entries[msg.count].height = 64;
+         msg.entries[msg.count].hardware = CTLPI_DISPLAY_HARDWARE_RGB_LED;
          msg.entries[msg.count].frameFormat = CTLPI_DISPLAY_FORMAT_SRGB565;
          msg.entries[msg.count].GetRenderFrame = &GetRenderFrame;
       }
@@ -266,7 +275,7 @@ static void OnGetRenderDMDSrc(const unsigned int eventId, void* userData, void* 
 }
 
 // Select the first DMD with a large enough size that supports frame identification
-static void OnDmdSrcChanged(const unsigned int eventId, void* userData, void* msgData)
+static void OnDmdSrcChanged(const unsigned int, void*, void*)
 {
    if (pSerum == nullptr)
       return;
@@ -312,17 +321,29 @@ static void OnControllerGameStart(const unsigned int eventId, void* userData, vo
    // Setup Serum on the selected DMD
    const CtlOnGameStartMsg* msg = static_cast<const CtlOnGameStartMsg*>(msgData);
    assert(msg != nullptr && msg->gameId != nullptr);
-   char crzFolder[1024];
-   msgApi->GetSetting("Serum", "CRZFolder", crzFolder, sizeof(crzFolder));
-   if (crzFolder[0] == '\0') {
-      VPXTableInfo tableInfo;
-      vpxApi->GetTableInfo(&tableInfo);
-      std::filesystem::path tablePath = tableInfo.path;
-      string path = find_case_insensitive_directory_path(tablePath.parent_path().string() + PATH_SEPARATOR_CHAR + "pinmame"s + PATH_SEPARATOR_CHAR + "altcolor"s);
-      if (!path.empty())
-         strncpy_s(crzFolder, sizeof(crzFolder), path.c_str());
-   }
-   pSerum = Serum_Load(crzFolder, msg->gameId, FLAG_REQUEST_32P_FRAMES | FLAG_REQUEST_64P_FRAMES);
+
+   VPXTableInfo tableInfo;
+   vpxApi->GetTableInfo(&tableInfo);
+   std::filesystem::path tablePath = tableInfo.path;
+
+   std::filesystem::path serumPath = serumPathProp_Get();
+   const std::filesystem::path crz = msg->gameId + ".cRZ"s;
+   const std::filesystem::path cromc = msg->gameId + ".cROMc"s;
+
+   // Priority 1: serum/rom/rom.crz
+   if (auto path1 = find_case_insensitive_file_path(tablePath.parent_path() / "serum"sv / msg->gameId / crz); !path1.empty())
+      serumPath = path1.parent_path().parent_path();
+   else if (auto path2 = find_case_insensitive_file_path(tablePath.parent_path() / "serum"sv / msg->gameId / cromc); !path2.empty())
+      serumPath = path2.parent_path().parent_path();
+
+   // Priority 2: pinmame/altcolor/rom/rom.crz
+   else if (auto path3 = find_case_insensitive_file_path(tablePath.parent_path() / "pinmame"sv / "altcolor"sv / msg->gameId / crz); !path3.empty())
+      serumPath = path3.parent_path().parent_path();
+   else if (auto path4 = find_case_insensitive_file_path(tablePath.parent_path() / "pinmame"sv / "altcolor"sv / msg->gameId / cromc); !path4.empty())
+      serumPath = path4.parent_path().parent_path();
+
+   // Default to global user setup folder if no table specific file is found
+   pSerum = Serum_Load(serumPath.string().c_str(), msg->gameId, FLAG_REQUEST_32P_FRAMES | FLAG_REQUEST_64P_FRAMES);
    OnDmdSrcChanged(onDmdSrcChangedId, nullptr, nullptr);
    if (pSerum)
    {
@@ -348,6 +369,8 @@ MSGPI_EXPORT void MSGPIAPI SerumPluginLoad(const uint32_t sessionId, const MsgPl
    // Request and setup shared login API
    LPISetup(endpointId, msgApi);
 
+   msgApi->RegisterSetting(endpointId, &serumPathProp);
+
    unsigned int getVpxApiId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_API);
    msgApi->BroadcastMsg(endpointId, getVpxApiId, &vpxApi);
    msgApi->ReleaseMsgID(getVpxApiId);
@@ -362,14 +385,15 @@ MSGPI_EXPORT void MSGPIAPI SerumPluginLoad(const uint32_t sessionId, const MsgPl
 MSGPI_EXPORT void MSGPIAPI SerumPluginUnload()
 {
    StopColorization();
-   msgApi->UnsubscribeMsg(getDmdSrcId, OnGetRenderDMDSrc);
-   msgApi->UnsubscribeMsg(onDmdSrcChangedId, OnDmdSrcChanged);
-   msgApi->UnsubscribeMsg(onControllerGameStartId, OnControllerGameStart);
-   msgApi->UnsubscribeMsg(onControllerGameEndId, OnControllerGameEnd);
+   msgApi->UnsubscribeMsg(getDmdSrcId, OnGetRenderDMDSrc, nullptr);
+   msgApi->UnsubscribeMsg(onDmdSrcChangedId, OnDmdSrcChanged, nullptr);
+   msgApi->UnsubscribeMsg(onControllerGameStartId, OnControllerGameStart, nullptr);
+   msgApi->UnsubscribeMsg(onControllerGameEndId, OnControllerGameEnd, nullptr);
    msgApi->ReleaseMsgID(onControllerGameStartId);
    msgApi->ReleaseMsgID(onControllerGameEndId);
    msgApi->ReleaseMsgID(onDmdTrigger);
    msgApi->ReleaseMsgID(onDmdSrcChangedId);
    msgApi->ReleaseMsgID(getDmdSrcId);
+   msgApi->FlushPendingCallbacks(endpointId);
    msgApi = nullptr;
 }

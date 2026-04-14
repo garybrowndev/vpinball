@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Actor.h"
-#include "VPXPlugin.h"
+#include "plugins/VPXPlugin.h"
 
 namespace Flex {
 
@@ -41,7 +41,7 @@ public:
    void Draw(Flex::SurfaceGraphics* pGraphics) override;
 
 private:
-   Actor* Get(const string &name);
+   Actor* Get(const string &name, bool logMissing = true);
 
    bool m_clip = false;
    vector<Actor *> m_children;

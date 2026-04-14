@@ -32,54 +32,56 @@ if(BUILD_SHARED)
    add_library(PinMAMEPlugin MODULE ${PINMAME_PLUGIN_SOURCES})
 
    target_include_directories(PinMAMEPlugin PUBLIC
-      plugins/pinmame
       ${CMAKE_SOURCE_DIR}/third-party/include
-      src/plugins
-      src
+      plugins
+      plugins/pinmame
    )
 
-   if(PluginPlatform STREQUAL "windows")
-      add_compile_options(
-         $<$<CONFIG:RELEASE>:/Ob2>
-         $<$<CONFIG:RELEASE>:/O2>
-         $<$<CONFIG:RELEASE>:/Oi>
-         $<$<CONFIG:RELEASE>:/arch:SSE2>
-         $<$<CONFIG:RELEASE>:/fp:fast>
-         $<$<CONFIG:RELEASE>:/fp:except->
-         $<$<CONFIG:RELEASE>:/Ot>
-         $<$<CONFIG:RELEASE>:/GF>
-         $<$<CONFIG:RELEASE>:/GS->
-         $<$<CONFIG:RELEASE>:/Gy>
-         $<$<CONFIG:RELEASE>:/GR>
-         $<$<CONFIG:RELEASE>:/Oy>
-         $<$<CONFIG:RELEASE>:/GT>
-         $<$<CONFIG:RELEASE>:/GL>
-      )
-      set_target_properties(PinMAMEPlugin PROPERTIES
-         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:DEBUG>:Debug>"
-      )
-      target_compile_options(PinMAMEPlugin PUBLIC
-         $<$<CONFIG:RELEASE>:$<$<COMPILE_LANGUAGE:CXX>:${OPT_COMMON}>>
-         $<$<CONFIG:RELEASE>:$<$<COMPILE_LANGUAGE:C>:${OPT_COMMON}>>
-      )
-      target_link_options(PinMAMEPlugin PUBLIC
-         $<$<CONFIG:RELEASE>:/INCREMENTAL:NO>
-         $<$<CONFIG:RELEASE>:/OPT:REF>
-         $<$<CONFIG:RELEASE>:/OPT:ICF>
-         $<$<CONFIG:RELEASE>:/LTCG>
-      )
+   if(PluginPlatform STREQUAL "windows" OR PluginPlatform STREQUAL "windows-mingw")
+      if(MSVC)
+         add_compile_options(
+            $<$<CONFIG:RELEASE>:/Ob2>
+            $<$<CONFIG:RELEASE>:/O2>
+            $<$<CONFIG:RELEASE>:/Oi>
+            $<$<CONFIG:RELEASE>:/arch:SSE2>
+            $<$<CONFIG:RELEASE>:/fp:fast>
+            $<$<CONFIG:RELEASE>:/fp:except->
+            $<$<CONFIG:RELEASE>:/Ot>
+            $<$<CONFIG:RELEASE>:/GF>
+            $<$<CONFIG:RELEASE>:/GS->
+            $<$<CONFIG:RELEASE>:/Gy>
+            $<$<CONFIG:RELEASE>:/GR>
+            $<$<CONFIG:RELEASE>:/Oy>
+            $<$<CONFIG:RELEASE>:/GT>
+            $<$<CONFIG:RELEASE>:/GL>
+         )
+         set_target_properties(PinMAMEPlugin PROPERTIES
+            MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:DEBUG>:Debug>"
+         )
+         target_compile_options(PinMAMEPlugin PUBLIC
+            $<$<CONFIG:RELEASE>:$<$<COMPILE_LANGUAGE:CXX>:${OPT_COMMON}>>
+            $<$<CONFIG:RELEASE>:$<$<COMPILE_LANGUAGE:C>:${OPT_COMMON}>>
+         )
+         target_link_options(PinMAMEPlugin PUBLIC
+            $<$<CONFIG:RELEASE>:/INCREMENTAL:NO>
+            $<$<CONFIG:RELEASE>:/OPT:REF>
+            $<$<CONFIG:RELEASE>:/OPT:ICF>
+            $<$<CONFIG:RELEASE>:/LTCG>
+         )
+      endif()
+      target_link_directories(PinMAMEPlugin PUBLIC ${CMAKE_SOURCE_DIR}/third-party/build-libs/${PluginPlatform}-${PluginArch} ${CMAKE_SOURCE_DIR}/third-party/runtime-libs/${PluginPlatform}-${PluginArch})
       if (PluginArch STREQUAL "x64")
          set_target_properties(PinMAMEPlugin PROPERTIES
+            PREFIX ""
             OUTPUT_NAME "plugin-pinmame64"
          )
-         target_link_directories(PinMAMEPlugin PUBLIC ${CMAKE_SOURCE_DIR}/third-party/build-libs/windows-x64)
-         target_link_libraries(PinMAMEPlugin pinmame64.lib)
+         target_link_libraries(PinMAMEPlugin pinmame64)
       else()
          set_target_properties(PinMAMEPlugin PROPERTIES
+            PREFIX ""
             OUTPUT_NAME "plugin-pinmame"
          )
-         target_link_directories(PinMAMEPlugin PUBLIC ${CMAKE_SOURCE_DIR}/third-party/build-libs/windows-x86)
-         target_link_libraries(PinMAMEPlugin pinmame.lib)
+         target_link_libraries(PinMAMEPlugin pinmame)
       endif()
    else()
       set_target_properties(PinMAMEPlugin PROPERTIES
@@ -103,21 +105,30 @@ if(BUILD_SHARED)
       COMMAND "${CMAKE_COMMAND}" -E rm "$<TARGET_FILE:PinMAMEPlugin>"
    )
 
-   if(PluginPlatform STREQUAL "windows")
-      if (PluginArch STREQUAL "x64")
+   if(POST_BUILD_COPY_EXT_LIBS)
+      if(PluginPlatform STREQUAL "windows")
+         if (PluginArch STREQUAL "x64")
+            add_custom_command(TARGET PinMAMEPlugin POST_BUILD
+               COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/third-party/runtime-libs/${PluginPlatform}-${PluginArch}/pinmame64.dll" "${PLUGINS_DIR}/pinmame/pinmame64.dll"
+            )
+         elseif (PluginArch STREQUAL "x86")
+            add_custom_command(TARGET PinMAMEPlugin POST_BUILD
+               COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/third-party/runtime-libs/${PluginPlatform}-${PluginArch}/pinmame.dll" "${PLUGINS_DIR}/pinmame/pinmame.dll"
+            )
+         endif()
+      elseif(PluginPlatform STREQUAL "windows-mingw")
          add_custom_command(TARGET PinMAMEPlugin POST_BUILD
-            COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/third-party/runtime-libs/windows-${PluginArch}/pinmame64.dll" "${PLUGINS_DIR}/pinmame/pinmame64.dll"
+            COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/third-party/runtime-libs/${PluginPlatform}-${PluginArch}/pinmame64.dll" "${PLUGINS_DIR}/pinmame/pinmame64.dll"
+            COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/third-party/runtime-libs/${PluginPlatform}-${PluginArch}/libgcc_s_seh-1.dll" "${PLUGINS_DIR}/pinmame/libgcc_s_seh-1.dll"
+            COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/third-party/runtime-libs/${PluginPlatform}-${PluginArch}/libstdc++-6.dll" "${PLUGINS_DIR}/pinmame/libstdc++-6.dll"
+            COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/third-party/runtime-libs/${PluginPlatform}-${PluginArch}/libwinpthread-1.dll" "${PLUGINS_DIR}/pinmame/libwinpthread-1.dll"
          )
-      elseif (PluginArch STREQUAL "x86")
+      elseif(PluginPlatform STREQUAL "linux")
          add_custom_command(TARGET PinMAMEPlugin POST_BUILD
-            COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_SOURCE_DIR}/third-party/runtime-libs/windows-${PluginArch}/pinmame.dll" "${PLUGINS_DIR}/pinmame/pinmame.dll"
+            COMMAND cp -a "${CMAKE_SOURCE_DIR}/third-party/runtime-libs/linux-${PluginArch}/libpinmame.so" "${PLUGINS_DIR}/pinmame/"
+            COMMAND cp -a "${CMAKE_SOURCE_DIR}/third-party/runtime-libs/linux-${PluginArch}/libpinmame.so.*" "${PLUGINS_DIR}/pinmame/"
          )
       endif()
-   elseif(PluginPlatform STREQUAL "linux")
-      add_custom_command(TARGET PinMAMEPlugin POST_BUILD
-         COMMAND cp -a "${CMAKE_SOURCE_DIR}/third-party/runtime-libs/linux-${PluginArch}/libpinmame.so" "${PLUGINS_DIR}/pinmame/"
-         COMMAND cp -a "${CMAKE_SOURCE_DIR}/third-party/runtime-libs/linux-${PluginArch}/libpinmame.so.*" "${PLUGINS_DIR}/pinmame/"
-      )
    endif()
 endif()
 
@@ -127,10 +138,9 @@ if(BUILD_STATIC)
    add_library(PinMAMEPlugin STATIC ${PINMAME_PLUGIN_SOURCES})
 
    target_include_directories(PinMAMEPlugin PUBLIC
-      plugins/pinmame
       ${CMAKE_SOURCE_DIR}/third-party/include
-      src/plugins
-      src
+      plugins
+      plugins/pinmame
    )
 
    set_target_properties(PinMAMEPlugin PROPERTIES

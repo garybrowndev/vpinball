@@ -1,12 +1,10 @@
 import SwiftUI
 
 struct SettingsWebServerView: View {
-    @EnvironmentObject var vpinballViewModel: VPinballViewModel
-    @EnvironmentObject var settingsModel: SettingsModel
+    @ObservedObject var settingsModel: SettingsModel
+    @ObservedObject var vpinballModel = VPinballModel.shared
 
     var showInput: (String, String, UIKeyboardType, @escaping (String) -> Void) -> Void
-
-    let vpinballManager = VPinballManager.shared
 
     var body: some View {
         Section {
@@ -33,23 +31,18 @@ struct SettingsWebServerView: View {
             Text("Web Server")
         }
         footer: {
-            if let url = vpinballViewModel.webServerURL, !url.isEmpty {
+            if let url = vpinballModel.webServerURL, !url.isEmpty {
                 Text(.init("Web Server is running and can be accessed at: \(url)."))
             } else {
                 Text("Web Server is not running.")
             }
         }
         .onChange(of: settingsModel.webServer) {
-            handleWebServer()
+            settingsModel.handleWebServer()
         }
         .onChange(of: settingsModel.webServerPort) {
-            handleWebServerPort()
+            settingsModel.handleWebServerPort()
         }
-    }
-
-    func handleWebServer() {
-        vpinballManager.saveValue(.standalone, "WebServer", settingsModel.webServer)
-        vpinballManager.updateWebServer()
     }
 
     func handleShowWebServerPort() {
@@ -60,7 +53,7 @@ struct SettingsWebServerView: View {
     }
 
     func handleWebServerPortConfirm(value: String) {
-        if let webServerPort = Int(value), webServerPort >= 0 && webServerPort <= 65535 {
+        if let webServerPort = Int(value), webServerPort >= 0, webServerPort <= 65535 {
             settingsModel.webServerPort = webServerPort
         } else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
@@ -68,17 +61,10 @@ struct SettingsWebServerView: View {
             }
         }
     }
-
-    func handleWebServerPort() {
-        vpinballManager.saveValue(.standalone, "WebServerPort", Int(settingsModel.webServerPort))
-        vpinballManager.updateWebServer()
-    }
 }
 
 #Preview {
     List {
-        SettingsView()
+        SettingsWebServerView(settingsModel: SettingsModel()) { _, _, _, _ in }
     }
-    .environmentObject(VPinballViewModel.shared)
-    .environmentObject(SettingsModel())
 }

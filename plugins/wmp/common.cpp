@@ -1,3 +1,5 @@
+// license:GPLv3+
+
 #include "common.h"
 #include <filesystem>
 #include <algorithm>
@@ -23,10 +25,11 @@ string normalize_path_separators(const string& szPath)
 {
    string szResult = szPath;
 
-   if (PATH_SEPARATOR_CHAR == '/')
+   #if '/' == PATH_SEPARATOR_CHAR
       std::ranges::replace(szResult.begin(), szResult.end(), '\\', PATH_SEPARATOR_CHAR);
-   else
+   #else
       std::ranges::replace(szResult.begin(), szResult.end(), '/', PATH_SEPARATOR_CHAR);
+   #endif
 
    auto end = std::unique(szResult.begin(), szResult.end(),
       [](char a, char b) { return a == b && a == PATH_SEPARATOR_CHAR; });
@@ -45,23 +48,23 @@ string find_case_insensitive_file_path(const string& szPath)
       if (std::filesystem::exists(p, ec))
          return p.string();
 
-      auto parent = p.parent_path();
+      const auto& parent = p.parent_path();
       string base;
       if (parent.empty() || parent == p) {
-         base = ".";
+         base = "."sv;
       } else {
          base = self(self, parent.string());
          if (base.empty())
             return string();
       }
 
-      for (auto& ent : std::filesystem::directory_iterator(base, ec)) {
+      for (const auto& ent : std::filesystem::directory_iterator(base, ec)) {
          if (!ec && StrCompareNoCase(ent.path().filename().string(), p.filename().string())) {
-            auto found = ent.path().string();
+            const auto& found = ent.path();
             if (found != path) {
-               LOGI("case insensitive file match: requested \"%s\", actual \"%s\"", path.c_str(), found.c_str());
+               LOGI(std::format("Case insensitive file match: requested \"{}\", actual \"{}\"", path, found.string()));
             }
-            return found;
+            return found.string();
          }
       }
 

@@ -13,7 +13,7 @@ void ControlCollection::Add(ControlInfo* pControlInfo)
 {
    bool add = true;
 
-   for (auto& it : *this) {
+   for (const auto& it : *this) {
       if (it->GetStartDigit() == pControlInfo->GetStartDigit()) {
          add = false;
          break;
@@ -29,14 +29,15 @@ void ControlCollection::Add(ControlInfo* pControlInfo)
 
 void ControlCollection::SetScore(B2SData* pB2SData, int score)
 {
-   string scoreAsString = string(m_digits > std::to_string(score).length()
-      ? m_digits - std::to_string(score).length() : 0,  ' ') + std::to_string(score);
-   if (scoreAsString.length() > m_digits)
+   string scoreAsString = std::to_string(score);
+   if (m_digits > (int)scoreAsString.length())
+      scoreAsString = string(m_digits - (int)scoreAsString.length(), ' ') + scoreAsString;
+   else if ((int)scoreAsString.length() > m_digits)
       scoreAsString = scoreAsString.substr(scoreAsString.length() - m_digits);
 
-   for (auto& pControl : *this) {
+   for (const auto& pControl : *this) {
       // get the part of the score
-      string partofscore = scoreAsString.substr(0, pControl->GetDigits());
+      const string partofscore = scoreAsString.substr(0, pControl->GetDigits());
 
       // pass matching score part to real control
       switch (pControl->GetType()) {
@@ -46,11 +47,11 @@ void ControlCollection::SetScore(B2SData* pB2SData, int score)
          case eControlType_Dream7LEDDisplay:
             if (!pControl->GetLEDDisplay()->IsVisible()) {
                for (int i = pControl->GetStartDigit(); i < pControl->GetStartDigit() + pControl->GetDigits(); i++)
-                  (*pB2SData->GetLEDs())["LEDBox" + std::to_string(i)]->SetText(partofscore.substr(i - pControl->GetStartDigit(), 1));
+                  (*pB2SData->GetLEDs())["LEDBox" + std::to_string(i)]->SetText(string(1,partofscore[i - pControl->GetStartDigit()]));
             }
             else {
                for (int i = 0; i < pControl->GetDigits(); i++)
-                  pControl->GetLEDDisplay()->SetValue(i, partofscore.substr(i, 1));
+                  pControl->GetLEDDisplay()->SetValue(i, string(1,partofscore[i]));
             }
             break;
          case eControlType_ReelBox:

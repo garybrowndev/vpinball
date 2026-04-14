@@ -8,13 +8,14 @@
 
 #include <atomic>
 #include "utils/hash.h"
-#ifndef __STANDALONE__
-#include "ui/dialogs/SearchSelectDialog.h"
-#endif
 #include "renderer/RenderProbe.h"
 #include "renderer/ViewSetup.h"
 
-#include "input/pininput.h"
+#include "input/InputManager.h"
+
+#include "ui/win/PinTableMDI.h"
+
+#include "parts/pinbinary.h"
 
 #ifdef __STANDALONE__
 #include <iostream>
@@ -36,17 +37,6 @@ struct LightSource
    Vertex3Ds pos;
 };
 
-struct ProtectionData
-{
-   int32_t fileversion;
-   int32_t size;
-   uint8_t paraphrase[16 + 8];
-   uint32_t flags;
-   int32_t keyversion;
-   int32_t spare1;
-   int32_t spare2;
-};
-
 struct WhereUsedInfo
 {
    string searchObjectName;      // Source object to search for (images, materials etc)
@@ -54,36 +44,11 @@ struct WhereUsedInfo
    string whereUsedPropertyName; // Property name where used (If searching for images this could be 'Image', 'Side Image' etc.  If search for materials this could be 'Material', 'Cap Material, 'Base Material' etc.
 };
 
-class ScriptGlobalTable;
-
-class PinTableMDI final : public CMDIChild
-{
-public:
-   PinTableMDI(VPinball *vpinball);
-   ~PinTableMDI()
-   #ifndef __STANDALONE__
-   override
-   #endif
-   ;
-   CComObject<PinTable> *GetTable() { return m_table; }
-   bool CanClose() const;
-
-protected:
-   void PreCreate(CREATESTRUCT &cs) override;
-   int OnCreate(CREATESTRUCT &cs) override;
-   void OnClose() override;
-   LRESULT OnMDIActivate(UINT msg, WPARAM wparam, LPARAM lparam) override;
-   BOOL OnEraseBkgnd(CDC &dc) override;
-
-private:
-   CComObject<PinTable> *m_table;
-   VPinball *m_vpinball;
-};
 
 class VPXFileFeedback;
+namespace VPX::InGameUI { class InGameUIItem; }
 
-class PinTable : public CWnd,
-                 public CComObjectRootEx<CComSingleThreadModel>,
+class PinTable : public CComObjectRootEx<CComSingleThreadModel>,
                  public IDispatchImpl<ITable, &IID_ITable, &LIBID_VPinballLib>,
                  public IConnectionPointContainerImpl<PinTable>,
                  public EventProxy<PinTable, &DIID_ITableEvents>,
@@ -93,7 +58,6 @@ class PinTable : public CWnd,
                  public IProvideClassInfo2Impl<&CLSID_Table, &DIID_ITableEvents, &LIBID_VPinballLib>,
                  public ISelect,
                  public IScriptable,
-                 public IScriptableHost,
                  public IEditable,
                  public IPerPropertyBrowsing // Ability to fill in dropdown in property browser
 {
@@ -231,7 +195,6 @@ public:
 
    STDMETHOD(get_FileName)(/*[out, retval]*/ BSTR *pVal);
 
-   const WCHAR *get_Name() const final;
    STDMETHOD(get_Name)(/*[out, retval]*/ BSTR *pVal);
    STDMETHOD(put_Name)(/*[in]*/ BSTR newVal);
    STDMETHOD(get_EnableAntialiasing)(/*[out, retval]*/ UserDefaultOnOff *pVal);
@@ -283,17 +246,6 @@ public:
    STDMETHOD(get_DeadZone)(/*[out, retval]*/ int *pVal); //!! remove?!
    STDMETHOD(put_DeadZone)(/*[in]*/ int newVal); //!! remove?!
 
-#ifdef UNUSED_TILT
-   STDMETHOD(get_JoltAmount)(/*[out, retval]*/ int *pVal);
-   STDMETHOD(put_JoltAmount)(/*[in]*/ int newVal);
-   STDMETHOD(get_TiltAmount)(/*[out, retval]*/ int *pVal);
-   STDMETHOD(put_TiltAmount)(/*[in]*/ int newVal);
-   STDMETHOD(get_JoltTriggerTime)(/*[out, retval]*/ int *pVal);
-   STDMETHOD(put_JoltTriggerTime)(/*[in]*/ int newVal);
-   STDMETHOD(get_TiltTriggerTime)(/*[out, retval]*/ int *pVal);
-   STDMETHOD(put_TiltTriggerTime)(/*[in]*/ int newVal);
-#endif
-
    STDMETHOD(get_TableSoundVolume)(/*[out, retval]*/ int *pVal);
    STDMETHOD(put_TableSoundVolume)(/*[in]*/ int newVal);
    STDMETHOD(get_TableMusicVolume)(/*[out, retval]*/ int *pVal);
@@ -326,6 +278,15 @@ public:
    STDMETHOD(get_VersionMinor)(/*[out, retval]*/ int *pVal);
    STDMETHOD(get_VersionRevision)(/*[out, retval]*/ int *pVal);
 
+   struct TableOption
+   {
+      const VPX::Properties::PropertyRegistry::PropId id;
+      const float displayScale;
+      const string format;
+      float value;
+   };
+   const vector<TableOption>& GetOptions() const;
+   void SetOptionLiveValue(VPX::Properties::PropertyRegistry::PropId id, float value); // Live value (not persisted unlike the script API put_Option which directly persist the option value)
    STDMETHOD(get_Option)(BSTR optionName, float minValue, float maxValue, float step, float defaultValue, int unit, /*[optional][in]*/ VARIANT values, /*[out, retval]*/ float *param);
    STDMETHOD(put_Option)(BSTR optionName, float minValue, float maxValue, float step, float defaultValue, int unit, /*[optional][in]*/ VARIANT values, /*[in]*/ float val);
 
@@ -334,26 +295,31 @@ public:
    PinTable();
    ~PinTable() override;
 
+private:
+   PinTable *CopyForPlay() const final { assert(!"const CopyForPlay not implemented"); return nullptr; } // inherited via IEditable
+public:
    PinTable *CopyForPlay();
 
-   void ClearForOverwrite() final;
-   void InitBuiltinTable(const size_t tableId);
-   void InitTablePostLoad();
+   EventProxyBase *GetEventProxyBase() final { return (EventProxyBase *)this; }
+
    void RemoveInvalidReferences();
 
    HRESULT GetTypeName(BSTR *pVal) const final;
 
-   void SetCaption(const string &szCaption);
    void SetMouseCapture();
-   int ShowMessageBox(const char *text) const;
-   POINT GetScreenPoint() const;
 
-   void UIRenderPass2(Sur *const psur) final;
-   void Paint(HDC hdc);
-   ISelect *HitTest(const int x, const int y);
+   // IEditable
+   void UIRenderPass2(Sur *const psur) final { }
+
+   // ISelect
+   bool IsUILocked() const final { return false; }
+   void SetUILock(bool lock) final { }
+   bool IsUIVisible() const final { return true; }
+   void SetUIVisible(bool visible) final { }
+
+   void OnLButtonDown(int x, int y) final;
+   void OnLButtonUp(int x, int y) final { }
    void SetDirtyDraw() final;
-
-   void Render3DProjection(Sur *const psur);
 
    bool GetDecalsEnabled()  const { return m_renderDecals; }  // Enable backdrop image, decals and lights on backdrop
    bool GetEMReelsEnabled() const { return m_renderEMReels; } // Enable dispreel on backdrop
@@ -361,24 +327,24 @@ public:
    void Copy(int x, int y);
    void Paste(const bool atLocation, const int x, const int y);
 
-   void ExportBlueprint();
    void ExportTableMesh();
-   void ImportBackdropPOV(const string &filename);
+   void ImportBackdropPOV(const std::filesystem::path &filename);
    void ExportBackdropPOV() const;
 
    static std::array<string, 18> VPPelementNames; // names of the fields in a .vpp file
-   void ImportVPP(const string &filename);
+   void ImportVPP(const std::filesystem::path &filename);
 
-   void FireOptionEvent(int event);
-   void FireGenericKeyEvent(int dispid, int keycode);
+   enum class OptionEventType { Initialized, Changed, Reseted, EndOfEdit };
+   void FireOptionEvent(OptionEventType event);
 
-   VPX::Sound *ImportSound(const string &filename);
-   void ReImportSound(VPX::Sound *const pps, const string &filename);
-   bool ExportSound(VPX::Sound *const pps, const string &filename);
+   VPX::Sound *ImportSound(const std::filesystem::path &filename);
+   void ReImportSound(VPX::Sound *const pps, const std::filesystem::path &filename);
+   bool ExportSound(VPX::Sound *const pps, const std::filesystem::path &filename);
    void RemoveSound(VPX::Sound *const pps);
-   bool ExportImage(const Texture *const ppi, const string &filename);
-   Texture* ImportImage(const string &filename, const string &imageName);
+   static bool ExportImage(const Texture *const ppi, const string &filename);
+   Texture* ImportImage(const std::filesystem::path &filename, const string &imageName);
    void RemoveImage(Texture *const ppi);
+
    Texture *GetImage(const string &szName) const;
    bool GetImageLink(const Texture *const ppi) const;
    PinBinary *GetImageLinkBinary(const int id);
@@ -403,16 +369,17 @@ public:
    void NewCollection(const HWND hwndListView, const bool fFromSelection);
    void ListCollections(HWND hwndListView);
    int AddListCollection(HWND hwndListView, CComObject<Collection> *pcol);
-   void RemoveCollection(CComObject<Collection> *pcol);
-   void SetCollectionName(Collection *pcol, const char *szName, HWND hwndList, int index);
 
-   void DoContextMenu(int x, int y, const int menuid, ISelect *psel);
+#ifndef __STANDALONE__
    void DoCommand(int icmd, int x, int y) final;
+#endif
    bool FMutilSelLocked();
 
-   void SelectItem(IScriptable *piscript) final;
-   void DoCodeViewCommand(int command) final;
-   void SetDirtyScript(SaveDirtyState sds) final;
+   // Expected by CodeViewer
+   void SelectItem(IScriptable *piscript);
+   void DoCodeViewCommand(int command);
+   void SetDirtyScript(SaveDirtyState sds);
+
    void ExportMesh(ObjLoader &loader) final;
 
    // Multi-object manipulation
@@ -424,37 +391,51 @@ public:
    void Scale(const float scalex, const float scaley, const Vertex2D &pvCenter, const bool useElementCenter) final;
    void Translate(const Vertex2D &pvOffset) final;
 
+   // IFireEvents
+   IDispatch *GetIDispatch() final { return (IDispatch *)this; }
+   const IDispatch *GetIDispatch() const final { return (const IDispatch *)this; }
+
    // IEditable (mostly bogus for now)
+   IFireEvents *GetIFireEvents() final { return (IFireEvents *)this; }
    void UIRenderPass1(Sur *const psur) final { }
-   ItemTypeEnum GetItemType() const final { return eItemTable; }
-   HRESULT InitLoad(IStream *pstm, PinTable *ptable, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey) final;
-   HRESULT InitPostLoad() final { return S_OK; }
-   HRESULT InitVBA(bool fNew, WCHAR *const wzName) final { return S_OK; }
+   void ClearForOverwrite() final;
+   void Load(IObjectReader &reader) final;
+   void Save(IObjectWriter& writer, const bool saveForUndo) final;
+   IHitable *GetIHitable() final { return nullptr; }
+   const IHitable *GetIHitable() const final { return nullptr; }
+   IRenderable *GetIRenderable() final { return nullptr; }
+   const IRenderable *GetIRenderable() const final { return nullptr; }
    ISelect *GetISelect() final { return (ISelect *)this; }
    const ISelect *GetISelect() const final { return (const ISelect *)this; }
    void SetDefaults(const bool fromMouseClick) final { }
-   IScriptable *GetScriptable() final { return (IScriptable *)this; }
-   const IScriptable *GetScriptable() const final { return (const IScriptable *)this; }
-   void SetDefaultPhysics(const bool fromMouseClick) final;
+   void WriteRegDefaults() final { }
+   IScriptable *GetIScriptable() final { return (IScriptable *)this; }
+   const IScriptable *GetIScriptable() const final { return (const IScriptable *)this; }
+   void BeginUndo() final;
+   void EndUndo() final;
+   void Undo();
+   void Delete() final { } // Can't delete table itself
+   void Uncreate() final { }
 
+   // ISelect
+   void SetDefaultPhysics(const bool fromMouseClick) final;
+   IEditable *GetIEditable() final { return (IEditable *)this; }
+   const IEditable *GetIEditable() const final { return (const IEditable *)this; }
+
+   // FIXME both ISelect and IEditable
+   ItemTypeEnum GetItemType() const final { return eItemTable; }
    PinTable *GetPTable() final { return this; }
    const PinTable *GetPTable() const final { return this; }
+
+
    static string GetElementName(IEditable *pedit);
 
    IEditable *GetElementByName(const char *const name) const;
    void OnDelete();
 
-   void DoLeftButtonDown(int x, int y, bool zoomIn);
-   void OnLeftButtonUp(int x, int y);
-   void OnRightButtonDown(int x, int y);
-   void FillCollectionContextMenu(CMenu &mainMenu, CMenu &colSubMenu, ISelect *psel);
-   void FillLayerContextMenu(CMenu &mainMenu, CMenu &layerSubMenu, ISelect *psel);
-   void AssignSelectionToPartGroup(PartGroup *group);
-   void OnRightButtonUp(int x, int y);
-   void DoMouseMove(int x, int y);
-   void OnLeftDoubleClick(int x, int y);
    void UseTool(int x, int y, int tool);
-   void OnKeyDown(int key);
+
+   void AssignSelectionToPartGroup(PartGroup *group);
 
    // Transform editor window coordinates to table coordinates
    Vertex2D TransformPoint(int x, int y) const;
@@ -464,66 +445,53 @@ public:
    ISelect *GetSelectedItem() const { return m_vmultisel.ElementAt(0); }
    void AddMultiSel(ISelect *psel, const bool add, const bool update, const bool contextClick);
 
-   void BeginAutoSaveCounter();
-   void EndAutoSaveCounter();
-   void AutoSave();
-
-   HRESULT TableSave();
-   HRESULT SaveAs();
-   HRESULT Save(const bool saveAs);
+   HRESULT Save();
    HRESULT SaveToStorage(IStorage *pstg);
    HRESULT SaveToStorage(IStorage *pstg, VPXFileFeedback& feedback);
+   HRESULT LoadGameFromFilename(const std::filesystem::path &filename);
+   HRESULT LoadGameFromFilename(const std::filesystem::path &filename, VPXFileFeedback &feedback);
+   void LoadScriptOverride(const std::filesystem::path& scriptPath);
+
+private:
    HRESULT SaveInfo(IStorage *pstg, HCRYPTHASH hcrypthash);
    HRESULT SaveCustomInfo(IStorage *pstg, IStream *pstmTags, HCRYPTHASH hcrypthash);
-   static HRESULT WriteInfoValue(IStorage *pstg, const wstring& wzName, const string &szValue, HCRYPTHASH hcrypthash);
-   static HRESULT ReadInfoValue(IStorage *pstg, const wstring& wzName, string &output, HCRYPTHASH hcrypthash);
-   HRESULT SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool saveForUndo) final;
-   HRESULT LoadGameFromFilename(const string &filename);
-   HRESULT LoadGameFromFilename(const string &filename, VPXFileFeedback& feedback);
+   static HRESULT WriteInfoValue(IStorage *pstg, const wstring &wzName, const string &szValue, HCRYPTHASH hcrypthash);
+   static HRESULT ReadInfoValue(IStorage *pstg, const wstring &wzName, string &output, HCRYPTHASH hcrypthash);
    HRESULT LoadInfo(IStorage *pstg, HCRYPTHASH hcrypthash, int version);
    HRESULT LoadCustomInfo(IStorage *pstg, IStream *pstmTags, HCRYPTHASH hcrypthash, int version);
-   HRESULT LoadData(IStream *pstm, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey);
-   IEditable *GetIEditable() final { return (IEditable *)this; }
-   const IEditable *GetIEditable() const final { return (const IEditable *)this; }
-   void Delete() final { } // Can't delete table itself
-   void Uncreate() final { }
-   bool LoadToken(const int id, BiffReader *const pbr) final;
 
-   virtual IDispatch *GetPrimary() { return GetDispatch(); }
-   IDispatch *GetDispatch() final { return (IDispatch *)this; }
-   const IDispatch *GetDispatch() const final { return (const IDispatch *)this; }
-   IFireEvents *GetIFireEvents() final { return (IFireEvents *)this; }
-
-   void SetZoom(float zoom);
-   void SetMyScrollInfo();
-
-   void BeginUndo() final;
-   void EndUndo() final;
-   void Undo();
-
+public:
    void Uncreate(IEditable *pie);
    void Undelete(IEditable *pie);
 
-   STDMETHOD(GetDisplayString)(DISPID dispID, BSTR *pbstr) { return hrNotImplemented; }
-   STDMETHOD(MapPropertyToPage)(DISPID dispID, CLSID *pclsid) { return hrNotImplemented; }
+   STDMETHOD(GetDisplayString)(DISPID dispID, BSTR *pbstr) { return ResultFromScode(E_NOTIMPL); }
+   STDMETHOD(MapPropertyToPage)(DISPID dispID, CLSID *pclsid) { return ResultFromScode(E_NOTIMPL); }
    STDMETHOD(GetPredefinedStrings)(DISPID dispID, CALPOLESTR *pcaStringsOut, CADWORD *pcaCookiesOut);
    STDMETHOD(GetPredefinedValue)(DISPID dispID, DWORD dwCookie, VARIANT *pVarOut);
 
    STDMETHOD(GetPredefinedStrings)(DISPID dispID, CALPOLESTR *pcaStringsOut, CADWORD *pcaCookiesOut, IEditable *piedit);
    STDMETHOD(GetPredefinedValue)(DISPID dispID, DWORD dwCookie, VARIANT *pVarOut, IEditable *piedit);
 
-   void OnLButtonDown(int x, int y) final;
-   void OnLButtonUp(int x, int y) final;
-   void OnMouseMove(int x, int y) final;
-   void OnMouseMove(const short x, const short y);
+   const vector<IEditable *>& GetParts() const { return m_vedit; }
+   bool HasPart(IEditable *part) const { return std::ranges::find(m_vedit, part) != m_vedit.end(); }
+   void AddPart(IEditable *part);
+   void RemovePart(IEditable *part);
+   void RenamePart(IEditable *part, const wstring& newName);
+   void MovePartToFront(IEditable *part);
+   void MovePartToBack(IEditable *part);
+   void ReorderParts(bool isDrawingOrder);
+   void AddCollection(Collection *collection);
+   void RemoveCollection(Collection *collection);
+   void RenameCollection(Collection *collection, const wstring &newName);
+   bool IsNameUnique(const wstring &wzName) const;
+   void GetUniqueName(const ItemTypeEnum type, wstring& wzUniqueName) const;
+   wstring GetUniqueName(const wstring &wzRoot) const;
 
-   void SetDefaultView();
-   void GetViewRect(FRect *pfrect) const;
+private:
+   ankerl::unordered_dense::map<wstring, IEditable *> m_scriptableNames;
+   vector<IEditable *> m_vedit;
 
-   bool IsNameUnique(const wstring& wzName) const;
-   void GetUniqueName(const ItemTypeEnum type, WCHAR *const wzUniqueName, const size_t wzUniqueName_maxlength) const;
-   void GetUniqueName(const wstring& wzRoot, WCHAR *const wzUniqueName, const size_t wzUniqueName_maxlength) const;
-   void GetUniqueNamePasting(const int type, WCHAR *const wzUniqueName, const size_t wzUniqueName_maxlength) const;
+public:
 
    float GetSurfaceHeight(const string &name, float x, float y) const;
 
@@ -534,8 +502,6 @@ public:
    void CheckDirty();
    bool FDirty() const;
 
-   void FVerifySaveToClose();
-
    VPX::Sound *GetSound(const string &name) const;
 
    void UpdateCollection(const int index);
@@ -543,10 +509,7 @@ public:
    void MoveCollectionDown(CComObject<Collection> *pcol);
    void UpdatePropertyImageList();
    void UpdatePropertyMaterialList();
-   int GetDetailLevel() const { return m_settings.LoadValueWithDefault(Settings::Player, "AlphaRampAccuracy"s, 10); } // used for rubber, ramp and ball
-   float GetZPD() const;
-   float GetMaxSeparation() const;
-   float Get3DOffset() const;
+   int GetDetailLevel() const { return m_settings.GetPlayer_AlphaRampAccuracy(); } // used for rubber, ramp and ball
 
    FRect3D GetBoundingBox() const;
    void ComputeNearFarPlane(const Matrix3D &matWorldView, const float scale, float &zNear, float &zFar) const;
@@ -554,7 +517,7 @@ public:
 
    bool RenderSolid() const { return m_renderSolid; }
 
-   void InvokeBallBallCollisionCallback(const class HitBall *b1, const class HitBall *b2, float hitVelocity);
+   static void InvokeBallBallCollisionCallback(const class HitBall *b1, const class HitBall *b2, float hitVelocity);
 
    BEGIN_COM_MAP(PinTable)
    COM_INTERFACE_ENTRY(ITable)
@@ -576,49 +539,80 @@ public:
 
    bool IsMaterialNameUnique(const string &name) const;
    Material *GetMaterial(const string &name) const;
-   Material *GetSurfaceMaterial(const string &name) const;
-   Texture *GetSurfaceImage(const string &name) const;
+   Material *GetSurfaceMaterial(const wstring &name) const;
+   Texture *GetSurfaceImage(const wstring &name) const;
+
+   std::unique_ptr<Material> m_dummyMaterial;
 
    bool GetCollectionIndex(const ISelect *const element, int &collectionIndex, int &elementIndex);
 
+   Vertex2D EvaluateGlassHeight() const;
+
    void LockElements();
 
-   string m_filename;
+   std::filesystem::path m_filename;
    string m_title;
 
    // Flag that disables all table edition. Lock toggles are counted to identify version changes in a table (for example to guarantee untouched table for tournament)
    bool IsLocked() const { return (m_tablelocked & 1) != 0; }
    void ToggleLock() { BeginUndo(); MarkForUndo(); m_tablelocked++; EndUndo(); SetDirtyDraw(); }
 
-   bool TournamentModePossible() const { return IsLocked() && !FDirty() && m_pcv->external_script_name.empty(); }
+   bool TournamentModePossible() const { return IsLocked() && !FDirty() && m_external_script_name.empty(); }
 
-   void SetSettingsFileName(const string &path)
+   // Override automatic ini path (used for commandline override)
+   void SetSettingsFileName(const std::filesystem::path &path)
    {
-      m_iniFileName = FileExists(path) ? path : string();
-      m_settings.LoadFromFile(GetSettingsFileName(), false);
+      m_iniFileName = FileExists(path) ? path : std::filesystem::path();
+      m_settings.SetIniPath(GetSettingsFileName());
+      m_settings.Load(false);
    }
 
-   string GetSettingsFileName() const
+   // Get the ini file name to use for this table (either overridden or derived from table or folder name)
+   std::filesystem::path GetSettingsFileName() const
    {
+      // Overriden externally (on command line)
       if (!m_iniFileName.empty() && FileExists(m_iniFileName))
          return m_iniFileName;
-      string INIFilename = m_filename;
-      if (ReplaceExtensionFromFilename(INIFilename, "ini"s))
-         return INIFilename;
-      return string();
+
+      // File not yet saved => No table ini file available
+      if (!FileExists(m_filename))
+         return std::filesystem::path();
+
+      // Table ini file alongside table file, name matching table filename
+      std::filesystem::path tableIni = m_filename;
+      tableIni.replace_extension(".ini");
+      if (FileExists(tableIni))
+         return tableIni;
+
+      // Table ini file alongside table file, name matching folder name
+      const auto folder = m_filename.parent_path();
+      auto fn = folder.filename();
+      fn += ".ini"sv;
+      std::filesystem::path folderIni = folder / fn;
+      folderIni = find_case_insensitive_file_path(folderIni);
+      if (!folderIni.empty())
+         return folderIni;
+
+      // No existing file: defaults to ini file alongside table file, name matching table filename
+      return tableIni;
    }
 
-   string m_iniFileName;
    Settings m_settings; // Settings for this table (apply overrides above application settings)
 
-   bool m_isLiveInstance = false; // true for live shallow copy of a table
+   PinTable * m_liveBaseTable = nullptr; // Defined when this table is a live shallow copy of another table
+   template <class T> T *GetLiveFromStartup(T *obj) { return static_cast<T *>(m_startupToLive[obj]); }
+   template <class T> T *GetStartupFromLive(T *obj) { return static_cast<T *>(m_liveToStartup[obj]); }
+
+   // FIXME circular dependency with PinTableWnd, needed while splitting Win32 editor from core parts, but must be removed afterward
+   class PinTableWnd *m_tableEditor = nullptr;
+
+private:
+   std::filesystem::path m_iniFileName;
+
    ankerl::unordered_dense::map<void *, void *> m_startupToLive; // For live table, maps back and forth to startup table editable parts, materials,...
    ankerl::unordered_dense::map<void *, void *> m_liveToStartup;
 
-   // editor viewport
-   Vertex2D m_offset;
-   float m_zoom;
-
+public:
    VectorProtected<ISelect> m_vmultisel;
 
    float m_left = 0.f; // always zero for now
@@ -629,20 +623,25 @@ public:
    float m_glassBottomHeight = 210.f; // Height of glass above playfield at bottom of playfield
    float m_glassTopHeight = 210.f; // Height of glass above playfield at top of playfield
 
-   float m_3DmaxSeparation = 0.03f;
-   float m_global3DMaxSeparation;
-   float m_3DZPD = 0.5f;
-   float m_global3DZPD;
-   float m_3DOffset = 0.f;
-   float m_global3DOffset;
    float m_defaultBulbIntensityScaleOnBall = 1.f;
 
-   bool m_BG_enable_FSS = false; // Flag telling if this table supports Full Single Screen POV (defaults is to use it in desktop mode if available)
-   ViewSetupID m_BG_override = BG_INVALID; // Allow to easily override the POV for testing (not persisted)
-   ViewSetupID m_BG_current_set; // Cache of the active view setup ID (depends on table but also on application settings and user overriding it)
+   // View mode selection
+   ViewSetupID GetViewMode() const { return m_viewMode; }
+   bool IsFSSEnabled() const;
+   void EnableFSS(const bool enable);
+   ViewSetupID GetViewSetupOverride() const { return m_viewModeOverride; }
+   void SetViewSetupOverride(const ViewSetupID v) { m_viewModeOverride = v; UpdateCurrentBGSet(); }
+   ViewSetup& GetViewSetup() { return mViewSetups[GetViewMode()]; }
+   const ViewSetup& GetViewSetup() const { return mViewSetups[GetViewMode()]; }
    ViewSetup mViewSetups[NUM_BG_SETS];
    string m_BG_image[NUM_BG_SETS];
-   ViewSetupID m_currentBackglassMode; // POV shown in the UI (not persisted)
+private:
+   void UpdateCurrentBGSet();
+   bool m_isFSSViewModeEnabled = false; // Flag telling if this table supports Full Single Screen POV (defaults is to use it in desktop mode if available)
+   ViewSetupID m_viewMode; // Cache of the active view setup ID (depends on table but also on application settings and user overriding it)
+   ViewSetupID m_viewModeOverride = BG_INVALID; // Allow to easily override the POV for testing (not persisted)
+
+public:
 
    float m_angletiltMax;
    float m_angletiltMin;
@@ -666,27 +665,22 @@ public:
    float m_elasticityFalloff;
    float m_scatter;
    float m_defaultScatter = 0.f;
-   
-   int m_plungerNormalize = 100;  //Mech-Plunger component adjustment or weak spring, aging
-   bool m_plungerFilter = false;
 
    float m_nudgeTime = 5.f;
    Vertex2D m_tblNudgeRead;
    float m_tblNudgeReadTilt = 0.f;
    Vertex2D m_tblNudgePlumb;
 
-   bool m_tblAutoStartEnabled;
    uint32_t m_tblAutoStart; // msecs before trying an autostart if doing once-only method .. 0 is automethod
    uint32_t m_tblAutoStartRetry; // msecs before retrying to autostart.
+   bool m_tblAutoStartEnabled;
 
    bool m_tblMirrorEnabled = false; // Mirror tables left to right.  This is activated by a cheat during table selection.
 
+   bool m_script_protected = false; // To be able to decrypt old tables with protected script
+
    float m_difficulty = 0.2f; // table difficulty Level
-   float m_globalDifficulty; // global difficulty, that is to say table difficulty eventually overriden from settings
-
-   short2 m_oldMousePos;
-
-   ProtectionData m_protectionData;
+   float m_globalDifficulty;  // global difficulty, i.e. table difficulty optionally overriden by settings
 
    string m_image;
    string m_playfieldMaterial;
@@ -702,7 +696,6 @@ public:
 
    string m_envImage;
 
-   vector<IEditable *> m_vedit;
    vector<ISelect *> m_allHitElements;
 
    vector<Texture *> m_vimage;
@@ -739,9 +732,11 @@ public:
 
    PinUndo m_undo;
 
-   CComObject<CodeViewer> *m_pcv;
+   string m_original_table_script; // Script defined in the loaded file
+   std::filesystem::path m_external_script_name; // if defined, file that override internal script
+   string m_script_text; // Actual script (either a copy of the original or the one loaded from the override file)
 
-   CComObject<ScriptGlobalTable> *m_psgt; // Object to expose to script for global functions
+   CComObject<class ScriptGlobalTable> *m_psgt; // Object to expose to script for global functions
 
    SaveDirtyState m_sdsDirtyProp = eSaveClean;
    SaveDirtyState m_sdsDirtyScript = eSaveClean;
@@ -765,8 +760,6 @@ public:
    vector<string> m_vCustomInfoTag;
    vector<string> m_vCustomInfoContent;
 
-   vector<HANDLE> m_vAsyncHandles;
-
    LightSource m_Light[MAX_LIGHT_SOURCES];
    COLORREF m_lightAmbient;
    float m_lightHeight;
@@ -776,6 +769,13 @@ public:
    float m_globalEmissionScale = 1.f;
    float m_AOScale;
    float m_SSRScale;
+   float m_groundToLockbarHeight = CMTOVPU(91.f); // Height of lockbar from ground (corresponding to cab model for VR)
+   Matrix3D GetDefaultPlayfieldToCabMatrix() const
+   {
+      //const float baseSlope = lerp(table->m_angletiltMin, table->m_angletiltMax, table->m_difficulty);
+      //const Matrix3D cabinetSlope = Matrix3D::MatrixRotateX(ANGTORAD(table->GetPlayfieldSlope() - baseSlope));
+      return Matrix3D::MatrixTranslate(0.f, 0.f, -(m_groundToLockbarHeight - m_glassBottomHeight));
+   }
 
    float m_playfieldReflectionStrength; // default (implicit) playfield reflection strength (0 to disable playfield reflection)
 
@@ -784,41 +784,11 @@ public:
    bool m_enableSSR;
    float m_bloom_strength;
 
-   SearchSelectDialog m_searchSelectDlg;
-
    volatile std::atomic<bool> m_savingActive = false;
 
    bool m_renderSolid = true;
-
-   bool m_grid = true; // Display grid or not
-   bool m_backdrop = true;
    bool m_renderDecals = true;
    bool m_renderEMReels = true;
-   bool m_overwriteGlobalStereo3D = false;
-
-#ifdef UNUSED_TILT //!! currently unused (see NudgeGetTilt())
-   int m_jolt_amount;
-   int m_tilt_amount;
-   int m_jolt_trigger_time;
-   int m_tilt_trigger_time;
-#endif
-
-   void OnInitialUpdate() final;
-   LRESULT WndProc(UINT uMsg, WPARAM wParam, LPARAM lParam) final;
-   BOOL OnEraseBkgnd(CDC &dc) final;
-
-   void SetMouseCursor();
-   void OnLeftButtonDown(const short x, const short y);
-   void OnMouseWheel(const short x, const short y, const short zDelta);
-   void OnSize();
-   void Set3DOffset(const float value);
-   void SetZPD(const float value);
-   void SetMaxSeparation(const float value);
-   bool IsFSSEnabled() const;
-   void EnableFSS(const bool enable);
-   ViewSetupID GetViewSetupOverride() const { return m_BG_override; }
-   void SetViewSetupOverride(const ViewSetupID v) { m_BG_override = v; UpdateCurrentBGSet(); }
-   void UpdateCurrentBGSet();
    int GetGlobalEmissionScale() const;
    void SetGlobalEmissionScale(const int value);
    float GetGlobalDifficulty() const;
@@ -832,7 +802,6 @@ public:
    float GetGravity() const;
    void SetGravity(const float value);
    void SetFriction(const float value);
-   void SetPlungerNormalize(const int value);
    float GetTableWidth() const;
    void SetTableWidth(const float value);
    float GetHeight() const;
@@ -841,10 +810,7 @@ public:
    float GetPlayfieldSlope() const;
    float GetPlayfieldOverridenSlope() const;
 
-   void SetMDITable(PinTableMDI *const table) { m_mdiTable = table; }
-   PinTableMDI *GetMDITable() const { return m_mdiTable; }
-
-   const WCHAR *GetCollectionNameByElement(const ISelect *const element) const;
+   const wstring& GetCollectionNameByElement(const ISelect *const element) const;
    void RefreshProperties();
 
    void SetNotesText(const string &text)
@@ -859,263 +825,31 @@ public:
    float GetExposure() const { return m_exposure; }
    void SetExposure(const float exposure) { m_exposure = exposure; }
 
+   void SetupLookUpTables(bool isPlaying);
+
+   // Win32 editor state which is persisted in the table file
+   Vertex2D m_winEditorViewOffset;
+   float m_winEditorZoom = 1.f;
+   bool m_winEditorGrid = true;
+   bool m_winEditorBackdrop = true;
+
 private:
    unsigned int m_tablelocked = 0;
 
-   PinTableMDI *m_mdiTable = nullptr;
    string m_notesText;
    ankerl::unordered_dense::map<string, Texture *, StringHashFunctor, StringComparator> m_textureMap; // hash table to speed up texture lookup by name
    ankerl::unordered_dense::map<string, Material *, StringHashFunctor, StringComparator> m_materialMap; // hash table to speed up material lookup by name
    ankerl::unordered_dense::map<string, Light *, StringHashFunctor, StringComparator> m_lightMap; // hash table to speed up light lookup by name
    ankerl::unordered_dense::map<string, RenderProbe *, StringHashFunctor, StringComparator> m_renderprobeMap; // hash table to speed up renderprobe lookup by name
-   bool m_moving = false;
 
    PinBinary *m_pbTempScreenshot = nullptr; // Holds contents of screenshot image until the image asks for it
    int m_loadTemp[5] = { 0, 0, 0, 0, 0 }; // Used to temporarily store the number of elements loaded for each type (subobjects, sounds, textures, fonts, collections) during loading phase
 
    ankerl::unordered_dense::set<std::string> m_loggedSoundErrors;
 
-   bool m_dirtyDraw = true; // Whether our background bitmap is up to date
-   HBITMAP m_hbmOffScreen = nullptr; // Buffer for drawing the editor window
-
    ToneMapper m_toneMapper = ToneMapper::TM_AGX;
    float m_exposure = 1.f;
 
-   inline float ApplyDifficulty(float minValue, float MaxValue) const;
-};
-
-class ScriptGlobalTable : 
-   public CComObjectRootEx<CComSingleThreadModel>, 
-   public IDispatchImpl<ITableGlobal, &IID_ITableGlobal, &LIBID_VPinballLib>, 
-   public IScriptable
-{
-public:
-#ifdef __STANDALONE__
-   STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
-   STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
-   STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
-#endif
-   // Headers to support communication between the game and the script.
-   STDMETHOD(EndModal)();
-   STDMETHOD(BeginModal)();
-   STDMETHOD(GetTextFile)(BSTR FileName, /*[out, retval]*/ BSTR *pContents);
-   STDMETHOD(GetCustomParam)(/*[in]*/ LONG index, /*[out, retval]*/ BSTR *param);
-   STDMETHOD(get_Setting)(BSTR Section, BSTR SettingName, /*[out, retval]*/ BSTR *param);
-   STDMETHOD(get_FrameIndex)(/*[out, retval]*/ LONG *pVal);
-   STDMETHOD(get_GameTime)(/*[out, retval]*/ LONG *pVal);
-   STDMETHOD(get_PreciseGameTime)(/*[out, retval]*/ double *pVal);
-   STDMETHOD(get_SystemTime)(/*[out, retval]*/ LONG *pVal);
-   STDMETHOD(get_AddCreditKey)(/*[out, retval]*/ LONG *pVal);
-   STDMETHOD(get_AddCreditKey2)(/*[out, retval]*/ LONG *pVal);
-   STDMETHOD(get_ActiveBall)(/*[out, retval]*/ IBall **pVal);
-   STDMETHOD(LoadValue)(BSTR TableName, BSTR ValueName, /*[out, retval]*/ VARIANT *Value);
-   STDMETHOD(SaveValue)(BSTR TableName, BSTR ValueName, VARIANT Value);
-   STDMETHOD(AddObject)(BSTR Name, IDispatch *pdisp);
-#ifdef _WIN64
-   STDMETHOD(get_GetPlayerHWnd)(/*[out, retval]*/ SIZE_T *pVal);
-#else
-   STDMETHOD(get_GetPlayerHWnd)(/*[out, retval]*/ LONG *pVal);
-#endif
-   STDMETHOD(get_UserDirectory)(/*[out, retval]*/ BSTR *pVal);
-   STDMETHOD(get_TablesDirectory)(/*[out, retval]*/ BSTR *pVal);
-   STDMETHOD(get_MusicDirectory)(/*[optional][in]*/ VARIANT pSubDir, /*[out, retval]*/ BSTR *pVal);
-   STDMETHOD(get_ScriptsDirectory)(/*[out, retval]*/ BSTR *pVal);
-   STDMETHOD(get_PlatformOS)(/*[out, retval]*/ BSTR *pVal);
-   STDMETHOD(get_PlatformCPU)(/*[out, retval]*/ BSTR *pVal);
-   STDMETHOD(get_PlatformBits)(/*[out, retval]*/ BSTR *pVal);
-   STDMETHOD(put_ShowCursor)(/*[in]*/ VARIANT_BOOL enable);
-   STDMETHOD(get_StartGameKey)(/*[out, retval]*/ LONG *pVal);
-   STDMETHOD(PlayMusic)(BSTR str, float volume);
-   STDMETHOD(put_MusicVolume)(float volume);
-   STDMETHOD(EndMusic)();
-   STDMETHOD(get_PlungerKey)(/*[out, retval]*/ LONG *pVal);
-   STDMETHOD(get_CenterTiltKey)(/*[out, retval]*/ LONG *pVal);
-   STDMETHOD(get_RightTiltKey)(/*[out, retval]*/ LONG *pVal);
-   STDMETHOD(get_LeftTiltKey)(/*[out, retval]*/ LONG *pVal);
-   STDMETHOD(get_RightFlipperKey)(/*[out, retval]*/ LONG *pVal);
-   STDMETHOD(get_LeftFlipperKey)(/*[out, retval]*/ LONG *pVal);
-   STDMETHOD(get_StagedRightFlipperKey)(/*[out, retval]*/ LONG *pVal);
-   STDMETHOD(get_StagedLeftFlipperKey)(/*[out, retval]*/ LONG *pVal);
-
-   STDMETHOD(put_DMDWidth)(/*[in]*/ int pVal);
-   STDMETHOD(put_DMDHeight)(/*[in]*/ int pVal);
-   STDMETHOD(put_DMDPixels)(/*[in]*/ VARIANT pVal);
-   STDMETHOD(put_DMDColoredPixels)(/*[in]*/ VARIANT pVal);
-
-   STDMETHOD(get_DisableStaticPrerendering)(/*[out, retval]*/ VARIANT_BOOL *pVal);
-   STDMETHOD(put_DisableStaticPrerendering)(/*[in]*/ VARIANT_BOOL newVal);
-
-   STDMETHOD(get_WindowWidth)(/*[out, retval]*/ int *pVal);
-   STDMETHOD(get_WindowHeight)(/*[out, retval]*/ int *pVal);
-
-   STDMETHOD(get_NightDay)(/*[out, retval]*/ int *pVal);
-   //STDMETHOD(put_NightDay)(/*[in]*/ int newVal);
-
-   STDMETHOD(get_ShowDT)(/*[out, retval]*/ VARIANT_BOOL *pVal);
-
-   STDMETHOD(get_ShowFSS)(/*[out, retval]*/ VARIANT_BOOL *pVal);
-
-   STDMETHOD(PlaySound)(BSTR sound, LONG LoopCount, float volume, float pan, float randompitch, LONG pitch, VARIANT_BOOL usesame, VARIANT_BOOL restart, float front_rear_fade);
-   STDMETHOD(StopSound)(BSTR sound);
-
-   STDMETHOD(FireKnocker)(/*[in]*/ int Count);
-   STDMETHOD(QuitPlayer)(/*[in]*/ int CloseType);
-
-   STDMETHOD(Nudge)(float Angle, float Force);
-   STDMETHOD(NudgeGetCalibration)(VARIANT *XMax, VARIANT *YMax, VARIANT *XGain, VARIANT *YGain, VARIANT *DeadZone, VARIANT *TiltSensitivity);
-   STDMETHOD(NudgeSetCalibration)(int XMax, int YMax, int XGain, int YGain, int DeadZone, int TiltSensitivity);
-   STDMETHOD(NudgeSensorStatus)(VARIANT *XNudge, VARIANT *YNudge);
-   STDMETHOD(NudgeTiltStatus)(VARIANT *XPlumb, VARIANT *YPlumb, VARIANT *Tilt);
-
-   const WCHAR *get_Name() const final;
-   STDMETHOD(get_Name)(BSTR *pVal);
-   STDMETHOD(get_MechanicalTilt)(/*[out, retval]*/ LONG *pVal);
-   STDMETHOD(get_LeftMagnaSave)(/*[out, retval]*/ LONG *pVal);
-   STDMETHOD(get_RightMagnaSave)(/*[out, retval]*/ LONG *pVal);
-   STDMETHOD(get_ExitGame)(/*[out, retval]*/ LONG *pVal);
-   STDMETHOD(get_LockbarKey)(/*[out, retval]*/ LONG *pVal);
-   STDMETHOD(get_JoyCustomKey)(/*[in]*/ LONG index, /*[out, retval]*/ LONG *pVal);
-
-   STDMETHOD(GetBalls)(/*[out, retval]*/ LPSAFEARRAY *pVal);
-   STDMETHOD(GetElements)(/*[out, retval]*/ LPSAFEARRAY *pVal);
-   STDMETHOD(GetElementByName)(/*[in]*/ BSTR name, /*[out, retval]*/ IDispatch **pVal);
-   STDMETHOD(get_ActiveTable)(/*[out, retval]*/ ITable **pVal);
-
-   STDMETHOD(get_Version)(/*[out, retval]*/ int *pVal);
-   STDMETHOD(get_VPBuildVersion)(/*[out, retval]*/ double *pVal);
-   STDMETHOD(get_VersionMajor)(/*[out, retval]*/ int *pVal);
-   STDMETHOD(get_VersionMinor)(/*[out, retval]*/ int *pVal);
-   STDMETHOD(get_VersionRevision)(/*[out, retval]*/ int *pVal);
-
-   STDMETHOD(GetSerialDevices)(VARIANT *pVal);
-   STDMETHOD(OpenSerial)(/*[in]*/ BSTR device);
-   STDMETHOD(CloseSerial)();
-   STDMETHOD(FlushSerial)();
-   STDMETHOD(SetupSerial)(int baud, int bits, int parity, int stopbit, VARIANT_BOOL rts, VARIANT_BOOL dtr);
-   STDMETHOD(ReadSerial)(int size, VARIANT *pVal);
-   STDMETHOD(WriteSerial)(VARIANT pVal);
-
-   STDMETHOD(get_RenderingMode)(/*[out, retval]*/ int *pVal);
-
-   STDMETHOD(UpdateMaterial)
-   (BSTR pVal, float wrapLighting, float roughness, float glossyImageLerp, float thickness, float edge, float edgeAlpha, float opacity, OLE_COLOR base, OLE_COLOR glossy, OLE_COLOR clearcoat,
-      VARIANT_BOOL isMetal, VARIANT_BOOL opacityActive, float elasticity, float elasticityFalloff, float friction, float scatterAngle);
-   STDMETHOD(GetMaterial)
-   (BSTR pVal, VARIANT *wrapLighting, VARIANT *roughness, VARIANT *glossyImageLerp, VARIANT *thickness, VARIANT *edge, VARIANT *edgeAlpha, VARIANT *opacity, VARIANT *base, VARIANT *glossy,
-      VARIANT *clearcoat, VARIANT *isMetal, VARIANT *opacityActive, VARIANT *elasticity, VARIANT *elasticityFalloff, VARIANT *friction, VARIANT *scatterAngle);
-   STDMETHOD(UpdateMaterialPhysics)(BSTR pVal, float elasticity, float elasticityFalloff, float friction, float scatterAngle);
-   STDMETHOD(GetMaterialPhysics)(BSTR pVal, VARIANT *elasticity, VARIANT *elasticityFalloff, VARIANT *friction, VARIANT *scatterAngle);
-   STDMETHOD(MaterialColor)(BSTR pVal, OLE_COLOR newVal);
-
-   STDMETHOD(LoadTexture)(BSTR imageName, BSTR fileName);
-
-   STDMETHOD(CreatePluginObject)(/*[in]*/ BSTR classId, /*[out, retval]*/ IDispatch **pVal);
-
-   void Init(VPinball *vpinball, PinTable *pt);
-   ~ScriptGlobalTable();
-
-   IDispatch *GetDispatch() final { return (IDispatch *)this; }
-   const IDispatch *GetDispatch() const final { return (const IDispatch *)this; }
-
-   ISelect *GetISelect() final { return nullptr; }
-   const ISelect *GetISelect() const final { return nullptr; }
-
-   BEGIN_COM_MAP(ScriptGlobalTable)
-   COM_INTERFACE_ENTRY(ITableGlobal)
-   COM_INTERFACE_ENTRY(IDispatch)
-   END_COM_MAP()
-
-private:
-   bool GetTextFileFromDirectory(const string& filename, const string& dirname, BSTR *pContents);
-
-   PinTable *m_pt = nullptr;
-   VPinball *m_vpinball = nullptr;
-
-   // Temporary API used to communicate between VPinMame and VPinballX
-   HANDLE m_hStateSharedMem = INVALID_HANDLE_VALUE; // handle to a shared memory block used to share output states
-};
-
-namespace PinMame
-{
-   #pragma warning(disable : 4200) // 0 length array is a non standard extension used intentionally, so disable corresponding warning
-   typedef struct
-   {
-      double updateTimestamp;
-      unsigned int nOutputs;
-      uint32_t outputBitset[]; // Bitset array of nOutputs bits with their current binary state
-   } core_tBinaryState;
-   #define CORE_DEVICE_STATE_TYPE_CUSTOM          1 // Custom state defined by each driver (value maybe either binary of 0/1 or 0/255, or modulated between 0..255)
-   #define CORE_DEVICE_STATE_TYPE_BULB            2 // Bulb state defined by its relative luminance and average filament temperature
-   #define CORE_DEVICE_STATE_TYPE_LED             3 // LED state defined by its relative luminance
-   #define CORE_DEVICE_STATE_TYPE_SEGMENTS        4 // LED or VFD state defined by a segment layout and the relative luminance of each segment
-   typedef struct
-   {
-      unsigned int deviceType;
-      union
-      {
-         // CORE_DEVICE_STATE_TYPE_DS
-         uint8_t customState;          // Custom value, depending on each driver definition
-         // CORE_DEVICE_STATE_TYPE_BULB
-         struct
-         {
-            float luminance;           // relative luminance to bulb rating (equals 1.f when bulb is under its rating voltage after heating stabilization)
-            float filamentTemperature; // perceived filament temperature (equals to bulb filament rating when bulb is under its rating voltage after heating stabilization)
-         } bulb;
-         // CORE_DEVICE_STATE_TYPE_LED
-         float ledLuminance;           // relative luminance to bulb design (equals 1.f when LED is pulsed at its designed PWM)
-         // CORE_DEVICE_STATE_TYPE_SEGMENTS
-         struct
-         {
-            unsigned int type;   // see CORE_SEG16, ...
-            float luminance[16]; // relative luminance of each segment (from 7 to 16)
-         } segment;
-      };
-   } core_tDeviceSingleState;
-   #pragma warning(disable : 4200) // 0 length array is a non standard extension used intentionally, so disable corresponding warning
-   typedef struct
-   {
-      double updateTimestamp;
-      unsigned int nDevices;
-      unsigned int dataStride;
-      core_tDeviceSingleState states[]; // array of nDevices * dataStride with the current device state
-   } core_tDeviceState;
-   #define CORE_FRAME_LUM             1 // Linear luminance (for monochrome DMD)
-   #define CORE_FRAME_RGB             2 // sRGB (for video frame)
-   #define CORE_FRAME_BP2             3 // 2 bitplanes, used to identify frames
-   #define CORE_FRAME_BP4             4 // 4 bitplanes, used to identify frames
-   #pragma warning(disable : 4200) // 0 length array is a non standard extension used intentionally, so disable corresponding warning
-   typedef struct
-   {
-      unsigned int structSize; // Struct size including header and frame data in bytes (for safe DMD/Display array iteration)
-      unsigned int displayId;  // Unique Id, shared between render frame and raw frame used for frame identification
-      double updateTimestamp;
-      unsigned int width;
-      unsigned int height;
-      unsigned int dataFormat;
-      unsigned int frameId;
-      uint8_t frameData[]; // The display frame data which size depends on width, height and data format
-   } core_tFrameState;
-   typedef struct
-   {
-      unsigned int nDisplays;
-      // core_tFrameState displays[]; // Array of nDisplays * core_tFrameState (can't be directly declared since frame size is undefined)
-   } core_tDisplayState;
-   typedef struct
-   {
-      unsigned int versionID;
-      core_tBinaryState* controlledOutputBinaryState;
-      core_tDeviceState* controlledOutputDeviceState;
-      core_tDeviceState* lampMatrixState;
-      core_tDeviceState* alphaDisplayState;
-      core_tDisplayState* displayState;
-      core_tDisplayState* rawDMDState;
-   } core_tGlobalOutputState;
-
-   #define CORE_STATE_REQMASK_GPOUTPUT_BINARY_STATE 0x01
-   #define CORE_STATE_REQMASK_GPOUTPUT_DEVICE_STATE 0x02
-   #define CORE_STATE_REQMASK_LAMP_DEVICE_STATE     0x04
-   #define CORE_STATE_REQMASK_ALPHA_DEVICE_STATE    0x08
-   #define CORE_STATE_REQMASK_DISPLAY_STATE         0x10
-   #define CORE_STATE_REQMASK_RAW_DMD_STATE         0x20
-   #define CORE_STATE_REQMASK_ALL                   0x3F
+   std::optional<VPX::Properties::PropertyRegistry::PropId> RegisterOption(BSTR optionName, float minValue, float maxValue, float step, float defaultValue, int unit, /*[optional][in]*/ VARIANT values);
+   vector<TableOption> m_tableOptions;
 };

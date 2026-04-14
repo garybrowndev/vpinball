@@ -1,16 +1,20 @@
 #include "../common.h"
 #include "B2SSettings.h"
 #include "B2SData.h"
-#include <charconv>
-#include <cstring>
 
 namespace B2SLegacy {
 
-B2SSettings::B2SSettings(MsgPluginAPI* msgApi)
-   : m_msgApi(msgApi)
-{
-   m_gameNameFound = false;
+MSGPI_BOOL_VAL_SETTING(hideGrillProp, "B2SHideGrill", "B2SHideGrill", "", true, false); // VB uses CheckedState_Indeterminate
+MSGPI_BOOL_VAL_SETTING(hideB2SProp, "B2SHideB2SDMD", "B2SHideB2SDMD", "", true, false);
+MSGPI_BOOL_VAL_SETTING(hideB2SBackglassProp, "B2SHideB2SBackglass", "B2SHideB2SBackglass", "", true, false);
+MSGPI_BOOL_VAL_SETTING(hideDMDProp, "B2SHideDMD", "B2SHideDMD", "", true, true); // VB uses CheckedState_Indeterminate
+MSGPI_INT_VAL_SETTING(dualModeProp, "B2SDualMode", "B2SDualMode", "", true, eDualMode_2_Authentic, eDualMode_2_Fantasy, eDualMode_2_Authentic);
 
+B2SSettings::B2SSettings(MsgPluginAPI* msgApi, unsigned int endpointId)
+   : m_msgApi(msgApi)
+   , m_endpointId(endpointId)
+   , m_gameNameFound(false)
+{
    ClearAll();
 }
 
@@ -21,12 +25,16 @@ B2SSettings::~B2SSettings()
 void B2SSettings::Load(bool resetLogs)
 {
    ClearAll();
-
-   m_hideGrill = (B2SSettingsCheckedState)GetSettingInt("B2SHideGrill", (int)B2SSettingsCheckedState_Indeterminate);
-   m_hideB2SDMD = GetSettingBool("B2SHideB2SDMD", false);
-   m_hideB2SBackglass = GetSettingBool("B2SHideB2SBackglass", false);
-   m_hideDMD = (B2SSettingsCheckedState)GetSettingInt("B2SHideDMD", (int)B2SSettingsCheckedState_Indeterminate);
-   m_currentDualMode = (eDualMode)GetSettingInt("B2SDualMode", (int)eDualMode_2_NotSet);
+   m_msgApi->RegisterSetting(m_endpointId, &hideGrillProp);
+   m_msgApi->RegisterSetting(m_endpointId, &hideB2SProp);
+   m_msgApi->RegisterSetting(m_endpointId, &hideB2SBackglassProp);
+   m_msgApi->RegisterSetting(m_endpointId, &hideDMDProp);
+   m_msgApi->RegisterSetting(m_endpointId, &dualModeProp);
+   m_hideGrill = hideGrillProp_Val;
+   m_hideB2SDMD = hideB2SProp_Val;
+   m_hideB2SBackglass = hideB2SBackglassProp_Val;
+   m_hideDMD = hideDMDProp_Val;
+   m_currentDualMode = (eDualMode)dualModeProp_Val;
 }
 
 void B2SSettings::ClearAll()
@@ -47,38 +55,16 @@ void B2SSettings::ClearAll()
    m_glowBulbOn = false;
    m_glowIndex = -1;
    m_defaultGlow = -1;
-   m_hideGrill = B2SSettingsCheckedState_Indeterminate;
+   m_hideGrill = false; // VB uses CheckedState_Indeterminate
    m_hideB2SDMD = false;
    m_hideB2SBackglass = false;
-   m_hideDMD = B2SSettingsCheckedState_Indeterminate;
+   m_hideDMD = true; // VB uses CheckedState_Indeterminate
    m_animationSlowDowns.clear();
    m_allAnimationSlowDown = 1;
    m_currentDualMode = (eDualMode)eDualMode_2_NotSet;
    m_formToFront = true;
    m_formToBack = false;
    m_formNoFocus = false;
-}
-
-int B2SSettings::GetSettingInt(const char* key, int def) const
-{
-   char buf[256];
-   m_msgApi->GetSetting("B2SLegacy", key, buf, sizeof(buf));
-   if (!buf[0]) return def;
-
-   int result;
-   auto [ptr, ec] = std::from_chars(buf, buf + strlen(buf), result);
-   return (ec == std::errc{}) ? result : def;
-}
-
-bool B2SSettings::GetSettingBool(const char* key, bool def) const
-{
-   char buf[256];
-   m_msgApi->GetSetting("B2SLegacy", key, buf, sizeof(buf));
-   if (!buf[0]) return def;
-
-   int result;
-   auto [ptr, ec] = std::from_chars(buf, buf + strlen(buf), result);
-   return (ec == std::errc{}) ? (result != 0) : def;
 }
 
 }

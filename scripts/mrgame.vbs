@@ -59,10 +59,10 @@ Function vpmKeyDown(ByVal keycode)
 	vpmKeyDown = True ' Assume we handle the key
 	With Controller
 		Select Case keycode
-			Case LeftFlipperKey  .Switch(swLLFlip) = True : vpmKeyDown = False : vpmFlips.FlipL True : if keycode = keyStagedFlipperL then vpmFlips.FlipUL True
-			Case RightFlipperKey .Switch(swLRFlip) = True : vpmKeyDown = False : vpmFlips.FlipR True : if keycode = keyStagedFlipperR then vpmFlips.FlipUR True
-			Case keyStagedFlipperL vpmFlips.FlipUL True
-			Case keyStagedFlipperR vpmFlips.FlipUR True
+			Case LeftFlipperKey  .Switch(swLLFlip) = True : vpmKeyDown = False : vpmFlips.FlipL True : if keycode = StagedLeftFlipperKey then vpmFlips.FlipUL True
+			Case RightFlipperKey .Switch(swLRFlip) = True : vpmKeyDown = False : vpmFlips.FlipR True : if keycode = StagedRightFlipperKey then vpmFlips.FlipUR True
+			Case StagedLeftFlipperKey vpmFlips.FlipUL True
+			Case StagedRightFlipperKey vpmFlips.FlipUR True
 			Case keyInsertCoin1  .Switch(swCoin1)  = True : If Not IsEmpty(Eval("SCoin")) Then Playsound SCoin
 			Case keyInsertCoin2  .Switch(swCoin2)  = True : If Not IsEmpty(Eval("SCoin")) Then Playsound SCoin
 			Case keyInsertCoin3  .Switch(swCoin3)  = True : If Not IsEmpty(Eval("SCoin")) Then Playsound SCoin
@@ -70,7 +70,7 @@ Function vpmKeyDown(ByVal keycode)
 			Case StartGameKey    .Switch(swStartButton) = True
 			Case keySelfTest     vpmTimer.PulseSw swAdvanceTest
 			Case keyAdvance      vpmTimer.PulseSw swReturnTest
-			Case keyBangBack     vpmNudge.DoNudge   0, 6
+			Case keyBangBack     vpmNudge.DoMechTilt
 			Case LeftTiltKey     vpmNudge.DoNudge  75, 2
 			Case RightTiltKey    vpmNudge.DoNudge 285, 2
 			Case CenterTiltKey   vpmNudge.DoNudge   0, 2
@@ -84,10 +84,10 @@ Function vpmKeyUp(ByVal keycode)
 	vpmKeyUp = True ' Assume we handle the key
 	With Controller
 		Select Case keycode
-			Case LeftFlipperKey  .Switch(swLLFlip) = False : vpmKeyUp = False : vpmFlips.FlipL False : if keycode = keyStagedFlipperL then vpmFlips.FlipUL False
-			Case RightFlipperKey .Switch(swLRFlip) = False : vpmKeyUp = False : vpmFlips.FlipR False : if keycode = keyStagedFlipperR then vpmFlips.FlipUR False
-			Case keyStagedFlipperL vpmFlips.FlipUL False
-			Case keyStagedFlipperR vpmFlips.FlipUR False
+			Case LeftFlipperKey  .Switch(swLLFlip) = False : vpmKeyUp = False : vpmFlips.FlipL False : if keycode = StagedLeftFlipperKey then vpmFlips.FlipUL False
+			Case RightFlipperKey .Switch(swLRFlip) = False : vpmKeyUp = False : vpmFlips.FlipR False : if keycode = StagedRightFlipperKey then vpmFlips.FlipUR False
+			Case StagedLeftFlipperKey vpmFlips.FlipUL False
+			Case StagedRightFlipperKey vpmFlips.FlipUR False
 			Case keyInsertCoin1  .Switch(swCoin1)  = False : If Not IsEmpty(Eval("SCoin")) Then Playsound SCoin
 			Case keyInsertCoin2  .Switch(swCoin2)  = False : If Not IsEmpty(Eval("SCoin")) Then Playsound SCoin
 			Case keyInsertCoin3  .Switch(swCoin3)  = False : If Not IsEmpty(Eval("SCoin")) Then Playsound SCoin

@@ -16,7 +16,7 @@ class FormBackglass final : public Form
 {
 public:
    FormBackglass(VPXPluginAPI* vpxApi, MsgPluginAPI* msgApi, uint32_t endpointId, B2SData* pB2SData);
-   ~FormBackglass();
+   ~FormBackglass() override;
 
    void Start();
    void OnPaint(VPXRenderContext2D* const ctx) override;
@@ -81,8 +81,8 @@ private:
    void CheckBulbs(int romid, eRomIDType romidtype, bool rominverted, eDualMode dualmode);
    SDL_Rect GetBoundingRectangle(VPXTexture pImage);
    VPXTexture CropImageToTransparency(VPXTexture pImage, VPXTexture pOffImage, SDL_Point& loc, SDL_Rect& size);
-   VPXTexture Base64ToImage(const string& image);
-   Sound* Base64ToWav(const string& data);
+   VPXTexture Base64ToImage(const char* image);
+   Sound* Base64ToWav(const char* data);
    uint32_t String2Color(const string& color);
    VPXTexture ResizeTexture(VPXTexture original, int newWidth, int newHeight);
    VPXTexture RotateTexture(VPXTexture source, int angle);

@@ -25,6 +25,7 @@ Sampler::Sampler(RenderDevice* rd, string name, std::shared_ptr<const BaseTextur
    switch (surf->m_format)
    {
    case BaseTexture::BW: m_bgfx_format = bgfx::TextureFormat::Enum::R8; break;
+   case BaseTexture::BW_FP32: m_bgfx_format = bgfx::TextureFormat::Enum::R32F; break;
    case BaseTexture::RGB: m_bgfx_format = bgfx::TextureFormat::Enum::RGB8; break;
    case BaseTexture::SRGB: m_bgfx_format = bgfx::TextureFormat::Enum::RGBA8; break;
    case BaseTexture::RGBA: m_bgfx_format = bgfx::TextureFormat::Enum::RGBA8; break;
@@ -59,6 +60,8 @@ Sampler::Sampler(RenderDevice* rd, string name, std::shared_ptr<const BaseTextur
       format = colorFormat::RGBA16F;
    else if (surf->m_format == BaseTexture::RGB_FP32)
       format = colorFormat::RGB32F;
+   else if (surf->m_format == BaseTexture::BW_FP32)
+      format = colorFormat::RED32F;
    else if (surf->m_format == BaseTexture::BW)
       format = colorFormat::GREY8;
    else
@@ -73,11 +76,11 @@ Sampler::Sampler(RenderDevice* rd, string name, std::shared_ptr<const BaseTextur
    HRESULT hr = m_rd->GetCoreDevice()->CreateTexture(m_width, m_height, (texformat != colorFormat::DXT5 && m_rd->m_autogen_mipmap) ? 0 : sysTex->GetLevelCount(),
       (texformat != colorFormat::DXT5 && m_rd->m_autogen_mipmap) ? textureUsage::AUTOMIPMAP : 0, (D3DFORMAT)texformat, (D3DPOOL)memoryPool::DEFAULT, &m_texture, nullptr);
    if (FAILED(hr))
-      ReportError("Fatal Error: out of VRAM!", hr, __FILE__, __LINE__);
+      ReportError("Fatal Error: out of VRAM!"s, hr, __FILE__, __LINE__);
 
    hr = m_rd->GetCoreDevice()->UpdateTexture(sysTex, m_texture);
    if (FAILED(hr))
-      ReportError("Fatal Error: uploading texture failed!", hr, __FILE__, __LINE__);
+      ReportError("Fatal Error: uploading texture failed!"s, hr, __FILE__, __LINE__);
 
    SAFE_RELEASE(sysTex);
 
@@ -196,7 +199,7 @@ bgfx::TextureHandle Sampler::GetCoreTexture(bool genMipmaps)
    const bool hasComputeMipMapGen = (bgfx::getCaps()->supported & BGFX_CAPS_COMPUTE) != 0
       && (bgfx::getCaps()->formats[m_bgfx_format] & (BGFX_CAPS_FORMAT_TEXTURE_IMAGE_READ | BGFX_CAPS_FORMAT_TEXTURE_IMAGE_WRITE)) != 0
       && (m_bgfx_format == bgfx::TextureFormat::Enum::RGBA8 || m_bgfx_format == bgfx::TextureFormat::Enum::RGBA16F || m_bgfx_format == bgfx::TextureFormat::Enum::RGBA32F)
-      && (bgfx::getRendererType() != bgfx::RendererType::Enum::OpenGL) // BGFX's OpenGL driver will not apply uniform, breaking this implementation for OpenGL
+      && (bgfx::getRendererType() != bgfx::RendererType::Enum::Vulkan) // FIXME remove as soon as BGFX is fixed: BGFX's Vulkan driver has a bug as of 2025/10/23 (it used to work before)
       && (bgfx::getRendererType() != bgfx::RendererType::Enum::OpenGLES); // OpenGL ES does not support compute shaders
 
    // Implementation based on a compute shader for mipmap generation:
@@ -413,6 +416,7 @@ void Sampler::UpdateTexture(std::shared_ptr<const BaseTexture> surf, const bool 
    switch (surf->m_format)
    {
    case BaseTexture::BW: assert(m_bgfx_format == bgfx::TextureFormat::Enum::R8); break;
+   case BaseTexture::BW_FP32: assert(m_bgfx_format == bgfx::TextureFormat::Enum::R32F); break;
    case BaseTexture::RGB: assert(m_bgfx_format == bgfx::TextureFormat::Enum::RGB8); break;
    case BaseTexture::RGBA: assert(m_bgfx_format == bgfx::TextureFormat::Enum::RGBA8); break;
    case BaseTexture::SRGB:
@@ -444,7 +448,7 @@ void Sampler::UpdateTexture(std::shared_ptr<const BaseTexture> surf, const bool 
    assert(bgfx::isTextureValid(1, false, 1, m_bgfx_format, m_isTextureUpdateLinear ? BGFX_TEXTURE_NONE : BGFX_TEXTURE_SRGB));
    assert(bgfx::isTextureValid(1, false, 1, m_bgfx_format, (m_isTextureUpdateLinear ? BGFX_TEXTURE_NONE : BGFX_TEXTURE_SRGB) | BGFX_TEXTURE_RT | BGFX_TEXTURE_BLIT_DST));
 
-   m_textureUpdate = bgfx::makeRef(ref->surf->datac(), static_cast<uint32_t>(ref->surf->height() * ref->surf->pitch()), releaseFn, (void*)ref);
+   m_textureUpdate = bgfx::makeRef(ref->surf->datac(), ref->surf->height() * ref->surf->pitch(), releaseFn, ref);
 
 #elif defined(ENABLE_OPENGL)
    colorFormat format;
@@ -464,6 +468,8 @@ void Sampler::UpdateTexture(std::shared_ptr<const BaseTexture> surf, const bool 
       format = colorFormat::RGBA16F;
    else if (surf->m_format == BaseTexture::RGB_FP32)
       format = colorFormat::RGB32F;
+   else if (surf->m_format == BaseTexture::BW_FP32)
+      format = colorFormat::RED32F;
    else if (surf->m_format == BaseTexture::BW)
       format = colorFormat::GREY8;
    else
@@ -505,7 +511,7 @@ void Sampler::UpdateTexture(std::shared_ptr<const BaseTexture> surf, const bool 
 #if defined(ENABLE_BGFX)
 
 #elif defined(ENABLE_OPENGL)
-GLuint Sampler::CreateTexture(std::shared_ptr<const BaseTexture> surf, unsigned int Levels, colorFormat Format, int stereo)
+GLuint Sampler::CreateTexture(const std::shared_ptr<const BaseTexture>& surf, unsigned int Levels, colorFormat Format, int stereo)
 {
    const unsigned int Width = surf->width();
    const unsigned int Height = surf->height();
@@ -621,20 +627,14 @@ IDirect3DTexture9* Sampler::CreateSystemTexture(std::shared_ptr<const BaseTextur
    const unsigned int texheight = surf->height();
    const BaseTexture::Format basetexformat = surf->m_format;
 
-   if (basetexformat == BaseTexture::RGB_FP16 || basetexformat == BaseTexture::RGBA_FP16)
+   switch (basetexformat)
    {
-      texformat = colorFormat::RGBA16F;
-   }
-   else if (basetexformat == BaseTexture::RGB_FP32)
-   {
-      texformat = colorFormat::RGBA32F;
-   }
-   else if (basetexformat == BaseTexture::SRGB565)
-   {
-      texformat = colorFormat::RGB5;
-   }
-   else
-   {
+   case BaseTexture::RGB_FP16: texformat = colorFormat::RGBA16F; break;
+   case BaseTexture::RGBA_FP16: texformat = colorFormat::RGBA16F; break;
+   case BaseTexture::RGB_FP32: texformat = colorFormat::RGBA32F; break;
+   case BaseTexture::SRGB565: texformat = colorFormat::RGB5; break;
+   case BaseTexture::BW_FP32: texformat = colorFormat::RED32F; break;
+   default:
       texformat = colorFormat::RGBA8;
       if (m_rd->m_compressTextures && ((texwidth & 3) == 0) && ((texheight & 3) == 0) && (texwidth > 256) && (texheight > 256))
          texformat = colorFormat::DXT5;
@@ -645,7 +645,7 @@ IDirect3DTexture9* Sampler::CreateSystemTexture(std::shared_ptr<const BaseTextur
       texwidth, texheight, (texformat != colorFormat::DXT5 && m_rd->m_autogen_mipmap) ? 1 : 0, 0, (D3DFORMAT)texformat, (D3DPOOL)memoryPool::SYSTEM, &sysTex, nullptr);
    if (FAILED(hr))
    {
-      ReportError("Fatal Error: unable to create texture!", hr, __FILE__, __LINE__);
+      ReportError("Fatal Error: unable to create texture!"s, hr, __FILE__, __LINE__);
    }
 
    D3DLOCKED_RECT locked;
@@ -686,7 +686,7 @@ IDirect3DTexture9* Sampler::CreateSystemTexture(std::shared_ptr<const BaseTextur
    else if ((basetexformat == BaseTexture::BW) && texformat == colorFormat::RGBA8)
    {
       uint8_t* const __restrict pdest = (uint8_t*)locked.pBits;
-      const uint8_t* const __restrict psrc = surf->datac();
+      const uint8_t* const __restrict psrc = (const uint8_t*)surf->datac();
       for (size_t i = 0; i < (size_t)texwidth * texheight; ++i)
       {
          pdest[i * 4 + 0] =
@@ -697,7 +697,7 @@ IDirect3DTexture9* Sampler::CreateSystemTexture(std::shared_ptr<const BaseTextur
    }
    else if ((basetexformat == BaseTexture::RGB || basetexformat == BaseTexture::SRGB) && texformat == colorFormat::RGBA8)
    {
-      copy_rgb_rgba<true>((unsigned int*)locked.pBits, surf->datac(), (size_t)texwidth * texheight);
+      copy_rgb_rgba<true>((unsigned int*)locked.pBits, (const uint8_t*)surf->datac(), (size_t)texwidth * texheight);
    }
    else if ((basetexformat == BaseTexture::RGBA || basetexformat == BaseTexture::SRGBA) && texformat == colorFormat::RGBA8)
    {
@@ -718,6 +718,12 @@ IDirect3DTexture9* Sampler::CreateSystemTexture(std::shared_ptr<const BaseTextur
       uint16_t* const __restrict pdest = (uint16_t*)locked.pBits;
       const uint16_t* const __restrict psrc = (const uint16_t*)(surf->datac());
       memcpy(pdest, psrc, (size_t)texwidth * texheight * 2);
+   }
+   else if (basetexformat == BaseTexture::BW_FP32 && texformat == colorFormat::RED32F)
+   {
+      float* const __restrict pdest = (float*)locked.pBits;
+      const float* const __restrict psrc = (const float*)(surf->datac());
+      memcpy(pdest, psrc, (size_t)texwidth * texheight * 4);
    }
    else
       assert(false); // Unsupported image format

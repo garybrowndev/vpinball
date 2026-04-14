@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "ui/resource.h"
+#include "ui/win/resource.h"
 
 class GateData final : public BaseProperty
 {
@@ -13,7 +13,6 @@ public:
    float m_length;
    float m_height;
    float m_rotation;
-   TimerDataRoot m_tdr;
    float m_damping;
    float m_gravityfactor;
    string m_szSurface;
@@ -34,7 +33,8 @@ class Gate :
    public IProvideClassInfo2Impl<&CLSID_Gate, &DIID_IGateEvents, &LIBID_VPinballLib>,
    public ISelect,
    public IEditable,
-   public Hitable,
+   public IHitable,
+   public IRenderable,
    public IScriptable,
    public IFireEvents,
    public IPerPropertyBrowsing // Ability to fill in dropdown in property browser
@@ -46,7 +46,7 @@ public:
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
-   Gate();
+   Gate() { }
    virtual ~Gate();
 
    void SetGateType(GateType type);
@@ -68,7 +68,7 @@ public:
       CONNECTION_POINT_ENTRY(DIID_IGateEvents)
    END_CONNECTION_POINT_MAP()
 
-   STANDARD_EDITABLE_DECLARES(Gate, eItemGate, GATE, 1)
+   STANDARD_EDITABLE_DECLARES(Gate, eItemGate, GATE, VIEW_PLAYFIELD)
 
    //DECLARE_NOT_AGGREGATABLE(Gate)
    // Remove the comment from the line above if you don't want your object to
@@ -104,8 +104,6 @@ private:
    void GenerateBracketMesh(Vertex3D_NoTex2 *buf) const;
    void GenerateWireMesh(Vertex3D_NoTex2 *buf) const;
 
-   PinTable *m_ptable = nullptr;
-
    RenderDevice *m_rd = nullptr;
 
    LineSeg *m_plineseg = nullptr;
@@ -113,8 +111,10 @@ private:
    float m_lastAngle = FLT_MAX;
 
    float m_vertexbuffer_angle = FLT_MAX;
-   MeshBuffer *m_wireMeshBuffer = nullptr;
-   MeshBuffer *m_bracketMeshBuffer = nullptr;
+   std::shared_ptr<MeshBuffer> m_wireMeshBuffer;
+   std::shared_ptr<MeshBuffer> m_bracketMeshBuffer;
+   std::shared_ptr<MeshBuffer> m_wireEdgeMeshBuffer;
+   std::shared_ptr<MeshBuffer> m_bracketEdgeMeshBuffer;
 
    const Vertex3D_NoTex2 *m_vertices = nullptr;
    const WORD            *m_indices = nullptr;

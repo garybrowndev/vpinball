@@ -2,7 +2,7 @@
 
 #include "common.h"
 #include "SurfaceGraphics.h"
-#include "VPXPlugin.h"
+#include "plugins/VPXPlugin.h"
 #include "resources/AssetManager.h"
 #include "actors/Group.h"
 
@@ -61,8 +61,8 @@ public:
 
    int GetWidth() const { return m_width; }
    int GetHeight() const { return m_height; }
-   void SetWidth(int w) { if (m_width == w) return; m_width = w; m_pStage->SetSize(static_cast<float>(m_width), static_cast<float>(m_height)); DiscardFrames(); if (m_run && m_show) OnDMDChanged(); }
-   void SetHeight(int h) { if (m_height == h) return; m_height = h; m_pStage->SetSize(static_cast<float>(m_width), static_cast<float>(m_height)); DiscardFrames(); if (m_run && m_show) OnDMDChanged(); }
+   void SetWidth(int w) { if (m_width == w) return; m_width = w; m_pStage->SetSize(m_width, m_height); DiscardFrames(); if (m_run && m_show) OnDMDChanged(); }
+   void SetHeight(int h) { if (m_height == h) return; m_height = h; m_pStage->SetSize(m_width, m_height); DiscardFrames(); if (m_run && m_show) OnDMDChanged(); }
 
    RenderMode GetRenderMode() const { return m_renderMode; }
    void SetRenderMode(RenderMode renderMode) { m_renderMode = renderMode; DiscardFrames(); if (m_run && m_show) OnDMDChanged(); }
@@ -107,6 +107,7 @@ public:
 
    uint8_t* UpdateRGBFrame();
    uint8_t* UpdateLum8Frame();
+   float* UpdateLumFP32Frame();
    const uint16_t* GetSegFrame() const { return m_segData; }
    unsigned int GetFrameId() const { return m_frameId; }
 
@@ -121,9 +122,10 @@ private:
 
    void DiscardFrames()
    {
-      delete m_pSurface; m_pSurface = nullptr; 
+      delete m_pSurface; m_pSurface = nullptr;
       delete[] m_rgbFrame; m_rgbFrame = nullptr;
       delete[] m_lum8Frame; m_lum8Frame = nullptr;
+      delete[] m_lumFP32Frame; m_lumFP32Frame = nullptr;
       m_rgbaFrame.clear();
       m_lumFrame.clear();
    }
@@ -140,6 +142,9 @@ private:
    uint8_t* m_lum8Frame = nullptr;
    bool m_lum8FrameDirty = true;
 
+   float* m_lumFP32Frame = nullptr;
+   bool m_lumFP32FrameDirty = true;
+
    void UpdateLumFrame();
    std::vector<uint8_t> m_lumFrame;
    bool m_lumFrameDirty = true;
@@ -150,7 +155,7 @@ private:
    int32_t m_runtimeVersion = 1008;
    bool m_clear = false;
    int m_renderLockCount = 0;
-   uint16_t m_segData[128] = { 0 };
+   uint16_t m_segData[128] = {};
    int m_width = 128;
    int m_height = 32;
    Group* m_pStage;

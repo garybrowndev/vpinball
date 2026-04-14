@@ -28,7 +28,7 @@ void serial::list_ports(vector<string> &availablePorts)
                tmp += allDeviceNames[c + c2];
                c2++;
             }
-            if (!tmp.empty() && tmp.substr(0, 3) == "COM")
+            if (tmp.starts_with("COM"))
                availablePorts.push_back(tmp);
             c += c2 + 1;
          } while (c < ret && allDeviceNames[c] != '\0');
@@ -295,9 +295,9 @@ const char* serial::get_setup_str()
 {
 	static char str[11];
 	if (!configured)
-		snprintf(str, sizeof(str), "INVALID");
+		snprintf(str, std::size(str), "INVALID");
 	else
-		snprintf(str, sizeof(str), "%u %d%c%d",
+		snprintf(str, std::size(str), "%u %u%c%u",
 			get_baud_int(baud),
 			get_bits_int(bits),
 			get_parity_str(parity),

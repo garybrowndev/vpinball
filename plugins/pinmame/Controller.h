@@ -1,7 +1,9 @@
+// license:GPLv3+
+
 #pragma once
 
 #include "common.h"
-#include "ControllerPlugin.h"
+#include "plugins/ControllerPlugin.h"
 
 namespace PinMAME {
 
@@ -10,7 +12,7 @@ class Game;
 class Controller final
 {
 public:
-   Controller(const MsgPluginAPI* api, unsigned int endpointId, PinmameConfig& config);
+   Controller(const MsgPluginAPI* api, unsigned int endpointId, const PinmameConfig& config);
    ~Controller();
 
    PSC_IMPLEMENT_REFCOUNT()
@@ -18,14 +20,16 @@ public:
    void SetOnDestroyHandler(void (*handler)(Controller*)) { m_onDestroyHandler = handler; }
    void SetOnGameStartHandler(void (*handler)(Controller*)) { m_onGameStartHandler = handler; }
    void SetOnGameEndHandler(void (*handler)(Controller*)) { m_onGameEndHandler = handler; }
+   bool GetIsPlugin() const { return true; }
 
    string GetVersion() const;
 
    // TODO may also be accessed as a collection object
    Game* GetGames(const string& name) const;
 
-   string GetGameName() const { if (m_pPinmameGame) return m_pPinmameGame->name; else return string(); }
+   string GetGameName() const { return m_szGameName; }
    void SetGameName(const string& name);
+   string GetROMName() const { if (m_pPinmameGame) return m_pPinmameGame->name; else return string(); }
 
    string GetSplashInfoLine() const { return m_splashInfoLine; }
    void SetSplashInfoLine(const string& text) { m_splashInfoLine = text; }
@@ -75,22 +79,20 @@ public:
    const vector<PinmameSolenoidState>& GetChangedSolenoids();
 
    // TODO should we bridge this ? but to what as External dmddevice.dll is handled through the plugin bus ?
-   bool GetShowPinDMD() const { LOGE("ShowPinDMD is not implemented"); return false; }
-   void SetShowPinDMD(bool v) const { LOGE("ShowPinDMD is not implemented"); }
+   bool GetShowPinDMD() const { LOGE("ShowPinDMD is not implemented"s); return false; }
+   void SetShowPinDMD(bool v) const { LOGE("ShowPinDMD is not implemented"s); }
 
    // TODO should we bridge this ? but to what as Windows DMD is handled through the plugin bus ?
-   bool GetShowWinDMD() const { LOGE("ShowWinDMD is not implemented"); return false; }
-   void SetShowWinDMD(bool v) const { LOGE("ShowWinDMD is not implemented"); }
+   bool GetShowWinDMD() const { LOGE("ShowWinDMD is not implemented"s); return false; }
+   void SetShowWinDMD(bool v) const { LOGE("ShowWinDMD is not implemented"s); }
 
-   // All these properties/methods are part of the VPinMame IDL but doesn't seem to be used anywhere (or are deprecated)
+   // All these properties/methods are part of the VPinMAME IDL but doesn't seem to be used anywhere (or are deprecated)
    //STDMETHOD(get_DmdWidth)(/*[out, retval]*/ int *pVal);
    //STDMETHOD(get_DmdHeight)(/*[out, retval]*/ int *pVal);
    //STDMETHOD(get_DmdPixel)(/*[in]*/ int x, /*[in]*/ int y, /*[out, retval]*/ int *pVal);
    //STDMETHOD(get_updateDmdPixels)(/*[in]*/ int **buf, /*[in]*/ int width, /*[in]*/ int height, /*[out, retval]*/ int *pVal);
    //STDMETHOD(get_ChangedLEDsState)(/*[in]*/ int nHigh, int nLow, int nnHigh, int nnLow, int **buf, /*[out, retval]*/ int *pVal);
    //STDMETHOD(get_Settings)(/*[out, retval]*/ IControllerSettings **pVal);
-   //STDMETHOD(get_LockDisplay)(/*[out, retval]*/ VARIANT_BOOL *pVal);
-   //STDMETHOD(put_LockDisplay)(/*[in]*/ VARIANT_BOOL newVal);
    //STDMETHOD(get_GIStrings)(/*[out, retval]*/ VARIANT *pVal);
    //STDMETHOD(get_Solenoids)(/*[out, retval]*/ VARIANT *pVal);
    //STDMETHOD(get_ChangedGIStrings)(/*[out, retval]*/ VARIANT *pVal);
@@ -120,22 +122,25 @@ public:
    //STDMETHOD(get_AudioDeviceModule)(/*[in]*/ int num, /*[out, retval]*/ BSTR *pVal);
    //STDMETHOD(get_CurrentAudioDevice)(/*[out, retval]*/ int *pVal);
    //STDMETHOD(put_CurrentAudioDevice)(/*[in]*/ int num);
-   bool GetDoubleSize() const { LOGE("DoubleSize is deprecated"); return false; }
-   void SetDoubleSize(bool v) const { LOGE("DoubleSize is deprecated"); }
-   bool GetShowFrame() const { LOGE("ShowFrame is deprecated"); return false; }
-   void SetShowFrame(bool v) const { LOGE("ShowFrame is deprecated"); }
-   bool GetShowDMDOnly() const { LOGE("ShowDMDOnly is deprecated"); return false; }
-   void SetShowDMDOnly(bool v) const { LOGE("ShowDMDOnly is deprecated"); }
-   bool GetShowTitle() const { LOGE("ShowTitle is deprecated"); return false; }
-   void SetShowTitle(bool v) const { LOGE("ShowTitle is deprecated"); }
-   int GetFastFrames() const { LOGE("FastFrames is deprecated"); return 0; }
-   void SetFastFrames(int v) const { LOGE("FastFrames is deprecated"); }
-   bool GetIgnoreRomCrc() const { LOGE("IgnoreRomCrc is deprecated"); return false; }
-   void SetIgnoreRomCrc(bool v) const { LOGE("IgnoreRomCrc is deprecated"); }
-   bool GetCabinetMode() const { LOGE("CabinetMode is deprecated"); return false; }
-   void SetCabinetMode(bool v) const { LOGE("CabinetMode is deprecated"); }
-   int GetSoundMode() const { LOGE("SoundMode is deprecated"); return 0; }
-   void SetSoundMode(int v) const { LOGE("SoundMode is deprecated"); }
+   bool GetLockDisplay() const { LOGE("LockDisplay is deprecated"s); return false; }
+   void SetLockDisplay(bool v) const { LOGE("LockDisplay is deprecated"s); }
+   bool GetDoubleSize() const { LOGE("DoubleSize is deprecated"s); return false; }
+   void SetDoubleSize(bool v) const { LOGE("DoubleSize is deprecated"s); }
+   bool GetShowFrame() const { LOGE("ShowFrame is deprecated"s); return false; }
+   void SetShowFrame(bool v) const { LOGE("ShowFrame is deprecated"s); }
+   bool GetShowDMDOnly() const { LOGE("ShowDMDOnly is deprecated"s); return false; }
+   void SetShowDMDOnly(bool v) const { LOGE("ShowDMDOnly is deprecated"s); }
+   bool GetShowTitle() const { LOGE("ShowTitle is deprecated"s); return false; }
+   void SetShowTitle(bool v) const { LOGE("ShowTitle is deprecated"s); }
+   int GetFastFrames() const { LOGE("FastFrames is deprecated"s); return 0; }
+   void SetFastFrames(int v) const { LOGE("FastFrames is deprecated"s); }
+   bool GetIgnoreRomCrc() const { LOGE("IgnoreRomCrc is deprecated"s); return false; }
+   void SetIgnoreRomCrc(bool v) const { LOGE("IgnoreRomCrc is deprecated"s); }
+   bool GetCabinetMode() const { LOGE("CabinetMode is deprecated"s); return false; }
+   void SetCabinetMode(bool v) const { LOGE("CabinetMode is deprecated"s); }
+   int GetSoundMode() const { LOGE("SoundMode is deprecated"s); return 0; }
+   void SetSoundMode(int v) const { LOGE("SoundMode is deprecated"s); }
+   void ShowOptsDialog(long hParentWnd = 0L) const { LOGE("ShowOptsDialog is deprecated"s); }
    //STDMETHOD(ShowPathesDialog)(/*[in,defaultvalue(0)]*/ LONG_PTR hParentWnd);
    //STDMETHOD(SetDisplayPosition)(/*[in]*/ int x, /*[in]*/ int y, /*[in]*/ LONG_PTR hParentWindow);
    //STDMETHOD(CheckROMS)(/*[in,defaultvalue(0)]*/ int nShowOptions, /*[in,defaultvalue(0)]*/ LONG_PTR hParentWnd, /*[out, retval]*/ VARIANT_BOOL *pVal);
@@ -144,11 +149,12 @@ public:
 
    const string& GetVpmPath() const { return m_vpmPath; }
 
-   void SetCheat(int cheat) { m_cheat = cheat; }
+   void SetCheat(bool cheat) { m_cheat = cheat; }
 
 private:
    string m_vpmPath;
-   PinmameGame* m_pPinmameGame = nullptr; // Game selected by setting GameName property
+   string m_szGameName;
+   PinmameGame* m_pPinmameGame = nullptr;
    PinmameMechConfig* m_pPinmameMechConfig = nullptr;
    vector<PinmameLampState> m_lampStates;
    vector<PinmameLEDState> m_ledStates;
@@ -157,12 +163,12 @@ private:
    vector<PinmameGIState> m_giStates;
    vector<PinmameSolenoidState> m_solenoidStates;
    string m_splashInfoLine; // Info line shown during startup
-   bool m_hidden = true; // Show/Hide PinMame window
+   bool m_hidden = true; // Show/Hide PinMAME window
 
    const MsgPluginAPI* const m_msgApi;
    const unsigned int m_endpointId;
    unsigned int m_getDmdSrcMsgId, m_onDmdChangedMsgId;
-   DisplaySrcId m_defaultDmd { 0 };
+   DisplaySrcId m_defaultDmd {};
    void UpdateDmdSrc();
    static void OnDmdSrcChanged(const unsigned int msgId, void* userData, void* msgData);
 
@@ -170,7 +176,7 @@ private:
    void (*m_onGameStartHandler)(Controller*) = nullptr;
    void (*m_onGameEndHandler)(Controller*) = nullptr;
 
-   int m_cheat = 0;
+   bool m_cheat = false;
 };
 
 }

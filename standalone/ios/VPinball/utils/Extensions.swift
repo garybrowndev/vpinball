@@ -68,24 +68,29 @@ extension UIImage {
 }
 
 extension View {
-    func onTouchDownGesture(callback: (() -> Void)? = nil) -> some View {
-        modifier(OnTouchDownGesture(callback: callback))
-    }
-
     func blinkEffect(interval: TimeInterval = 0.75, maxLoop: Int = 0) -> some View {
         modifier(BlinkEffect(interval: interval,
                              maxLoop: maxLoop))
     }
 
-    func gradientEffect(icon: String, size: CGSize, contentMode: ContentMode) -> some View {
+    func gradientEffect(icon: String, contentMode: ContentMode) -> some View {
         modifier(GradientEffect(icon: icon,
-                                size: size,
                                 contentMode: contentMode))
     }
 
-    func gradientEffect(icon: String, aspectRatio: CGFloat, contentMode: ContentMode) -> some View {
-        modifier(GradientEffectWithAspectRatio(icon: icon,
-                                               aspectRatio: aspectRatio,
-                                               contentMode: contentMode))
+    func statusBarHidden(_ hidden: Bool,
+                         style: UIStatusBarStyle? = nil,
+                         animated: Bool = true) -> some View
+    {
+        onAppear {
+            StatusBarManager.shared.setHidden(hidden,
+                                              style: style,
+                                              animated: animated)
+        }
+        .onChange(of: hidden) {
+            StatusBarManager.shared.setHidden(hidden,
+                                              style: style,
+                                              animated: animated)
+        }
     }
 }

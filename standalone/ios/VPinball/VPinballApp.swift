@@ -1,35 +1,31 @@
 import Foundation
-import SwiftData
 import SwiftUI
 
-@main
-struct VPinballApp: App {
-    @State var showSplash = true
+struct VPinballAppView: View {
+    @ObservedObject var vpinballModel = VPinballModel.shared
 
-    init() {
-        UISearchBar.appearance().overrideUserInterfaceStyle = .dark
-    }
-
-    var body: some Scene {
-        WindowGroup {
-            if showSplash {
+    var body: some View {
+        ZStack {
+            if vpinballModel.showSplash {
                 SplashView()
                     .onAppear {
                         handleAppear()
                     }
             } else {
                 MainView()
+                    .opacity(vpinballModel.showMainView ? 1 : 0)
             }
         }
-        .environmentObject(VPinballViewModel.shared)
-        .modelContainer(for: PinTable.self)
+        .onChange(of: vpinballModel.isPlaying) {
+            vpinballModel.showMainView = !vpinballModel.isPlaying
+
+            StatusBarManager.shared.setHidden(!vpinballModel.showMainView,
+                                              animated: false)
+        }
     }
 
     func handleAppear() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            withAnimation {
-                showSplash = false
-            }
-        }
+        VPinballManager.shared.startup()
+        vpinballModel.startSplashTimer()
     }
 }

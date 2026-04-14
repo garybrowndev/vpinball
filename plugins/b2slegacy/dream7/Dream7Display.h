@@ -9,17 +9,17 @@
 #include <map>
 
 
-
 namespace B2SLegacy {
 
 class Dream7Display final : public Control
 {
 public:
    Dream7Display(VPXPluginAPI* vpxApi);
-   virtual ~Dream7Display();
+   ~Dream7Display() override;
 
    void OnPaint(VPXRenderContext2D* const ctx) override;
    void OnHandleCreated() override;
+   void OnPaintBackground(VPXGraphics* pGraphics) override;
 
    bool IsHidden() const { return m_hidden; }
    void SetHidden(const bool hidden) { m_hidden = hidden; }
@@ -47,11 +47,11 @@ public:
    void SetGlassColorCenter(const uint32_t glassColorCenter);
    int GetGlassAlpha() const { return m_glassAlpha; }
    void SetGlassAlpha(const int glassAlpha);
-   int GetGlassAlphaCenter() const { return m_glassAlphaCenter; }
-   void SetGlassAlphaCenter(const int glassAlphaCenter);
+   uint8_t GetGlassAlphaCenter() const { return m_glassAlphaCenter; }
+   void SetGlassAlphaCenter(const uint8_t glassAlphaCenter);
    float GetGlow() const { return m_glow; }
    void SetGlow(const float glow);
-   const SDL_FRect& GetBulbSize() { return m_bulbSize; }
+   const SDL_FRect& GetBulbSize() const { return m_bulbSize; }
    void SetBulbSize(const SDL_FRect& bulbSize);
    bool IsWireFrame() const { return m_wireFrame; }
    void SetWireFrame(const bool wireFrame);
@@ -66,7 +66,7 @@ public:
    float GetAngle() const { return m_angle; }
    void SetAngle(const float angle) { if (m_angle != angle) { m_angle = angle; InitSegmentsStyle(); } }
    void SetValue(int segment, const string& value);
-   void SetValue(int segment, long value);
+   void SetValue(int segment, int value);
    void SetExtraSpacing(int segment, float value);
    void SegmentNumberInvalidated(SegmentNumber* pNumber);
    void SegmentDisplayHandleCreated();
@@ -74,7 +74,7 @@ public:
 
 private:
    void InitMatrix(float shear, float scaleFactor, bool mirrored);
-   SDL_FRect GetBounds(Matrix* pMatrix);
+   SDL_FRect GetBounds(const Matrix* const pMatrix);
    void InitSegments();
    void InitSegments(int digits, SegmentNumberType type, float shear);
    void InitSegmentsStyle();
@@ -94,7 +94,7 @@ private:
    uint32_t m_glassColor;
    uint32_t m_glassColorCenter;
    int m_glassAlpha;
-   int m_glassAlphaCenter;
+   uint8_t m_glassAlphaCenter;
    float m_glow;
    SDL_FRect m_bulbSize;
    bool m_wireFrame;
@@ -105,7 +105,6 @@ private:
    float m_angle;
    Matrix* m_pMatrix;
    SDL_FRect m_bounds;
-   std::unique_ptr<VPXGraphics> m_pGraphics;
 };
 
 }

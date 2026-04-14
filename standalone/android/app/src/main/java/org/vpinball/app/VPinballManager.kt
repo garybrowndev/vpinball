@@ -1,213 +1,247 @@
 package org.vpinball.app
 
 import android.content.Context
-import android.graphics.BitmapFactory
-import android.net.Uri
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.util.Log
 import android.util.Size
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.lifecycle.viewmodel.compose.viewModel
 import java.io.File
-import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.json.Json
 import org.koin.core.component.KoinComponent
-import org.koin.core.component.inject
-import org.vpinball.app.data.entity.PinTable
-import org.vpinball.app.data.repository.PinTableRepository
-import org.vpinball.app.jni.VPinballCaptureScreenshotData
-import org.vpinball.app.jni.VPinballCustomTableOption
+import org.libsdl.app.SDL
+import org.vpinball.app.jni.VPinballCommandData
 import org.vpinball.app.jni.VPinballEvent
 import org.vpinball.app.jni.VPinballJNI
 import org.vpinball.app.jni.VPinballLogLevel
+import org.vpinball.app.jni.VPinballPath
 import org.vpinball.app.jni.VPinballProgressData
 import org.vpinball.app.jni.VPinballRumbleData
-import org.vpinball.app.jni.VPinballScriptErrorData
 import org.vpinball.app.jni.VPinballSettingsSection
 import org.vpinball.app.jni.VPinballSettingsSection.STANDALONE
 import org.vpinball.app.jni.VPinballStatus
-import org.vpinball.app.jni.VPinballTableEventData
-import org.vpinball.app.jni.VPinballTableInfo
-import org.vpinball.app.jni.VPinballTableOptions
-import org.vpinball.app.jni.VPinballTablesData
-import org.vpinball.app.jni.VPinballViewSetup
 import org.vpinball.app.jni.VPinballWebServerData
+import org.vpinball.app.ui.screens.landing.LandingScreenViewModel
 import org.vpinball.app.util.FileUtils
-import org.vpinball.app.util.basePath
-import org.vpinball.app.util.deleteFiles
-import org.vpinball.app.util.hasImage
-import org.vpinball.app.util.imageFile
-import org.vpinball.app.util.loadImage
-import org.vpinball.app.util.tableFile
 
 object VPinballManager : KoinComponent {
-    enum class ScreenshotMode(val value: Int) {
-        INSTRUCTIONS(0),
-        ARTWORK(1),
-        QUIT(2),
-    }
+    val vpinballJNI: VPinballJNI = VPinballJNI()
 
-    private const val TAG = "VPinballManager"
-
-    private var vpinballJNI: VPinballJNI = VPinballJNI()
-    private val pinTableRepository: PinTableRepository by inject()
-
-    private lateinit var activity: VPinballActivity
-    private lateinit var filesDir: File
+    private lateinit var context: Context
     private lateinit var cacheDir: File
     private lateinit var displaySize: Size
     private lateinit var vibrator: Vibrator
 
-    private var activeTable: PinTable? = null
-    private var haptics = false
-    private var error: String? = null
-    private var screenshotMode: ScreenshotMode? = null
+    private var playerActivity: VPinballPlayerActivity? = null
+    private var mainActivity: VPinballActivity? = null
 
-    fun initialize(activity: VPinballActivity) {
-        this.activity = activity
+    private var lastProgressEvent: VPinballEvent? = null
+    private var lastProgress: Int? = null
 
-        filesDir = activity.filesDir
-        cacheDir = activity.cacheDir
+    enum class InitState {
+        NOT_INITIALIZED,
+        SDL_READY,
+        INITIALIZED,
+    }
 
-        val displayMetrics = activity.resources.displayMetrics
+    private var initState = InitState.NOT_INITIALIZED
+    private val initLock = Object()
+    private val pendingCallbacks = mutableListOf<() -> Unit>()
+
+    fun initialize(context: Context) {
+        this.context = context.applicationContext
+        cacheDir = context.cacheDir
+
+        val displayMetrics = context.resources.displayMetrics
         val width = displayMetrics.widthPixels
         val height = displayMetrics.heightPixels
         displaySize = if (width > height) Size(height, width) else Size(width, height)
 
         vibrator =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager = activity.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
                 vibratorManager.defaultVibrator
             } else {
-                activity.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
             }
 
-        vpinballJNI.VPinballInit { value, data ->
+        SAFFileSystem.initialize(context)
+    }
+
+    fun onActivityReady(activity: VPinballActivity) {
+        synchronized(initLock) {
+            mainActivity = activity
+            SDL.setContext(activity)
+
+            if (initState != InitState.NOT_INITIALIZED) {
+                return
+            }
+
+            initState = InitState.SDL_READY
+            performInit()
+        }
+    }
+
+    private fun performInit() {
+        vpinballJNI.VPinballInit { value, jsonData ->
+            val activity = mainActivity ?: return@VPinballInit
             val viewModel = activity.viewModel
-            val event = VPinballEvent.entries.find { it.ordinal == value }
+            val event = VPinballEvent.entries.find { it.ordinal == value } ?: return@VPinballInit
+
             when (event) {
-                VPinballEvent.ARCHIVE_UNCOMPRESSING,
-                VPinballEvent.ARCHIVE_COMPRESSING,
-                VPinballEvent.LOADING_ITEMS,
-                VPinballEvent.LOADING_SOUNDS,
-                VPinballEvent.LOADING_IMAGES,
-                VPinballEvent.LOADING_FONTS,
-                VPinballEvent.LOADING_COLLECTIONS,
-                VPinballEvent.PRERENDERING -> {
-                    val progressData = data as? VPinballProgressData
-                    Log.v(TAG, "event=${event.name}, data=${progressData}")
-                    progressData?.let {
-                        CoroutineScope(Dispatchers.Main).launch {
-                            viewModel.title(activeTable?.name ?: "")
-                            viewModel.progress(progressData.progress)
-                            viewModel.status(event.text)
+                VPinballEvent.INIT_COMPLETE -> {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        runCatching { FileUtils.copyAssets(context.assets, "", File(vpinballJNI.VPinballGetPath(VPinballPath.ROOT.value))) }
+
+                        synchronized(initLock) {
+                            initState = InitState.INITIALIZED
+                            pendingCallbacks.forEach { callback -> CoroutineScope(Dispatchers.Main).launch { callback() } }
+                            pendingCallbacks.clear()
                         }
+                    }
+                }
+                VPinballEvent.EXTRACT_SCRIPT,
+                VPinballEvent.LOADING,
+                VPinballEvent.PRERENDERING -> {
+                    val progressData =
+                        jsonData?.let { jsonStr ->
+                            try {
+                                Json.decodeFromString<VPinballProgressData>(jsonStr)
+                            } catch (e: Exception) {
+                                log(VPinballLogLevel.WARN, "Failed to parse progress data JSON: $jsonStr - ${e.message}")
+                                null
+                            }
+                        }
+
+                    val shouldUpdate = lastProgressEvent != event || lastProgress != progressData?.progress
+                    if (shouldUpdate) {
+                        log(VPinballLogLevel.INFO, "event=${event.name}, data=${progressData}")
+                        lastProgressEvent = event
+                        lastProgress = progressData?.progress
+
+                        progressData?.let { CoroutineScope(Dispatchers.Main).launch { viewModel.updateHUD(progressData.progress, event.text ?: "") } }
                     }
                 }
                 VPinballEvent.PLAYER_STARTED -> {
-                    log(VPinballLogLevel.INFO, "event=${event.name}")
+                    lastProgressEvent = null
+                    lastProgress = null
                     CoroutineScope(Dispatchers.Main).launch {
-                        viewModel.playing(true)
+                        viewModel.isPlaying = true
                         delay(500)
-                        viewModel.loading(false)
-                        if (loadValue(STANDALONE, "TouchInstructions", true)) {
-                            viewModel.touchInstructions(true)
-                        }
-                        if (loadValue(STANDALONE, "TouchOverlay", false)) {
-                            viewModel.touchOverlay(true)
-                        }
+                        viewModel.hideHUD()
                     }
-                    vpinballJNI.VPinballSetWebServerUpdated()
                 }
                 VPinballEvent.RUMBLE -> {
-                    if (haptics) {
-                        val rumbleData = data as? VPinballRumbleData
-                        rumbleData?.let { rumble(it) }
-                    }
-                }
-                VPinballEvent.SCRIPT_ERROR -> {
-                    if (error == null) {
-                        val scriptErrorData = data as? VPinballScriptErrorData
-                        error =
-                            scriptErrorData?.let { "${it.error.text} on line ${it.line}, position ${it.position}:\n\n${it.description}" }
-                                ?: "Script error."
-                    }
-                }
-                VPinballEvent.LIVE_UI_TOGGLE -> {
-                    log(VPinballLogLevel.INFO, "event=${event.name}")
-                    CoroutineScope(Dispatchers.Main).launch {
-                        viewModel.toggleLiveUI()
-                        setPlayState(!viewModel.isLiveUI())
-                    }
-                }
-                VPinballEvent.LIVE_UI_UPDATE -> {}
-                VPinballEvent.PLAYER_CLOSING -> {
-                    log(VPinballLogLevel.INFO, "event=${event.name}")
+                    val rumbleData =
+                        jsonData?.let { jsonStr ->
+                            try {
+                                Json.decodeFromString<VPinballRumbleData>(jsonStr)
+                            } catch (e: Exception) {
+                                log(VPinballLogLevel.WARN, "Failed to parse rumble data JSON: $jsonStr - ${e.message}")
+                                null
+                            }
+                        }
+                    rumbleData?.let { rumble(it) }
                 }
                 VPinballEvent.PLAYER_CLOSED -> {
-                    log(VPinballLogLevel.INFO, "event=${event.name}")
-                }
-                VPinballEvent.STOPPED -> {
-                    log(VPinballLogLevel.INFO, "event=${event.name}")
-                    activeTable = null
+                    val tableToCleanup = viewModel.activeTable
+                    viewModel.activeTable = null
                     CoroutineScope(Dispatchers.Main).launch {
-                        viewModel.stopped()
-                        error?.let { error ->
-                            delay(500)
-                            showError(error)
+                        viewModel.isPlaying = false
+                        viewModel.hideHUD()
+                        delay(100)
+
+                        tableToCleanup?.let { table ->
+                            if (SAFFileSystem.isUsingSAF()) {
+                                viewModel.showHUD(table.name, "Saving changes...")
+                                delay(50)
+
+                                withContext(Dispatchers.IO) {
+                                    TableManager.getInstance().cleanupLoadedTable(table) { progress, status ->
+                                        CoroutineScope(Dispatchers.Main).launch { viewModel.updateHUD(progress, status) }
+                                    }
+                                }
+
+                                viewModel.hideHUD()
+                            } else {
+                                withContext(Dispatchers.IO) { TableManager.getInstance().cleanupLoadedTable(table) }
+                            }
+
+                            withContext(Dispatchers.IO) {
+                                TableManager.getInstance().reloadTableImage(table)?.let { updatedTable ->
+                                    LandingScreenViewModel.triggerUpdateTable(updatedTable)
+                                }
+                            }
                         }
+
+                        delay(2000)
+                        playerActivity?.finish()
                     }
-                    vpinballJNI.VPinballSetWebServerUpdated()
                 }
                 VPinballEvent.WEB_SERVER -> {
-                    val webServerData = data as? VPinballWebServerData
-                    log(VPinballLogLevel.INFO, "event=${event.name}, data=${webServerData}")
-                    webServerData?.let { CoroutineScope(Dispatchers.Main).launch { viewModel.webServerURL = webServerData.url } }
+                    val webServerData =
+                        jsonData?.let { jsonStr ->
+                            try {
+                                Json.decodeFromString<VPinballWebServerData>(jsonStr)
+                            } catch (_: Exception) {
+                                null
+                            }
+                        }
+                    CoroutineScope(Dispatchers.Main).launch { viewModel.webServerURL = webServerData?.url }
                 }
-                VPinballEvent.CAPTURE_SCREENSHOT -> {
-                    val captureScreenshotData = data as? VPinballCaptureScreenshotData
-                    log(VPinballLogLevel.INFO, "event=${event.name}, data=$captureScreenshotData")
-
-                    when (screenshotMode) {
-                        ScreenshotMode.INSTRUCTIONS ->
-                            viewModel.instructionsImage = BitmapFactory.decodeFile(File(cacheDir, "haze-bg.jpg").absolutePath)?.asImageBitmap()
-
-                        ScreenshotMode.ARTWORK -> viewModel.artworkImage = activeTable?.loadImage()
-
-                        ScreenshotMode.QUIT -> stop()
-                        else -> {}
+                VPinballEvent.COMMAND -> {
+                    val commandData =
+                        jsonData?.let { jsonStr ->
+                            try {
+                                Json.decodeFromString<VPinballCommandData>(jsonStr)
+                            } catch (e: Exception) {
+                                log(VPinballLogLevel.WARN, "Failed to parse command data JSON: $jsonStr - ${e.message}")
+                                null
+                            }
+                        }
+                    commandData?.let {
+                        if (it.command == "reloadTables") {
+                            CoroutineScope(Dispatchers.IO).launch {
+                                TableManager.getInstance().refresh()
+                                LandingScreenViewModel.triggerRefresh()
+                            }
+                        }
                     }
-                }
-                VPinballEvent.TABLE_LIST -> {
-                    return@VPinballInit handleTableList()
-                }
-                VPinballEvent.TABLE_IMPORT -> {
-                    handleTableImport(data)
-                }
-                VPinballEvent.TABLE_RENAME -> {
-                    handleTableRename(data)
-                }
-                VPinballEvent.TABLE_DELETE -> {
-                    handleTableDelete(data)
                 }
                 else -> {
                     log(VPinballLogLevel.WARN, "event=${event}")
                 }
             }
         }
+    }
 
-        CoroutineScope(Dispatchers.Main).launch {
-            delay(500)
-            updateWebServer()
+    fun whenReady(callback: () -> Unit) {
+        synchronized(initLock) {
+            if (initState == InitState.INITIALIZED) {
+                callback()
+            } else {
+                pendingCallbacks.add(callback)
+            }
+        }
+    }
+
+    fun isInitialized(): Boolean = synchronized(initLock) { initState == InitState.INITIALIZED }
+
+    fun setPlayerActivity(activity: VPinballPlayerActivity?) {
+        playerActivity = activity
+    }
+
+    fun setMainActivity(activity: VPinballActivity?) {
+        synchronized(initLock) {
+            mainActivity = activity
+            if (activity != null) {
+                SDL.setContext(activity)
+            }
         }
     }
 
@@ -215,8 +249,8 @@ object VPinballManager : KoinComponent {
         return displaySize
     }
 
-    fun getFilesDir(): File {
-        return filesDir
+    fun getCacheDir(): File {
+        return cacheDir
     }
 
     fun log(level: VPinballLogLevel, message: String) {
@@ -250,7 +284,7 @@ object VPinballManager : KoinComponent {
         vpinballJNI.VPinballLoadValueFloat(section.value, key, defaultValue)
 
     fun loadValue(section: VPinballSettingsSection, key: String, defaultValue: Boolean): Boolean =
-        loadValue(section, key, if (defaultValue) 1 else 0) == 1
+        vpinballJNI.VPinballLoadValueBool(section.value, key, defaultValue)
 
     fun loadValue(section: VPinballSettingsSection, key: String, defaultValue: String): String =
         vpinballJNI.VPinballLoadValueString(section.value, key, defaultValue)
@@ -264,7 +298,7 @@ object VPinballManager : KoinComponent {
     }
 
     fun saveValue(section: VPinballSettingsSection, key: String, value: Boolean) {
-        saveValue(section, key, if (value) 1 else 0)
+        vpinballJNI.VPinballSaveValueBool(section.value, key, value)
     }
 
     fun saveValue(section: VPinballSettingsSection, key: String, value: String) {
@@ -275,258 +309,49 @@ object VPinballManager : KoinComponent {
         vpinballJNI.VPinballResetIni()
     }
 
-    fun toggleFPS() {
-        vpinballJNI.VPinballToggleFPS()
-    }
+    suspend fun load(table: Table, onProgress: ((Int, String) -> Unit)? = null): Boolean {
+        val viewModel = mainActivity?.viewModel ?: return false
 
-    fun setPlayState(enable: Boolean) {
-        vpinballJNI.VPinballSetPlayState(if (enable) 1 else 0)
-    }
-
-    fun getCustomTableOptions(): List<VPinballCustomTableOption> {
-        val count = vpinballJNI.VPinballGetCustomTableOptionsCount()
-        val options = mutableListOf<VPinballCustomTableOption>()
-        for (i in 0 until count) {
-            val option = vpinballJNI.VPinballGetCustomTableOption(i)
-            if (option != null) {
-                options.add(option)
-            }
-        }
-        return options
-    }
-
-    fun setCustomTableOption(customTableOption: VPinballCustomTableOption) {
-        vpinballJNI.VPinballSetCustomTableOption(customTableOption)
-    }
-
-    fun resetCustomTableOptions() {
-        vpinballJNI.VPinballResetCustomTableOptions()
-    }
-
-    fun saveCustomTableOptions() {
-        vpinballJNI.VPinballSaveCustomTableOptions()
-    }
-
-    fun getTableOptions(): VPinballTableOptions {
-        return vpinballJNI.VPinballGetTableOptions()
-    }
-
-    fun setTableOptions(tableOptions: VPinballTableOptions) {
-        vpinballJNI.VPinballSetTableOptions(tableOptions)
-    }
-
-    fun resetTableOptions() {
-        vpinballJNI.VPinballResetTableOptions()
-    }
-
-    fun saveTableOptions() {
-        vpinballJNI.VPinballSaveTableOptions()
-    }
-
-    fun getViewSetup(): VPinballViewSetup {
-        return vpinballJNI.VPinballGetViewSetup()
-    }
-
-    fun setViewSetup(viewSetup: VPinballViewSetup) {
-        vpinballJNI.VPinballSetViewSetup(viewSetup)
-    }
-
-    fun setDefaultViewSetup() {
-        vpinballJNI.VPinballSetDefaultViewSetup()
-    }
-
-    fun resetViewSetup() {
-        vpinballJNI.VPinballResetViewSetup()
-    }
-
-    fun saveViewSetup() {
-        vpinballJNI.VPinballSaveViewSetup()
-    }
-
-    fun hasScreenshot(): Boolean {
-        return activeTable?.hasImage() ?: false
-    }
-
-    fun captureScreenshot(mode: ScreenshotMode) {
-        activeTable?.let { table ->
-            screenshotMode = mode
-            val path =
-                when (mode) {
-                    ScreenshotMode.INSTRUCTIONS -> File(cacheDir, "haze-bg.jpg").absolutePath
-                    else -> table.imageFile.absolutePath
-                }
-            vpinballJNI.VPinballCaptureScreenshot(path)
-        }
-    }
-
-    //
-    // Import process:
-    //
-    // Delete contents of cacheDir
-    // Determine filename from uri
-    // Copy uri to cacheDir
-    //
-    // If zip or vpxz, uncompress, and delete zip or vpxz
-    // If vpx, do nothing
-    //
-    // Search for first vpx file in cacheDir
-    // If found, generate uuid folder in filesDir,
-    // and recursively copy from vpx file folder into uuid folder
-    //
-
-    fun importUri(
-        context: Context,
-        uri: Uri,
-        onUpdate: (Int, String) -> Unit,
-        onComplete: (uuid: String, path: String) -> Unit,
-        onError: () -> Unit,
-    ) {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                cacheDir.deleteRecursively()
-                cacheDir.mkdir()
-                val filename = FileUtils.filenameFromUri(context, uri)
-                if (filename == null) {
-                    log(VPinballLogLevel.ERROR, "Unable to get filename: uri=$uri")
-                    withContext(Dispatchers.Main) {
-                        onError()
-                        showErrorAndReset("Unable to import table.")
-                    }
-                    return@launch
-                }
-                withContext(Dispatchers.Main) { onUpdate(0, "Staging") }
-                val outputFile = File(cacheDir, filename)
-                FileUtils.copyFile(context, uri, outputFile) { progress -> launch(Dispatchers.Main) { onUpdate(progress, "Copying") } }
-                if (!outputFile.extension.equals("vpx", ignoreCase = true)) {
-                    if (vpinballJNI.VPinballUncompress(outputFile.absolutePath) != VPinballStatus.SUCCESS.value) {
-                        log(VPinballLogLevel.ERROR, "Failed to uncompress file")
-                        withContext(Dispatchers.Main) {
-                            onError()
-                            showErrorAndReset("Unable to import table.")
-                        }
-                        return@launch
-                    }
-                    outputFile.delete()
-                }
-                val vpxFile = FileUtils.findFileByExtension(cacheDir, "vpx")
-                if (vpxFile == null) {
-                    log(VPinballLogLevel.ERROR, "Unable to find vpx file")
-                    withContext(Dispatchers.Main) {
-                        onError()
-                        showErrorAndReset("Unable to import table.")
-                    }
-                    return@launch
-                }
-                val uuid = UUID.randomUUID().toString()
-                val uuidFolder = File(filesDir, uuid)
-                if (!uuidFolder.mkdir()) {
-                    log(VPinballLogLevel.ERROR, "Failed to create UUID folder")
-                    withContext(Dispatchers.Main) {
-                        onError()
-                        showErrorAndReset("Unable to import table.")
-                    }
-                    return@launch
-                }
-                FileUtils.copyDirectoryContents(vpxFile.parentFile!!, uuidFolder)
-                val newVpxFile = FileUtils.findFileByExtension(uuidFolder, "vpx")
-                if (newVpxFile == null) {
-                    log(VPinballLogLevel.ERROR, "Unable to find vpx file in UUID folder")
-                    withContext(Dispatchers.Main) {
-                        onError()
-                        showErrorAndReset("Unable to import table.")
-                    }
-                    return@launch
-                }
-                withContext(Dispatchers.Main) { onComplete(uuid, newVpxFile.name) }
-            } catch (e: Exception) {
-                log(VPinballLogLevel.ERROR, "An error occurred: ${e.message}")
-                withContext(Dispatchers.Main) {
-                    onError()
-                    showErrorAndReset("Unable to import script.")
-                }
-            }
-        }
-    }
-
-    fun extractScript(table: PinTable, onComplete: () -> Unit, onError: () -> Unit) {
-        if (activeTable != null) return
-        activeTable = table
-        CoroutineScope(Dispatchers.IO).launch {
-            if (!table.tableFile.exists()) {
-                withContext(Dispatchers.Main) {
-                    onError()
-                    showErrorAndReset("Unable to extract script.")
-                }
-                return@launch
-            }
-            val status = vpinballJNI.VPinballExtractScript(table.tableFile.absolutePath)
-            withContext(Dispatchers.Main) {
-                if (status == VPinballStatus.SUCCESS.value) {
-                    onComplete()
-                } else {
-                    onError()
-                    showErrorAndReset("Unable to extract script.")
-                }
-                activeTable = null
-            }
-        }
-    }
-
-    fun share(table: PinTable, onComplete: (file: File) -> Unit, onError: () -> Unit) {
-        if (activeTable != null) return
-        activeTable = table
-        CoroutineScope(Dispatchers.IO).launch {
-            if (!table.tableFile.exists()) {
-                withContext(Dispatchers.Main) {
-                    onError()
-                    showErrorAndReset("Unable to share table.")
-                }
-                return@launch
-            }
-            try {
-                cacheDir.deleteRecursively()
-                cacheDir.mkdir()
-                val name = table.name.replace(Regex("[ ]"), "_")
-                val shareFile = File(cacheDir, "${name}.vpxz")
-                val status = vpinballJNI.VPinballCompress(table.basePath.absolutePath, shareFile.absolutePath)
-                withContext(Dispatchers.Main) {
-                    if (status == VPinballStatus.SUCCESS.value) {
-                        onComplete(shareFile)
-                        activeTable = null
-                    } else {
-                        onError()
-                        showErrorAndReset("Unable to share table.")
-                    }
-                }
-            } catch (e: Exception) {
-                log(VPinballLogLevel.ERROR, "An error occurred: ${e.message}")
-                showErrorAndReset("Unable to share table.")
-            }
-        }
-    }
-
-    fun play(table: PinTable) {
-        if (activeTable != null) return
-        activeTable = table
-        error = null
-        CoroutineScope(Dispatchers.IO).launch {
-            if (!table.tableFile.exists()) {
-                showErrorAndReset("Unable to load table.")
-                return@launch
-            }
+        return withContext(Dispatchers.IO) {
             if (loadValue(STANDALONE, "ResetLogOnPlay", true)) {
                 vpinballJNI.VPinballResetLog()
             }
-            haptics = loadValue(STANDALONE, "Haptics", true)
-            withContext(Dispatchers.Main) { activity.viewModel.loading(true, table) }
-            if (vpinballJNI.VPinballLoad(table.tableFile.absolutePath) == VPinballStatus.SUCCESS.value) {
-                vpinballJNI.VPinballPlay()
-            } else {
+
+            val tablePath = TableManager.getInstance().stageTable(table) { progress, status -> onProgress?.invoke(progress, status) }
+
+            if (tablePath == null) {
+                log(VPinballLogLevel.ERROR, "Unable to stage table: ${table.uuid}")
                 delay(500)
-                activity.viewModel.stopped()
-                showErrorAndReset("Unable to load table.")
+                withContext(Dispatchers.Main) {
+                    viewModel.activeTable = null
+                    viewModel.hideHUD()
+                    LandingScreenViewModel.triggerError("Unable to stage table.")
+                }
+                return@withContext false
+            }
+
+            if (vpinballJNI.VPinballLoadTable(tablePath) == VPinballStatus.SUCCESS.value) {
+                true
+            } else {
+                log(VPinballLogLevel.ERROR, "Unable to load table: ${table.uuid}")
+                delay(500)
+                withContext(Dispatchers.Main) {
+                    viewModel.activeTable = null
+                    viewModel.hideHUD()
+                    LandingScreenViewModel.triggerError("Unable to load table.")
+                }
+                false
             }
         }
+    }
+
+    fun play() {
+        if (mainActivity?.viewModel?.activeTable == null) {
+            log(VPinballLogLevel.ERROR, "No table loaded for playback")
+            return
+        }
+
+        vpinballJNI.VPinballPlay()
     }
 
     fun stop() {
@@ -534,131 +359,11 @@ object VPinballManager : KoinComponent {
     }
 
     fun showError(message: String) {
-        activity.viewModel.setError(message)
-    }
-
-    private fun showErrorAndReset(message: String) {
         CoroutineScope(Dispatchers.Main).launch {
             delay(250)
-            showError(message)
-            activeTable = null
+            LandingScreenViewModel.triggerError(message)
         }
     }
 
-    private fun handleTableList(): VPinballTablesData {
-        return try {
-            val tables = kotlinx.coroutines.runBlocking { pinTableRepository.getAllSorted(true).first() }
-            log(VPinballLogLevel.DEBUG, "handleTableList: Found ${tables.size} tables")
-
-            val tableInfoList = tables.map { table -> VPinballTableInfo(tableId = table.uuid, name = table.name) }
-
-            VPinballTablesData(tables = tableInfoList, success = true)
-        } catch (e: Exception) {
-            log(VPinballLogLevel.ERROR, "handleTableList: Exception: ${e.message}")
-            VPinballTablesData(tables = emptyList(), success = false)
-        }
-    }
-
-    private fun handleTableImport(data: Any?) {
-        val eventData = data as? VPinballTableEventData ?: return
-        val filePath = eventData.path ?: ""
-
-        kotlinx.coroutines.runBlocking(Dispatchers.Main) {
-            try {
-                val fileUri = Uri.fromFile(File(filePath))
-                var importSuccess = false
-                var importError = false
-
-                importUri(
-                    context = activity,
-                    uri = fileUri,
-                    onUpdate = { _, _ -> },
-                    onComplete = { uuid, path ->
-                        CoroutineScope(Dispatchers.IO).launch {
-                            try {
-                                val name = path.substringBeforeLast('.').replace(Regex("[_]"), " ")
-                                val now = kotlinx.datetime.Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
-
-                                val table = PinTable(uuid = uuid, name = name, path = path, createdAt = now, modifiedAt = now)
-                                pinTableRepository.insert(table)
-
-                                withContext(Dispatchers.Main) {
-                                    importSuccess = true
-                                    vpinballJNI.VPinballSetWebServerUpdated()
-                                }
-                            } catch (e: Exception) {
-                                log(VPinballLogLevel.ERROR, "Failed to add imported table to database: ${e.message}")
-                                importError = true
-                            }
-                        }
-                    },
-                    onError = {
-                        log(VPinballLogLevel.ERROR, "Failed to import table from web server")
-                        importError = true
-                    },
-                )
-
-                var attempts = 0
-                while (!importSuccess && !importError && attempts < 300) {
-                    delay(100)
-                    attempts++
-                }
-
-                eventData.success = importSuccess
-            } catch (e: Exception) {
-                log(VPinballLogLevel.ERROR, "Failed to import table: ${e.message}")
-                eventData.success = false
-            }
-        }
-    }
-
-    private fun handleTableRename(data: Any?) {
-        val eventData = data as? VPinballTableEventData ?: return
-        val tableId = eventData.tableId ?: ""
-        val newName = eventData.newName ?: ""
-
-        kotlinx.coroutines.runBlocking(Dispatchers.Main) {
-            try {
-                val table = pinTableRepository.getById(tableId).first()
-                val updatedTable =
-                    table.copy(
-                        name = newName,
-                        modifiedAt = kotlinx.datetime.Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault()),
-                    )
-
-                pinTableRepository.update(updatedTable)
-
-                eventData.success = true
-                vpinballJNI.VPinballSetWebServerUpdated()
-            } catch (e: Exception) {
-                log(VPinballLogLevel.ERROR, "Failed to rename table: ${e.message}")
-                eventData.success = false
-            }
-        }
-    }
-
-    private fun handleTableDelete(data: Any?) {
-        val eventData = data as? VPinballTableEventData ?: return
-        val tableId = eventData.tableId ?: ""
-
-        kotlinx.coroutines.runBlocking(Dispatchers.Main) {
-            try {
-                val table = pinTableRepository.getById(tableId).first()
-
-                table.deleteFiles()
-
-                pinTableRepository.delete(table)
-
-                eventData.success = true
-                vpinballJNI.VPinballSetWebServerUpdated()
-            } catch (e: Exception) {
-                log(VPinballLogLevel.ERROR, "Failed to delete table: ${e.message}")
-                eventData.success = false
-            }
-        }
-    }
-
-    fun setWebLastUpdate() {
-        vpinballJNI.VPinballSetWebServerUpdated()
-    }
+    fun getPath(pathType: VPinballPath): String = vpinballJNI.VPinballGetPath(pathType.value)
 }

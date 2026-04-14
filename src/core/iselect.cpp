@@ -7,17 +7,23 @@ ISelect::ISelect()
 {
 }
 
+void ISelect::SetDirtyDraw()
+{
+   if (GetPTable())
+      GetPTable()->SetDirtyDraw();
+}
+
 void ISelect::SetObjectPos()
 {
    m_vpinball->ClearObjectPosCur();
 }
 
+void ISelect::RenderBlueprint(Sur *psur, const bool solid) { UIRenderPass2(psur); }
+
 void ISelect::OnLButtonDown(int x, int y)
 {
    m_dragging = true;
    m_markedForUndo = false; // So we will be marked when and if we are dragged
-   m_ptLast.x = x;
-   m_ptLast.y = y;
 
    GetPTable()->SetMouseCapture();
 
@@ -36,31 +42,6 @@ void ISelect::OnLButtonUp(int x, int y)
    {
       m_markedForUndo = false;
       STOPUNDOSELECT
-   }
-}
-
-void ISelect::OnMouseMove(int x, int y)
-{
-   if ((x == m_ptLast.x) && (y == m_ptLast.y))
-      return;
-
-   if (m_dragging && !GetIEditable()->GetISelect()->m_locked) // For drag points, follow the lock of the parent
-   {
-      PinTable * const ptable = GetPTable();
-      const float inv_zoom = 1.0f / ptable->m_zoom;
-
-      if (!m_markedForUndo)
-      {
-         m_markedForUndo = true;
-         STARTUNDOSELECT
-      }
-      MoveOffset((float)(x - m_ptLast.x)*inv_zoom, (float)(y - m_ptLast.y)*inv_zoom);
-
-      ptable->SetDirtyDraw();
-
-      m_ptLast.x = x;
-      m_ptLast.y = y;
-      SetObjectPos();
    }
 }
 
@@ -109,27 +90,17 @@ void ISelect::DoCommand(int icmd, int x, int y)
    switch (icmd)
    {
    case ID_DRAWINFRONT:
-   {
-      PinTable * const ptable = GetPTable();
-      RemoveFromVectorSingle(ptable->m_vedit, piedit);
-      ptable->m_vedit.push_back(piedit);
-      ptable->SetDirtyDraw();
+      GetPTable()->MovePartToFront(piedit);
       break;
-   }
    case ID_DRAWINBACK:
-   {
-      PinTable * const ptable = GetPTable();
-      RemoveFromVectorSingle(ptable->m_vedit, piedit);
-      ptable->m_vedit.insert(ptable->m_vedit.begin(), piedit);
-      ptable->SetDirtyDraw();
+      GetPTable()->MovePartToBack(piedit);
       break;
-   }
    case ID_SETASDEFAULT:
       piedit->WriteRegDefaults();
       break;
    case ID_LOCK:
       STARTUNDOSELECT
-      m_locked = !m_locked;
+      SetUILock(!IsUILocked());
       STOPUNDOSELECT
       break;
    }
@@ -138,8 +109,8 @@ void ISelect::DoCommand(int icmd, int x, int y)
 
 void ISelect::SetSelectFormat(Sur *psur)
 {
-   const COLORREF color = m_locked ? m_vpinball->m_elemSelectLockedColor
-                                   : m_vpinball->m_elemSelectColor;//GetSysColor(COLOR_HIGHLIGHT);
+   const COLORREF color = IsUILocked() ? m_vpinball->m_elemSelectLockedColor
+                                       : m_vpinball->m_elemSelectColor;//GetSysColor(COLOR_HIGHLIGHT);
 
    psur->SetBorderColor(color, false, 4);
    psur->SetLineColor(color, false, 4);
@@ -147,8 +118,8 @@ void ISelect::SetSelectFormat(Sur *psur)
 
 void ISelect::SetMultiSelectFormat(Sur *psur)
 {
-   const COLORREF color = m_locked ? m_vpinball->m_elemSelectLockedColor :
-                                     m_vpinball->m_elemSelectColor;//GetSysColor(COLOR_HIGHLIGHT);
+   const COLORREF color = IsUILocked() ? m_vpinball->m_elemSelectLockedColor :
+                                         m_vpinball->m_elemSelectColor;//GetSysColor(COLOR_HIGHLIGHT);
 
    psur->SetBorderColor(color, false, 3);
    psur->SetLineColor(color, false, 3);
@@ -224,13 +195,12 @@ void ISelect::Translate(const Vertex2D &pvOffset)
 
 HRESULT ISelect::GetTypeName(BSTR *pVal) const
 {
-   WCHAR buf[256];
-   GetTypeNameForType(GetItemType(), buf);
-   *pVal = SysAllocString(buf);
+   wstring buf = GetTypeNameForType(GetItemType());
+   *pVal = SysAllocStringLen(buf.c_str(), static_cast<UINT>(buf.length()));
    return S_OK;
 }
 
-void ISelect::GetTypeNameForType(const ItemTypeEnum type, WCHAR * const buf) const
+wstring ISelect::GetTypeNameForType(const ItemTypeEnum type) const
 {
    UINT strID;
    switch (type)
@@ -244,118 +214,25 @@ void ISelect::GetTypeNameForType(const ItemTypeEnum type, WCHAR * const buf) con
    }
 
 #ifndef __STANDALONE__
-   buf[0] = L'\0';
-   /*const int len =*/ LoadStringW(m_vpinball->theInstance, strID, buf, 256);
-   buf[256-1] = L'\0'; // in case of truncation
- #else
-   wcsncpy_s(buf, 256, LocalStringW(strID).m_szbuffer);
+   LPWSTR strPtr = nullptr;
+   const int len = LoadStringW(g_app->GetInstanceHandle(), strID, reinterpret_cast<LPWSTR>(&strPtr), 0);
+   if (len > 0 && strPtr)
+      return wstring(strPtr, len);
+   return wstring();
+#else
+   return LocalStringW(strID).m_buffer;
 #endif
-}
-
-static void SetPartGroup(ISelect* const me, string layerName)
-{
-   if (me->GetIEditable() && (me->GetItemType() != eItemDragPoint) && (me->GetItemType() != eItemLightCenter))
-   {
-      // Not needed as part group are cleaned up after loading
-      /* if (me->GetIEditable()->GetPartGroup())
-      {
-         PartGroup* legacyPartGroup = me->GetIEditable()->GetPartGroup();
-         me->GetIEditable()->SetPartGroup(nullptr);
-         auto users = std::ranges::find_if(me->GetPTable()->m_vedit, [legacyPartGroup](IEditable *editable) { return editable->GetPartGroup() == legacyPartGroup; });
-         if (users == me->GetPTable()->m_vedit.end())
-         {
-            legacyPartGroup->GetISelect()->Uncreate();
-            legacyPartGroup->Release();
-         }
-      }*/
-      if (layerName.size() >= std::size(me->GetPTable()->m_wzName))
-         layerName = layerName.substr(0, std::size(me->GetPTable()->m_wzName) - 1);
-      auto partGroupF = std::ranges::find_if(me->GetPTable()->m_vedit, [layerName](IEditable *editable) {
-         return (editable->GetItemType() == ItemTypeEnum::eItemPartGroup) && editable->GetName() == layerName;
-      });
-      if (partGroupF == me->GetPTable()->m_vedit.end())
-      {
-         PartGroup *const newGroup = static_cast<PartGroup *>(EditableRegistry::CreateAndInit(eItemPartGroup, me->GetPTable(), 0, 0));
-         if (newGroup)
-         {
-            const wstring newName = MakeWString(layerName);
-            me->GetPTable()->m_pcv->ReplaceName(newGroup->GetIEditable()->GetScriptable(), newName);
-            wcsncpy_s(newGroup->GetScriptable()->m_wzName, std::size(newGroup->GetScriptable()->m_wzName), newName.c_str());
-            me->GetPTable()->m_vedit.push_back(newGroup);
-            me->GetIEditable()->SetPartGroup(newGroup);
-         }
-      }
-      else
-      {
-         me->GetIEditable()->SetPartGroup(static_cast<PartGroup *>(*partGroupF));
-      }
-   }
-}
-
-bool ISelect::LoadToken(const int id, BiffReader * const pbr)
-{
-   switch(id)
-   {
-      case FID(LOCK): pbr->GetBool(m_locked); break;
-      case FID(LVIS): pbr->GetBool(m_isVisible); break;
-      case FID(LAYR): // Old layer style (limited number of unnamed layers)
-      {
-         int layerIndex;
-         pbr->GetInt(layerIndex);
-         SetPartGroup(this, (layerIndex < 9 ? "Layer_0" : "Layer_") + std::to_string(layerIndex + 1));
-         break;
-      }
-      case FID(LANR): // 10.7 layers (limited number of named layers)
-      {
-         string layerName;
-         pbr->GetString(layerName);
-         std::ranges::transform(
-            layerName.begin(), layerName.end(), layerName.begin(), [](char c) {
-               return ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) ? c : '_';
-            });
-         SetPartGroup(this, "Layer_" + layerName);
-         break;
-      }
-      case FID(GRUP): // 10.8.1 groups (unlimited number of hierarchical parenting with properties)
-      {
-         string partGroupName;
-         pbr->GetString(partGroupName);
-         SetPartGroup(this, partGroupName);
-         break;
-      }
-   }
-   return true;
-}
-
-HRESULT ISelect::SaveData(IStream *pstm, HCRYPTHASH hcrypthash)
-{
-   BiffWriter bw(pstm, hcrypthash);
-
-   bw.WriteBool(FID(LOCK), m_locked);
-   if (GetIEditable() && (GetItemType() != eItemDragPoint) && (GetItemType() != eItemLightCenter) && GetIEditable()->GetPartGroup())
-   {
-      // Implement backward 'readability' (file will open in previous versions, with unsupported content dropped)
-      const PartGroup* layer = GetIEditable()->GetPartGroup();
-      while (layer->GetPartGroup() != nullptr)
-         layer = layer->GetPartGroup();
-      int index = 0;
-      for (const auto edit : GetPTable()->m_vedit)
-      {
-         if (edit == layer)
-            break;
-         if (edit->GetItemType() == eItemPartGroup && edit->GetPartGroup() == nullptr)
-            index++;
-      }
-      bw.WriteInt(FID(LAYR), min(index, 11));
-      bw.WriteString(FID(LANR), layer->GetName());
-      bw.WriteString(FID(GRUP), GetIEditable()->GetPartGroup()->GetName());
-   }
-   bw.WriteBool(FID(LVIS), m_isVisible);
-   
-   return S_OK;
 }
 
 void ISelect::UpdateStatusBarInfo()
 {
-   m_vpinball->SetStatusBarUnitInfo(string(), false);
+   if (m_vpinball)
+      m_vpinball->SetStatusBarUnitInfo(string(), false);
+}
+
+bool ISelect::IsVisible(IEditable *editable) const
+{
+   return IsUIVisible()
+      && (editable == nullptr || editable->GetPartGroup() == nullptr || editable->GetPartGroup()->GetISelect() == nullptr
+         || editable->GetPartGroup()->GetISelect()->IsVisible(editable->GetPartGroup()));
 }

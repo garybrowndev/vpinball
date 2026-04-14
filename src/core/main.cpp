@@ -9,9 +9,9 @@
 #include "plugins/VPXPlugin.h"
 #include "core/VPXPluginAPIImpl.h"
 
-#include "core/VPApp.h"
+#include "core/AppCommands.h"
 
-#include "ui/resource.h"
+#include "ui/win/resource.h"
 #include <initguid.h>
 
 #define SET_CRT_DEBUG_FIELD(a) _CrtSetDbgFlag((a) | _CrtSetDbgFlag(_CRTDBG_REPORT_FLAG))
@@ -19,13 +19,19 @@
 #include <locale>
 #include <codecvt>
 
-#ifdef __ANDROID__
-#include <SDL3/SDL_main.h>
-#endif
-
 #ifdef __STANDALONE__
 #include <SDL3_ttf/SDL_ttf.h>
 #include <filesystem>
+#endif
+
+#if defined(__STANDALONE__) && ((defined(__linux__) && !defined(__ANDROID__)) || defined(__MINGW32__))
+#include <csignal>
+
+void OnSignalHandler(int signum)
+{
+   PLOGI.printf("Exiting from signal: %d", signum);
+   exit(-9999);
+}
 #endif
 
 #ifndef OVERRIDE
@@ -64,7 +70,7 @@ static bool NvAPI_OK_Verify(NvAPI_Status status)
    if (status == NVAPI_OK)
       return true;
 
-   NvAPI_ShortString szDesc = { 0 };
+   NvAPI_ShortString szDesc = {};
    NvAPI_GetErrorMessage(status, szDesc);
 
    PLOGI << "NVAPI error: " << szDesc;
@@ -172,7 +178,8 @@ extern "C" int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, 
 
    Logger::Init();
 
-   int retval;
+
+   int retval = 0;
    try
    {
       #if defined(ENABLE_OPENGL) && !defined(__STANDALONE__)
@@ -183,28 +190,23 @@ extern "C" int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, 
          SetNVIDIAThreadOptimization(NV_THREAD_OPTIMIZATION_DISABLE);
       }
       #endif
-      // Start Win32++
-      VPApp theApp(hInstance);
-      theApp.ProcessCommandLine();
+
+      VPApp theApp;
+      CommandLineProcessor cmdLine;
+      cmdLine.ProcessCommandLine();
       theApp.InitInstance();
-      MsgPluginManager::GetInstance().ScanPluginFolder(g_pvp->m_myPath + "plugins",
-         [](MsgPlugin& plugin)
-         {
-         const char *enableDisable[] = { "Disabled", "Enabled" };
-         int enabled = (int)VPXPluginAPIImpl::GetInstance().getAPI().GetOption(plugin.m_id.c_str(), 
-            "Enable", VPX_OPT_SHOW_UI, "Enable plugin", 0.f, 1.f, 1.f, 0.f, VPXPluginAPI::NONE, enableDisable);
-         if (enabled)
-         {
-            plugin.Load(&MsgPluginManager::GetInstance().GetMsgAPI());
-         }
-         else
-         {
-            PLOGI << "Plugin " << plugin.m_id << " was found but is disabled (" << plugin.m_library << ')';
-         }
-      });
+
+      SDL_SetHint(SDL_HINT_WINDOW_ALLOW_TOPMOST, "0");
+      if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+      {
+         PLOGE << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+         // FIXME this is not correct as we may be running something else than the player (extract vbs, ...)
+         exit(1);
+      }
 
       // Run the application
-      retval = theApp.Run();
+      if (cmdLine.m_command)
+         cmdLine.m_command->Execute();
    }
 
    // catch all CException types
@@ -216,11 +218,7 @@ extern "C" int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, 
       retval = -1;
    }
 
-   MsgPluginManager::GetInstance().UnloadPlugins();
-
-   #ifdef ENABLE_SDL_VIDEO
-      SDL_QuitSubSystem(SDL_INIT_VIDEO);
-   #endif
+   SDL_QuitSubSystem(SDL_INIT_VIDEO);
 
    #ifdef __STANDALONE__
       TTF_Quit();
@@ -234,31 +232,28 @@ extern "C" int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, 
    }
    #endif
 
-   #if defined(ENABLE_SDL_VIDEO) || defined(ENABLE_SDL_INPUT)
-      SDL_Quit();
-   #endif
+   SDL_Quit();
 
    PLOGI << "Closing VPX...\n\n";
-   #if (defined(__STANDALONE__) && (defined(__APPLE__) && ((defined(TARGET_OS_IOS) && TARGET_OS_IOS) || (defined(TARGET_OS_TV) && TARGET_OS_TV))) || defined(__ANDROID__))
-   exit(retval);
-   #endif
    return retval;
 }
 
-#ifdef __STANDALONE__
-#ifdef __ANDROID__
-int main(int argc, char** argv) {
-   while(true)
-      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-   return 0;
-}
-#elif ((defined(__APPLE__) && defined(TARGET_OS_TV) && TARGET_OS_TV) || defined(__linux__))
+#if defined(__STANDALONE__) && ((defined(__linux__) && !defined(__ANDROID__)) || defined(__MINGW32__))
 extern int g_argc;
-extern char **g_argv;
-int main(int argc, char** argv) {
+extern const char **g_argv;
+int main(int argc, const char** argv) {
+#ifdef __MINGW32__
+   signal(SIGINT, OnSignalHandler);
+#else
+   struct sigaction sigIntHandler;
+   sigIntHandler.sa_handler = OnSignalHandler;
+   sigemptyset(&sigIntHandler.sa_mask);
+   sigIntHandler.sa_flags = 0;
+   sigaction(SIGINT, &sigIntHandler, nullptr);
+#endif
+
    g_argc = argc;
    g_argv = argv;
    return WinMain(NULL, NULL, NULL, 0);
 }
-#endif
 #endif

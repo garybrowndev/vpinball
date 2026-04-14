@@ -27,9 +27,9 @@ ScoreView::ScoreView(const MsgPluginAPI* api, unsigned int endpointId, VPXPlugin
 
 ScoreView::~ScoreView()
 {
-   m_msgApi->UnsubscribeMsg(m_onSegChangedMsgId, OnResChanged);
+   m_msgApi->UnsubscribeMsg(m_onSegChangedMsgId, OnResChanged, this);
    m_msgApi->ReleaseMsgID(m_onSegChangedMsgId);
-   m_msgApi->UnsubscribeMsg(m_onDmdChangedMsgId, OnResChanged);
+   m_msgApi->UnsubscribeMsg(m_onDmdChangedMsgId, OnResChanged, this);
    m_msgApi->ReleaseMsgID(m_onDmdChangedMsgId);
    for (auto& image : m_images)
       m_vpxApi->DeleteTexture(image.second);
@@ -44,35 +44,34 @@ void ScoreView::OnResChanged(const unsigned int msgId, void* userData, void* msg
    static_cast<ScoreView*>(userData)->m_invalidBestLayout = true;
 }
 
-void ScoreView::Load(const string& path)
+void ScoreView::Load(const std::filesystem::path& path)
 {
-   const std::filesystem::path p(path);
-   if (!std::filesystem::exists(p))
+   if (!std::filesystem::exists(path))
       return;
    std::error_code ec;
-   if (std::filesystem::is_directory(p, ec))
+   if (std::filesystem::is_directory(path, ec))
    {
-      for (const auto& entry : std::filesystem::directory_iterator(p))
+      for (const auto& entry : std::filesystem::directory_iterator(path))
       {
-         if (!entry.is_directory() && entry.path().extension().string() == ".scv")
+         if (!entry.is_directory() && lowerCase(entry.path().extension()) == ".scv")
          {
             std::ifstream ifs(entry.path());
-            Parse(entry.path(), ifs);
+            Parse(entry.path());
          }
       }
    }
    else
    {
-      std::ifstream ifs(path);
-      Parse(p, ifs);
+      Parse(path);
    }
 }
 
-void ScoreView::Parse(const std::filesystem::path& path, std::istream& content)
+void ScoreView::Parse(const std::filesystem::path& path)
 {
-   #define CHECK_FIELD(check) if (!(check)) { LOGE("Invalid field '%s: %s' at line %d in ScoreView file %s", key.c_str(), value.c_str(), lineIndex, path.c_str()); return; }
+   std::ifstream content(path);
+   #define CHECK_FIELD(check) if (!(check)) { LOGE(std::format("Invalid field '{}: {}' at line {} in ScoreView file {}", key, value, lineIndex, path.string())); return; }
    static const string whitespace = " \t"s;
-   Layout layout { string() };
+   Layout layout = { };
    layout.path = path;
    layout.width = 1920.f;
    layout.height = 1080.f;
@@ -115,13 +114,13 @@ void ScoreView::Parse(const std::filesystem::path& path, std::istream& content)
          indentSize = afterIndent;
       if ((indentSize != 0) && ((afterIndent % indentSize) != 0))
       {
-         LOGE("Invalid indentation at line %d in ScoreView file %s", lineIndex, path.c_str());
+         LOGE(std::format("Invalid indentation at line {} in ScoreView file {}", lineIndex, path.string()));
          return;
       }
       size_t indent = indentSize == 0 ? 0 : afterIndent / indentSize;
       if (indent > expectedIndent)
       {
-         LOGE("Invalid indentation (%d while expecting %d at line %d in ScoreView file %s", indent, expectedIndent, lineIndex, path.c_str());
+         LOGE(std::format("Invalid indentation ({} while expecting {} at line {}) in ScoreView file {}", indent, expectedIndent, lineIndex, path.string()));
          return;
       }
       if (indent < expectedIndent)
@@ -135,12 +134,12 @@ void ScoreView::Parse(const std::filesystem::path& path, std::istream& content)
       const auto colon = line.find(':');
       if (colon == string::npos)
       {
-         LOGE("Field is missing ':' separator at line %s in ScoreView file %s", lineIndex, path.c_str());
+         LOGE(std::format("Field is missing ':' separator at line {} in ScoreView file {}", lineIndex, path.string()));
          return;
       }
       if (colon == afterIndent)
       {
-         LOGE("Field is missing a key before ':' separator at line %d in ScoreView file %s", lineIndex, path.c_str());
+         LOGE(std::format("Field is missing a key before ':' separator at line {} in ScoreView file {}", lineIndex, path.string()));
          return;
       }
       const string key(line.cbegin() + afterIndent, line.cbegin() + colon);
@@ -186,7 +185,7 @@ void ScoreView::Parse(const std::filesystem::path& path, std::istream& content)
          visual->glassAmbient = vec3(1.f, 1.f, 1.f);
          visual->glassPad = vec4(0.f, 0.f, 0.f, 0.f);
          visual->glassArea = vec4(0.f, 0.f, 0.f, 0.f);
-         visual->dmdSize = vec2i(-1, -1);
+         visual->dmdSize = ivec2(-1, -1);
       }
       else if (key == "- SegDisplay")
       {
@@ -195,7 +194,7 @@ void ScoreView::Parse(const std::filesystem::path& path, std::istream& content)
          layout.visuals.push_back({VisualType::SegDisplay});
          visual = &layout.visuals.back();
          visual->srcUri = string();
-         visual->liveStyle = 1;
+         visual->liveStyle = -1;
          visual->tint = vec3(1.f, 1.f, 1.f);
          visual->glassTint = vec3(1.f, 1.f, 1.f);
          visual->glassAmbient = vec3(1.f, 1.f, 1.f);
@@ -216,7 +215,7 @@ void ScoreView::Parse(const std::filesystem::path& path, std::istream& content)
       else if (key == "Rect")
       {
          CHECK_FIELD((indent == 2) && (visual != nullptr));
-         auto rect = parseArray(value);
+         const auto rect = parseArray(value);
          CHECK_FIELD(rect.size() == 4);
          visual->x = rect[0];
          visual->y = rect[1];
@@ -227,12 +226,12 @@ void ScoreView::Parse(const std::filesystem::path& path, std::istream& content)
       else if (key == "Pad")
       {
          CHECK_FIELD((indent == 2) && (visual != nullptr)); // Display pad inside rect
-         auto rect = parseArray(value);
+         const auto rect = parseArray(value);
          CHECK_FIELD(rect.size() == 4);
-         visual->glassPad.x = clamp(rect[0] / layout.height, 0.f, 1.f);
-         visual->glassPad.y = clamp(rect[1] / layout.width, 0.f, 1.f);
-         visual->glassPad.z = clamp(rect[2] / layout.height, 0.f, 1.f);
-         visual->glassPad.w = clamp(rect[3] / layout.width, 0.f, 1.f);
+         visual->glassPad.x = saturate(rect[0] / layout.height);
+         visual->glassPad.y = saturate(rect[1] / layout.width);
+         visual->glassPad.z = saturate(rect[2] / layout.height);
+         visual->glassPad.w = saturate(rect[3] / layout.width);
          // Not yet supported
          CHECK_FIELD((visual->glassPad.x == 0.f) && (visual->glassPad.y == 0.f) && (visual->glassPad.z == 0.f) && (visual->glassPad.w == 0.f));
       }
@@ -261,7 +260,9 @@ void ScoreView::Parse(const std::filesystem::path& path, std::istream& content)
          }
          else if (visual->type == VisualType::SegDisplay)
          {
-            if (value == "Neon Plasma")
+            if (value == "Auto")
+               visual->liveStyle = -1;
+            else if (value == "Neon Plasma")
                visual->liveStyle = 0;
             else if (value == "Blue VFD")
                visual->liveStyle = 1;
@@ -318,12 +319,12 @@ void ScoreView::Parse(const std::filesystem::path& path, std::istream& content)
       {
          CHECK_FIELD((indent == 2) && (visual != nullptr) && (visual->type == VisualType::SegDisplay)); // Seg display sub element offsets
          visual->xOffsets = parseArray(value);
-         CHECK_FIELD(!visual->xOffsets.empty() && (visual->nElements == -1 || visual->xOffsets.size() == visual->nElements));
+         CHECK_FIELD(!visual->xOffsets.empty() && (visual->nElements == -1 || (int)visual->xOffsets.size() == visual->nElements));
       }
       else if (key == "NElements")
       {
          CHECK_FIELD((indent == 2) && (visual != nullptr) && (visual->type == VisualType::SegDisplay) && try_parse_int(value, visual->nElements)); // Number of seg display elements
-         CHECK_FIELD(visual->xOffsets.empty() || visual->xOffsets.size() == visual->nElements);
+         CHECK_FIELD(visual->xOffsets.empty() || (int)visual->xOffsets.size() == visual->nElements);
       }
       else if (key == "Glass")
       {
@@ -334,7 +335,7 @@ void ScoreView::Parse(const std::filesystem::path& path, std::istream& content)
       else if (key == "Tint")
       {
          CHECK_FIELD((indent == 3) && (visual != nullptr)); // Glass tint
-         auto tint = parseArray(value);
+         const auto tint = parseArray(value);
          CHECK_FIELD(tint.size() == 3);
          visual->glassTint.x = tint[0];
          visual->glassTint.y = tint[1];
@@ -353,7 +354,7 @@ void ScoreView::Parse(const std::filesystem::path& path, std::istream& content)
       else if (key == "Area")
       {
          CHECK_FIELD((indent == 3) && (visual != nullptr)); // Glass image area
-         auto rect = parseArray(value);
+         const auto rect = parseArray(value);
          CHECK_FIELD(rect.size() == 4);
          visual->glassArea.x = rect[0];
          visual->glassArea.y = rect[1];
@@ -363,7 +364,7 @@ void ScoreView::Parse(const std::filesystem::path& path, std::istream& content)
       else if (key == "Ambient")
       {
          CHECK_FIELD((indent == 3) && (visual != nullptr)); // Glass image ambient
-         auto rect = parseArray(value);
+         const auto rect = parseArray(value);
          CHECK_FIELD(rect.size() == 3)
          visual->glassAmbient.x = InvsRGB(rect[0]);
          visual->glassAmbient.y = InvsRGB(rect[1]);
@@ -379,16 +380,17 @@ void ScoreView::Parse(const std::filesystem::path& path, std::istream& content)
       case VisualType::DMD:
          if (visual.dmdSize.x < 0 || visual.dmdSize.y < 0)
          {
-            LOGE("DMD display needs Size to be defined in ScoreView file %s", path.c_str());
+            LOGE("DMD display needs Size to be defined in ScoreView file " + path.string());
             return;
          }
          break;
+
       case VisualType::SegDisplay:
          if (visual.nElements == -1)
             visual.nElements = (int)visual.xOffsets.size();
          if (visual.nElements == 0)
          {
-            LOGE("Segment display needs at least one of XPos/NElements to be defined in ScoreView file %s", path.c_str());
+            LOGE("Segment display needs at least one of XPos/NElements to be defined in ScoreView file " + path.string());
             return;
          }
          if (visual.xOffsets.empty())
@@ -397,6 +399,9 @@ void ScoreView::Parse(const std::filesystem::path& path, std::istream& content)
             for (int i = 0; i < visual.nElements; i++)
                visual.xOffsets.push_back(visual.w * static_cast<float>(i) / static_cast<float>(visual.nElements));
          }
+         break;
+
+      case VisualType::Image:
          break;
       }
    }
@@ -422,14 +427,14 @@ void ScoreView::LoadGlass(Visual& visual)
          {
             std::streamsize size = file.tellg();
             file.seekg(0, std::ios::beg);
-            std::vector<uint8_t> buffer(size);
+            std::vector<uint8_t> buffer((size_t)size);
             file.read(reinterpret_cast<char*>(buffer.data()), size);
             file.close();
             visual.glass = m_vpxApi->CreateTexture(buffer.data(), static_cast<int>(size));
          }
          else
          {
-            LOGE("Missing glass file: %s", fullPath.c_str());
+            LOGE("Missing glass file: " + fullPath.string());
             visual.glass = nullptr;
          }
          m_images[visual.glassPath] = visual.glass;
@@ -539,7 +544,7 @@ bool ScoreView::Render(VPXRenderContext2D* ctx)
             continue;
          LoadGlass(visual);
          m_vpxApi->UpdateTexture(&visual.dmdTex, dmd.source->width, dmd.source->height,
-              dmd.source->frameFormat == CTLPI_DISPLAY_FORMAT_LUM8    ? VPXTextureFormat::VPXTEXFMT_BW
+              dmd.source->frameFormat == CTLPI_DISPLAY_FORMAT_LUM32F  ? VPXTextureFormat::VPXTEXFMT_BW32F
             : dmd.source->frameFormat == CTLPI_DISPLAY_FORMAT_SRGB565 ? VPXTextureFormat::VPXTEXFMT_sRGB565
                                                                       : VPXTextureFormat::VPXTEXFMT_sRGB8,
             dmd.state.frame);
@@ -588,11 +593,33 @@ bool ScoreView::Render(VPXRenderContext2D* ctx)
          const float hGlassScale = glassArea.z / visual.w;
          vec4 segGlassArea = glassArea;
          segGlassArea.z = elementW * hGlassScale;
+         VPXSegDisplayHint hint = VPXSegDisplayHint::Generic;
+         VPXSegDisplayRenderStyle style = VPXSegDisplayRenderStyle::VPXSegStyle_Plasma;
+         if (visual.liveStyle == -1)
+         {
+            if ((frame.source->hardware & CTLPI_SEG_HARDWARE_FAMILY_MASK) == CTLPI_SEG_HARDWARE_NEON_PLASMA)
+               style = VPXSegDisplayRenderStyle::VPXSegStyle_Plasma;
+            else if ((frame.source->hardware & CTLPI_SEG_HARDWARE_FAMILY_MASK) == CTLPI_SEG_HARDWARE_VFD_GREEN)
+               style = VPXSegDisplayRenderStyle::VPXSegStyle_GreenVFD;
+            else if ((frame.source->hardware & CTLPI_SEG_HARDWARE_FAMILY_MASK) == CTLPI_SEG_HARDWARE_VFD_BLUE)
+            {
+               style = VPXSegDisplayRenderStyle::VPXSegStyle_BlueVFD;
+               if (frame.source->hardware == CTLPI_SEG_HARDWARE_GTS1_4DIGIT //
+                  || frame.source->hardware == CTLPI_SEG_HARDWARE_GTS1_6DIGIT //
+                  || frame.source->hardware == CTLPI_SEG_HARDWARE_GTS80A_7DIGIT //
+                  || frame.source->hardware == CTLPI_SEG_HARDWARE_GTS80B_20DIGIT //
+               )
+                  hint = VPXSegDisplayHint::Gottlieb;
+            }
+         }
+         else
+         {
+            style = static_cast<VPXSegDisplayRenderStyle>(visual.liveStyle);
+         }
          for (size_t i = 0; i < frame.source->nElements; i++)
          {
             segGlassArea.x = glassArea.x + visual.xOffsets[i] * hGlassScale;
-            // FIXME use hardware segment style
-            ctx->DrawSegDisplay(ctx, static_cast<VPXSegDisplayRenderStyle>(visual.liveStyle), VPXSegDisplayHint::Generic,
+            ctx->DrawSegDisplay(ctx, style, hint,
                // First layer: glass
                visual.glass, visual.glassTint.x, visual.glassTint.y, visual.glassTint.z, visual.glassRoughness, // Glass texture, tint and roughness
                segGlassArea.x, segGlassArea.y, segGlassArea.z, segGlassArea.w, // Glass texture coordinates (inside overall glass texture, cut for each element)

@@ -4,7 +4,7 @@
 
 namespace B2SLegacy {
 
-RunningAnimationsCollection* RunningAnimationsCollection::m_pInstance = NULL;
+RunningAnimationsCollection* RunningAnimationsCollection::m_pInstance = nullptr;
 
 RunningAnimationsCollection* RunningAnimationsCollection::GetInstance()
 {
@@ -16,24 +16,21 @@ RunningAnimationsCollection* RunningAnimationsCollection::GetInstance()
 
 void RunningAnimationsCollection::Add(const string& item)
 {
-   auto it = std::find(begin(), end(), item);
-   if (it == end())
+   if (std::ranges::find(*this, item) == end())
       push_back(item);
 }
 
 bool RunningAnimationsCollection::Remove(const string& item)
 {
-   auto it = std::find(begin(), end(), item);
-   if (it != end())
+   if (auto it = std::ranges::find(*this, item); it != end())
       erase(it);
 
    return true;
 }
 
-bool RunningAnimationsCollection::Contains(const string& item)
+bool RunningAnimationsCollection::Contains(const string& item) const
 {
-   auto it = std::find(begin(), end(), item);
-   return it != end();
+   return std::ranges::find(*this, item) != end();
 }
 
 }

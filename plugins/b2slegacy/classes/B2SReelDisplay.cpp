@@ -2,6 +2,7 @@
 
 #include "B2SReelDisplay.h"
 #include "../controls/B2SReelBox.h"
+#include <format>
 
 namespace B2SLegacy {
 
@@ -26,10 +27,10 @@ B2SReelDisplay::~B2SReelDisplay()
    delete m_pTimerIA;
 }
 
-bool B2SReelDisplay::IsInAction()
+bool B2SReelDisplay::IsInAction() const
 {
    bool ret = false;
-   for (auto& [key, pReelbox] : m_reels) {
+   for (const auto& [key, pReelbox] : m_reels) {
       if (pReelbox->IsInAction()) {
          ret = true;
          break;
@@ -55,18 +56,16 @@ void B2SReelDisplay::SetScore_(int score, int startAtIndex)
    if (!m_reels.empty()) {
       m_pTimerIA->Start();
 
-      std::ostringstream oss;
-      oss << std::setw(m_digits) << std::setfill('0') << score;
-      const string scoreAsStringX = oss.str();
+      const string scoreAsStringX = std::format("{:0{}d}", score, m_digits);
 
       int j = 1;
       for (int i = m_startDigit + m_digits - startAtIndex - 1; i >= m_startDigit; i--) {
-         if (m_reels.contains(i)) {
-            B2SReelBox* pReelbox = m_reels[i];
-            int value = pReelbox->GetCurrentText();
-            int newvalue = std::stoi(scoreAsStringX.substr(i - m_startDigit, 1));
-            bool nextReelShouldWait = (value > newvalue && score > 0);
-            m_reels[i]->SetText(std::stoi(scoreAsStringX.substr(i - m_startDigit, 1)), true);
+         const auto& it = m_reels.find(i);
+         if (it != m_reels.end()) {
+            const int value = it->second->GetCurrentText();
+            const int newvalue = scoreAsStringX[i - m_startDigit] - '0'; // convert char to int
+            const bool nextReelShouldWait = (value > newvalue && score > 0);
+            it->second->SetText(scoreAsStringX[i - m_startDigit] - '0', true);
             // maybe get out here since the current reel is rolling over '9'
             if (nextReelShouldWait) {
                StartTimer(i, newvalue, score, j);

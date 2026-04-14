@@ -15,6 +15,7 @@ echo "  PINMAME_SHA: ${PINMAME_SHA}"
 echo "  LIBDMDUTIL_SHA: ${LIBDMDUTIL_SHA}"
 echo "  LIBALTSOUND_SHA: ${LIBALTSOUND_SHA}"
 echo "  LIBDOF_SHA: ${LIBDOF_SHA}"
+echo "  LIBWINEVBS_SHA: ${LIBWINEVBS_SHA}"
 echo "  FFMPEG_SHA: ${FFMPEG_SHA}"
 echo "  LIBZIP_SHA: ${LIBZIP_SHA}"
 echo ""
@@ -27,7 +28,7 @@ cd "external/ios-simulator-arm64/${BUILD_TYPE}"
 #
 # build SDL3, SDL3_image, SDL3_ttf#
 
-SDL3_EXPECTED_SHA="${SDL_SHA}-${SDL_IMAGE_SHA}-${SDL_TTF_SHA}"
+SDL3_EXPECTED_SHA="${SDL_SHA}-${SDL_IMAGE_SHA}-${SDL_TTF_SHA}_001"
 SDL3_FOUND_SHA="$([ -f SDL3/cache.txt ] && cat SDL3/cache.txt || echo "")"
 
 if [ "${SDL3_EXPECTED_SHA}" != "${SDL3_FOUND_SHA}" ]; then
@@ -41,6 +42,7 @@ if [ "${SDL3_EXPECTED_SHA}" != "${SDL3_FOUND_SHA}" ]; then
    tar xzf SDL-${SDL_SHA}.tar.gz
    mv SDL-${SDL_SHA} SDL
    cd SDL
+   cp ../../../../../platforms/ios-simulator-arm64/SDL/SDL_uikitappdelegate.m src/video/uikit/SDL_uikitappdelegate.m
    cmake \
       -DSDL_SHARED=OFF \
       -DSDL_STATIC=ON \
@@ -262,7 +264,6 @@ if [ "${LIBALTSOUND_EXPECTED_SHA}" != "${LIBALTSOUND_FOUND_SHA}" ]; then
    tar xzf libaltsound-${LIBALTSOUND_SHA}.tar.gz
    mv libaltsound-${LIBALTSOUND_SHA} libaltsound
    cd libaltsound
-   ./platforms/ios-simulator/arm64/external.sh
    cmake \
       -DPLATFORM=ios-simulator \
       -DARCH=arm64 \
@@ -391,6 +392,38 @@ if [ "${LIBZIP_EXPECTED_SHA}" != "${LIBZIP_FOUND_SHA}" ]; then
 fi
 
 #
+# build libwinevbs
+#
+
+LIBWINEVBS_EXPECTED_SHA="${LIBWINEVBS_SHA}"
+LIBWINEVBS_FOUND_SHA="$([ -f libwinevbs/cache.txt ] && cat libwinevbs/cache.txt || echo "")"
+
+if [ "${LIBWINEVBS_EXPECTED_SHA}" != "${LIBWINEVBS_FOUND_SHA}" ]; then
+   echo "Building libwinevbs. Expected: ${LIBWINEVBS_EXPECTED_SHA}, Found: ${LIBWINEVBS_FOUND_SHA}"
+
+   rm -rf libwinevbs
+   mkdir libwinevbs
+   cd libwinevbs
+
+   curl -sL https://github.com/vpinball/libwinevbs/archive/${LIBWINEVBS_SHA}.tar.gz -o libwinevbs-${LIBWINEVBS_SHA}.tar.gz
+   tar xzf libwinevbs-${LIBWINEVBS_SHA}.tar.gz
+   mv libwinevbs-${LIBWINEVBS_SHA} libwinevbs
+   cd libwinevbs
+   cmake \
+      -DPLATFORM=ios-simulator \
+      -DARCH=arm64 \
+      -DBUILD_SHARED=OFF \
+      -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
+      -B build
+   cmake --build build -- -j${NUM_PROCS}
+   cd ..
+
+   echo "$LIBWINEVBS_EXPECTED_SHA" > cache.txt
+
+   cd ..
+fi
+
+#
 # copy libraries
 #
 
@@ -430,13 +463,23 @@ cp libdmdutil/libdmdutil/third-party/include/serum-decode.h ../../../third-party
 cp libdmdutil/libdmdutil/third-party/build-libs/ios-simulator/arm64/libpupdmd.a ../../../third-party/build-libs/ios-simulator-arm64
 cp libdmdutil/libdmdutil/third-party/include/pupdmd.h ../../../third-party/include
 cp libdmdutil/libdmdutil/third-party/build-libs/ios-simulator/arm64/libsockpp.a ../../../third-party/build-libs/ios-simulator-arm64
+cp libdmdutil/libdmdutil/third-party/build-libs/ios-simulator/arm64/libvni.a ../../../third-party/build-libs/ios-simulator-arm64
+cp libdmdutil/libdmdutil/third-party/include/vni.h ../../../third-party/include
 
 cp libaltsound/libaltsound/build/libaltsound.a ../../../third-party/build-libs/ios-simulator-arm64
-cp -r libaltsound/libaltsound/src/altsound.h ../../../third-party/include/
-cp libaltsound/libaltsound/third-party/runtime-libs/ios-simulator/arm64/libbass.dylib ../../../third-party/runtime-libs/ios-simulator-arm64
+cp libaltsound/libaltsound/src/altsound.h ../../../third-party/include
 
 cp libdof/libdof/build/libdof.a ../../../third-party/build-libs/ios-simulator-arm64
 cp -r libdof/libdof/include/DOF ../../../third-party/include/
+
+cp libwinevbs/libwinevbs/build/libwinevbs.a ../../../third-party/build-libs/ios-simulator-arm64
+mkdir -p ../../../third-party/include/libwinevbs/wine/include
+mkdir -p ../../../third-party/include/libwinevbs/atl/include
+mkdir -p ../../../third-party/include/libwinevbs/atlmfc/include
+cp libwinevbs/libwinevbs/include/libwinevbs.h ../../../third-party/include/libwinevbs/
+cp -r libwinevbs/libwinevbs/wine/include/* ../../../third-party/include/libwinevbs/wine/include/
+cp -r libwinevbs/libwinevbs/atl/include/* ../../../third-party/include/libwinevbs/atl/include/
+cp -r libwinevbs/libwinevbs/atlmfc/include/* ../../../third-party/include/libwinevbs/atlmfc/include/
 
 for LIB in libavcodec libavdevice libavfilter libavformat libavutil libswresample libswscale; do
    cp -a ffmpeg/ffmpeg/${LIB}/${LIB}.a ../../../third-party/build-libs/ios-simulator-arm64

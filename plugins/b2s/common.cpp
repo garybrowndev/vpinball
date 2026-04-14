@@ -1,38 +1,26 @@
+// license:GPLv3+
+
 #include "common.h"
 
 #include <algorithm>
 #include <filesystem>
 #include <charconv>
 
-namespace B2S {
+#include <cstddef> // for size_t, ptrdiff_t
+// Define ssize_t for Windows
+#if defined(_WIN32) && !defined(__SSIZE_T_DEFINED)
+#if defined(_WIN64)
+typedef __int64 ssize_t;
+#else
+typedef int ssize_t;
+#endif
+#define __SSIZE_T_DEFINED
+#endif
 
-static string GetSettingString(const MsgPluginAPI* pMsgApi, const string& section, const string& key, const string& def = string())
-{
-   char buf[256];
-   pMsgApi->GetSetting(section.c_str(), key.c_str(), buf, sizeof(buf));
-   return buf[0] ? string(buf) : def;
-}
+#include "base64.h"
 
-int GetSettingInt(const MsgPluginAPI* pMsgApi, const string& section, const string& key, int def)
+namespace B2S
 {
-   const auto s = GetSettingString(pMsgApi, section, key, string());
-   int result;
-   return (s.empty() || (std::from_chars(s.c_str(), s.c_str() + s.length(), result).ec != std::errc {})) ? def : result;
-}
-
-bool GetSettingBool(const MsgPluginAPI* pMsgApi, const string& section, const string& key, bool def)
-{
-   const auto s = GetSettingString(pMsgApi, section, key, string());
-   int result;
-   return (s.empty() || (std::from_chars(s.c_str(), s.c_str() + s.length(), result).ec != std::errc {})) ? def : (result != 0);
-}
-
-static inline char cLower(char c)
-{
-   if (c >= 'A' && c <= 'Z')
-      c ^= 32; //ASCII convention
-   return c;
-}
 
 static inline bool StrCompareNoCase(const string& strA, const string& strB)
 {
@@ -45,125 +33,57 @@ string string_to_lower(string str)
    return str;
 }
 
-string normalize_path_separators(const string& szPath)
+std::filesystem::path find_case_insensitive_file_path(const std::filesystem::path& searchedFile)
 {
-   string szResult = szPath;
-
-   if (PATH_SEPARATOR_CHAR == '/')
-      std::ranges::replace(szResult.begin(), szResult.end(), '\\', PATH_SEPARATOR_CHAR);
-   else
-      std::ranges::replace(szResult.begin(), szResult.end(), '/', PATH_SEPARATOR_CHAR);
-
-   auto end = std::unique(szResult.begin(), szResult.end(),
-      [](char a, char b) { return a == b && a == PATH_SEPARATOR_CHAR; });
-   szResult.erase(end, szResult.end());
-
-   return szResult;
-}
-
-string extension_from_path(const string& path)
-{
-   const size_t pos = path.find_last_of('.');
-   return pos != string::npos ? string_to_lower(path.substr(pos + 1)) : string();
-}
-
-// same as removing the file extension
-string TitleAndPathFromFilename(const string& filename)
-{
-   return filename.substr(0, filename.find_last_of('.')); // in case no '.' is found, will then copy full filename
-}
-
-string find_case_insensitive_file_path(const string& szPath)
-{
-   auto fn = [&](auto& self, const string& s) -> string {
-      string path = normalize_path_separators(s);
-      std::filesystem::path p = std::filesystem::path(path).lexically_normal();
+   auto fn = [](const auto& self, std::filesystem::path path)
+   {
       std::error_code ec;
+      path = path.lexically_normal();
+      if (std::filesystem::exists(path, ec))
+         return path;
 
-      if (std::filesystem::exists(p, ec))
-         return p.string();
+      const auto& parent = path.parent_path();
+      std::filesystem::path base = (parent.empty() || parent == path) ? std::filesystem::path("."s) : self(self, parent);
+      if (base.empty())
+         return base;
 
-      auto parent = p.parent_path();
-      string base;
-      if (parent.empty() || parent == p) {
-         base = ".";
-      } else {
-         base = self(self, parent.string());
-         if (base.empty())
-            return string();
-      }
-
-      for (auto& ent : std::filesystem::directory_iterator(base, ec)) {
-         if (!ec && StrCompareNoCase(ent.path().filename().string(), p.filename().string())) {
-            auto found = ent.path().string();
-            if (found != path) {
-               LOGI("case insensitive file match: requested \"%s\", actual \"%s\"", path.c_str(), found.c_str());
+      for (const auto& ent : std::filesystem::directory_iterator(base, ec))
+      {
+         if (!ec && StrCompareNoCase(ent.path().filename().string(), path.filename().string()))
+         {
+            const auto& found = ent.path();
+            if (found != path)
+            {
+               LOGI(std::format("Case insensitive file match: requested \"{}\", actual \"{}\"", path.string(), found.string()));
             }
             return found;
          }
       }
 
-      return string();
+      return std::filesystem::path();
    };
 
-   string result = fn(fn, szPath);
-   if (!result.empty()) {
-      std::filesystem::path p = std::filesystem::absolute(result);
-      return p.string();
-   }
-   return string();
+   const std::filesystem::path result = fn(fn, searchedFile);
+   return result.empty() ? result : std::filesystem::absolute(result);
 }
 
-vector<unsigned char> base64_decode(string encoded_string)
+// Wraps up https://github.com/czkz/base64 public domain decoder (plus extensions/optimizations)
+vector<uint8_t> base64_decode(const char * const __restrict value, const size_t size_bytes)
 {
-   static const string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                                      "abcdefghijklmnopqrstuvwxyz"
-                                      "0123456789+/"s;
+   vector<uint8_t> ret(size_bytes);
 
-   std::erase(encoded_string, '\r');
-   std::erase(encoded_string, '\n');
-
-   int in_len = static_cast<int>(encoded_string.length());
-   int i = 0, in_ = 0;
-   unsigned char char_array_4[4], char_array_3[3];
-   vector<unsigned char> ret;
-
-   while (in_len-- && (encoded_string[in_] != '=') && (std::isalnum(encoded_string[in_]) || (encoded_string[in_] == '+') || (encoded_string[in_] == '/')))
+   // First remove any newlines or carriage returns from the input
+   uint8_t* __restrict dst = ret.data();
+   for (size_t i = 0; i < size_bytes; ++i)
    {
-      char_array_4[i++] = encoded_string[in_];
-      in_++;
-      if (i == 4)
-      {
-         for (i = 0; i < 4; i++)
-            char_array_4[i] = (unsigned char)base64_chars.find(char_array_4[i]);
-
-         char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
-         char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
-         char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
-
-         for (i = 0; i < 3; i++)
-            ret.push_back(char_array_3[i]);
-         i = 0;
-      }
+      const char c = value[i];
+      if (c != '\r' && c != '\n')
+         *dst++ = c;
    }
 
-   if (i)
-   {
-      for (int j = i; j < 4; j++)
-         char_array_4[j] = 0;
-
-      for (int j = 0; j < 4; j++)
-         char_array_4[j] = (unsigned char)base64_chars.find(char_array_4[j]);
-
-      char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
-      char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
-      char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
-
-      for (int j = 0; (j < i - 1); j++)
-         ret.push_back(char_array_3[j]);
-   }
-
-   return ret;
+   const size_t newLen = from_base64_inplace(ret.data(), dst - ret.data());
+   ret.resize(newLen);
+   return ret; // will be moved
 }
 
 }

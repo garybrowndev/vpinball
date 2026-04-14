@@ -68,16 +68,14 @@
                 </span>
                 Upload File
               </a>
-              <a href="#" onclick="event.preventDefault(); importTable(); hideMainActionsDropdown(); return false;">
+              <a href="#" onclick="event.preventDefault(); refreshTables(); hideMainActionsDropdown(); return false;">
                 <span class="dropdown-icon">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                    <polyline points="16 13 12 17 8 13"></polyline>
-                    <line x1="12" y1="17" x2="12" y2="9"></line>
+                    <path d="M1 4v6h6"></path>
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
                   </svg>
                 </span>
-                Import
+                Refresh Tables
               </a>
               <a href="#" id="log-stream-menu-item" onclick="event.preventDefault(); toggleLogViewer(); hideMainActionsDropdown(); return false;">
                 <span class="dropdown-icon">
@@ -206,6 +204,70 @@
       </div>
     </div>
 
+    <div id="video-viewer" class="video-viewer-container">
+      <div class="path-container">
+        <div id="video-breadcrumb" class="breadcrumb"></div>
+        <div class="path-actions">
+          <div class="actions-dropdown">
+            <span class="menu-icon" id="video-actions-button" onclick="toggleVideoActionsDropdown()">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="1"></circle>
+                <circle cx="12" cy="5" r="1"></circle>
+                <circle cx="12" cy="19" r="1"></circle>
+              </svg>
+            </span>
+            <div class="actions-dropdown-content" id="video-actions-dropdown">
+              <a href="#" id="video-download-action" onclick="event.preventDefault(); downloadCurrentVideo(); hideVideoActionsDropdown(); return false;">
+                <span class="dropdown-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                </span>
+                Download
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="video-viewer-content">
+        <video id="video-display" controls></video>
+      </div>
+    </div>
+
+    <div id="audio-viewer" class="audio-viewer-container">
+      <div class="path-container">
+        <div id="audio-breadcrumb" class="breadcrumb"></div>
+        <div class="path-actions">
+          <div class="actions-dropdown">
+            <span class="menu-icon" id="audio-actions-button" onclick="toggleAudioActionsDropdown()">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="1"></circle>
+                <circle cx="12" cy="5" r="1"></circle>
+                <circle cx="12" cy="19" r="1"></circle>
+              </svg>
+            </span>
+            <div class="actions-dropdown-content" id="audio-actions-dropdown">
+              <a href="#" id="audio-download-action" onclick="event.preventDefault(); downloadCurrentAudio(); hideAudioActionsDropdown(); return false;">
+                <span class="dropdown-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                </span>
+                Download
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="audio-viewer-content">
+        <audio id="audio-display" controls></audio>
+      </div>
+    </div>
+
     <div id="drop-overlay" class="drop-overlay">
       <div class="drop-message">
         <div class="drop-icon">
@@ -215,7 +277,7 @@
             <line x1="12" y1="3" x2="12" y2="15"></line>
           </svg>
         </div>
-        <h3>Drop files here to upload</h3>
+        <h3>Drop files or folders here to upload</h3>
       </div>
     </div>
 

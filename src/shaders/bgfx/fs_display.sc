@@ -41,7 +41,7 @@ uniform vec4 glassTint_Roughness;
 #define glassRoughness    (glassTint_Roughness.w)
 
 // Textured glass
-SAMPLER2D(displayGlass, 1); // Glass over display texture (usually dirt and scratches, eventually tinting)
+SAMPLER2D(displayGlass, 1); // Glass over display texture (usually dirt and scratches, optionally tinting)
 uniform vec4 w_h_height;
 #define glassAmbient      (w_h_height.rgb)
 #define hasGlass          (w_h_height.w != 0.0)
@@ -60,6 +60,12 @@ vec3 ReinhardToneMap(vec3 color)
     float l = min(dot(color, vec3(0.176204, 0.812985, 0.0108109)), MAX_BURST); // CIE RGB to XYZ, Y row (relative luminance)
     return color * ((l * BURN_HIGHLIGHTS + 1.0) / (l + 1.0)); // overflow is handled by bloom
 }
+
+#if defined(TARGET_essl)
+	#define texFetch(tex, pos, size) texNoLod(tex, vec2(pos) / size)
+#else
+	#define texFetch(tex, pos, size) texelFetch(tex, pos, 0)
+#endif
 
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -80,7 +86,7 @@ vec3 ReinhardToneMap(vec3 color)
 #ifdef DMD
 	#define N_SAMPLES      2                     // Number of surrounding dots in diffuse evaluation (this has a big performance impact)
 	uniform vec4 vRes_Alpha_time;
-	#define dmdSize        (vRes_Alpha_time.xy)  // display size in dots
+	#define dmdSize        (vRes_Alpha_time.xy)  // Display size in dots
 	#define coloredDMD     (displayProperties.x != 0.0) // Linear luminance or sRGB color
 	#define sdfOffset      (displayProperties.y)        // Offset needed for SDF=0.5 at border decreasing to 0.0: 0.5 * (1.0 + (1.0 / (float(N_SAMPLES) + 0.5)) * dotSize / 2.0)
 	#define dotThreshold   (displayProperties.z)        // Threshold inside SDF (so > 0.5): 0.5 + 0.5 * (0.025 /* Antialiasing */ + dotSize * (1.0 - dotSharpness) /* Darkening around border inside dot */);
@@ -92,6 +98,30 @@ vec3 ReinhardToneMap(vec3 color)
 //
 
 #ifdef CRT
+	uniform vec4 vRes_Alpha_time;
+	#define crtSize        (vRes_Alpha_time.xy)   // input display size in pixels
+	#define crtMode        (displayProperties.x)  // main render mode (pixels, smoothed, vertical CRT, horizontal CRT)
+	#define outSize        (displayProperties.yz) // output display size in pixels
+
+	// See definition in include header, and experiment here: https://www.shadertoy.com/view/MtSfRK
+	// #define CRTS_DEBUG 1
+	#define CRTS_GPU 1
+	#define CRTS_GLSL 1
+	//#define CRTS_2_TAP 1
+	#define CRTS_TONE 1
+	#define CRTS_CONTRAST 0
+	#define CRTS_SATURATION 0
+	#define CRTS_WARP 1
+	//#define CRTS_MASK_GRILLE 1
+	//#define CRTS_MASK_GRILLE_LITE 1
+	//#define CRTS_MASK_NONE 1
+	#define CRTS_MASK_SHADOW 1
+	// Setup the function which returns input image color
+	vec3 CrtsFetch(vec2 uv) {
+		return InvGamma(texFetch(displayTex, ivec2(uv * crtSize), crtSize).rgb);
+	}
+	
+	#include "fs_crt_lottes.fs"
 
 #endif
 
@@ -145,12 +175,16 @@ void main()
 			vec4 sharp = smoothstep(vec4_splat(0.475), vec4_splat(0.525), sdf); // Resolve SDF after texture filtering
 			vec4 diffuse = diffuseStrength * sdf * sdf; // Magic formula to simulate light dispersion at maximum glass roughness
 			vec4 light = mix(sharp, diffuse, roughness);
-			unlitLum4 += light;
-			litLum4   += light * alphaSegState[i];
+			//unlitLum4 += light;
+			//litLum4   += light * alphaSegState[i];
+			unlitLum4 = max(light, unlitLum4); // Max gives slightly better results than additive, especially for corners between segs that are overlit otherwise
+			litLum4 = max(light * alphaSegState[i], litLum4);
 		}
-		vec3 litLum = dot(litLum4, vec4_splat(1.0)) * lit;
-		float unlitLum = dot(unlitLum4, vec4_splat(1.0));
-		
+		//vec3 litLum = dot(litLum4, vec4_splat(1.0));
+		//float unlitLum = dot(unlitLum4, vec4_splat(1.0));
+		vec3 litLum = vec3_splat(max(max(litLum4.x, litLum4.y), max(litLum4.z, litLum4.w)));
+		float unlitLum = max(max(unlitLum4.x, unlitLum4.y), max(unlitLum4.z, unlitLum4.w));
+
 	#elif defined(DMD)
 		float unlitLum = 0.0;
 		vec3 litLum = vec3_splat(0.0);
@@ -160,6 +194,7 @@ void main()
 		float thr = 0.15 * (abs(dFdx(dmdUv.x)) + abs(dFdx(dmdUv.y))); // Magic formula to adjust antialiasing to actual gradient
 		float minThr = 0.5 - thr, maxThr = dotThreshold + thr;
 		for (int y = -N_SAMPLES; y <= N_SAMPLES; y++)
+		{
 			for (int x = -N_SAMPLES; x <= N_SAMPLES; x++)
 			{
 				ivec2 dotUv = dotPos + ivec2(x,y);
@@ -171,25 +206,53 @@ void main()
 					float diffuse = diffuseStrength * sdf * sdf; // Magic formula to evaluate light dispersion at maximum glass roughness
 					float light = mix(sharp, diffuse, roughness);
 					unlitLum += light;
-					if (coloredDMD) // RGB data (eventually sRGB but this is handled by the hardware sampler)
-						litLum += light * texelFetch(displayTex, dotUv, 0).rgb * lit;
+					if (coloredDMD) // RGB data (maybe sRGB, but this is handled by the hardware sampler)
+					{
+						litLum += light * texFetch(displayTex, dotUv, dmdSize).rgb;
+					}
 					else // linear brightness data
-						litLum += light * texelFetch(displayTex, dotUv, 0).r * lit;
+					{
+						litLum += light * texFetch(displayTex, dotUv, dmdSize).rrr;
+					}
 				}
 			}
-		
+		}
+
 	#elif defined(CRT)
-		// TODO implement CRT shading (see Lottes public domain CRT shader)
 		float unlitLum = 0.0;
-		vec3 litLum = vec3_splat(0.0);
-		
+		vec3 litLum;
+		if (crtMode == 0.0) // Pixelated
+		{
+			litLum = texFetch(displayTex, ivec2(displayUv * crtSize), crtSize).rgb;
+		}
+		else if (crtMode == 1.0) // Smoothed
+		{
+			litLum = texture2D(displayTex, displayUv).rgb;
+		}
+		else if (crtMode == 2.0) // CRT
+		{
+			litLum = CrtsFilter(
+			  displayUv * outSize, // Input position
+			  crtSize / outSize, // inputSize / outputSize (in pixels)
+			  crtSize * vec2(0.5,0.5), // half input size
+			  1.0 / crtSize, // 1.0 / input size
+			  1.0 / outSize, // 1.0 / output size
+			  2.0 / outSize, // 2.0 / output size
+			  crtSize.y, // input height
+			  vec2(1.0/48.0,1.0/24.0), // x and y warp
+			  0.7, // Scanline thinness (same as third of CrtsTone below)
+			  -2.5, // Horizonal scan blur
+			  0.5, // Shadow mask effect (same as last of CrtsTone below)
+			  CrtsTone(1.0,0.0,0.7,0.5));
+		}
+
 	#endif
 
 	// Shading is a mix of basic shading (just tinted texture ambient if any) and transmitted (tinted emitter ambient + light)
-	vec3 lum = (unlitLum * unlit + litLum);
+	vec3 lum = unlitLum * unlit + litLum * lit;
 	if (hasGlass)
 		lum = mix(lum, glassAmbient, 0.5 * glass.a);
-	lum *=  glass.rgb;
+	lum *= glass.rgb;
 
 	// Convert to output color space
 	if (displayOutputMode == 0.0) // No tonemap, linear Color space

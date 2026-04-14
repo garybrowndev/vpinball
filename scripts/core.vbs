@@ -88,10 +88,15 @@ Private Const conFlipRetSpeed	 = 0.137 ' Flipper return speed
 Function CheckScript(file) 'Checks Tables and Scripts directories for specified vbs file, and if it exists, will load it.
 	CheckScript = False
 	On Error Resume Next
-	Dim TablesDirectory:TablesDirectory = Left(UserDirectory,InStrRev(UserDirectory,"\",InStrRev(UserDirectory,"\")-1))&"tables\"
-	Dim ScriptsDirectory:ScriptsDirectory = Left(UserDirectory,InStrRev(UserDirectory,"\",InStrRev(UserDirectory,"\")-1))&"scripts\"
 	Dim check:Set check = CreateObject("Scripting.FileSystemObject")
-	If check.FileExists(tablesdirectory & file) Or check.FileExists(scriptsdirectory & file) Or check.FileExists(file) Then CheckScript = True
+	If check.FileExists(file) Then ' file is directly specified with path
+		CheckScript = True
+	ElseIf check.FileExists(ScriptsDirectory & file) Then ' file is in main application Scripts directory (core scripts)
+		CheckScript = True
+	Else
+		Dim TablesDirectory:TablesDirectory = Left(ActiveTable.FileName,InStrRev(ActiveTable.FileName,"\",InStrRev(ActiveTable.FileName,"\")-1))
+		If check.FileExists(TablesDirectory & file) Then CheckScript = True ' file is in current table directory
+	End If
 	On Error Goto 0
 End Function
 
@@ -1105,14 +1110,32 @@ End Class
 '		Nudge
 '--------------------
 class cvpmNudge
-	Private mCount, mSensitivity, mNudgeTimer, mSlingBump, mForce
 	Public TiltSwitch
 
-	Private Sub Class_Initialize
-		mCount = 0 : TiltSwitch = 0 : mSensitivity = 5 : vpmTimer.AddResetObj Me
-	End sub
+	Private Sub Class_Initialize : TiltSwitch = 0 : End Sub
 
-	Private Property Let NeedUpdate(aEnabled) : vpmTimer.EnableUpdate Me, False, aEnabled : End Property
+	' Handle tilt from keyboard event which is sent either from keyboard, or physical plumb, or VPX's emulated plumb
+	Public Sub DoMechTilt()
+		' Legacy core scripts would emulate it by doing a strong forward nudge and relying on a vbs plumb simulation.
+		' People with physical plumb would then manually override this with custom script. There were also a few custom
+		' heuristic plumb simulation scripts available. This is not needed anymore as we now have a plumb simulation
+		' inside VPX physics engine (which will send the 'Tilt' key event), so just trigger the mechanical tilt.
+		If TiltSwitch <> 0 Then vpmTimer.PulseSw TiltSwitch
+	End Sub
+
+	' Handle keyboard nudge
+	Public Sub DoNudge(ByVal aDir, ByVal aForce)
+		aDir = aDir + (Rnd-0.5)*15*aForce : aForce = (0.6+Rnd*0.8)*aForce
+		Nudge aDir, aForce
+	End Sub
+
+	' Legacy public properties used to perform plumb simulation inside VBS scripting (kept to avoid breaking old tables which would access these)
+	Public Property Let Sensitivity(aSens) : End Property
+	Public Sub Update : End Sub
+	Public Sub Reset : End Sub
+
+	' Simulation of devices wired through the GameOn solenoid (bumper, slings,... not really linked with nudging but shares the same class)
+	Private mSlingBump, mForce
 
 	Public Property Let TiltObj(aSlingBump)
 		Dim ii
@@ -1123,46 +1146,20 @@ class cvpmNudge
 		Next
 	End Property
 
-	Public Property Let Sensitivity(aSens) : mSensitivity = (10-aSens)+1 : End property
-
-	Public Sub DoNudge(ByVal aDir, ByVal aForce)
-		aDir = aDir + (Rnd-0.5)*15*aForce : aForce = (0.6+Rnd*0.8)*aForce
-		Nudge aDir, aForce
-		If TiltSwitch = 0 Then Exit Sub ' If no switch why care
-		mCount = mCount + aForce * 1.2
-		If mCount > mSensitivity + 10 Then mCount = mSensitivity + 10
-		If mCount >= mSensitivity Then vpmTimer.PulseSw TiltSwitch
-		NeedUpdate = True
-	End sub
-
-	Public Sub Update
-		If mCount > 0 Then
-			mNudgeTimer = mNudgeTimer + 1
-			If mNudgeTimer > 1000\conTimerPulse Then
-				If mCount > mSensitivity+1 Then mCount = mCount - 1 : vpmTimer.PulseSw TiltSwitch
-				mCount = mCount - 1 : mNudgeTimer = 0
-			End If
-		Else
-			mCount = 0 : NeedUpdate = False
-		End If
-	End Sub
-
-	Public Sub Reset : mCount = 0 : End Sub
-
 	Public Sub SolGameOn(aEnabled)
-		if IsEmpty(mForce) then exit sub 'prevent errors if vpmNudge.TiltObj isn't set
+		If IsEmpty(mForce) Then Exit Sub 'prevent errors if vpmNudge.TiltObj isn't set
 		Dim obj, ii
 		If aEnabled Then
 			ii = 0
 			For Each obj In mSlingBump
 				If TypeName(obj) = "Bumper" Then obj.Threshold = mForce(ii)
-				If vpmVPVer >= 9000 and TypeName(obj) = "Wall" Then obj.SlingshotThreshold = mForce(ii)
+				If vpmVPVer >= 9000 And TypeName(obj) = "Wall" Then obj.SlingshotThreshold = mForce(ii)
 				ii = ii + 1
 			Next
 		Else
 			For Each obj In mSlingBump
 				If TypeName(obj) = "Bumper" Then obj.Threshold = 100
-				If vpmVPVer >= 9000 and TypeName(obj) = "Wall" Then obj.SlingshotThreshold = 100
+				If vpmVPVer >= 9000 And TypeName(obj) = "Wall" Then obj.SlingshotThreshold = 100
 			Next
 		End If
 	End Sub
@@ -1294,7 +1291,12 @@ Class cvpmDropTarget
 	Public Sub SolUnhit(aNo, aEnabled)
 		Dim mSwcopy
 		Dim ii : If Not aEnabled Then Exit Sub
-		If TypeName(mDropObj(aNo-1)) = "HitTarget" Then CorePlaySoundAt mRaiseSnd, mDropObj(aNo-1) Else PlaySound mRaiseSnd
+		If TypeName(mDropObj(aNo-1)) = "HitTarget" Then
+			CorePlaySoundAt mRaiseSnd, mDropObj(aNo-1)
+			vpmSolWall mDropObj(aNo-1), False, False
+		Else
+			PlaySound mRaiseSnd
+		End If
 		mSwcopy = mDropSw(aNo-1)
 		Controller.Switch(mSwcopy) = False
 		mAllDn = False : CheckAllDn False
@@ -2024,7 +2026,7 @@ Class cvpmImpulseP
 End Class
 
 Set vpmTimer = New cvpmTimer
-If LoadScript("NudgePlugIn.vbs") Then Set vpmNudge = New cvpmNudge2 Else Set vpmNudge = New cvpmNudge
+Set vpmNudge = New cvpmNudge
 
 '-------------
 'cvpmFlips (FastFlips) 2 Beta 1
@@ -2951,6 +2953,8 @@ Sub NVOffset(version) ' version 2 for dB2S compatibility
 End Sub
 
 Sub VPMVol
+	' PinMAME plugin streams its sound through VPX, using VPX mixing and therefore volume settings
+	if IsPluginPinMAME Then Exit Sub
 	if PlatformOS <> "windows" then
 		MsgBox "VPinMAME Volume adjustment is not supported on standalone versions of Visual Pinball."
 		Exit Sub

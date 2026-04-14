@@ -42,70 +42,71 @@ struct CodeView: View {
     var allowsClear: Bool = false
 
     var body: some View {
-        NavigationStack {
-            CodeWebView(language: language,
-                        code: content)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Text(url.lastPathComponent)
-                    }
-
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button(action: {
-                            handleDone()
-                        }) {
-                            Text("Done")
-                                .bold()
+        GeometryReader { geometry in
+            NavigationStack {
+                CodeWebView(language: language,
+                            code: content)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Text(url.lastPathComponent)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .frame(maxWidth: geometry.size.width * 0.6, alignment: .leading)
                         }
-                        .tint(Color.vpxRed)
-                    }
-                    ToolbarItem(placement: .bottomBar) {
-                        HStack {
+
+                        ToolbarItem(placement: .topBarTrailing) {
                             Button(action: {
-                                handleShare()
+                                handleDone()
                             }) {
-                                Image(systemName: "square.and.arrow.up")
+                                Text("Done")
+                                    .bold()
                             }
                             .tint(Color.vpxRed)
-
-                            Spacer()
-
-                            if allowsClear {
+                        }
+                        ToolbarItem(placement: .bottomBar) {
+                            HStack {
                                 Button(action: {
-                                    handleClear()
+                                    handleShare()
                                 }) {
-                                    Text("Clear")
+                                    Image(systemName: "square.and.arrow.up")
                                 }
                                 .tint(Color.vpxRed)
+
+                                Spacer()
+
+                                if allowsClear {
+                                    Button(action: {
+                                        handleClear()
+                                    }) {
+                                        Text("Clear")
+                                    }
+                                    .tint(Color.vpxRed)
+                                }
                             }
                         }
                     }
-                }
-                .toolbarBackground(.visible, for: .navigationBar)
-                .toolbarBackground(.visible, for: .bottomBar)
+                    .toolbarBackground(.visible, for: .navigationBar)
+                    .toolbarBackground(.visible, for: .bottomBar)
+            }
+            .onAppear {
+                handleAppear()
+            }
+            .sheet(isPresented: $showShare,
+                   content: {
+                       ActivityViewControllerView(activityItems: $shareSheetItems,
+                                                  excludedActivityTypes: [.postToFacebook])
+                           .presentationDetents([.medium])
+                           .presentationDragIndicator(.hidden)
+                           .ignoresSafeArea()
+                   })
         }
-        .onAppear {
-            handleAppear()
-        }
-        .sheet(isPresented: $showShare,
-               content: {
-                   ActivityViewControllerView(activityItems: $shareSheetItems,
-                                              excludedActivityTypes: [.postToFacebook])
-                       .presentationDetents([.medium])
-                       .presentationDragIndicator(.hidden)
-                       .ignoresSafeArea()
-               })
     }
 
     func handleAppear() {
-        URLSession.shared.dataTask(with: url) { data, _, _ in
-            if let data = data, let content = String(data: data,
-                                                     encoding: .utf8)
-            {
-                self.content = content
-            }
-        }.resume()
+        if let data = try? Data(contentsOf: url) {
+            content = String(decoding: data, as: UTF8.self)
+        }
     }
 
     func handleDone() {
@@ -129,10 +130,7 @@ struct CodeView: View {
 }
 
 #Preview {
-    let documentsDirectory = FileManager.default.urls(for: .documentDirectory,
-                                                      in: .userDomainMask).first!
-
-    let url = documentsDirectory.appendingPathComponent("vpinball.log")
+    let url = URL(fileURLWithPath: VPinballManager.shared.getPath(.preferences)).appendingPathComponent("vpinball.log")
 
     return CodeView(url: url,
                     language: .log,

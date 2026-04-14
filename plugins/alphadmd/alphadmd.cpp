@@ -1,8 +1,8 @@
 // license:GPLv3+
 
-#include "MsgPlugin.h"
-#include "ControllerPlugin.h"
-#include "LoggingPlugin.h"
+#include "plugins/MsgPlugin.h"
+#include "plugins/ControllerPlugin.h"
+#include "plugins/LoggingPlugin.h"
 
 #include <vector>
 #include <thread>
@@ -10,6 +10,7 @@
 #include <condition_variable>
 #include <string>
 using namespace std::string_literals;
+using namespace std::string_view_literals;
 #include <cstring>
 #include <cstdint>
 #include <sstream>
@@ -26,8 +27,12 @@ using namespace std::string_literals;
 #include "usbalphanumeric.h"
 
 #ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #include <locale>
 #endif
@@ -40,12 +45,12 @@ using namespace std::string_literals;
 // - Generate DMD frame for rendering on DMD hardware
 // - Provide identification frames for alphanumeric to DMD colorizations
 //
-// This plugin only rely on the generic messaging plugin API and the generic
-// controller display and segment API. It listen for alphanumeric source and, 
+// This plugin only relies on the generic messaging plugin API and the generic
+// controller display and segment API. It listens for alphanumeric source and, 
 // when found, provide corresponding DMD sources (128x32 and 256x64 variants)
 // with identify capabilities for the 128x32 variant.
 //
-// All rendering is done by an anciliary thread, causing a one frame delay, but
+// All rendering is done by an ancillary thread, causing a one frame delay, but
 // avoiding CPU load on the main thread.
 
 namespace AlphaDMD {
@@ -63,17 +68,16 @@ static std::thread renderThread;
 static std::condition_variable updateCondVar;
 static bool isRunning = false;
 
-static DisplaySrcId dmd128Id, dmd256Id;
-static uint8_t renderFrame[128 * 32] = {0};
-static uint8_t dmd128Frame[128 * 32] = {0};
-static uint8_t dmd256Frame[256 * 64] = {0};
+static DisplaySrcId dmd128Id;
+static float renderFrame[128 * 32] = {};
+static float dmd128Frame[128 * 32] = {};
 static unsigned int renderFrameId = 0;
 
-static uint8_t identifyFrame[128*32] = {0};
+static uint8_t identifyFrame[128*32] = {};
 static unsigned int identifyFrameId = 0;
 
-LPI_USE();
-LPI_IMPLEMENT // Implement shared login support
+LPI_USE_CPP();
+LPI_IMPLEMENT_CPP // Implement shared log support
 
 typedef enum {
    Undefined,
@@ -95,7 +99,7 @@ static DmdLayouts dmdLayout = DmdLayouts::Undefined;
 // Number of segments corresponding to CTLPI_SEG_LAYOUT_xxx
 static constexpr int nSegments[] = { 7, 8, 8, 10, 10, 15, 15, 16, 16 };
 
-// Segment layouts, derived from PinMame, itself taking it from 'usbalphanumeric.h'
+// Segment layouts, derived from PinMAME, itself taking it from 'usbalphanumeric.h'
 
 typedef enum
 {
@@ -224,17 +228,17 @@ static constexpr segDisplay segDisplays[6] = {
       } },
 };
 
-static void DrawChar(const int x, const int y, const segDisplay& display, const float* const lum, const int nSeg)
+template <typename T> constexpr inline T clamp(const T x, const T mn, const T mx) { return std::max(std::min(x, mx), mn); }
+
+static void DrawChar(const int x, const int y, const segDisplay& display, const float* const __restrict lum, const int nSeg)
 {
    for (int seg = 0; seg < nSeg; seg++)
    {
-      const uint8_t v = static_cast<uint8_t>((lum[seg] < 0.01f ? 0.01f : lum[seg] > 1.f ? 1.f : lum[seg]) * 255.f);
+      const float v = clamp(lum[seg], 0.01f, 1.f);
       for (int i = 0; i < display.segs[seg].nDots; i++)
       {
-         const int px = x + display.segs[seg].dots[i][0];
-         const int py = y + display.segs[seg].dots[i][1];
-         int w = renderFrame[py * 128 + px] + v;
-         renderFrame[py * 128 + px] = w < 255 ? w : 255;
+         const int pos = 128 * (y + display.segs[seg].dots[i][1]) + (x + display.segs[seg].dots[i][0]);
+         renderFrame[pos] = std::min(renderFrame[pos] + v, 1.f);
       }
    }
 }
@@ -266,7 +270,7 @@ static void DrawDisplay(int x, int y, float*& lum, int srcIndex, bool large)
 }
 
 #ifdef _WIN32
-void SetThreadName(const std::string& name)
+static void SetThreadName(const std::string& name)
 {
    const int size_needed = MultiByteToWideChar(CP_UTF8, 0, name.c_str(), -1, nullptr, 0);
    if (size_needed <= 1)
@@ -277,7 +281,7 @@ void SetThreadName(const std::string& name)
    SetThreadDescription(GetCurrentThread(), wstr.c_str());
 }
 #else
-void SetThreadName(const std::string& name)
+static void SetThreadName(const std::string& name)
 {
 #ifdef __APPLE__
    pthread_setname_np(name.c_str());
@@ -285,25 +289,22 @@ void SetThreadName(const std::string& name)
    pthread_setname_np(pthread_self(), name.c_str());
 #endif
 }
-#endif   
+#endif
 
 static void RenderThread()
 {
    SetThreadName("AlphaDMD.RenderThread"s);
-   uint16_t seg_data[128] = { 0 };
-   uint16_t seg_data2[128] = { 0 };
-   float groupLum[128 * 16] = { 0 };
+   uint16_t seg_data[128] = {};
+   uint16_t seg_data2[128] = {};
+   float groupLum[128 * 16] = {};
    std::vector<unsigned int> lastFrameId;
    while (isRunning)
    {
       std::unique_lock lock(sourceMutex);
-      updateCondVar.wait(lock, [] { return !isRunning; });
+      updateCondVar.wait(lock, [] { return true; });
 
-      if (!isRunning)
+      if (!isRunning || selectedSources.empty() || (dmdLayout == DmdLayouts::Undefined))
          break;
-
-      if (selectedSources.empty() || (dmdLayout == DmdLayouts::Undefined))
-         continue;
 
       // Get segment display state and compute backward compatible binary version
       float* lum = groupLum;
@@ -315,7 +316,7 @@ static void RenderThread()
          {
             changed = true;
             lastFrameId[i] = seg.frameId;
-            memcpy(lum, seg.frame, selectedSources[i].nElements * 16 * sizeof(float));
+            memcpy(lum, seg.frame, selectedSources[i].nElements * (16 * sizeof(float)));
             for (unsigned int j = 0; j < selectedSources[i].nElements; j++)
             {
                const int nSegs = nSegments[selectedSources[i].elementType[j]];
@@ -421,13 +422,10 @@ static void RenderThread()
          break;
       default: break;
       }
-      if (memcmp(dmd128Frame, renderFrame, 128 * 32) != 0)
+      if (memcmp(dmd128Frame, renderFrame, sizeof(dmd128Frame)) != 0)
       {
          //std::lock_guard<std::mutex> lock(renderMutex);
-         memcpy(dmd128Frame, renderFrame, 128 * 32);
-         for (int y = 0; y < 64; y++)
-            for (int x = 0; x < 256; x++)
-               dmd256Frame[x + y * 256] = dmd128Frame[(x >> 1) + (y >> 1) * 128];
+         memcpy(dmd128Frame, renderFrame, sizeof(dmd128Frame));
          renderFrameId++;
       }
       
@@ -445,8 +443,11 @@ static void RenderThread()
          break;
       case Layout_4x6_2x2_1x6: return; // Unsupported
       case Layout_4x7:
-         _2x7Alpha_2x7Num(seg_data); break;
-         _4x7Num10(seg_data); break;
+         if (firstType >= CTLPI_SEG_LAYOUT_14)
+            _2x7Alpha_2x7Num(seg_data);
+         else
+            _4x7Num10(seg_data);
+         break;
       case Layout_4x7_2x2:
          if ((firstType == CTLPI_SEG_LAYOUT_9) || (firstType == CTLPI_SEG_LAYOUT_9C))
             _2x7Num10_2x7Num10_4x1Num(seg_data);
@@ -475,12 +476,12 @@ static void RenderThread()
    isRunning = false;
 }
 
-static DisplayFrame GetRenderFrame(const CtlResId id) 
+static DisplayFrame GetRenderFrame(const CtlResId id)
 {
    // TODO To be fully clean we should do a lock on sourceLock and return a copy of the render
    //std::lock_guard<std::mutex> lock(renderMutex);
    updateCondVar.notify_one();
-   return { renderFrameId, id.resId == 0 ? dmd128Frame : dmd256Frame };
+   return { renderFrameId, dmd128Frame };
 }
 
 static DisplayFrame GetIdentifyFrame(const CtlResId id)
@@ -499,14 +500,19 @@ static void OnGetDisplaySrc(const unsigned int eventId, void* userData, void* ms
    if (msg.count < msg.maxEntryCount)
       msg.entries[msg.count] = dmd128Id;
    msg.count++;
-   if (msg.count < msg.maxEntryCount)
-      msg.entries[msg.count] = dmd256Id;
-   msg.count++;
+}
+
+static void StopRenderThread()
+{
+   isRunning = false;
+   updateCondVar.notify_all();
+   if (renderThread.joinable())
+      renderThread.join();
 }
 
 static void OnSegSrcChanged(const unsigned int, void* userData, void* msgData)
 {
-   std::lock_guard lock(sourceMutex);
+   std::unique_lock lock(sourceMutex);
    bool wasRendering = !selectedSources.empty();
    selectedSources.clear();
 
@@ -544,7 +550,7 @@ static void OnSegSrcChanged(const unsigned int, void* userData, void* msgData)
    };
    for (int i = 0; (dmdLayout == DmdLayouts::Undefined) && (i < 12); i++)
    {
-      if (layouts[i][1] == selectedSources.size())
+      if (layouts[i][1] == (int)selectedSources.size())
       {
          dmdLayout = static_cast<DmdLayouts>(layouts[i][0]);
          for (size_t j = 0; j < selectedSources.size(); j++)
@@ -564,16 +570,22 @@ static void OnSegSrcChanged(const unsigned int, void* userData, void* msgData)
       for (size_t i = 0; i < selectedSources.size(); i++)
          ss << (i == 0 ? "" : ", ") << selectedSources[i].nElements;
       ss << ')';
-      LPI_LOGI("%s", ss.str().c_str());
+      LPI_LOGI_CPP(ss);
    }
+   lock.unlock();
 
    // If we are starting or stopping rendering, report it
    if (wasRendering != (!selectedSources.empty()))
    {
-      if (selectedSources.empty())
-         msgApi->UnsubscribeMsg(getDmdSrcId, OnGetDisplaySrc);
-      else
+      if (wasRendering)
+         msgApi->UnsubscribeMsg(getDmdSrcId, OnGetDisplaySrc, nullptr);
+      StopRenderThread();
+      if (!selectedSources.empty())
+      {
+         isRunning = true;
+         renderThread = std::thread(RenderThread);
          msgApi->SubscribeMsg(endpointId, getDmdSrcId, OnGetDisplaySrc, nullptr);
+      }
       msgApi->BroadcastMsg(endpointId, onDmdSrcChangedId, nullptr);
    }
 }
@@ -587,29 +599,17 @@ MSGPI_EXPORT void MSGPIAPI AlphaDMDPluginLoad(const uint32_t sessionId, const Ms
    msgApi = api;
    endpointId = sessionId;
    dmd128Id = {
-      .id = { endpointId, 0 },
-      .groupId = { endpointId, 0 },
-      .overrideId = { 0, 0 },
+      .id = { { endpointId, 0 } },
+      .groupId = { { endpointId, 0 } },
+      .overrideId = { { 0, 0 } },
       .width = 128,
       .height = 32,
       .hardware = CTLPI_DISPLAY_HARDWARE_UNKNOWN,
-      .frameFormat = CTLPI_DISPLAY_FORMAT_LUM8,
+      .frameFormat = CTLPI_DISPLAY_FORMAT_LUM32F,
       .GetRenderFrame = &GetRenderFrame,
       .identifyFormat = CTLPI_DISPLAY_ID_FORMAT_BITPLANE2,
       .GetIdentifyFrame = &GetIdentifyFrame
    };
-   dmd256Id = {
-      .id = { endpointId, 1 },
-      .groupId = { endpointId, 0 },
-      .overrideId = { 0, 0 },
-      .width = 256,
-      .height = 64,
-      .hardware = CTLPI_DISPLAY_HARDWARE_UNKNOWN,
-      .frameFormat = CTLPI_DISPLAY_FORMAT_LUM8,
-      .GetRenderFrame = &GetRenderFrame
-   };
-   isRunning = true;
-   renderThread = std::thread(RenderThread);
    onDmdSrcChangedId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DISPLAY_ON_SRC_CHG_MSG);
    getDmdSrcId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DISPLAY_GET_SRC_MSG);
    onSegSrcChangedId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_SEG_ON_SRC_CHG_MSG);
@@ -620,16 +620,18 @@ MSGPI_EXPORT void MSGPIAPI AlphaDMDPluginLoad(const uint32_t sessionId, const Ms
 
 MSGPI_EXPORT void MSGPIAPI AlphaDMDPluginUnload()
 {
-   isRunning = false;
-   updateCondVar.notify_all();
-   if (renderThread.joinable())
-      renderThread.join();
-   if (!selectedSources.empty())
-      msgApi->UnsubscribeMsg(getDmdSrcId, OnGetDisplaySrc);
-   msgApi->UnsubscribeMsg(onSegSrcChangedId, OnSegSrcChanged);
-   msgApi->ReleaseMsgID(onDmdSrcChangedId);
+   {
+      std::lock_guard lock(sourceMutex);
+      msgApi->UnsubscribeMsg(onSegSrcChangedId, OnSegSrcChanged, nullptr);
+      if (!selectedSources.empty())
+         msgApi->UnsubscribeMsg(getDmdSrcId, OnGetDisplaySrc, nullptr);
+      selectedSources.clear();
+      msgApi->BroadcastMsg(endpointId, onDmdSrcChangedId, nullptr);
+   }
+   StopRenderThread();
    msgApi->ReleaseMsgID(getDmdSrcId);
    msgApi->ReleaseMsgID(onSegSrcChangedId);
    msgApi->ReleaseMsgID(getSegSrcId);
+   msgApi->ReleaseMsgID(onDmdSrcChangedId);
    msgApi = nullptr;
 }

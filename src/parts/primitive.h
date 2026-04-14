@@ -1,43 +1,11 @@
 // license:GPLv3+
 
-// interface for the Primitive class.
-
 #pragma once
 
-#include "ui/resource.h"
+#include "ui/win/resource.h"
 #include "unordered_dense.h"
-
-class Mesh final
-{
-public:
-   Vertex3Ds middlePoint;
-   struct VertData
-   {
-      float x, y, z;
-      float nx, ny, nz;
-   };
-   struct FrameData
-   {
-      vector<VertData> m_frameVerts;
-   };
-
-   vector<FrameData> m_animationFrames;
-   vector<Vertex3D_NoTex2> m_vertices;
-   vector<unsigned int> m_indices;
-   Vertex3Ds m_minAABound, m_maxAABound;
-   bool m_validBounds = false;
-
-   Mesh() { middlePoint.x = 0.0f; middlePoint.y = 0.0f; middlePoint.z = 0.0f; }
-   void Clear();
-   bool LoadWavefrontObj(const string& fname, const bool flipTV, const bool convertToLeftHanded);
-   void SaveWavefrontObj(const string& fname, const string& description);
-   bool LoadAnimation(const char *fname, const bool flipTV, const bool convertToLeftHanded);
-
-   size_t NumVertices() const    { return m_vertices.size(); }
-   size_t NumIndices() const     { return m_indices.size(); }
-   void UploadToVB(VertexBuffer * vb, const float frame);
-   void UpdateBounds();
-};
+#include "math/Mesh.h"
+#include "math/MeshUtils.h"
 
 // Indices for RotAndTra:
 //     RotX = 0
@@ -49,19 +17,17 @@ public:
 //  ObjRotX = 6
 //  ObjRotY = 7
 //  ObjRotZ = 8
-
 class PrimitiveData final : public BaseProperty
 {
 public:
    int m_Sides = 4;
    Vertex3Ds m_vPosition { 0.f, 0.f, 0.f };
    Vertex3Ds m_vSize { 1.f, 1.f, 1.f };
-   float m_aRotAndTra[9] { 0.f };
+   float m_aRotAndTra[9] { };
    string m_szNormalMap;
    string m_meshFileName;
 
    COLORREF m_SideColor = RGB(150, 150, 150);
-   TimerDataRoot m_tdr;
 
    float m_elasticityFalloff = 0.43f;
    float m_depthBias = 0.0f; // for determining depth sorting
@@ -106,7 +72,8 @@ class Primitive :
 
    public ISelect,
    public IEditable,
-   public Hitable,
+   public IHitable,
+   public IRenderable,
    public IScriptable,
    public IFireEvents,
    public IPerPropertyBrowsing // Ability to fill in dropdown in property browser
@@ -255,7 +222,7 @@ public:
    STDMETHOD(get_RefractionProbe)(/*[out, retval]*/ BSTR *pVal);
    STDMETHOD(put_RefractionProbe)(/*[in]*/ BSTR newVal);
 
-   Primitive();
+   Primitive() { }
    virtual ~Primitive();
 
    BEGIN_COM_MAP(Primitive)
@@ -275,9 +242,11 @@ public:
    END_CONNECTION_POINT_MAP()
 
 
-   STANDARD_EDITABLE_DECLARES(Primitive, eItemPrimitive, PRIMITIVE, 1)
+   STANDARD_EDITABLE_DECLARES(Primitive, eItemPrimitive, PRIMITIVE, VIEW_PLAYFIELD)
 
    DECLARE_REGISTRY_RESOURCEID(IDR_PRIMITIVE)
+
+   bool PhysicUpdate(class PhysicsEngine *physics, const bool isUI) final;
 
    void MoveOffset(const float dx, const float dy) final;
    void SetObjectPos() final;
@@ -291,11 +260,10 @@ public:
    void ExportMeshDialog() final;
 
 #if (GET_PLATFORM_OS_ENUM==0) // Windows
-   bool IsPlayfield() const { return _wcsicmp(m_wzName, L"playfield_mesh") == 0; }
+   bool IsPlayfield() const { return _wcsicmp(m_wzName.c_str(), L"playfield_mesh") == 0; }
 #else // Linux and variants (POSIX.1-2008)
-   bool IsPlayfield() const { return wcscasecmp(m_wzName, L"playfield_mesh") == 0; }
+   bool IsPlayfield() const { return wcscasecmp(m_wzName.c_str(), L"playfield_mesh") == 0; }
 #endif
-   bool IsBackglass() const { return StrCompareNoCase(m_d.m_szImage, "backglassimage"s); }
 
    float GetAlpha() const { return m_d.m_alpha; }
    void SetAlpha(const float value) { m_d.m_alpha = max(value, 0.f); }
@@ -311,7 +279,7 @@ public:
    void RenderBlueprint(Sur *psur, const bool solid) final;
    void UpdateStatusBarInfo() final;
 
-   void RecalculateMatrices();
+   const Matrix3D &RecalculateMatrices();
    void TransformVertices();
 
    void setInPlayState(const bool newVal);
@@ -328,13 +296,12 @@ public:
 private:
    RenderDevice *m_rd = nullptr;
 
-   PinTable *m_ptable = nullptr;
    Light * m_lightmap = nullptr;
 
    bool m_useAsPlayfield = false;
-   bool m_isBackGlassImage;
 
    Matrix3D m_fullMatrix;
+   Matrix3D m_physicMatrix;
    bool m_skipRendering = false;
    bool m_groupdRendering = false;
    int m_numGroupVertices = 0;
@@ -358,10 +325,6 @@ private:
       const Vertex3Ds &vj, const bool isUI);
 
    void CalculateBuiltinOriginal();
-   static void WaitForMeshDecompression();
-
-   PropertyPane *m_propVisual = nullptr;
-   PropertyPane *m_propPosition = nullptr;
 
    vector<HitObject*> m_vhoCollidable; // Objects to that may be collide selectable
 
@@ -410,6 +373,7 @@ private:
    vector<Vertex3Ds> m_vertices;
    vector<float> m_normals; // only z component actually
 
-   MeshBuffer *m_meshBuffer = nullptr;
+   std::shared_ptr<MeshBuffer> m_meshBuffer;
+   std::shared_ptr<MeshBuffer> m_meshEdgeBuffer;
    bool m_vertexBufferRegenerate = true;
 };

@@ -1,15 +1,10 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
+#include "dragpoint.h"
 
 Vertex3Ds DragPoint::m_copyPoint;
 bool      DragPoint::m_pointCopied = false;
-
-IHaveDragPoints::IHaveDragPoints()
-{
-    m_propVisuals = nullptr;
-    m_propPosition = nullptr;
-}
 
 IHaveDragPoints::~IHaveDragPoints()
 {
@@ -24,13 +19,12 @@ Vertex2D IHaveDragPoints::GetPointCenter() const
    float miny = FLT_MAX;
    float maxy = -FLT_MAX;
 
-   for (size_t i = 0; i < m_vdpoint.size(); i++)
+   for (const auto& v : m_vdpoint)
    {
-      const Vertex3Ds& v = m_vdpoint[i]->m_v;
-      minx = min(minx, v.x);
-      maxx = max(maxx, v.x);
-      miny = min(miny, v.y);
-      maxy = max(maxy, v.y);
+      minx = min(minx, v->m_v.x);
+      maxx = max(maxx, v->m_v.x);
+      miny = min(miny, v->m_v.y);
+      maxy = max(maxy, v->m_v.y);
    }
 
    return {(maxx + minx)*0.5f, (maxy + miny)*0.5f};
@@ -42,11 +36,11 @@ void IHaveDragPoints::FlipPointY(const Vertex2D& pvCenter)
 
    Vertex2D newcenter = GetPointCenter();
 
-   for (size_t i = 0; i < m_vdpoint.size(); i++)
+   for (const auto& v : m_vdpoint)
    {
-      const float deltay = m_vdpoint[i]->m_v.y - pvCenter.y;
+      const float deltay = v->m_v.y - pvCenter.y;
 
-      m_vdpoint[i]->m_v.y -= deltay*2.0f;
+      v->m_v.y -= deltay*2.0f;
    }
 
    const float deltay = newcenter.y - pvCenter.y;
@@ -64,11 +58,11 @@ void IHaveDragPoints::FlipPointX(const Vertex2D& pvCenter)
 
    Vertex2D newcenter = GetPointCenter();
 
-   for (size_t i = 0; i < m_vdpoint.size(); i++)
+   for (const auto& v : m_vdpoint)
    {
-      const float deltax = m_vdpoint[i]->m_v.x - pvCenter.x;
+      const float deltax = v->m_v.x - pvCenter.x;
 
-      m_vdpoint[i]->m_v.x -= deltax*2.0f;
+      v->m_v.x -= deltax*2.0f;
    }
 
    const float deltax = newcenter.x - pvCenter.x;
@@ -80,87 +74,38 @@ void IHaveDragPoints::FlipPointX(const Vertex2D& pvCenter)
    STOPUNDOSELECT
 }
 
-void IHaveDragPoints::RotateDialog()
-{
-#ifndef __STANDALONE__
-   DialogBoxParam(g_pvp->theInstance, MAKEINTRESOURCE(IDD_ROTATE),
-       g_pvp->GetHwnd(), RotateProc, (size_t)GetIEditable()->GetISelect());//(long)this);
-#endif
-}
-
-void IHaveDragPoints::ScaleDialog()
-{
-#ifndef __STANDALONE__
-   DialogBoxParam(g_pvp->theInstance, MAKEINTRESOURCE(IDD_SCALE),
-       g_pvp->GetHwnd(), ScaleProc, (size_t)GetIEditable()->GetISelect());
-#endif
-}
-
-void IHaveDragPoints::TranslateDialog()
-{
-#ifndef __STANDALONE__
-   DialogBoxParam(g_pvp->theInstance, MAKEINTRESOURCE(IDD_TRANSLATE),
-       g_pvp->GetHwnd(), TranslateProc, (size_t)GetIEditable()->GetISelect());
-#endif
-}
-
 void IHaveDragPoints::RotatePoints(const float ang, const Vertex2D& pvCenter, const bool useElementCenter)
 {
-   Vertex2D newcenter = GetPointCenter();
-
    STARTUNDOSELECT
 
-   if (useElementCenter)
+   Vertex2D newcenter = GetPointCenter();
+
+   const float centerx = useElementCenter ? newcenter.x : pvCenter.x;
+   const float centery = useElementCenter ? newcenter.y : pvCenter.y;
+
+   const float sn = sinf(ANGTORAD(ang));
+   const float cs = cosf(ANGTORAD(ang));
+
+   for (const auto& v : m_vdpoint)
    {
-      /* Don't use the pvCenter anymore! pvCenter is the mouse position when rotating is activated.
-      Because the mouse position (rotation center) isn't shown in the editor use the element's center returned by GetPointCenter() */
-      const float centerx = newcenter.x;
-      const float centery = newcenter.y;
-
-      const float sn = sinf(ANGTORAD(ang));
-      const float cs = cosf(ANGTORAD(ang));
-
-      for (size_t i = 0; i < m_vdpoint.size(); i++)
-      {
-         DragPoint * const pdp1 = m_vdpoint[i];
-         const float dx = pdp1->m_v.x - centerx;
-         const float dy = pdp1->m_v.y - centery;
-         const float dx2 = cs*dx - sn*dy;
-         const float dy2 = cs*dy + sn*dx;
-         pdp1->m_v.x = centerx + dx2;
-         pdp1->m_v.y = centery + dy2;
-      }
+      const float dx = v->m_v.x - centerx;
+      const float dy = v->m_v.y - centery;
+      const float dx2 = cs*dx - sn*dy;
+      const float dy2 = cs*dy + sn*dx;
+      v->m_v.x = centerx + dx2;
+      v->m_v.y = centery + dy2;
    }
-   else
+
+   // Move object center as well (if rotating around object center, this would have no effect)
+   if (!useElementCenter)
    {
-      const float centerx = pvCenter.x;
-      const float centery = pvCenter.y;
-
-      const float sn = sinf(ANGTORAD(ang));
-      const float cs = cosf(ANGTORAD(ang));
-
-      for (size_t i = 0; i < m_vdpoint.size(); i++)
-      {
-         DragPoint * const pdp1 = m_vdpoint[i];
-         const float dx = pdp1->m_v.x - centerx;
-         const float dy = pdp1->m_v.y - centery;
-         const float dx2 = cs*dx - sn*dy;
-         const float dy2 = cs*dy + sn*dx;
-         pdp1->m_v.x = centerx + dx2;
-         pdp1->m_v.y = centery + dy2;
-      }
-
-      // Move object center as well (if rotating around object center,
-      // this will have no effect)
-      {
-         const float dx = newcenter.x - centerx;
-         const float dy = newcenter.y - centery;
-         const float dx2 = cs*dx - sn*dy;
-         const float dy2 = cs*dy + sn*dx;
-         newcenter.x = centerx + dx2;
-         newcenter.y = centery + dy2;
-         PutPointCenter(newcenter);
-      }
+      const float dx = newcenter.x - centerx;
+      const float dy = newcenter.y - centery;
+      const float dx2 = cs*dx - sn*dy;
+      const float dy2 = cs*dy + sn*dx;
+      newcenter.x = centerx + dx2;
+      newcenter.y = centery + dy2;
+      PutPointCenter(newcenter);
    }
 
    STOPUNDOSELECT
@@ -168,49 +113,29 @@ void IHaveDragPoints::RotatePoints(const float ang, const Vertex2D& pvCenter, co
 
 void IHaveDragPoints::ScalePoints(const float scalex, const float scaley, const Vertex2D& pvCenter, const bool useElementCenter)
 {
-   Vertex2D newcenter = GetPointCenter();
-
    STARTUNDOSELECT
 
-   if (useElementCenter)
-   {
-      // Don't use the pvCenter anymore! pvCenter is the mouse position when scaling is activated.
-      // Because the mouse position (scaling center) isn't shown in the editor use the element's center returned by GetPointCenter()
-      const float centerx = newcenter.x;
-      const float centery = newcenter.y;
+   Vertex2D newcenter = GetPointCenter();
 
-      for (size_t i = 0; i < m_vdpoint.size(); i++)
-      {
-         DragPoint * const pdp1 = m_vdpoint[i];
-         const float dx = (pdp1->m_v.x - centerx) * scalex;
-         const float dy = (pdp1->m_v.y - centery) * scaley;
-         pdp1->m_v.x = centerx + dx;
-         pdp1->m_v.y = centery + dy;
-      }
+   const float centerx = useElementCenter ? newcenter.x : pvCenter.x;
+   const float centery = useElementCenter ? newcenter.y : pvCenter.y;
+
+   for (const auto& v : m_vdpoint)
+   {
+      const float dx = (v->m_v.x - centerx) * scalex;
+      const float dy = (v->m_v.y - centery) * scaley;
+      v->m_v.x = centerx + dx;
+      v->m_v.y = centery + dy;
    }
-   else
+
+   // Move object center as well (if scaling from object center, this would have no effect)
+   if (!useElementCenter)
    {
-      const float centerx = pvCenter.x;
-      const float centery = pvCenter.y;
-
-      for (size_t i = 0; i < m_vdpoint.size(); i++)
-      {
-         DragPoint * const pdp1 = m_vdpoint[i];
-         const float dx = (pdp1->m_v.x - centerx) * scalex;
-         const float dy = (pdp1->m_v.y - centery) * scaley;
-         pdp1->m_v.x = centerx + dx;
-         pdp1->m_v.y = centery + dy;
-      }
-
-      // Move object center as well (if scaling from object center,
-      // this will have no effect)
-      {
-         const float dx = (newcenter.x - centerx) * scalex;
-         const float dy = (newcenter.y - centery) * scaley;
-         newcenter.x = centerx + dx;
-         newcenter.y = centery + dy;
-         PutPointCenter(newcenter);
-      }
+      const float dx = (newcenter.x - centerx) * scalex;
+      const float dy = (newcenter.y - centery) * scaley;
+      newcenter.x = centerx + dx;
+      newcenter.y = centery + dy;
+      PutPointCenter(newcenter);
    }
 
    STOPUNDOSELECT
@@ -220,19 +145,13 @@ void IHaveDragPoints::TranslatePoints(const Vertex2D &pvOffset)
 {
    STARTUNDOSELECT
 
-   for (size_t i = 0; i < m_vdpoint.size(); i++)
+   for (const auto& v : m_vdpoint)
    {
-      DragPoint * const pdp1 = m_vdpoint[i];
-      pdp1->m_v.x += pvOffset.x;
-      pdp1->m_v.y += pvOffset.y;
+      v->m_v.x += pvOffset.x;
+      v->m_v.y += pvOffset.y;
    }
 
-   Vertex2D newcenter = GetPointCenter();
-
-   newcenter.x += pvOffset.x;
-   newcenter.y += pvOffset.y;
-
-   PutPointCenter(newcenter);
+   PutPointCenter(GetPointCenter());
 
    STOPUNDOSELECT
 }
@@ -360,7 +279,7 @@ void IHaveDragPoints::ClearPointsForOverwrite()
 {
    for (size_t i = 0; i < m_vdpoint.size(); i++)
    {
-      if (m_vdpoint[i]->m_selectstate != eNotSelected/*GetPTable()->m_pselcur == m_vdpoint[i]*/)
+      if (m_vdpoint[i]->m_selectstate != ISelect::SelectState::NotSelected /*GetPTable()->m_pselcur == m_vdpoint[i]*/)
       {
          //GetPTable()->SetSel(GetPTable());
          GetPTable()->AddMultiSel(GetPTable(), false, true, false);
@@ -372,42 +291,58 @@ void IHaveDragPoints::ClearPointsForOverwrite()
    m_vdpoint.clear();
 }
 
-HRESULT IHaveDragPoints::SavePointData(IStream *pstm, HCRYPTHASH hcrypthash)
+void IHaveDragPoints::SavePoints(IObjectWriter &writer) const
 {
-   BiffWriter bw(pstm, hcrypthash);
-
-   for (size_t i = 0; i < m_vdpoint.size(); i++)
+   for (const auto pdp : m_vdpoint)
    {
-      bw.WriteTag(FID(DPNT));
-      CComObject<DragPoint> * const pdp = m_vdpoint[i];
-      bw.WriteStruct(FID(VCEN), &(pdp->m_v), sizeof(Vertex2D));
-      bw.WriteFloat(FID(POSZ), pdp->m_v.z);
-      bw.WriteBool(FID(SMTH), pdp->m_smooth);
-      bw.WriteBool(FID(SLNG), pdp->m_slingshot);
-      bw.WriteBool(FID(ATEX), pdp->m_autoTexture);
-      bw.WriteFloat(FID(TEXC), pdp->m_texturecoord);
-
-      ((ISelect *)pdp)->SaveData(pstm, hcrypthash);
-
-      bw.WriteTag(FID(ENDB));
+      writer.BeginObject(FID(DPNT), true, false);
+      writer.WriteVector2(FID(VCEN), Vertex2D(pdp->m_v.x, pdp->m_v.y));
+      writer.WriteFloat(FID(POSZ), pdp->m_v.z);
+      writer.WriteBool(FID(SMTH), pdp->m_smooth);
+      writer.WriteBool(FID(SLNG), pdp->m_slingshot);
+      writer.WriteBool(FID(ATEX), pdp->m_autoTexture);
+      writer.WriteFloat(FID(TEXC), pdp->m_texturecoord);
+      writer.WriteBool(FID(LOCK), pdp->m_uiLocked);
+      writer.WriteBool(FID(LVIS), pdp->m_uiVisible);
+      writer.EndObject();
    }
-
-   return S_OK;
 }
 
-
-void IHaveDragPoints::LoadPointToken(BiffReader *pbr)
+void IHaveDragPoints::LoadPointToken(IObjectReader& reader)
 {
    CComObject<DragPoint> *pdp;
    CComObject<DragPoint>::CreateInstance(&pdp);
-   if (pdp)
-   {
-      pdp->AddRef();
-      pdp->Init(this, 0.f, 0.f, 0.f, false);
-      m_vdpoint.push_back(pdp);
-      BiffReader br(pbr->m_pistream, pdp, pbr->m_version, pbr->m_hcrypthash, pbr->m_hcryptkey);
-      br.Load();
-   }
+   if (pdp == nullptr)
+      return;
+
+   pdp->AddRef();
+   pdp->Init(this, 0.f, 0.f, 0.f, false);
+   reader.AsObject(
+      [pdp](int tag, IObjectReader &reader)
+      {
+         switch (tag)
+         {
+         case FID(VCEN):
+         {
+            auto v = reader.AsVector2();
+            pdp->m_v.x = v.x;
+            pdp->m_v.y = v.y; 
+            break;
+         }
+         case FID(POSZ): pdp->m_v.z = reader.AsFloat(); break;
+         case FID(SMTH): pdp->m_smooth = reader.AsBool(); break;
+         case FID(SLNG): pdp->m_slingshot = reader.AsBool(); break;
+         case FID(ATEX): pdp->m_autoTexture = reader.AsBool(); break;
+         case FID(TEXC): pdp->m_texturecoord = reader.AsFloat(); break;
+         case FID(LOCK): pdp->m_uiLocked = reader.AsBool(); break;
+         case FID(LVIS): pdp->m_uiVisible = reader.AsBool(); break;
+         // Old save would wrongly save these fields which do not apply to dragpoint
+         case FID(LAYR): reader.AsInt(); break;
+         case FID(LANR): reader.AsString(); break;
+         }
+         return true;
+      });
+   m_vdpoint.push_back(pdp);
 }
 
 void DragPoint::Init(IHaveDragPoints *pihdp, const float x, const float y, const float z, const bool smooth)
@@ -439,13 +374,13 @@ const IEditable *DragPoint::GetIEditable() const
 void DragPoint::OnLButtonDown(int x, int y)
 {
    ISelect::OnLButtonDown(x, y);
-   GetIEditable()->SetDirtyDraw();
+   GetPTable()->SetDirtyDraw();
 }
 
 void DragPoint::OnLButtonUp(int x, int y)
 {
    ISelect::OnLButtonUp(x, y);
-   GetIEditable()->SetDirtyDraw();
+   GetPTable()->SetDirtyDraw();
 }
 
 void DragPoint::SetObjectPos()
@@ -470,24 +405,13 @@ void DragPoint::PutCenter(const Vertex2D& pv)
    m_v.y = pv.y;
 }
 
-void DragPoint::EditMenu(CMenu &menu)
-{
-#ifndef __STANDALONE__
-   menu.CheckMenuItem(ID_POINTMENU_SMOOTH, MF_BYCOMMAND | (m_smooth ? MF_CHECKED : MF_UNCHECKED));
-   //EnableMenuItem(hmenu, ID_POINTMENU_SLINGSHOT, MF_BYCOMMAND | (m_fSmooth ? MF_GRAYED : MF_ENABLED));
-   menu.CheckMenuItem(ID_POINTMENU_SLINGSHOT, MF_BYCOMMAND | ((m_slingshot && !m_smooth) ? MF_CHECKED : MF_UNCHECKED));
-#endif
-}
-
 void DragPoint::Delete()
 {
    if ((int)M_PIHDP->m_vdpoint.size() > M_PIHDP->GetMinimumPoints()) // Can't allow less points than the user can recover from
    {
-      GetIEditable()->BeginUndo();
-      GetIEditable()->MarkForUndo();
+      STARTUNDOSELECT
       RemoveFromVectorSingle(M_PIHDP->m_vdpoint, (CComObject<DragPoint> *)this);
-      GetIEditable()->EndUndo();
-      GetIEditable()->SetDirtyDraw();
+      STOPUNDOSELECT
       Release();
    }
 }
@@ -498,6 +422,14 @@ void DragPoint::Uncreate()
    Release();
 }
 
+#ifndef __STANDALONE__
+void DragPoint::EditMenu(CMenu &menu)
+{
+   menu.CheckMenuItem(ID_POINTMENU_SMOOTH, MF_BYCOMMAND | (m_smooth ? MF_CHECKED : MF_UNCHECKED));
+   //EnableMenuItem(hmenu, ID_POINTMENU_SLINGSHOT, MF_BYCOMMAND | (m_fSmooth ? MF_GRAYED : MF_ENABLED));
+   menu.CheckMenuItem(ID_POINTMENU_SLINGSHOT, MF_BYCOMMAND | ((m_slingshot && !m_smooth) ? MF_CHECKED : MF_UNCHECKED));
+}
+
 void DragPoint::DoCommand(int icmd, int x, int y)
 {
    ISelect::DoCommand(icmd, x, y);
@@ -505,10 +437,7 @@ void DragPoint::DoCommand(int icmd, int x, int y)
    {
    case ID_POINTMENU_SMOOTH:
    {
-      IEditable * const pedit = GetIEditable();
-      pedit->BeginUndo();
-      pedit->MarkForUndo();
-
+      STARTUNDOSELECT
       m_smooth = !m_smooth;
       const int index2 = (FindIndexOf(M_PIHDP->m_vdpoint, (CComObject<DragPoint> *)this) - 1 + (int)M_PIHDP->m_vdpoint.size()) % (int)M_PIHDP->m_vdpoint.size();
       if (m_smooth && m_slingshot)
@@ -519,17 +448,12 @@ void DragPoint::DoCommand(int icmd, int x, int y)
       {
          M_PIHDP->m_vdpoint[index2]->m_slingshot = false;
       }
-
-      pedit->EndUndo();
-      pedit->SetDirtyDraw();
+      STOPUNDOSELECT
       break;
    }
    case ID_POINTMENU_SLINGSHOT:
    {
-      IEditable * const pedit = GetIEditable();
-      pedit->BeginUndo();
-      pedit->MarkForUndo();
-
+      STARTUNDOSELECT
       m_slingshot = !m_slingshot;
       if (m_slingshot)
       {
@@ -537,13 +461,12 @@ void DragPoint::DoCommand(int icmd, int x, int y)
          const int index2 = (FindIndexOf(M_PIHDP->m_vdpoint, (CComObject<DragPoint> *)this) + 1) % M_PIHDP->m_vdpoint.size();
          M_PIHDP->m_vdpoint[index2]->m_smooth = false;
       }
-
-      pedit->EndUndo();
-      pedit->SetDirtyDraw();
+      STOPUNDOSELECT
       break;
    }
    }
 }
+#endif
 
 void DragPoint::SetSelectFormat(Sur *psur)
 {
@@ -567,21 +490,6 @@ STDMETHODIMP DragPoint::InterfaceSupportsErrorInfo(REFIID riid)
          return S_OK;
 
    return S_FALSE;
-}
-
-bool DragPoint::LoadToken(const int id, BiffReader * const pbr)
-{
-   switch (id)
-   {
-   case FID(VCEN): pbr->GetStruct(&m_v, sizeof(Vertex2D)); break;
-   case FID(POSZ): pbr->GetFloat(m_v.z); break;
-   case FID(SMTH): pbr->GetBool(m_smooth); break;
-   case FID(SLNG): pbr->GetBool(m_slingshot); break;
-   case FID(ATEX): pbr->GetBool(m_autoTexture); break;
-   case FID(TEXC): pbr->GetFloat(m_texturecoord); break;
-   default: ISelect::LoadToken(id, pbr); break;
-   }
-   return true;
 }
 
 void DragPoint::Copy()
@@ -690,397 +598,4 @@ STDMETHODIMP DragPoint::put_TextureCoordinateU(float newVal)
    STOPUNDOSELECT
 
    return S_OK;
-}
-
-static int rotateApplyCount = 0;
-INT_PTR CALLBACK RotateProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-#ifndef __STANDALONE__
-   ISelect *psel;
-
-   switch (uMsg)
-   {
-   case WM_INITDIALOG:
-   {
-      rotateApplyCount = 0;
-      SetWindowLongPtr(hwndDlg, GWLP_USERDATA, lParam);
-
-      psel = (ISelect *)GetWindowLongPtr(hwndDlg, GWLP_USERDATA);
-      const float angle = psel->GetRotate();
-
-      SendDlgItemMessage(hwndDlg, IDC_CHECK_ROTATE_CENTER, BM_SETCHECK, BST_CHECKED, 0);
-
-      SetDlgItemText(hwndDlg, IDC_ROTATEBY, f2sz(angle).c_str());
-      const Vertex2D v = psel->GetCenter();
-      SetDlgItemText(hwndDlg, IDC_CENTERX, f2sz(v.x).c_str());
-      SetDlgItemText(hwndDlg, IDC_CENTERY, f2sz(v.y).c_str());
-   }
-   return TRUE;
-   break;
-
-   case WM_CLOSE:
-      EndDialog(hwndDlg, FALSE);
-      break;
-
-   case WM_COMMAND:
-      psel = (ISelect *)GetWindowLongPtr(hwndDlg, GWLP_USERDATA);
-      switch (LOWORD(wParam))
-      {
-      case IDC_CHECK_ROTATE_CENTER:
-      {
-         switch (HIWORD(wParam))
-         {
-            case BN_CLICKED:
-            {
-               if (SendDlgItemMessage(hwndDlg, IDC_CHECK_ROTATE_CENTER, BM_GETCHECK, 0, 0) != BST_CHECKED)
-               {
-                  SetDlgItemText(hwndDlg, IDC_CENTERX, f2sz(g_pvp->m_mouseCursorPosition.x).c_str());
-                  SetDlgItemText(hwndDlg, IDC_CENTERY, f2sz(g_pvp->m_mouseCursorPosition.y).c_str());
-               }
-               else
-               {
-                  const Vertex2D v = psel->GetCenter();
-                  SetDlgItemText(hwndDlg, IDC_CENTERX, f2sz(v.x).c_str());
-                  SetDlgItemText(hwndDlg, IDC_CENTERY, f2sz(v.y).c_str());
-               }
-               break;
-            }
-            default:
-               break;
-          }
-      }
-      default:
-         break;
-      }
-
-
-      switch (HIWORD(wParam))
-      {
-      case BN_CLICKED:
-         switch (LOWORD(wParam))
-         {
-         case IDOK:
-         {
-            if (rotateApplyCount == 0)
-            {
-               char szT[256];
-               GetDlgItemText(hwndDlg, IDC_ROTATEBY, szT, 255);
-               const float f = sz2f(szT);
-
-               const bool useElementCenter = (SendDlgItemMessage(hwndDlg, IDC_CHECK_ROTATE_CENTER, BM_GETCHECK, 0, 0) == BST_CHECKED);
-               GetDlgItemText(hwndDlg, IDC_CENTERX, szT, 255);
-               Vertex2D v;
-               v.x = sz2f(szT);
-               GetDlgItemText(hwndDlg, IDC_CENTERY, szT, 255);
-               v.y = sz2f(szT);
-
-               psel->Rotate(f, v, useElementCenter);
-            }
-            EndDialog(hwndDlg, TRUE);
-            break;
-         }
-         case IDC_ROTATE_APPLY_BUTTON:
-         {
-            rotateApplyCount++;
-            char szT[256];
-            GetDlgItemText(hwndDlg, IDC_ROTATEBY, szT, 255);
-            const float f = sz2f(szT);
-
-            const bool useElementCenter = (SendDlgItemMessage(hwndDlg, IDC_CHECK_ROTATE_CENTER, BM_GETCHECK, 0, 0) == BST_CHECKED);
-            GetDlgItemText(hwndDlg, IDC_CENTERX, szT, 255);
-            Vertex2D v;
-            v.x = sz2f(szT);
-            GetDlgItemText(hwndDlg, IDC_CENTERY, szT, 255);
-            v.y = sz2f(szT);
-
-            psel->Rotate(f, v, useElementCenter);
-            psel->GetPTable()->SetDirtyDraw();
-            break;
-         }
-         case IDC_ROTATE_UNDO_BUTTON:
-         {
-            if (rotateApplyCount > 0)
-            {
-               rotateApplyCount--;
-               psel->GetPTable()->Undo();
-               psel->GetPTable()->SetDirtyDraw();
-            }
-            break;
-         }
-         case IDCANCEL:
-            if (rotateApplyCount > 0)
-            {
-               for (int i = 0; i < rotateApplyCount; i++) psel->GetPTable()->Undo();
-               psel->GetPTable()->SetDirtyDraw();
-            }
-            EndDialog(hwndDlg, FALSE);
-            break;
-         }
-         break;
-      }
-      break;
-   }
-
-   return FALSE;
-}
-
-static int scaleApplyCount = 0;
-INT_PTR CALLBACK ScaleProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-   ISelect *psel;
-
-   switch (uMsg)
-   {
-   case WM_INITDIALOG:
-   {
-      scaleApplyCount = 0;
-      SetWindowLongPtr(hwndDlg, GWLP_USERDATA, lParam);
-      psel = (ISelect *)GetWindowLongPtr(hwndDlg, GWLP_USERDATA);
-
-      Vertex2D v = psel->GetScale();
-
-      SetDlgItemText(hwndDlg, IDC_SCALEFACTOR, f2sz(v.x).c_str());
-      SetDlgItemText(hwndDlg, IDC_SCALEY, f2sz(v.y).c_str());
-      v = psel->GetCenter();
-
-      SendDlgItemMessage(hwndDlg, IDC_CHECK_SCALE_CENTER, BM_SETCHECK, BST_CHECKED, 0);
-
-      SetDlgItemText(hwndDlg, IDC_CENTERX, f2sz(v.x).c_str());
-      SetDlgItemText(hwndDlg, IDC_CENTERY, f2sz(v.y).c_str());
-
-      SendDlgItemMessage(hwndDlg, IDC_SQUARE, BM_SETCHECK, TRUE, 0);
-
-      EnableWindow(GetDlgItem(hwndDlg, IDC_SCALEY), FALSE);
-      EnableWindow(GetDlgItem(hwndDlg, IDC_STATIC_SCALEY), FALSE);
-   }
-   return TRUE;
-   break;
-
-   case WM_CLOSE:
-      EndDialog(hwndDlg, FALSE);
-      break;
-
-   case WM_COMMAND:
-      psel = (ISelect *)GetWindowLongPtr(hwndDlg, GWLP_USERDATA);
-      switch (LOWORD(wParam))
-      {
-         case IDC_CHECK_SCALE_CENTER:
-         {
-            switch (HIWORD(wParam))
-            {
-            case BN_CLICKED:
-            {
-               if (SendDlgItemMessage(hwndDlg, IDC_CHECK_SCALE_CENTER, BM_GETCHECK, 0, 0) != BST_CHECKED)
-               {
-                  SetDlgItemText(hwndDlg, IDC_CENTERX, f2sz(g_pvp->m_mouseCursorPosition.x).c_str());
-                  SetDlgItemText(hwndDlg, IDC_CENTERY, f2sz(g_pvp->m_mouseCursorPosition.y).c_str());
-               }
-               else
-               {
-                  const Vertex2D v = psel->GetCenter();
-                  SetDlgItemText(hwndDlg, IDC_CENTERX, f2sz(v.x).c_str());
-                  SetDlgItemText(hwndDlg, IDC_CENTERY, f2sz(v.y).c_str());
-               }
-               break;
-            }
-            default:
-               break;
-            }
-         }
-      default:
-         break;
-      }
-
-      switch (HIWORD(wParam))
-      {
-      case BN_CLICKED:
-         switch (LOWORD(wParam))
-         {
-         case IDOK:
-         {
-            if (scaleApplyCount == 0)
-            {
-               char szT[256];
-               GetDlgItemText(hwndDlg, IDC_SCALEFACTOR, szT, 255);
-               const float fx = sz2f(szT);
-               const size_t checked = SendDlgItemMessage(hwndDlg, IDC_SQUARE, BM_GETCHECK, 0, 0);
-               float fy;
-               if (checked)
-               {
-                  fy = fx;
-               }
-               else
-               {
-                  GetDlgItemText(hwndDlg, IDC_SCALEY, szT, 255);
-                  fy = sz2f(szT);
-               }
-
-               GetDlgItemText(hwndDlg, IDC_CENTERX, szT, 255);
-               Vertex2D v;
-               v.x = sz2f(szT);
-               GetDlgItemText(hwndDlg, IDC_CENTERY, szT, 255);
-               v.y = sz2f(szT);
-
-               const bool useElementCenter = (SendDlgItemMessage(hwndDlg, IDC_CHECK_SCALE_CENTER, BM_GETCHECK, 0, 0) == BST_CHECKED);
-               //pihdp->ScalePoints(fx, fy, &v);
-               psel->Scale(fx, fy, v, useElementCenter);
-            }
-            EndDialog(hwndDlg, TRUE);
-            break;
-         }
-         case IDC_SCALE_APPLY_BUTTON:
-         {
-            scaleApplyCount++;
-            char szT[256];
-            GetDlgItemText(hwndDlg, IDC_SCALEFACTOR, szT, 255);
-            const float fx = sz2f(szT);
-            const size_t checked = SendDlgItemMessage(hwndDlg, IDC_SQUARE, BM_GETCHECK, 0, 0);
-            float fy;
-            if (checked)
-            {
-               fy = fx;
-            }
-            else
-            {
-               GetDlgItemText(hwndDlg, IDC_SCALEY, szT, 255);
-               fy = sz2f(szT);
-            }
-
-            GetDlgItemText(hwndDlg, IDC_CENTERX, szT, 255);
-            Vertex2D v;
-            v.x = sz2f(szT);
-            GetDlgItemText(hwndDlg, IDC_CENTERY, szT, 255);
-            v.y = sz2f(szT);
-
-            const bool useElementCenter = (SendDlgItemMessage(hwndDlg, IDC_CHECK_SCALE_CENTER, BM_GETCHECK, 0, 0) == BST_CHECKED);
-
-            //pihdp->ScalePoints(fx, fy, &v);
-            psel->Scale(fx, fy, v, useElementCenter);
-            psel->GetPTable()->SetDirtyDraw();
-            break;
-         }
-         case IDC_SCALE_UNDO_BUTTON:
-         {
-            if (scaleApplyCount > 0)
-            {
-               scaleApplyCount--;
-               psel->GetPTable()->Undo();
-               psel->GetPTable()->SetDirtyDraw();
-            }
-            break;
-         }
-         case IDCANCEL:
-            if (scaleApplyCount > 0)
-            {
-               for (int i = 0; i < scaleApplyCount; i++) psel->GetPTable()->Undo();
-               psel->GetPTable()->SetDirtyDraw();
-            }
-            EndDialog(hwndDlg, FALSE);
-            break;
-
-         case IDC_SQUARE:
-         {
-            const size_t checked = SendDlgItemMessage(hwndDlg, IDC_SQUARE, BM_GETCHECK, 0, 0);
-            EnableWindow(GetDlgItem(hwndDlg, IDC_SCALEY), checked != BST_CHECKED);
-            EnableWindow(GetDlgItem(hwndDlg, IDC_STATIC_SCALEY), checked != BST_CHECKED);
-         }
-         break;
-         }
-         break;
-      }
-      break;
-   }
-#endif
-
-   return FALSE;
-}
-
-static int translateApplyCount = 0;
-INT_PTR CALLBACK TranslateProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-#ifndef __STANDALONE__
-   ISelect *psel;
-
-   switch (uMsg)
-   {
-   case WM_INITDIALOG:
-   {
-      translateApplyCount = 0;
-      SetWindowLongPtr(hwndDlg, GWLP_USERDATA, lParam);
-
-      SetWindowLongPtr(hwndDlg, GWLP_USERDATA, lParam);
-
-      SetDlgItemText(hwndDlg, IDC_OFFSETX, f2sz(0.f).c_str());
-      SetDlgItemText(hwndDlg, IDC_OFFSETY, f2sz(0.f).c_str());
-   }
-   return TRUE;
-   break;
-
-   case WM_CLOSE:
-      EndDialog(hwndDlg, FALSE);
-      break;
-
-   case WM_COMMAND:
-      psel = (ISelect *)GetWindowLongPtr(hwndDlg, GWLP_USERDATA);
-      switch (HIWORD(wParam))
-      {
-      case BN_CLICKED:
-         switch (LOWORD(wParam))
-         {
-         case IDOK:
-         {
-            if (translateApplyCount == 0)
-            {
-               char szT[256];
-               GetDlgItemText(hwndDlg, IDC_OFFSETX, szT, 255);
-               Vertex2D v;
-               v.x = sz2f(szT);
-               GetDlgItemText(hwndDlg, IDC_OFFSETY, szT, 255);
-               v.y = sz2f(szT);
-
-               psel->Translate(v);
-            }
-            EndDialog(hwndDlg, TRUE);
-            break;
-         }
-         case IDC_TRANSLATE_APPLY_BUTTON:
-         {
-            translateApplyCount++;
-            char szT[256];
-            GetDlgItemText(hwndDlg, IDC_OFFSETX, szT, 255);
-            Vertex2D v;
-            v.x = sz2f(szT);
-            GetDlgItemText(hwndDlg, IDC_OFFSETY, szT, 255);
-            v.y = sz2f(szT);
-
-            psel->Translate(v);
-            psel->GetPTable()->SetDirtyDraw();
-            break;
-         }
-         case IDC_TRANSLATE_UNDO_BUTTON:
-         {
-            if (translateApplyCount > 0)
-            {
-               translateApplyCount--;
-               psel->GetPTable()->Undo();
-               psel->GetPTable()->SetDirtyDraw();
-            }
-            break;
-         }
-         case IDCANCEL:
-            if (translateApplyCount > 0)
-            {
-               for (int i = 0; i < translateApplyCount; i++) psel->GetPTable()->Undo();
-               psel->GetPTable()->SetDirtyDraw();
-            }
-            EndDialog(hwndDlg, FALSE);
-            break;
-         }
-         break;
-      }
-      break;
-   }
-#endif
-
-   return FALSE;
 }

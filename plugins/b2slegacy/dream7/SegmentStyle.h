@@ -1,9 +1,6 @@
 #pragma once
 
 
-#include <map>
-
-
 namespace B2SLegacy {
 
 class SegmentStyle
@@ -21,11 +18,11 @@ public:
    void SetGlassColorCenter(uint32_t color) { m_glassColorCenter = color; }
    int GetGlassAlpha() const { return m_glassAlpha; }
    void SetGlassAlpha(int alpha) { m_glassAlpha = alpha; }
-   int GetGlassAlphaCenter() const { return m_glassAlphaCenter; }
-   void SetGlassAlphaCenter(int alpha) { m_glassAlphaCenter = alpha; }
+   uint8_t GetGlassAlphaCenter() const { return m_glassAlphaCenter; }
+   void SetGlassAlphaCenter(const uint8_t alpha) { m_glassAlphaCenter = alpha; }
    float GetGlow() const { return m_glow; }
    void SetGlow(float glow) { m_glow = glow; }
-   SDL_FRect& GetBulbSize() { return m_bulbSize; }
+   const SDL_FRect& GetBulbSize() { return m_bulbSize; }
    void SetBulbSize(const SDL_FRect& bulbSize) { m_bulbSize = bulbSize; }
    bool IsWireFrame() const { return m_wireFrame; }
    void SetWireFrame(bool wireFrame) { m_wireFrame = wireFrame; }
@@ -36,7 +33,7 @@ private:
    uint32_t m_glassColor;
    uint32_t m_glassColorCenter;
    int m_glassAlpha;
-   int m_glassAlphaCenter;
+   uint8_t m_glassAlphaCenter;
    float m_glow;
    SDL_FRect m_bulbSize;
    bool m_wireFrame;

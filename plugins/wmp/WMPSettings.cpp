@@ -1,3 +1,5 @@
+// license:GPLv3+
+
 #include "WMPSettings.h"
 #include "WMPCore.h"
 #include <algorithm>
@@ -37,12 +39,12 @@ void WMPSettings::SetMute(bool mute)
    m_pCore->GetAudioPlayer()->UpdateVolume(m_pCore->m_volume, m_pCore->m_mute);
 }
 
-long WMPSettings::GetVolume() const
+int WMPSettings::GetVolume() const
 {
    return m_pCore->m_volume;
 }
 
-void WMPSettings::SetVolume(long volume)
+void WMPSettings::SetVolume(int volume)
 {
    m_pCore->m_volume = volume;
    m_pCore->GetAudioPlayer()->UpdateVolume(m_pCore->m_volume, m_pCore->m_mute);

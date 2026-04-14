@@ -1,8 +1,11 @@
+// license:GPLv3+
+
 #include "common.h"
 #include "Server.h"
-#include "LoggingPlugin.h"
+#include "plugins/LoggingPlugin.h"
 
 using namespace std::string_literals;
+using namespace std::string_view_literals;
 
 #include "forms/FormBackglass.h"
 #include "forms/FormDMD.h"
@@ -22,13 +25,22 @@ using namespace std::string_literals;
 
 namespace B2SLegacy {
 
-Server::Server(MsgPluginAPI* msgApi, uint32_t endpointId, VPXPluginAPI* vpxApi)
-   : m_msgApi(msgApi),
-     m_vpxApi(vpxApi),
-     m_endpointId(endpointId),
-     m_pinmameApi(nullptr)
+Server* Server::m_singleton = nullptr;
+
+Server::Server(MsgPluginAPI* msgApi, uint32_t endpointId, VPXPluginAPI* vpxApi, ScriptClassDef* serverClassDef)
+   : m_onGameStartId(msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_EVT_ON_GAME_START))
+   , m_onGameEndId(msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_EVT_ON_GAME_END))
+   , m_onGetDevSrcId(msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DEVICE_GET_SRC_MSG)) 
+   , m_msgApi(msgApi)
+   , m_vpxApi(vpxApi)
+   , m_endpointId(endpointId)
+   , m_onGetAuxRendererId(msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_AUX_RENDERER))
+   , m_onAuxRendererChgId(msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_AUX_RENDERER_CHG))
+   , m_onDevChangedMsgId(msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DEVICE_ON_SRC_CHG_MSG))
+   , m_pinmameApi(msgApi, endpointId, this, serverClassDef)
 {
-   m_pB2SSettings = new B2SSettings(m_msgApi);
+   m_singleton = this;
+   m_pB2SSettings = new B2SSettings(m_msgApi, endpointId);
    m_pB2SData = new B2SData(this, m_pB2SSettings, m_vpxApi);
    m_pFormBackglass = nullptr;
    m_isVisibleStateSet = false;
@@ -51,18 +63,41 @@ Server::Server(MsgPluginAPI* msgApi, uint32_t endpointId, VPXPluginAPI* vpxApi)
    m_szPath = "./";
 
    memset(&m_deviceStateSrc, 0, sizeof(m_deviceStateSrc));
-   m_nSolenoids = 0;
-   m_GIIndex = -1;
-   m_nGIs = 0;
-   m_lampIndex = -1;
-   m_nLamps = 0;
-   m_mechIndex = -1;
-   m_nMechs = 0;
+
+   m_devSrc.id.endpointId = m_endpointId;
+   m_devSrc.GetByteState = GetByteState;
+   m_devSrc.GetFloatState = GetFloatState;
+   m_devSrc.SetChangeCallback = RegisterStateChangeCallback;
+
+   msgApi->SubscribeMsg(endpointId, m_onGetAuxRendererId, OnGetRendererStatic, this);
+   msgApi->SubscribeMsg(endpointId, m_onDevChangedMsgId, OnDevSrcChangedStatic, this);
+   msgApi->SubscribeMsg(endpointId, m_onGetDevSrcId, OnGetDevSrc, this);
+   msgApi->BroadcastMsg(endpointId, m_onAuxRendererChgId, nullptr);
 }
 
 Server::~Server()
 {
+   if (m_gameRunning)
+      m_msgApi->BroadcastMsg(m_endpointId, m_onGameEndId, nullptr);
+   m_msgApi->ReleaseMsgID(m_onGameStartId);
+   m_msgApi->ReleaseMsgID(m_onGameEndId);
+
+   m_msgApi->UnsubscribeMsg(m_onGetAuxRendererId, OnGetRendererStatic, this);
+   m_msgApi->UnsubscribeMsg(m_onDevChangedMsgId, OnDevSrcChangedStatic, this);
+   m_msgApi->UnsubscribeMsg(m_onGetDevSrcId, OnGetDevSrc, this);
+   m_msgApi->BroadcastMsg(m_endpointId, m_onAuxRendererChgId, nullptr);
+   m_msgApi->ReleaseMsgID(m_onGetAuxRendererId);
+   m_msgApi->ReleaseMsgID(m_onAuxRendererChgId);
+   m_msgApi->ReleaseMsgID(m_onDevChangedMsgId);
+   m_msgApi->ReleaseMsgID(m_onGetDevSrcId);
+
    delete[] m_deviceStateSrc.deviceDefs;
+   delete[] m_devSrc.deviceDefs;
+
+   if (m_onDestroyHandler)
+      m_onDestroyHandler(this);
+
+   m_singleton = nullptr;
 
    delete m_pTimer;
    delete m_pFormBackglass;
@@ -87,20 +122,18 @@ int Server::OnRender(VPXRenderContext2D* const renderCtx, void* context)
       m_ready = true;
    }
 
-   if (renderCtx->window == VPXAnciliaryWindow::VPXWINDOW_Backglass) {
+   if (renderCtx->window == VPXWindowId::VPXWINDOW_Backglass) {
       if (!m_pB2SSettings->IsHideB2SBackglass()) {
-         SDL_Rect& size = m_pFormBackglass->GetB2SScreen()->GetBackglassSize();
-         renderCtx->srcWidth = static_cast<float>(size.w);
-         renderCtx->srcHeight = static_cast<float>(size.h);
+         renderCtx->srcWidth = static_cast<float>(m_pFormBackglass->GetWidth());
+         renderCtx->srcHeight = static_cast<float>(m_pFormBackglass->GetHeight());
          m_pFormBackglass->OnPaint(renderCtx);
          return 1;
       }
    }
-   else if (renderCtx->window == VPXAnciliaryWindow::VPXWINDOW_ScoreView) {
+   else if (renderCtx->window == VPXWindowId::VPXWINDOW_ScoreView) {
       if (m_pFormBackglass->GetFormDMD()) {
-         SDL_Rect& size = m_pFormBackglass->GetB2SScreen()->GetDMDSize();
-         renderCtx->srcWidth = static_cast<float>(size.w);
-         renderCtx->srcHeight = static_cast<float>(size.h);
+         renderCtx->srcWidth = static_cast<float>(m_pFormBackglass->GetFormDMD()->GetWidth());
+         renderCtx->srcHeight = static_cast<float>(m_pFormBackglass->GetFormDMD()->GetHeight());
          m_pFormBackglass->GetFormDMD()->OnPaint(renderCtx);
          return 1;
       }
@@ -113,60 +146,149 @@ void Server::OnDevSrcChanged(const unsigned int msgId, void* userData, void* msg
 {
    delete[] m_deviceStateSrc.deviceDefs;
    memset(&m_deviceStateSrc, 0, sizeof(m_deviceStateSrc));
-   m_nSolenoids = 0;
-   m_GIIndex = -1;
-   m_nGIs = 0;
-   m_lampIndex = -1;
-   m_nLamps = 0;
-   m_mechIndex = -1;
-   m_nMechs = 0;
 
-   GetDevSrcMsg getSrcMsg = { 1024, 0, new DevSrcId[1024] };
-   m_msgApi->BroadcastMsg(m_endpointId, m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DEVICE_GET_SRC_MSG), &getSrcMsg);
+   unsigned int pinmameEndpoint = m_msgApi->GetPluginEndpoint("PinMAME");
+   if (pinmameEndpoint == 0)
+      return;
 
+   unsigned int getDevSrcMsgId = m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DEVICE_GET_SRC_MSG);
+   GetDevSrcMsg getSrcMsg = { 0, 0, nullptr };
+   m_msgApi->SendMsg(m_endpointId, getDevSrcMsgId, pinmameEndpoint, &getSrcMsg);
+   vector<DevSrcId> entries(getSrcMsg.count);
+   getSrcMsg = { getSrcMsg.count, 0, entries.data() };
+   m_msgApi->SendMsg(m_endpointId, getDevSrcMsgId, pinmameEndpoint, &getSrcMsg);
+   m_msgApi->ReleaseMsgID(getDevSrcMsgId);
    for (unsigned int i = 0; i < getSrcMsg.count; i++)
    {
-      m_deviceStateSrc = getSrcMsg.entries[i];
-      if (getSrcMsg.entries[i].deviceDefs)
+      if (getSrcMsg.entries[i].id.endpointId == pinmameEndpoint)
       {
-         m_deviceStateSrc.deviceDefs = new DeviceDef[getSrcMsg.entries[i].nDevices];
-         memcpy(m_deviceStateSrc.deviceDefs, getSrcMsg.entries[i].deviceDefs, getSrcMsg.entries[i].nDevices * sizeof(DeviceDef));
+         m_deviceStateSrc = getSrcMsg.entries[i];
+         if (getSrcMsg.entries[i].deviceDefs)
+         {
+            m_deviceStateSrc.deviceDefs = new DeviceDef[getSrcMsg.entries[i].nDevices];
+            memcpy(m_deviceStateSrc.deviceDefs, getSrcMsg.entries[i].deviceDefs, getSrcMsg.entries[i].nDevices * sizeof(DeviceDef));
+         }
+         break;
       }
-      break;
    }
-   delete[] getSrcMsg.entries;
 
-   if (m_deviceStateSrc.deviceDefs)
+   if (m_deviceStateSrc.deviceDefs == nullptr)
+      return;
+
+   LOGI(std::format("B2SLegacy: Device state updated - {} devices", m_deviceStateSrc.nDevices));
+}
+
+void Server::OnGetDevSrc(const unsigned int, void* userData, void* msgData)
+{
+   auto me = static_cast<Server*>(userData);
+   auto msg = static_cast<GetDevSrcMsg*>(msgData);
+   if (msg->count < msg->maxEntryCount)
+      memcpy(&msg->entries[msg->count], &me->m_devSrc, sizeof(DevSrcId));
+   msg->count++;
+}
+
+void Server::UpdateDevSrc()
+{
+   if (m_gameRunning && m_b2sStates.empty())
    {
-      for (unsigned int i = 0; i < m_deviceStateSrc.nDevices; i++)
-      {
-         if (m_deviceStateSrc.deviceDefs[i].groupId == 0x0100)
-         {
-            if (m_GIIndex == -1)
-               m_GIIndex = i;
-            m_nGIs++;
-         }
-         else if (m_deviceStateSrc.deviceDefs[i].groupId == 0x0200)
-         {
-            if (m_lampIndex == -1)
-               m_lampIndex = i;
-            m_nLamps++;
-         }
-         else if (m_deviceStateSrc.deviceDefs[i].groupId == 0x0300)
-         {
-            if (m_mechIndex == -1)
-               m_mechIndex = i;
-            m_nMechs++;
-         }
-         else if ((m_GIIndex == -1) && (m_lampIndex == -1))
-         {
-            m_nSolenoids++;
-         }
-      }
+      m_gameRunning = false;
+      m_msgApi->BroadcastMsg(m_endpointId, m_onGameEndId, nullptr);
+   }
+   else if (!m_gameRunning && !m_b2sStates.empty())
+   {
+      m_gameRunning = true;
+      CtlOnGameStartMsg msg = { GetB2SName().c_str(), 0 };
+      m_msgApi->BroadcastMsg(m_endpointId, m_onGameStartId, reinterpret_cast<void*>(&msg));
    }
 
-   LOGI("B2SLegacy: Device state updated - Solenoids: %d, Lamps: %d, GI: %d, Mechs: %d",
-        m_nSolenoids, m_nLamps, m_nGIs, m_nMechs);
+   delete[] m_devSrc.deviceDefs;
+   m_devSrc.nDevices = static_cast<unsigned int>(m_b2sStates.size());
+   m_devSrc.deviceDefs = new DeviceDef[m_devSrc.nDevices];
+   m_devSrcNames.resize(m_devSrc.nDevices);
+   uint16_t index = 0;
+   for (const auto& [id, v] : m_b2sStates)
+   {
+      m_devSrcNames[index] = std::format("B2S.Data #{}", id);
+      m_devSrc.deviceDefs[index].name = m_devSrcNames[index].c_str();
+      m_devSrc.deviceDefs[index].id.groupId = 0x0001;
+      m_devSrc.deviceDefs[index].id.deviceId = id;
+      index++;
+   }
+   m_stateChgCallbacks.clear();
+   m_msgApi->BroadcastMsg(m_endpointId, m_onDevChangedMsgId, nullptr);
+}
+
+uint8_t MSGPIAPI Server::GetByteState(const unsigned int deviceIndex)
+{
+   if (Server::m_singleton == nullptr || deviceIndex >= m_singleton->m_devSrc.nDevices)
+      return 0;
+   int b2sId = m_singleton->m_devSrc.deviceDefs[deviceIndex].id.deviceId;
+   return static_cast<uint8_t>(m_singleton->GetState(b2sId) * 255.f);
+}
+
+float MSGPIAPI Server::GetFloatState(const unsigned int deviceIndex)
+{
+   if (Server::m_singleton == nullptr || deviceIndex >= m_singleton->m_devSrc.nDevices)
+      return 0.f;
+   int b2sId = m_singleton->m_devSrc.deviceDefs[deviceIndex].id.deviceId;
+   return m_singleton->GetState(b2sId);
+}
+
+void MSGPIAPI Server::RegisterStateChangeCallback(unsigned int deviceIndex, int isRegister, ctlpi_chg_callback cb, void* ctx)
+{
+   if (Server::m_singleton == nullptr || deviceIndex >= m_singleton->m_devSrc.nDevices)
+      return;
+   const int b2sId = m_singleton->m_devSrc.deviceDefs[deviceIndex].id.deviceId;
+   if (auto mapIt = m_singleton->m_stateChgCallbacks.find(b2sId); mapIt == m_singleton->m_stateChgCallbacks.end())
+      m_singleton->m_stateChgCallbacks[b2sId] = vector<ChgCallback>();
+   auto& callbacks = m_singleton->m_stateChgCallbacks[b2sId];
+   auto it = std::ranges::find_if(callbacks, [&cb](const ChgCallback& a) { return a.m_callback == cb; });
+   if (isRegister)
+   {
+      if (it == callbacks.end())
+         callbacks.emplace_back(cb, deviceIndex, ctx);
+   }
+   else
+   {
+      if (it != callbacks.end())
+         callbacks.erase(it);
+   }
+}
+
+float Server::GetState(int b2sId) const
+{
+   const auto it = m_b2sStates.find(b2sId);
+   return it == m_b2sStates.end() ? 0.f : it->second;
+}
+
+int Server::OnRenderStatic(VPXRenderContext2D* ctx, void* userData)
+{
+   return static_cast<Server*>(userData)->OnRender(ctx, userData);
+}
+
+void Server::OnGetRendererStatic(const unsigned int, void* userData, void* msgData)
+{
+   auto me = static_cast<Server*>(userData);
+   auto msg = static_cast<GetAncillaryRendererMsg*>(msgData);
+
+   const AncillaryRendererDef backglassEntry = { "B2SLegacy", "B2S Legacy Backglass", "Renderer for B2S legacy backglass files", me, OnRenderStatic };
+   const AncillaryRendererDef dmdEntry = { "B2SLegacyDMD", "B2S Legacy DMD", "Renderer for B2S legacy DMD files", me, OnRenderStatic };
+
+   if (msg->window == VPXWindowId::VPXWINDOW_Backglass) {
+      if (msg->count < msg->maxEntryCount)
+         msg->entries[msg->count] = backglassEntry;
+      msg->count++;
+   }
+   else if (msg->window == VPXWindowId::VPXWINDOW_ScoreView) {
+      if (msg->count < msg->maxEntryCount)
+         msg->entries[msg->count] = dmdEntry;
+      msg->count++;
+   }
+}
+
+void Server::OnDevSrcChangedStatic(const unsigned int msgId, void* userData, void* msgData)
+{
+   static_cast<Server*>(userData)->OnDevSrcChanged(msgId, userData, msgData);
 }
 
 void Server::TimerElapsed(Timer* pTimer)
@@ -223,7 +345,7 @@ void Server::TimerElapsed(Timer* pTimer)
          }
 
          if (!logged || changed) {
-            LOGI("B2S polling status: lamps=%d, solenoids=%d, giStrings=%d, leds=%d", callLamps, callSolenoids, callGIStrings, callLEDs);
+            LOGI(std::format("B2S polling status: lamps={}, solenoids={}, giStrings={}, leds={}", callLamps, callSolenoids, callGIStrings, callLEDs));
 
             if (!callLamps && !callSolenoids && !callGIStrings && !callLEDs)
                pTimer->Stop();
@@ -252,22 +374,34 @@ double Server::GetB2SBuildVersion()
       + B2S_VERSION_BUILD / 10000.0;
 }
 
-string Server::GetB2SServerDirectory() const
+const string& Server::GetB2SServerDirectory() const
 {
    return m_szPath;
 }
 
-string Server::GetB2SName() const
+const string& Server::GetB2SName() const
 {
    return m_pB2SSettings->GetB2SName();
 }
 
 void Server::SetB2SName(const string& b2sName)
 {
+   if (b2sName == m_pB2SSettings->GetB2SName())
+      return;
+
+   if (m_gameRunning)
+      m_msgApi->BroadcastMsg(m_endpointId, m_onGameEndId, nullptr);
+
    m_pB2SSettings->SetB2SName(b2sName);
+
+   if (m_gameRunning)
+   {
+      CtlOnGameStartMsg msg = { GetB2SName().c_str(), 0 };
+      m_msgApi->BroadcastMsg(m_endpointId, m_onGameStartId, reinterpret_cast<void*>(&msg));
+   }
 }
 
-string Server::GetTableName() const
+const string& Server::GetTableName() const
 {
    return m_pB2SData->GetTableName();
 }
@@ -325,10 +459,7 @@ void Server::SetPuPHide(bool puPHide)
 
 void Server::GetChangedLamps()
 {
-   if (!m_pinmameApi)
-      return;
-
-   ScriptArray* lampArray = m_pinmameApi->GetChangedLamps();
+   ScriptArray* lampArray = m_pinmameApi.GetChangedLamps();
    if (m_pB2SData->IsLampsData() && lampArray)
       CheckLamps(lampArray);
 }
@@ -342,10 +473,7 @@ void Server::GetChangedLamps(ScriptVariant* pRet)
 
 void Server::GetChangedSolenoids()
 {
-   if (!m_pinmameApi)
-      return;
-
-   ScriptArray* solenoidArray = m_pinmameApi->GetChangedSolenoids();
+   ScriptArray* solenoidArray = m_pinmameApi.GetChangedSolenoids();
    if (m_pB2SData->IsSolenoidsData() && solenoidArray)
       CheckSolenoids(solenoidArray);
 }
@@ -359,10 +487,7 @@ void Server::GetChangedSolenoids(ScriptVariant* pRet)
 
 void Server::GetChangedGIStrings()
 {
-   if (!m_pinmameApi)
-      return;
-
-   ScriptArray* giStringArray = m_pinmameApi->GetChangedGIStrings();
+   ScriptArray* giStringArray = m_pinmameApi.GetChangedGIStrings();
    if (m_pB2SData->IsGIStringsData() && giStringArray)
       CheckGIStrings(giStringArray);
 }
@@ -376,10 +501,7 @@ void Server::GetChangedGIStrings(ScriptVariant* pRet)
 
 void Server::GetChangedLEDs()
 {
-   if (!m_pinmameApi)
-      return;
-
-   ScriptArray* ledArray = m_pinmameApi->GetChangedLEDs();
+   ScriptArray* ledArray = m_pinmameApi.GetChangedLEDs();
    if (m_pB2SData->IsLEDsData() && ledArray)
       CheckLEDs(ledArray);
 }
@@ -393,8 +515,7 @@ void Server::GetChangedLEDs(ScriptVariant* pRet)
 
 void Server::SetSwitch(int switchId, bool value)
 {
-   if (m_pinmameApi)
-      m_pinmameApi->SetSwitch(switchId, value);
+   m_pinmameApi.SetSwitch(switchId, value);
 }
 
 void Server::B2SSetData(int id, int value)
@@ -690,6 +811,23 @@ void Server::B2SMapSound(int digit, const string& soundname)
 
 void Server::MyB2SSetData(int id, int value)
 {
+   const auto it = m_b2sStates.find(id);
+   if (it == m_b2sStates.end())
+   {
+      m_b2sStates[id] = static_cast<float>(value);
+      UpdateDevSrc();
+   }
+   else
+   {
+      it->second = static_cast<float>(value);
+      const auto chgIt = m_stateChgCallbacks.find(id);
+      if (chgIt != m_stateChgCallbacks.end())
+      {
+         for (const auto& cb : chgIt->second)
+            cb.m_callback(cb.m_index, cb.m_context);
+      }
+   }
+
    if (m_pB2SData->IsBackglassRunning()) {
       // Handle top/second light switching based on ROM IDs
       if ((m_pFormBackglass->GetTopRomIDType() == eRomIDType_Lamp && m_pFormBackglass->GetTopRomID() == id) ||
@@ -815,15 +953,15 @@ void Server::CheckGetMech(int number, int mech)
 
 void Server::CheckLamps(ScriptArray* psa)
 {
-   if (m_deviceStateSrc.deviceDefs == nullptr || m_nLamps == 0)
+   if (m_deviceStateSrc.deviceDefs == nullptr)
       return;
 
-   for (unsigned int i = 0; i < m_nLamps; i++)
+   for (unsigned int i = 0; i < m_deviceStateSrc.nDevices; i++)
    {
-      if (m_deviceStateSrc.deviceDefs[m_lampIndex + i].groupId == 0x0200)
+      if ((m_deviceStateSrc.deviceDefs[i].id.groupId & 0xFF00) == 0x0200)
       {
-         const int lampId = m_deviceStateSrc.deviceDefs[m_lampIndex + i].deviceId;
-         const float state = m_deviceStateSrc.GetFloatState(m_lampIndex + i);
+         const int lampId = m_deviceStateSrc.deviceDefs[i].id.deviceId;
+         const float state = m_deviceStateSrc.GetFloatState(i);
          const int lampState = static_cast<int>(state * 255.0f);
 
          if (m_pB2SData->IsUseRomLamps() || m_pB2SData->IsUseAnimationLamps()) {
@@ -958,27 +1096,31 @@ void Server::CheckLamps(ScriptArray* psa)
 
 void Server::CheckSolenoids(ScriptArray* psa)
 {
-   if (m_deviceStateSrc.deviceDefs == nullptr || m_nSolenoids == 0)
+   if (m_deviceStateSrc.deviceDefs == nullptr)
       return;
 
-   for (unsigned int i = 0; i < m_nSolenoids; i++)
+   for (unsigned int i = 0; i < m_deviceStateSrc.nDevices; i++)
    {
-      const float state = m_deviceStateSrc.GetFloatState(i);
-      const int solenoidId = i + 1;
-      const int solenoidState = static_cast<int>(state * 255.0f);
+      if ((m_deviceStateSrc.deviceDefs[i].id.groupId & 0xFF00) == 0x0000)
+      {
+         const int solenoidId = m_deviceStateSrc.deviceDefs[i].id.deviceId;
+         const float state = m_deviceStateSrc.GetFloatState(i);
+         const int solenoidState = static_cast<int>(state * 255.0f);
 
-      if (m_pB2SData->IsUseRomSolenoids() || m_pB2SData->IsUseAnimationSolenoids()) {
-         // collect illumination data
-         if (m_pFormBackglass->GetTopRomIDType() == eRomIDType_Solenoid && m_pFormBackglass->GetTopRomID() == solenoidId)
-            m_pCollectSolenoidsData->Add(solenoidId, new CollectData(solenoidState, eCollectedDataType_TopImage));
-         else if (m_pFormBackglass->GetSecondRomIDType() == eRomIDType_Solenoid && m_pFormBackglass->GetSecondRomID() == solenoidId)
-            m_pCollectSolenoidsData->Add(solenoidId, new CollectData(solenoidState, eCollectedDataType_SecondImage));
-         if (m_pB2SData->GetUsedRomSolenoidIDs()->contains(solenoidId))
-            m_pCollectSolenoidsData->Add(solenoidId, new CollectData(solenoidState, eCollectedDataType_Standard));
+         if (m_pB2SData->IsUseRomSolenoids() || m_pB2SData->IsUseAnimationSolenoids())
+         {
+            // collect illumination data
+            if (m_pFormBackglass->GetTopRomIDType() == eRomIDType_Solenoid && m_pFormBackglass->GetTopRomID() == solenoidId)
+               m_pCollectSolenoidsData->Add(solenoidId, new CollectData(solenoidState, eCollectedDataType_TopImage));
+            else if (m_pFormBackglass->GetSecondRomIDType() == eRomIDType_Solenoid && m_pFormBackglass->GetSecondRomID() == solenoidId)
+               m_pCollectSolenoidsData->Add(solenoidId, new CollectData(solenoidState, eCollectedDataType_SecondImage));
+            if (m_pB2SData->GetUsedRomSolenoidIDs()->contains(solenoidId))
+               m_pCollectSolenoidsData->Add(solenoidId, new CollectData(solenoidState, eCollectedDataType_Standard));
 
-         // collect animation data
-         if (m_pB2SData->GetUsedAnimationSolenoidIDs()->contains(solenoidId) || m_pB2SData->GetUsedRandomAnimationSolenoidIDs()->contains(solenoidId))
-            m_pCollectSolenoidsData->Add(solenoidId, new CollectData(solenoidState, eCollectedDataType_Animation));
+            // collect animation data
+            if (m_pB2SData->GetUsedAnimationSolenoidIDs()->contains(solenoidId) || m_pB2SData->GetUsedRandomAnimationSolenoidIDs()->contains(solenoidId))
+               m_pCollectSolenoidsData->Add(solenoidId, new CollectData(solenoidState, eCollectedDataType_Animation));
+         }
       }
    }
 
@@ -1098,15 +1240,15 @@ void Server::CheckSolenoids(ScriptArray* psa)
 
 void Server::CheckGIStrings(ScriptArray* psa)
 {
-   if (m_deviceStateSrc.deviceDefs == nullptr || m_nGIs == 0 || m_GIIndex == -1)
+   if (m_deviceStateSrc.deviceDefs == nullptr)
       return;
 
-   for (unsigned int i = 0; i < m_nGIs; i++)
+   for (unsigned int i = 0; i < m_deviceStateSrc.nDevices; i++)
    {
-      if (m_deviceStateSrc.deviceDefs[m_GIIndex + i].groupId == 0x0100)
+      if ((m_deviceStateSrc.deviceDefs[i].id.groupId & 0xFF00) == 0x0100)
       {
-         const int giStringId = m_deviceStateSrc.deviceDefs[m_GIIndex + i].deviceId;
-         const float state = m_deviceStateSrc.GetFloatState(m_GIIndex + i);
+         const int giStringId = m_deviceStateSrc.deviceDefs[i].id.deviceId;
+         const float state = m_deviceStateSrc.GetFloatState(i);
          const int giStringBool = static_cast<int>(state * 255.0f) > m_giStringThreshold;
 
          if (m_pB2SData->IsUseRomGIStrings() || m_pB2SData->IsUseAnimationGIStrings()) {
@@ -1264,9 +1406,9 @@ void Server::CheckLEDs(ScriptArray* psa)
 
    // maybe show the collected data
    if (m_pCollectLEDsData->ShowData()) {
-      bool useLEDs = m_pB2SData->IsUseLEDs() && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Rendered;
-      bool useLEDDisplays = m_pB2SData->IsUseLEDDisplays() && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Dream7;
-      bool useReels = m_pB2SData->IsUseReels();
+      const bool useLEDs = m_pB2SData->IsUseLEDs() && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Rendered;
+      const bool useLEDDisplays = m_pB2SData->IsUseLEDDisplays() && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Dream7;
+      const bool useReels = m_pB2SData->IsUseReels();
 
       m_pCollectLEDsData->Lock();
 
@@ -1276,24 +1418,23 @@ void Server::CheckLEDs(ScriptArray* psa)
 
          if (useLEDs) {
             // rendered LEDs are used
-            string ledname = "LEDBox" + std::to_string(digit + 1);
-            if (m_pB2SData->GetLEDs()->contains(ledname))
-               (*m_pB2SData->GetLEDs())[ledname]->SetValue(value);
+            const auto& led = m_pB2SData->GetLEDs()->find("LEDBox" + std::to_string(digit + 1));
+            if (led != m_pB2SData->GetLEDs()->end())
+               led->second->SetValue(value);
          }
 
          if (useLEDDisplays) {
             // Dream 7 displays are used
-            if (m_pB2SData->GetLEDDisplayDigits()->contains(digit)) {
-               LEDDisplayDigitLocation* pLEDDisplayDigitLocation = (*m_pB2SData->GetLEDDisplayDigits())[digit];
-               pLEDDisplayDigitLocation->GetLEDDisplay()->SetValue(pLEDDisplayDigitLocation->GetDigit(), value);
-            }
+            const auto& dream7 = m_pB2SData->GetLEDDisplayDigits()->find(digit);
+            if (dream7 != m_pB2SData->GetLEDDisplayDigits()->end())
+               dream7->second->GetLEDDisplay()->SetValue(dream7->second->GetDigit(), value);
          }
 
           if (useReels) {
             // reels are used
-             string reelname = "ReelBox" + std::to_string(digit + 1);
-            if (m_pB2SData->GetReels()->contains(reelname))
-               (*m_pB2SData->GetReels())[reelname]->SetValue(value);
+            const auto& reel = m_pB2SData->GetReels()->find("ReelBox" + std::to_string(digit + 1));
+            if (reel != m_pB2SData->GetReels()->end())
+               reel->second->SetValue(value);
          }
       }
       m_pCollectLEDsData->Unlock();
@@ -1308,21 +1449,18 @@ void Server::MyB2SSetLED(int digit, int value)
    if (!m_pB2SData->IsBackglassRunning())
       return;
 
-   bool useLEDs = m_pB2SData->GetLEDs()->contains(string("LEDBox" + std::to_string(digit))) && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Rendered;
-   bool useLEDDisplays = m_pB2SData->GetLEDDisplayDigits()->contains(digit - 1) && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Dream7;
+   const auto& led = m_pB2SData->GetLEDs()->find("LEDBox" + std::to_string(digit));
+   const bool useLEDs = led != m_pB2SData->GetLEDs()->end() && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Rendered;
+   const auto& dream7 = m_pB2SData->GetLEDDisplayDigits()->find(digit - 1);
+   const bool useLEDDisplays = dream7 != m_pB2SData->GetLEDDisplayDigits()->end() && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Dream7;
 
    if (useLEDs) {
       // Rendered LEDs are used
-      string ledname = "LEDBox" + std::to_string(digit);
-      if (m_pB2SData->GetLEDs()->contains(ledname))
-         (*m_pB2SData->GetLEDs())[ledname]->SetValue(value);
+      led->second->SetValue(value);
    }
    else if (useLEDDisplays) {
       // Dream 7 displays are used
-      if (m_pB2SData->GetLEDDisplayDigits()->contains(digit - 1)) {
-         LEDDisplayDigitLocation* pLEDDisplayDigitLocation = (*m_pB2SData->GetLEDDisplayDigits())[digit - 1];
-         pLEDDisplayDigitLocation->GetLEDDisplay()->SetValue(pLEDDisplayDigitLocation->GetDigit(), value);
-      }
+      dream7->second->GetLEDDisplay()->SetValue(dream7->second->GetDigit(), value);
    }
 }
 
@@ -1331,18 +1469,16 @@ void Server::MyB2SSetLED(int digit, const string& value)
    if (!m_pB2SData->IsBackglassRunning())
       return;
 
-   bool useLEDs = m_pB2SData->GetLEDs()->contains(string("LEDBox" + std::to_string(digit))) && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Rendered;
-   bool useLEDDisplays = m_pB2SData->GetLEDDisplayDigits()->contains(digit - 1) && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Dream7;
+   const bool useLEDs = m_pB2SData->GetLEDs()->contains("LEDBox" + std::to_string(digit)) && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Rendered;
+   const auto& dream7 = m_pB2SData->GetLEDDisplayDigits()->find(digit - 1);
+   const bool useLEDDisplays = dream7 != m_pB2SData->GetLEDDisplayDigits()->end() && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Dream7;
 
    if (useLEDs) {
       // Rendered LEDs do not support string values
    }
    else if (useLEDDisplays) {
       // Dream 7 displays are used
-      if (m_pB2SData->GetLEDDisplayDigits()->contains(digit - 1)) {
-         auto& pLEDDisplayDigit = (*m_pB2SData->GetLEDDisplayDigits())[digit - 1];
-         pLEDDisplayDigit->GetLEDDisplay()->SetValue(pLEDDisplayDigit->GetDigit(), value);
-      }
+      dream7->second->GetLEDDisplay()->SetValue(dream7->second->GetDigit(), value);
    }
 }
 
@@ -1353,44 +1489,41 @@ void Server::MyB2SSetLEDDisplay(int display, const string& szText)
 
    int digit = GetFirstDigitOfDisplay(display);
 
-   bool useLEDs = m_pB2SData->GetLEDs()->contains(string("LEDBox" + std::to_string(digit))) && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Rendered;
-   //bool useLEDDisplays = m_pB2SData->GetLEDDisplayDigits()->contains(digit - 1) && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Dream7;
+   const bool useLEDs = m_pB2SData->GetLEDs()->contains("LEDBox" + std::to_string(digit)) && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Rendered;
+   //const bool useLEDDisplays = m_pB2SData->GetLEDDisplayDigits()->contains(digit - 1) && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Dream7;
 
    if (useLEDs) {
       // Set text for each character position in the LED display
       for (size_t i = 0; i < szText.length(); i++) {
          int ledDigit = digit + static_cast<int>(i);
-         string ledBoxName = "LEDBox" + std::to_string(ledDigit);
+         const auto& led = m_pB2SData->GetLEDs()->find("LEDBox" + std::to_string(ledDigit));
 
-         if (m_pB2SData->GetLEDs()->contains(ledBoxName)) {
-            auto& pLEDBox = (*m_pB2SData->GetLEDs())[ledBoxName];
-
+         if (led != m_pB2SData->GetLEDs()->end()) {
             // Convert character to appropriate LED value
             char c = szText[i];
             if (c >= '0' && c <= '9') {
-               pLEDBox->SetValue(c - '0');  // Convert char digit to int
+               led->second->SetValue(c - '0'); // Convert char digit to int
             }
             else if (c >= 'A' && c <= 'F') {
-               pLEDBox->SetValue(c - 'A' + 10);  // Hex A-F
+               led->second->SetValue(c - 'A' + 10); // Hex A-F
             }
             else if (c >= 'a' && c <= 'f') {
-               pLEDBox->SetValue(c - 'a' + 10);  // Hex a-f
+               led->second->SetValue(c - 'a' + 10); // Hex a-f
             }
             else if (c == ' ') {
-               pLEDBox->SetValue(-1);  // Blank/off
+               led->second->SetValue(-1); // Blank/off
             }
             else {
                // For other characters, try to display as numeric value
-               pLEDBox->SetValue(static_cast<int>(c) % 16);
+               led->second->SetValue(static_cast<int>(c) % 16);
             }
          }
       }
    }
    else {
-      if (m_pB2SData->GetLEDDisplayDigits()->contains(digit)) {
-         auto& pLEDDisplayDigit = (*m_pB2SData->GetLEDDisplayDigits())[digit];
-         pLEDDisplayDigit->GetLEDDisplay()->SetText(szText);
-      }
+      const auto& dream7 = m_pB2SData->GetLEDDisplayDigits()->find(digit);
+      if (dream7 != m_pB2SData->GetLEDDisplayDigits()->end())
+         dream7->second->GetLEDDisplay()->SetText(szText);
    }
 }
 
@@ -1418,24 +1551,24 @@ void Server::MyB2SSetScore(int digit, int value, bool animateReelChange)
 {
    if (m_pB2SData->IsBackglassRunning()) {
       if (digit > 0) {
-         bool useLEDs = (m_pB2SData->GetLEDs()->contains(string("LEDBox" + std::to_string(digit))) && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Rendered);
-         bool useLEDDisplays = (m_pB2SData->GetLEDDisplayDigits()->contains(digit - 1) && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Dream7);
-         bool useReels = m_pB2SData->GetReels()->contains(string("ReelBox" + std::to_string(digit)));
+         const auto& led = m_pB2SData->GetLEDs()->find("LEDBox" + std::to_string(digit));
+         const bool useLEDs = (led != m_pB2SData->GetLEDs()->end() && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Rendered);
+         const auto& dream7 = m_pB2SData->GetLEDDisplayDigits()->find(digit - 1);
+         const bool useLEDDisplays = (dream7 != m_pB2SData->GetLEDDisplayDigits()->end() && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Dream7);
+         const auto& reel = m_pB2SData->GetReels()->find("ReelBox" + std::to_string(digit));
+         const bool useReels = reel != m_pB2SData->GetReels()->end();
 
          if (useLEDs) {
             // Rendered LEDs are used
-            string ledname = "LEDBox" + std::to_string(digit);
-            (*m_pB2SData->GetLEDs())[ledname]->SetText(std::to_string(value));
+            led->second->SetText(std::to_string(value));
          }
          else if (useLEDDisplays) {
             // Dream 7 displays are used
-            LEDDisplayDigitLocation* pLEDDisplayDigitLocation = (*m_pB2SData->GetLEDDisplayDigits())[digit - 1];
-            pLEDDisplayDigitLocation->GetLEDDisplay()->SetValue(pLEDDisplayDigitLocation->GetDigit(), std::to_string(value));
+            dream7->second->GetLEDDisplay()->SetValue(dream7->second->GetDigit(), std::to_string(value));
          }
          else if (useReels) {
             // Reels are used
-            string reelname = "ReelBox" + std::to_string(digit);
-            (*m_pB2SData->GetReels())[reelname]->SetText(value, animateReelChange);
+            reel->second->SetText(value, animateReelChange);
          }
       }
    }
@@ -1445,45 +1578,43 @@ void Server::MyB2SSetScore(int digit, int score)
 {
    if (m_pB2SData->IsBackglassRunning()) {
       if (digit > 0) {
-         bool useLEDs = (m_pB2SData->GetLEDs()->contains(string("LEDBox" + std::to_string(digit))) && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Rendered);
-         bool useLEDDisplays = (m_pB2SData->GetLEDDisplayDigits()->contains(digit - 1) && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Dream7);
-         bool useReels = m_pB2SData->GetReels()->contains(string("ReelBox" + std::to_string(digit)));
+         const auto& led = m_pB2SData->GetLEDs()->find("LEDBox" + std::to_string(digit));
+         const bool useLEDs = (led != m_pB2SData->GetLEDs()->end() && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Rendered);
+         const auto& dream7 = m_pB2SData->GetLEDDisplayDigits()->find(digit - 1);
+         const bool useLEDDisplays = (dream7 != m_pB2SData->GetLEDDisplayDigits()->end() && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Dream7);
+         const auto& reel = m_pB2SData->GetReels()->find("ReelBox" + std::to_string(digit));
+         const bool useReels = reel != m_pB2SData->GetReels()->end();
 
          if (useLEDs) {
             // Check the passed digit
-            string led = "LEDBox" + std::to_string(digit);
-
             // Get all necessary display data
-            int startdigit = (*m_pB2SData->GetLEDs())[led]->GetStartDigit();
-            int digits = (*m_pB2SData->GetLEDs())[led]->GetDigits();
-            string scoreAsString = string(digits - std::to_string(score).length(), ' ') + std::to_string(score);
+            const int startdigit = led->second->GetStartDigit();
+            const int digits = led->second->GetDigits();
+            const string scoreAsString = string(digits - std::to_string(score).length(), ' ') + std::to_string(score);
 
             // Set digits
             for (int i = startdigit + digits - 1; i >= startdigit; i--)
-               (*m_pB2SData->GetLEDs())["LEDBox" + std::to_string(i)]->SetText(scoreAsString.substr(i - startdigit, 1));
+               (*m_pB2SData->GetLEDs())["LEDBox" + std::to_string(i)]->SetText(string(1,scoreAsString[i - startdigit]));
          }
          else if (useLEDDisplays) {
-            LEDDisplayDigitLocation* pLEDDisplayDigitLocation = (*m_pB2SData->GetLEDDisplayDigits())[digit - 1];
             // Get all necessary display data
-            int digits = pLEDDisplayDigitLocation->GetLEDDisplay()->GetDigits();
-            string scoreAsString = string(digits - std::to_string(score).length(), ' ') + std::to_string(score);
+            const int digits = dream7->second->GetLEDDisplay()->GetDigits();
+            const string scoreAsString = string(digits - std::to_string(score).length(), ' ') + std::to_string(score);
 
             // Set digits
             for (int i = digits - 1; i >= 0; i--)
-               pLEDDisplayDigitLocation->GetLEDDisplay()->SetValue(i, scoreAsString.substr(i, 1));
+               dream7->second->GetLEDDisplay()->SetValue(i, string(1,scoreAsString[i]));
          }
          else if (useReels) {
             // Reels are used
-            string reel = "ReelBox" + std::to_string(digit);
-
             // Get all necessary display data
-            int startdigit = (*m_pB2SData->GetReels())[reel]->GetStartDigit();
-            int digits = (*m_pB2SData->GetReels())[reel]->GetDigits();
-            string scoreAsString = string(digits - std::to_string(score).length(), '0') + std::to_string(score);
+            const int startdigit = reel->second->GetStartDigit();
+            const int digits = reel->second->GetDigits();
+            const string scoreAsString = string(digits - std::to_string(score).length(), '0') + std::to_string(score);
 
             // Set digits
             for (int i = startdigit + digits - 1; i >= startdigit; i--)
-               (*m_pB2SData->GetReels())["ReelBox" + std::to_string(i)]->SetText(std::stoi(scoreAsString.substr(i - startdigit, 1)), true);
+               (*m_pB2SData->GetReels())["ReelBox" + std::to_string(i)]->SetText(scoreAsString[i - startdigit] - '0', true); // convert char to int
          }
       }
    }
@@ -1493,8 +1624,9 @@ void Server::MyB2SSetScorePlayer(int playerno, int score)
 {
    if (m_pB2SData->IsBackglassRunning()) {
       if (playerno > 0) {
-         if (m_pB2SData->GetPlayers()->contains(playerno))
-            (*m_pB2SData->GetPlayers())[playerno]->SetScore(m_pB2SData, score);
+         const auto& it = m_pB2SData->GetPlayers()->find(playerno);
+         if (it != m_pB2SData->GetPlayers()->end())
+            it->second->SetScore(m_pB2SData, score);
       }
    }
 }
@@ -1594,7 +1726,7 @@ void Server::Startup()
     m_vpxApi->GetTableInfo(&tableInfo);
     m_pB2SData->SetTableFileName(tableInfo.path);
 
-    LOGI("B2S table filename set to '%s'", tableInfo.path);
+    LOGI("B2S table filename set to '"s + tableInfo.path + '\'');
 }
 
 void Server::ShowBackglassForm()

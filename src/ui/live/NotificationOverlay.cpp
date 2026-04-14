@@ -2,7 +2,7 @@
 
 #include "core/stdafx.h"
 
-#include "imgui/imgui_internal.h" // Needed for FindRenderedTextEnd (should be adapted when this function will refactored in ImGui)
+#include "imgui/imgui_internal.h" // Needed for FindRenderedTextEnd (should be adapted when this function will be refactored in ImGui)
 
 #include "NotificationOverlay.h"
 
@@ -55,7 +55,7 @@ float NotificationOverlay::RenderNotification(int index, float posY) const {
    {
       if (line.empty())
       {
-         lines.push_back(line);
+         lines.emplace_back(""s);
          continue;
       }
       const char *textEnd = line.c_str();
@@ -72,8 +72,7 @@ float NotificationOverlay::RenderNotification(int index, float posY) const {
             lineSize = font->CalcTextSizeA(fontBaked->Size, FLT_MAX, 0.0f, textEnd, wrapPoint);
          }
 
-         string newLine(textEnd, nextLineTextEnd);
-         lines.push_back(newLine);
+         lines.emplace_back(textEnd, nextLineTextEnd);
 
          if (lineSize.x > text_size.x)
             text_size.x = lineSize.x;
@@ -84,18 +83,18 @@ float NotificationOverlay::RenderNotification(int index, float posY) const {
             textEnd++;
       }
    }
-   text_size.x += (padding / 2.f);
-   text_size.y = ((float)lines.size() * ImGui::GetTextLineHeightWithSpacing()) + (padding / 2.f);
+   text_size.x += padding / 2.f;
+   text_size.y = ((float)lines.size() * ImGui::GetTextLineHeightWithSpacing()) + padding / 2.f;
 
    constexpr ImGuiWindowFlags window_flags
       = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
    ImGui::SetNextWindowBgAlpha(0.666f);
    ImGui::SetNextWindowPos(ImVec2((ImGui::GetIO().DisplaySize.x - text_size.x) / 2, posY));
    ImGui::SetNextWindowSize(text_size);
-   ImGui::Begin(std::format("Notification{}", index).c_str(), nullptr, window_flags);
+   ImGui::Begin(("Notification" + std::to_string(index)).c_str(), nullptr, window_flags);
    for (const string &lline : lines)
    {
-      ImVec2 lineSize = font->CalcTextSizeA(fontBaked->Size, FLT_MAX, 0.0f, lline.c_str());
+      const ImVec2 lineSize = font->CalcTextSizeA(fontBaked->Size, FLT_MAX, 0.0f, lline.c_str());
       ImGui::SetCursorPosX((text_size.x - lineSize.x) / 2);
       ImGui::TextUnformatted(lline.c_str());
    }

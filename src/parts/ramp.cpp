@@ -1,22 +1,13 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
+#include "ramp.h"
+
 //#include "forsyth.h"
 #include "utils/objloader.h"
 #include "renderer/Shader.h"
+#include "ui/win/DragPointDialogs.h"
 
-Ramp::Ramp()
-{
-   m_menuid = IDR_SURFACEMENU;
-   m_d.m_collidable = true;
-   m_d.m_visible = true;
-   m_d.m_depthBias = 0.0f;
-   m_d.m_wireDiameter = 6.0f;
-   m_d.m_wireDistanceX = 38.0f;
-   m_d.m_wireDistanceY = 88.0f;
-   m_propPosition = nullptr;
-   m_rgheightInit = nullptr;
-}
 
 Ramp::~Ramp()
 {
@@ -24,29 +15,29 @@ Ramp::~Ramp()
    delete[] m_rgheightInit;
 }
 
-Ramp *Ramp::CopyForPlay(PinTable *live_table) const
+Ramp *Ramp::CopyForPlay() const
 {
-   STANDARD_EDITABLE_WITH_DRAGPOINT_COPY_FOR_PLAY_IMPL(Ramp, live_table, m_vdpoint)
+   STANDARD_EDITABLE_WITH_DRAGPOINT_COPY_FOR_PLAY_IMPL(Ramp, m_vdpoint)
    return dst;
 }
 
 void Ramp::UpdateStatusBarInfo()
 {
-   char tbuf[128];
-   sprintf_s(tbuf, sizeof(tbuf), "TopH: %.03f | BottomH: %0.3f | TopW: %.03f | BottomW: %.03f | LeftW: %.03f | RightW: %.03f", m_vpinball->ConvertToUnit(m_d.m_heighttop), m_vpinball->ConvertToUnit(m_d.m_heightbottom),
+   if (!m_vpinball)
+      return;
+   const string tbuf = std::format("TopH: {:.03f} | BottomH: {:.03f} | TopW: {:.03f} | BottomW: {:.03f} | LeftW: {:.03f} | RightW: {:.03f}", m_vpinball->ConvertToUnit(m_d.m_heighttop), m_vpinball->ConvertToUnit(m_d.m_heightbottom),
        m_vpinball->ConvertToUnit(m_d.m_widthtop), m_vpinball->ConvertToUnit(m_d.m_widthbottom),
        m_vpinball->ConvertToUnit(m_d.m_leftwallheightvisible), m_vpinball->ConvertToUnit(m_d.m_rightwallheightvisible));
    m_vpinball->SetStatusBarUnitInfo(tbuf, true);
 }
 
 
-HRESULT Ramp::Init(PinTable *const ptable, const float x, const float y, const bool fromMouseClick, const bool forPlay)
+HRESULT Ramp::Init(const float x, const float y, const bool fromMouseClick, const bool forPlay)
 {
-   m_ptable = ptable;
    SetDefaults(fromMouseClick);
    m_d.m_visible = true;
 
-   const float length = 0.5f * g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultPropsRamp, "Length"s, 400.0f);
+   const float length = 0.5f * g_app->m_settings.GetDefaultPropsRamp_Length();
 
    CComObject<DragPoint> *pdp;
    CComObject<DragPoint>::CreateInstance(&pdp);
@@ -67,80 +58,70 @@ HRESULT Ramp::Init(PinTable *const ptable, const float x, const float y, const b
       m_vdpoint.push_back(pdp);
    }
 
-   return forPlay ? S_OK : InitVBA(true, nullptr);
+   return S_OK;
 }
 
+#define LinkProp(field, prop) field = fromMouseClick ? g_app->m_settings.GetDefaultPropsRamp_##prop() : Settings::GetDefaultPropsRamp_##prop##_Default()
 void Ramp::SetDefaults(const bool fromMouseClick)
 {
-#define strKeyName Settings::DefaultPropsRamp
-
-   m_d.m_heightbottom = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "HeightBottom"s, 0.0f) : 0.0f;
-   m_d.m_heighttop = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "HeightTop"s, 50.0f) : 50.0f;
-   m_d.m_widthbottom = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "WidthBottom"s, 75.0f) : 75.0f;
-   m_d.m_widthtop = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "WidthTop"s, 60.0f) : 60.0f;
-   m_d.m_type = fromMouseClick ? (RampType)g_pvp->m_settings.LoadValueWithDefault(strKeyName, "RampType"s, (int)RampTypeFlat) : RampTypeFlat;
-
-   m_d.m_tdr.m_TimerEnabled = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "TimerEnabled"s, false) : false;
-   m_d.m_tdr.m_TimerInterval = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "TimerInterval"s, 100) : 100;
-
-   const bool hr = g_pvp->m_settings.LoadValue(strKeyName, "Image"s, m_d.m_szImage);
-   if (!hr || !fromMouseClick)
-      m_d.m_szImage.clear();
-
-   m_d.m_imagealignment = fromMouseClick ? (RampImageAlignment)g_pvp->m_settings.LoadValueWithDefault(strKeyName, "ImageMode"s, (int)ImageModeWorld) : ImageModeWorld;
-   m_d.m_imageWalls = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "ImageWalls"s, true) : true;
-
-   m_d.m_leftwallheight = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "LeftWallHeight"s, 62.0f) : 62.0f;
-   m_d.m_rightwallheight = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "RightWallHeight"s, 62.0f) : 62.0f;
-   m_d.m_leftwallheightvisible = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "LeftWallHeightVisible"s, 30.0f) : 30.0f;
-   m_d.m_rightwallheightvisible = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "RightWallHeightVisible"s, 30.0f) : 30.0f;
-
-   m_d.m_threshold = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "HitThreshold"s, 2.0f) : 2.0f;
-
+   LinkProp(m_d.m_heightbottom, HeightBottom);
+   LinkProp(m_d.m_heighttop, HeightTop);
+   LinkProp(m_d.m_widthbottom, WidthBottom);
+   LinkProp(m_d.m_widthtop, WidthTop);
+   LinkProp(m_d.m_type, RampType);
+   LinkProp(m_d.m_szImage, Image);
+   LinkProp(m_d.m_imagealignment, ImageMode);
+   LinkProp(m_d.m_imageWalls, ImageWalls);
+   LinkProp(m_d.m_leftwallheight, LeftWallHeight);
+   LinkProp(m_d.m_rightwallheight, RightWallHeight);
+   LinkProp(m_d.m_hitEvent, HitEvent);
+   LinkProp(m_d.m_threshold, HitThreshold);
+   LinkProp(m_d.m_collidable, Collidable);
+   LinkProp(m_d.m_visible, Visible);
+   LinkProp(m_d.m_wireDiameter, WireDiameter);
+   LinkProp(m_d.m_wireDistanceX, WireDistanceX);
+   LinkProp(m_d.m_wireDistanceY, WireDistanceY);
+   LinkProp(m_d.m_reflectionEnabled, ReflectionEnabled);
+   LinkProp(m_timerEnabled, TimerEnabled);
+   LinkProp(m_timerInterval, TimerInterval);
    SetDefaultPhysics(fromMouseClick);
-
-   m_d.m_visible = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "Visible"s, true) : true;
-   m_d.m_collidable = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "Collidable"s, true) : true;
-   m_d.m_reflectionEnabled = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "ReflectionEnabled"s, true) : true;
-
-   m_d.m_wireDiameter = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "WireDiameter"s, 8.0f) : 8.0f;
-   m_d.m_wireDistanceX = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "WireDistanceX"s, 38.0f) : 38.0f;
-   m_d.m_wireDistanceY = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "WireDistanceY"s, 88.0f) : 88.0f;
-
-#undef strKeyName
 }
+
+void Ramp::SetDefaultPhysics(const bool fromMouseClick)
+{
+   LinkProp(m_d.m_elasticity, Elasticity);
+   LinkProp(m_d.m_friction, Friction);
+   LinkProp(m_d.m_scatter, Scatter);
+}
+#undef LinkProp
 
 void Ramp::WriteRegDefaults()
 {
-#define strKeyName Settings::DefaultPropsRamp
-
-   g_pvp->m_settings.SaveValue(strKeyName, "HeightBottom"s, m_d.m_heightbottom);
-   g_pvp->m_settings.SaveValue(strKeyName, "HeightTop"s, m_d.m_heighttop);
-   g_pvp->m_settings.SaveValue(strKeyName, "WidthBottom"s, m_d.m_widthbottom);
-   g_pvp->m_settings.SaveValue(strKeyName, "WidthTop"s, m_d.m_widthtop);
-   g_pvp->m_settings.SaveValue(strKeyName, "RampType"s, m_d.m_type);
-   g_pvp->m_settings.SaveValue(strKeyName, "TimerEnabled"s, m_d.m_tdr.m_TimerEnabled);
-   g_pvp->m_settings.SaveValue(strKeyName, "TimerInterval"s, m_d.m_tdr.m_TimerInterval);
-   g_pvp->m_settings.SaveValue(strKeyName, "Image"s, m_d.m_szImage);
-   g_pvp->m_settings.SaveValue(strKeyName, "ImageMode"s, m_d.m_imagealignment);
-   g_pvp->m_settings.SaveValue(strKeyName, "ImageWalls"s, m_d.m_imageWalls);
-   g_pvp->m_settings.SaveValue(strKeyName, "LeftWallHeight"s, m_d.m_leftwallheight);
-   g_pvp->m_settings.SaveValue(strKeyName, "RightWallHeight"s, m_d.m_rightwallheight);
-   g_pvp->m_settings.SaveValue(strKeyName, "LeftWallHeightVisible"s, m_d.m_leftwallheightvisible);
-   g_pvp->m_settings.SaveValue(strKeyName, "RightWallHeightVisible"s, m_d.m_rightwallheightvisible);
-   g_pvp->m_settings.SaveValue(strKeyName, "HitEvent"s, m_d.m_hitEvent);
-   g_pvp->m_settings.SaveValue(strKeyName, "HitThreshold"s, m_d.m_threshold);
-   g_pvp->m_settings.SaveValue(strKeyName, "Elasticity"s, m_d.m_elasticity);
-   g_pvp->m_settings.SaveValue(strKeyName, "Friction"s, m_d.m_friction);
-   g_pvp->m_settings.SaveValue(strKeyName, "Scatter"s, m_d.m_scatter);
-   g_pvp->m_settings.SaveValue(strKeyName, "Collidable"s, m_d.m_collidable);
-   g_pvp->m_settings.SaveValue(strKeyName, "Visible"s, m_d.m_visible);
-   g_pvp->m_settings.SaveValue(strKeyName, "ReflectionEnabled"s, m_d.m_reflectionEnabled);
-   g_pvp->m_settings.SaveValue(strKeyName, "WireDiameter"s, m_d.m_wireDiameter);
-   g_pvp->m_settings.SaveValue(strKeyName, "WireDistanceX"s, m_d.m_wireDistanceX);
-   g_pvp->m_settings.SaveValue(strKeyName, "WireDistanceY"s, m_d.m_wireDistanceY);
-
-#undef strKeyName
+#define LinkProp(field, prop) g_app->m_settings.SetDefaultPropsRamp_##prop(field, false)
+   LinkProp(m_d.m_heightbottom, HeightBottom);
+   LinkProp(m_d.m_heighttop, HeightTop);
+   LinkProp(m_d.m_widthbottom, WidthBottom);
+   LinkProp(m_d.m_widthtop, WidthTop);
+   LinkProp(m_d.m_type, RampType);
+   LinkProp(m_d.m_szImage, Image);
+   LinkProp(m_d.m_imagealignment, ImageMode);
+   LinkProp(m_d.m_imageWalls, ImageWalls);
+   LinkProp(m_d.m_leftwallheight, LeftWallHeight);
+   LinkProp(m_d.m_rightwallheight, RightWallHeight);
+   LinkProp(m_d.m_hitEvent, HitEvent);
+   LinkProp(m_d.m_threshold, HitThreshold);
+   LinkProp(m_d.m_collidable, Collidable);
+   LinkProp(m_d.m_visible, Visible);
+   LinkProp(m_d.m_wireDiameter, WireDiameter);
+   LinkProp(m_d.m_wireDistanceX, WireDistanceX);
+   LinkProp(m_d.m_wireDistanceY, WireDistanceY);
+   LinkProp(m_d.m_elasticity, Elasticity);
+   LinkProp(m_d.m_friction, Friction);
+   LinkProp(m_d.m_scatter, Scatter);
+   LinkProp(m_d.m_reflectionEnabled, ReflectionEnabled);
+   LinkProp(m_timerEnabled, TimerEnabled);
+   LinkProp(m_timerInterval, TimerInterval);
+#undef LinkProp
 }
 
 void Ramp::UIRenderPass1(Sur * const psur)
@@ -196,7 +177,7 @@ void Ramp::UIRenderPass2(Sur * const psur)
    delete[] pfCross;
    delete[] middlePoints;
 
-   bool drawDragpoints = ((m_selectstate != eNotSelected) || m_vpinball->m_alwaysDrawDragPoints);
+   bool drawDragpoints = ((m_selectstate != SelectState::NotSelected) || m_vpinball->m_alwaysDrawDragPoints);
    // if the item is selected then draw the dragpoints (or if we are always to draw dragpoints)
    if (!drawDragpoints)
    {
@@ -204,7 +185,7 @@ void Ramp::UIRenderPass2(Sur * const psur)
       for (size_t i = 0; i < m_vdpoint.size(); i++)
       {
          const CComObject<DragPoint> * const pdp = m_vdpoint[i];
-         if (pdp->m_selectstate != eNotSelected)
+         if (pdp->m_selectstate != SelectState::NotSelected)
          {
             drawDragpoints = true;
             break;
@@ -549,6 +530,9 @@ float Ramp::GetSurfaceHeight(float x, float y) const
 
 void Ramp::PhysicSetup(PhysicsEngine* physics, const bool isUI)
 {
+   if (!isUI && GetPartGroup() != nullptr && GetPartGroup()->GetReferenceSpace() != PartGroupData::SpaceReference::SR_PLAYFIELD)
+      return;
+
    float *rgheight1;
    int cvertex;
    const Vertex2D *const rgvLocal = GetRampVertex(cvertex, &rgheight1, nullptr, nullptr, nullptr, HIT_SHAPE_DETAIL_LEVEL, true);
@@ -846,8 +830,8 @@ void Ramp::RenderSetup(RenderDevice *device)
 void Ramp::RenderRelease()
 {
    assert(m_rd != nullptr);
-   delete m_meshBuffer;
    m_meshBuffer = nullptr;
+   m_meshEdgeBuffer = nullptr;
    m_dynamicVertexBufferRegenerate = true;
    m_rd = nullptr;
 }
@@ -860,20 +844,20 @@ void Ramp::UpdateAnimation(const float diff_time_msec)
 void Ramp::Render(const unsigned int renderMask)
 {
    assert(m_rd != nullptr);
-   assert(!m_backglass);
+   assert(!m_desktopBackdrop);
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
    const bool isReflectionPass = renderMask & Renderer::REFLECTION_PASS;
+   const bool isUIPass = renderMask & Renderer::UI_EDGES || renderMask & Renderer::UI_FILL;
    TRACE_FUNCTION();
 
    const Material *const mat = m_ptable->GetMaterial(m_d.m_szMaterial);
    if (!m_d.m_visible
-    || mat == nullptr
+    || (!isUIPass && mat == nullptr)
     || (isReflectionPass && !m_d.m_reflectionEnabled)
     || (isStaticOnly && mat->m_bOpacityActive)
     || (isDynamicOnly && !mat->m_bOpacityActive))
       return;
-
 
    if (m_d.m_widthbottom == 0.0f && m_d.m_widthtop == 0.0f)
    {
@@ -881,17 +865,28 @@ void Ramp::Render(const unsigned int renderMask)
       return;
    }
 
-   m_rd->ResetRenderState();
-
    if (IsHabitrail())
    {
       if (!m_meshBuffer || m_dynamicVertexBufferRegenerate)
          PrepareHabitrail();
 
+      if (isUIPass)
+      {
+         if (renderMask & Renderer::UI_FILL)
+            m_rd->DrawMesh(m_rd->m_basicShader, true, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
+         /* if (renderMask & Renderer::UI_EDGES)
+         {
+            // FIXME create line list index buffer and reuse vertex buffer
+            m_rd->DrawMesh(m_rd->m_basicShader, true, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::LINELIST, 0, m_numIndices);
+         }*/
+         return;
+      }
+
       /* TODO: This is a misnomer right now, but clamp fixes some visual glitches (single-pixel lines)
        * with transparent textures. Probably the option should simply be renamed to ImageModeClamp,
        * since the texture coordinates always stay within [0,1] anyway. */
-      SamplerAddressMode sam = m_d.m_imagealignment == ImageModeWrap ? SA_CLAMP : SA_REPEAT;
+      const SamplerAddressMode sam = m_d.m_imagealignment == ImageModeWrap ? SA_CLAMP : SA_REPEAT;
+      m_rd->ResetRenderState();
       m_rd->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
       Texture * const pin = m_ptable->GetImage(m_d.m_szImage);
       if (!pin)
@@ -913,6 +908,32 @@ void Ramp::Render(const unsigned int renderMask)
       if (!m_meshBuffer || m_dynamicVertexBufferRegenerate)
          GenerateVertexBuffer();
 
+      if (isUIPass)
+      {
+         if (renderMask & Renderer::UI_FILL)
+            m_rd->DrawMesh(m_rd->m_basicShader, true, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, (m_rampVertex - 1) * 6 * 3);
+         if (renderMask & Renderer::UI_EDGES && m_meshEdgeBuffer == nullptr)
+         {
+            vector<unsigned int> indices(8 * m_meshIndices.size() / 6);
+            for (int i = 0; i < (int)m_meshIndices.size() / 6; i++)
+            {
+               indices[i * 8 + 0] = m_meshIndices[i * 6 + 0];
+               indices[i * 8 + 1] = m_meshIndices[i * 6 + 1];
+               indices[i * 8 + 2] = m_meshIndices[i * 6 + 1];
+               indices[i * 8 + 3] = m_meshIndices[i * 6 + 2];
+               indices[i * 8 + 4] = m_meshIndices[i * 6 + 3];
+               indices[i * 8 + 5] = m_meshIndices[i * 6 + 5];
+               indices[i * 8 + 6] = m_meshIndices[i * 6 + 5];
+               indices[i * 8 + 7] = m_meshIndices[i * 6 + 4];
+            }
+            m_meshEdgeBuffer = std::make_shared<MeshBuffer>(m_meshBuffer->m_vb, std::make_shared<IndexBuffer>(m_rd, indices), true);
+         }
+         if (renderMask & Renderer::UI_EDGES)
+            m_rd->DrawMesh(m_rd->m_basicShader, mat->m_bOpacityActive, m_boundingSphereCenter, 0.f, m_meshEdgeBuffer, RenderDevice::LINELIST, 0, m_meshEdgeBuffer->m_ib->m_count);
+         return;
+      }
+
+      m_rd->ResetRenderState();
       m_rd->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE); // as both floor and walls are thinwalled
 
       Texture * const pin = m_ptable->GetImage(m_d.m_szImage);
@@ -921,7 +942,7 @@ void Ramp::Render(const unsigned int renderMask)
          /* TODO: This is a misnomer right now, but clamp fixes some visual glitches (single-pixel lines)
           * with transparent textures. Probably the option should simply be renamed to ImageModeClamp,
           * since the texture coordinates always stay within [0,1] anyway. */
-         SamplerAddressMode sam = m_d.m_imagealignment == ImageModeWrap ? SA_CLAMP : SA_REPEAT;
+         const SamplerAddressMode sam = m_d.m_imagealignment == ImageModeWrap ? SA_CLAMP : SA_REPEAT;
          m_rd->m_basicShader->SetTechniqueMaterial(SHADER_TECHNIQUE_basic_with_texture, *mat, pin->m_alphaTestValue >= 0.f && !pin->IsOpaque());
          m_rd->m_basicShader->SetTexture(SHADER_tex_base_color, pin, false, SF_TRILINEAR, sam, sam);
          m_rd->m_basicShader->SetAlphaTestValue(pin->m_alphaTestValue);
@@ -936,28 +957,26 @@ void Ramp::Render(const unsigned int renderMask)
       if (m_d.m_rightwallheightvisible != 0.f && m_d.m_leftwallheightvisible != 0.f && (!pin || m_d.m_imageWalls))
       {
          // both walls with image and floor
-         m_rd->DrawMesh(m_rd->m_basicShader, mat->m_bOpacityActive, m_boundingSphereCenter, m_d.m_depthBias,
-            m_meshBuffer, RenderDevice::TRIANGLELIST, 0, (m_rampVertex - 1) * 6 * 3);
+         m_rd->DrawMesh(m_rd->m_basicShader, mat->m_bOpacityActive, m_boundingSphereCenter, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, (m_rampVertex - 1) * 6 * 3);
       }
       else
       {
          // only floor
-         m_rd->DrawMesh(m_rd->m_basicShader, mat->m_bOpacityActive, m_boundingSphereCenter, m_d.m_depthBias,
-            m_meshBuffer, RenderDevice::TRIANGLELIST, 0, (m_rampVertex - 1) * 6);
+         m_rd->DrawMesh(m_rd->m_basicShader, mat->m_bOpacityActive, m_boundingSphereCenter, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, (m_rampVertex - 1) * 6);
 
          if (m_d.m_rightwallheightvisible != 0.f || m_d.m_leftwallheightvisible != 0.f)
          {
             if (pin && !m_d.m_imageWalls)
                m_rd->m_basicShader->SetTechniqueMaterial(SHADER_TECHNIQUE_basic_without_texture, *mat);
             if (m_d.m_rightwallheightvisible != 0.f && m_d.m_leftwallheightvisible != 0.f) //only render left & right side if the height is >0
-               m_rd->DrawMesh(m_rd->m_basicShader, mat->m_bOpacityActive, m_boundingSphereCenter, m_d.m_depthBias,
-                  m_meshBuffer, RenderDevice::TRIANGLELIST, (m_rampVertex - 1) * 6, (m_rampVertex - 1) * 6 * 2);
+               m_rd->DrawMesh(m_rd->m_basicShader, mat->m_bOpacityActive, m_boundingSphereCenter, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, (m_rampVertex - 1) * 6,
+                  (m_rampVertex - 1) * 6 * 2);
             else if (m_d.m_rightwallheightvisible != 0.f) //only render right side if the height is >0
-               m_rd->DrawMesh(m_rd->m_basicShader, mat->m_bOpacityActive, m_boundingSphereCenter, m_d.m_depthBias,
-                  m_meshBuffer, RenderDevice::TRIANGLELIST, (m_rampVertex - 1) * 6, (m_rampVertex - 1) * 6);
+               m_rd->DrawMesh(m_rd->m_basicShader, mat->m_bOpacityActive, m_boundingSphereCenter, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, (m_rampVertex - 1) * 6,
+                  (m_rampVertex - 1) * 6);
             else if (m_d.m_leftwallheightvisible != 0.f) //only render left side if the height is >0
-               m_rd->DrawMesh(m_rd->m_basicShader, mat->m_bOpacityActive, m_boundingSphereCenter, m_d.m_depthBias,
-                  m_meshBuffer, RenderDevice::TRIANGLELIST, (m_rampVertex - 1) * 6 * 2, (m_rampVertex - 1) * 6);
+               m_rd->DrawMesh(m_rd->m_basicShader, mat->m_bOpacityActive, m_boundingSphereCenter, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, (m_rampVertex - 1) * 6 * 2,
+                  (m_rampVertex - 1) * 6);
          }
       }
    }
@@ -996,7 +1015,7 @@ void Ramp::CreateWire(const int numRings, const int numSegments, const Vertex2D 
       const int i2 = (i == (numRings - 1)) ? i : i + 1;
       const float height = m_rgheightInit[i];
 
-      Vertex3Ds tangent(midPoints[i2].x - midPoints[i].x, midPoints[i2].y - midPoints[i].y, m_rgheightInit[i2]- m_rgheightInit[i]);
+      Vertex3Ds tangent(midPoints[i2].x - midPoints[i].x, midPoints[i2].y - midPoints[i].y, m_rgheightInit[i2] - m_rgheightInit[i]);
       if (i == numRings - 1)
       {
          // for the last spline point use the previous tangent again, otherwise we won't see the complete wire (it stops one control point too early)
@@ -1159,7 +1178,8 @@ void Ramp::GenerateWireMesh(Vertex3D_NoTex2 **meshBuf1, Vertex3D_NoTex2 **meshBu
 
 void Ramp::PrepareHabitrail()
 {
-   delete m_meshBuffer;
+   m_meshBuffer = nullptr;
+   m_meshEdgeBuffer = nullptr;
    m_dynamicVertexBufferRegenerate = false;
    Vertex3D_NoTex2 *tmpBuf1 = nullptr;
    Vertex3D_NoTex2 *tmpBuf2 = nullptr;
@@ -1169,9 +1189,9 @@ void Ramp::PrepareHabitrail()
    {
    case RampType1Wire:
    {
-      IndexBuffer *dynamicIndexBuffer = new IndexBuffer(m_rd, m_meshIndices);
-      VertexBuffer *dynamicVertexBuffer = new VertexBuffer(m_rd, m_numVertices, (float *)tmpBuf1);
-      m_meshBuffer = new MeshBuffer(m_wzName, dynamicVertexBuffer, dynamicIndexBuffer, true);
+      std::shared_ptr<IndexBuffer> dynamicIndexBuffer = std::make_shared<IndexBuffer>(m_rd, m_meshIndices);
+      std::shared_ptr<VertexBuffer> dynamicVertexBuffer = std::make_shared<VertexBuffer>(m_rd, m_numVertices, (float *)tmpBuf1);
+      m_meshBuffer = std::make_shared<MeshBuffer>(GetName(), dynamicVertexBuffer, dynamicIndexBuffer, true);
       break;
    }
    case RampType2Wire:
@@ -1189,9 +1209,9 @@ void Ramp::PrepareHabitrail()
       memcpy(indices, m_meshIndices.data(), m_numIndices * sizeof(WORD));
       for (int i = 0; i < m_numIndices; i++)
          indices[m_numIndices + i] = indices[i] + m_numVertices;
-      IndexBuffer *dynamicIndexBuffer = new IndexBuffer(m_rd, m_numIndices * 2, indices);
-      VertexBuffer *dynamicVertexBuffer = new VertexBuffer(m_rd, m_numVertices * 2, (float *)vertices);
-      m_meshBuffer = new MeshBuffer(m_wzName, dynamicVertexBuffer, dynamicIndexBuffer, true);
+      std::shared_ptr<IndexBuffer> dynamicIndexBuffer = std::make_shared<IndexBuffer>(m_rd, m_numIndices * 2, indices);
+      std::shared_ptr<VertexBuffer> dynamicVertexBuffer = std::make_shared<VertexBuffer>(m_rd, m_numVertices * 2, (float *)vertices);
+      m_meshBuffer = std::make_shared<MeshBuffer>(GetName(), dynamicVertexBuffer, dynamicIndexBuffer, true);
       m_numVertices *= 2;
       m_numIndices *= 2;
       delete[] vertices;
@@ -1219,9 +1239,9 @@ void Ramp::PrepareHabitrail()
          indices[m_numIndices + i] = indices[i] + m_numVertices;
          indices[m_numIndices * 2 + i] = indices[i] + m_numVertices * 2;
       }
-      IndexBuffer *dynamicIndexBuffer = new IndexBuffer(m_rd, m_numIndices * 3, indices);
-      VertexBuffer *dynamicVertexBuffer = new VertexBuffer(m_rd, m_numVertices * 3, (float *)vertices);
-      m_meshBuffer = new MeshBuffer(m_wzName, dynamicVertexBuffer, dynamicIndexBuffer, true);
+      std::shared_ptr<IndexBuffer> dynamicIndexBuffer = std::make_shared<IndexBuffer>(m_rd, m_numIndices * 3, indices);
+      std::shared_ptr<VertexBuffer> dynamicVertexBuffer = std::make_shared<VertexBuffer>(m_rd, m_numVertices * 3, (float *)vertices);
+      m_meshBuffer = std::make_shared<MeshBuffer>(GetName(), dynamicVertexBuffer, dynamicIndexBuffer, true);
       m_numVertices *= 3;
       m_numIndices *= 3;
       delete[] vertices;
@@ -1252,9 +1272,9 @@ void Ramp::PrepareHabitrail()
          indices[m_numIndices*2 + i] = indices[i] + m_numVertices*2;
          indices[m_numIndices*3 + i] = indices[i] + m_numVertices*3;
       }
-      IndexBuffer *dynamicIndexBuffer = new IndexBuffer(m_rd, m_numIndices * 4, indices);
-      VertexBuffer *dynamicVertexBuffer = new VertexBuffer(m_rd, m_numVertices * 4, (float *)vertices);
-      m_meshBuffer = new MeshBuffer(m_wzName, dynamicVertexBuffer, dynamicIndexBuffer, true);
+      std::shared_ptr<IndexBuffer> dynamicIndexBuffer = std::make_shared<IndexBuffer>(m_rd, m_numIndices * 4, indices);
+      std::shared_ptr<VertexBuffer> dynamicVertexBuffer = std::make_shared<VertexBuffer>(m_rd, m_numVertices * 4, (float *)vertices);
+      m_meshBuffer = std::make_shared<MeshBuffer>(GetName(), dynamicVertexBuffer, dynamicIndexBuffer, true);
       m_numVertices *= 4;
       m_numIndices *= 4;
       delete[] vertices;
@@ -1303,114 +1323,88 @@ void Ramp::ClearForOverwrite()
    ClearPointsForOverwrite();
 }
 
-HRESULT Ramp::SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool saveForUndo)
+void Ramp::Save(IObjectWriter& writer, const bool saveForUndo)
 {
-   BiffWriter bw(pstm, hcrypthash);
-
-   bw.WriteFloat(FID(HTBT), m_d.m_heightbottom);
-   bw.WriteFloat(FID(HTTP), m_d.m_heighttop);
-   bw.WriteFloat(FID(WDBT), m_d.m_widthbottom);
-   bw.WriteFloat(FID(WDTP), m_d.m_widthtop);
-   bw.WriteString(FID(MATR), m_d.m_szMaterial);
-   bw.WriteBool(FID(TMON), m_d.m_tdr.m_TimerEnabled);
-   bw.WriteInt(FID(TMIN), m_d.m_tdr.m_TimerInterval);
-   bw.WriteInt(FID(TYPE), m_d.m_type);
-   bw.WriteWideString(FID(NAME), m_wzName);
-   bw.WriteString(FID(IMAG), m_d.m_szImage);
-   bw.WriteInt(FID(ALGN), m_d.m_imagealignment);
-   bw.WriteBool(FID(IMGW), m_d.m_imageWalls);
-   bw.WriteFloat(FID(WLHL), m_d.m_leftwallheight);
-   bw.WriteFloat(FID(WLHR), m_d.m_rightwallheight);
-   bw.WriteFloat(FID(WVHL), m_d.m_leftwallheightvisible);
-   bw.WriteFloat(FID(WVHR), m_d.m_rightwallheightvisible);
-   bw.WriteBool(FID(HTEV), m_d.m_hitEvent);
-   bw.WriteFloat(FID(THRS), m_d.m_threshold);
-   bw.WriteFloat(FID(ELAS), m_d.m_elasticity);
-   bw.WriteFloat(FID(RFCT), m_d.m_friction);
-   bw.WriteFloat(FID(RSCT), m_d.m_scatter);
-   bw.WriteBool(FID(CLDR), m_d.m_collidable);
-   bw.WriteBool(FID(RVIS), m_d.m_visible);
-   bw.WriteFloat(FID(RADB), m_d.m_depthBias);
-   bw.WriteFloat(FID(RADI), m_d.m_wireDiameter);
-   bw.WriteFloat(FID(RADX), m_d.m_wireDistanceX);
-   bw.WriteFloat(FID(RADY), m_d.m_wireDistanceY);
-   bw.WriteBool(FID(REEN), m_d.m_reflectionEnabled);
-   bw.WriteString(FID(MAPH), m_d.m_szPhysicsMaterial);
-   bw.WriteBool(FID(OVPH), m_d.m_overwritePhysics);
-
-   ISelect::SaveData(pstm, hcrypthash);
-
-   bw.WriteTag(FID(PNTS));
-   HRESULT hr;
-   if (FAILED(hr = SavePointData(pstm, hcrypthash)))
-      return hr;
-
-   bw.WriteTag(FID(ENDB));
-
-   return S_OK;
+   writer.WriteFloat(FID(HTBT), m_d.m_heightbottom);
+   writer.WriteFloat(FID(HTTP), m_d.m_heighttop);
+   writer.WriteFloat(FID(WDBT), m_d.m_widthbottom);
+   writer.WriteFloat(FID(WDTP), m_d.m_widthtop);
+   writer.WriteString(FID(MATR), m_d.m_szMaterial);
+   writer.WriteBool(FID(TMON), m_timerEnabled);
+   writer.WriteInt(FID(TMIN), m_timerInterval);
+   writer.WriteInt(FID(TYPE), m_d.m_type);
+   writer.WriteWideString(FID(NAME), m_wzName);
+   writer.WriteString(FID(IMAG), m_d.m_szImage);
+   writer.WriteInt(FID(ALGN), m_d.m_imagealignment);
+   writer.WriteBool(FID(IMGW), m_d.m_imageWalls);
+   writer.WriteFloat(FID(WLHL), m_d.m_leftwallheight);
+   writer.WriteFloat(FID(WLHR), m_d.m_rightwallheight);
+   writer.WriteFloat(FID(WVHL), m_d.m_leftwallheightvisible);
+   writer.WriteFloat(FID(WVHR), m_d.m_rightwallheightvisible);
+   writer.WriteBool(FID(HTEV), m_d.m_hitEvent);
+   writer.WriteFloat(FID(THRS), m_d.m_threshold);
+   writer.WriteFloat(FID(ELAS), m_d.m_elasticity);
+   writer.WriteFloat(FID(RFCT), m_d.m_friction);
+   writer.WriteFloat(FID(RSCT), m_d.m_scatter);
+   writer.WriteBool(FID(CLDR), m_d.m_collidable);
+   writer.WriteBool(FID(RVIS), m_d.m_visible);
+   writer.WriteFloat(FID(RADB), m_d.m_depthBias);
+   writer.WriteFloat(FID(RADI), m_d.m_wireDiameter);
+   writer.WriteFloat(FID(RADX), m_d.m_wireDistanceX);
+   writer.WriteFloat(FID(RADY), m_d.m_wireDistanceY);
+   writer.WriteBool(FID(REEN), m_d.m_reflectionEnabled);
+   writer.WriteString(FID(MAPH), m_d.m_szPhysicsMaterial);
+   writer.WriteBool(FID(OVPH), m_d.m_overwritePhysics);
+   SaveSharedEditableFields(writer);
+   SavePoints(writer);
+   writer.EndObject();
 }
 
-HRESULT Ramp::InitLoad(IStream *pstm, PinTable *ptable, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey)
+void Ramp::Load(IObjectReader& reader)
 {
    SetDefaults(false);
-
-   BiffReader br(pstm, this, version, hcrypthash, hcryptkey);
-
-   m_ptable = ptable;
-
-   br.Load();
-   return S_OK;
-}
-
-bool Ramp::LoadToken(const int id, BiffReader * const pbr)
-{
-   switch(id)
-   {
-   case FID(PIID): { int pid; pbr->GetInt(&pid); } break;
-   case FID(HTBT): pbr->GetFloat(m_d.m_heightbottom); break;
-   case FID(HTTP): pbr->GetFloat(m_d.m_heighttop); break;
-   case FID(WDBT): pbr->GetFloat(m_d.m_widthbottom); break;
-   case FID(WDTP): pbr->GetFloat(m_d.m_widthtop); break;
-   case FID(MATR): pbr->GetString(m_d.m_szMaterial); break;
-   case FID(TMON): pbr->GetBool(m_d.m_tdr.m_TimerEnabled); break;
-   case FID(TMIN): pbr->GetInt(m_d.m_tdr.m_TimerInterval); break;
-   case FID(TYPE): pbr->GetInt(&m_d.m_type); break;
-   case FID(IMAG): pbr->GetString(m_d.m_szImage); break;
-   case FID(ALGN): pbr->GetInt(&m_d.m_imagealignment); break;
-   case FID(IMGW): pbr->GetBool(m_d.m_imageWalls); break;
-   case FID(NAME): pbr->GetWideString(m_wzName, std::size(m_wzName)); break;
-   case FID(WLHL): pbr->GetFloat(m_d.m_leftwallheight); break;
-   case FID(WLHR): pbr->GetFloat(m_d.m_rightwallheight); break;
-   case FID(WVHL): pbr->GetFloat(m_d.m_leftwallheightvisible); break;
-   case FID(WVHR): pbr->GetFloat(m_d.m_rightwallheightvisible); break;
-   case FID(HTEV): pbr->GetBool(m_d.m_hitEvent); break;
-   case FID(THRS): pbr->GetFloat(m_d.m_threshold); break;
-   case FID(ELAS): pbr->GetFloat(m_d.m_elasticity); break;
-   case FID(RFCT): pbr->GetFloat(m_d.m_friction); break;
-   case FID(RSCT): pbr->GetFloat(m_d.m_scatter); break;
-   case FID(CLDR): pbr->GetBool(m_d.m_collidable); break;
-   case FID(RVIS): pbr->GetBool(m_d.m_visible); break;
-   case FID(REEN): pbr->GetBool(m_d.m_reflectionEnabled); break;
-   case FID(RADB): pbr->GetFloat(m_d.m_depthBias); break;
-   case FID(RADI): pbr->GetFloat(m_d.m_wireDiameter); break;
-   case FID(RADX): pbr->GetFloat(m_d.m_wireDistanceX); break;
-   case FID(RADY): pbr->GetFloat(m_d.m_wireDistanceY); break;
-   case FID(MAPH): pbr->GetString(m_d.m_szPhysicsMaterial); break;
-   case FID(OVPH): pbr->GetBool(m_d.m_overwritePhysics); break;
-   default:
-   {
-      if (id == FID(DPNT))
-         LoadPointToken(pbr);
-      ISelect::LoadToken(id, pbr);
-      break;
-   }
-   }
-   return true;
-}
-
-HRESULT Ramp::InitPostLoad()
-{
-   return S_OK;
+   reader.AsObject(
+      [this](int tag, IObjectReader& reader)
+      {
+         switch (tag)
+         {
+         case FID(PIID): reader.AsInt(); break;
+         case FID(HTBT): m_d.m_heightbottom = reader.AsFloat(); break;
+         case FID(HTTP): m_d.m_heighttop = reader.AsFloat(); break;
+         case FID(WDBT): m_d.m_widthbottom = reader.AsFloat(); break;
+         case FID(WDTP): m_d.m_widthtop = reader.AsFloat(); break;
+         case FID(MATR): m_d.m_szMaterial = reader.AsString(); break;
+         case FID(TMON): m_timerEnabled = reader.AsBool(); break;
+         case FID(TMIN): m_timerInterval = reader.AsInt(); break;
+         case FID(TYPE): m_d.m_type = static_cast<RampType>(reader.AsInt()); break;
+         case FID(IMAG): m_d.m_szImage = reader.AsString(); break;
+         case FID(ALGN): m_d.m_imagealignment = static_cast<RampImageAlignment>(reader.AsInt()); break;
+         case FID(IMGW): m_d.m_imageWalls = reader.AsBool(); break;
+         case FID(NAME): m_wzName = reader.AsWideString(); break;
+         case FID(WLHL): m_d.m_leftwallheight = reader.AsFloat(); break;
+         case FID(WLHR): m_d.m_rightwallheight = reader.AsFloat(); break;
+         case FID(WVHL): m_d.m_leftwallheightvisible = reader.AsFloat(); break;
+         case FID(WVHR): m_d.m_rightwallheightvisible = reader.AsFloat(); break;
+         case FID(HTEV): m_d.m_hitEvent = reader.AsBool(); break;
+         case FID(THRS): m_d.m_threshold = reader.AsFloat(); break;
+         case FID(ELAS): m_d.m_elasticity = reader.AsFloat(); break;
+         case FID(RFCT): m_d.m_friction = reader.AsFloat(); break;
+         case FID(RSCT): m_d.m_scatter = reader.AsFloat(); break;
+         case FID(CLDR): m_d.m_collidable = reader.AsBool(); break;
+         case FID(RVIS): m_d.m_visible = reader.AsBool(); break;
+         case FID(REEN): m_d.m_reflectionEnabled = reader.AsBool(); break;
+         case FID(RADB): m_d.m_depthBias = reader.AsFloat(); break;
+         case FID(RADI): m_d.m_wireDiameter = reader.AsFloat(); break;
+         case FID(RADX): m_d.m_wireDistanceX = reader.AsFloat(); break;
+         case FID(RADY): m_d.m_wireDistanceY = reader.AsFloat(); break;
+         case FID(MAPH): m_d.m_szPhysicsMaterial = reader.AsString(); break;
+         case FID(OVPH): m_d.m_overwritePhysics = reader.AsBool(); break;
+         case FID(PNTS): break; // Empty tag placed before drag point data (unused)
+         case FID(DPNT): LoadPointToken(reader); break;
+         default: LoadSharedEditableField(tag, reader); break;
+         }
+         return true;
+      });
 }
 
 void Ramp::AddPoint(int x, int y, const bool smooth)
@@ -1446,6 +1440,7 @@ void Ramp::AddPoint(int x, int y, const bool smooth)
    STOPUNDO
 }
 
+#ifndef __STANDALONE__
 void Ramp::DoCommand(int icmd, int x, int y)
 {
    ISelect::DoCommand(icmd, x, y);
@@ -1461,15 +1456,15 @@ void Ramp::DoCommand(int icmd, int x, int y)
       break;
 
    case ID_WALLMENU_ROTATE:
-      RotateDialog();
+      VPX::WinUI::RotatePointsDialog(this);
       break;
 
    case ID_WALLMENU_SCALE:
-      ScaleDialog();
+      VPX::WinUI::ScalePointsDialog(this);
       break;
 
    case ID_WALLMENU_TRANSLATE:
-      TranslateDialog();
+      VPX::WinUI::TranslatePointsDialog(this);
       break;
 
    case ID_WALLMENU_ADDPOINT:
@@ -1479,6 +1474,7 @@ void Ramp::DoCommand(int icmd, int x, int y)
    break;
    }
 }
+#endif
 
 void Ramp::FlipY(const Vertex2D& pvCenter)
 {
@@ -1771,7 +1767,7 @@ STDMETHODIMP Ramp::get_Friction(float *pVal)
 
 STDMETHODIMP Ramp::put_Friction(float newVal)
 {
-   newVal = clamp(newVal, 0.f, 1.f);
+   newVal = saturate(newVal);
    m_d.m_friction = newVal;
 
    return S_OK;
@@ -2310,22 +2306,11 @@ void Ramp::GenerateVertexBuffer()
 
    Vertex3D_NoTex2 *tmpBuffer = nullptr;
    GenerateRampMesh(&tmpBuffer);
-
-   const MeshBuffer *meshBuffer = m_meshBuffer;
-   m_rd->AddEndOfFrameCmd([meshBuffer]() { delete meshBuffer; });
-   VertexBuffer* dynamicVertexBuffer = new VertexBuffer(m_rd, m_numVertices * 3, (float*) tmpBuffer); //!! use USAGE_DYNAMIC if it would actually be "really" dynamic
-   IndexBuffer* dynamicIndexBuffer = new IndexBuffer(m_rd, m_meshIndices);
-   m_meshBuffer = new MeshBuffer(m_wzName, dynamicVertexBuffer, dynamicIndexBuffer, true);
+   std::shared_ptr<VertexBuffer> dynamicVertexBuffer
+      = std::make_shared<VertexBuffer>(m_rd, m_numVertices * 3, (float *)tmpBuffer); //!! use USAGE_DYNAMIC if it would actually be "really" dynamic
    delete[] tmpBuffer;
-}
 
-void Ramp::SetDefaultPhysics(const bool fromMouseClick)
-{
-#define strKeyName Settings::DefaultPropsRamp
-
-   m_d.m_elasticity = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "Elasticity"s, 0.3f) : 0.3f;
-   m_d.m_friction = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "Friction"s, 0.3f) : 0.3f;
-   m_d.m_scatter = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(strKeyName, "Scatter"s, 0.f) : 0.f;
-
-#undef strKeyName
+   std::shared_ptr<IndexBuffer> dynamicIndexBuffer = std::make_shared<IndexBuffer>(m_rd, m_meshIndices);
+   
+   m_meshBuffer = std::make_shared<MeshBuffer>(GetName(), dynamicVertexBuffer, dynamicIndexBuffer, true);
 }

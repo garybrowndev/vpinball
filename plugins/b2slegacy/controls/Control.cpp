@@ -2,13 +2,14 @@
 
 #include "Control.h"
 #include "../forms/Form.h"
+#include "../utils/VPXGraphics.h"
 
 namespace B2SLegacy {
 
 Control::Control(VPXPluginAPI* vpxApi)
    : m_vpxApi(vpxApi)
 {
-   m_pParent = NULL;
+   m_pParent = nullptr;
    m_szName.clear();
    m_rect = { 0, 0, 0, 0 };
    m_visible = true;
@@ -19,12 +20,15 @@ Control::Control(VPXPluginAPI* vpxApi)
 
 Control::~Control()
 {
-   // TODO: if (m_pBackgroundImage)  // We probably shouldn't delete because it could be referenced somewhere else
-   //   m_vpxApi->DeleteTexture(m_pBackgroundImage);
 }
 
 void Control::OnPaint(VPXRenderContext2D* const ctx)
 {
+   if (IsVisible() && m_pGraphics) {
+      m_pGraphics->Clear();
+      OnPaintBackground(m_pGraphics.get());
+   }
+
    for (Control* child : m_children)
       child->OnPaint(ctx);
 
@@ -33,6 +37,13 @@ void Control::OnPaint(VPXRenderContext2D* const ctx)
 
 void Control::OnHandleCreated()
 {
+}
+
+void Control::OnPaintBackground(VPXGraphics* pGraphics)
+{
+   pGraphics->SetColor(m_backColor);
+   SDL_Rect rect = { 0, 0, GetWidth(), GetHeight() };
+   pGraphics->FillRectangle(rect);
 }
 
 void Control::AddControl(Control* control)
@@ -49,7 +60,7 @@ Control* Control::GetControl(const string& szName) const
       if (child->GetName() == szName)
          return child;
    }
-   return NULL;
+   return nullptr;
 }
 
 bool Control::IsVisible() const

@@ -1,0 +1,646 @@
+// license:GPLv3+
+
+#include "core/stdafx.h"
+
+#include "StereoSettingsPage.h"
+
+namespace VPX::InGameUI
+{
+
+StereoSettingsPage::StereoSettingsPage()
+   : InGameUIPage("Stereo Settings"s, ""s, SaveMode::Both)
+{
+}
+
+void StereoSettingsPage::Open(bool isBackwardAnimation)
+{
+   InGameUIPage::Open(isBackwardAnimation);
+   m_staticPrepassDisabled = false;
+   BuildPage();
+}
+
+void StereoSettingsPage::Close(bool isBackwardAnimation)
+{
+   InGameUIPage::Close(isBackwardAnimation);
+   if (m_staticPrepassDisabled)
+      m_player->m_renderer->DisableStaticPrePass(false);
+}
+
+void StereoSettingsPage::Render(float elapsedS)
+{
+   if (IsAnaglyphStereoMode(m_editedStereoMode))
+   {
+      m_anaglyph.LoadSetupFromRegistry(m_player->m_ptable->m_settings, m_editedStereoMode - STEREO_ANAGLYPH_1);
+      if (m_calibrationStep >= 0)
+      {
+         UpdateAnaglyphCalibrationModal();
+      }
+      else
+      {
+         InGameUIPage::Render(elapsedS);
+         RenderAnaglyphInformations();
+      }
+   }
+   else
+   {
+      InGameUIPage::Render(elapsedS);
+   }
+}
+
+VPX::Properties::PropertyRegistry::PropId StereoSettingsPage::GetCalibratedProperty() const
+{
+   const int glassesIndex = m_editedStereoMode - STEREO_ANAGLYPH_1;
+   switch (m_calibrationStep)
+   {
+   case 0: return Settings::m_propPlayer_AnaglyphLeftRed[glassesIndex];
+   case 1: return Settings::m_propPlayer_AnaglyphLeftGreen[glassesIndex];
+   case 2: return Settings::m_propPlayer_AnaglyphLeftBlue[glassesIndex];
+   case 3: return Settings::m_propPlayer_AnaglyphRightRed[glassesIndex];
+   case 4: return Settings::m_propPlayer_AnaglyphRightGreen[glassesIndex];
+   case 5: return Settings::m_propPlayer_AnaglyphRightBlue[glassesIndex];
+   default: assert(false); break;
+   }
+   return {};
+}
+
+void StereoSettingsPage::SelectNextItem()
+{
+   if (IsAnaglyphStereoMode(m_editedStereoMode) && m_calibrationStep >= 0)
+   {
+      m_calibrationStep++;
+      if (m_calibrationStep > 5)
+      {
+         m_calibrationStep = -1;
+         BuildPage();
+      }
+   }
+   else
+      InGameUIPage::SelectNextItem();
+}
+
+void StereoSettingsPage::SelectPrevItem()
+{
+   if (IsAnaglyphStereoMode(m_editedStereoMode) && m_calibrationStep >= 0)
+   {
+      m_calibrationStep--;
+      if (m_calibrationStep < 0)
+         BuildPage();
+   }
+   else
+      InGameUIPage::SelectPrevItem();
+}
+
+void StereoSettingsPage::AdjustItem(float direction, bool isInitialPress)
+{
+   if (IsAnaglyphStereoMode(m_editedStereoMode) && m_calibrationStep >= 0)
+   {
+      const uint32_t now = msec();
+      if (isInitialPress)
+      {
+         m_pressStartMs = now;
+         m_lastUpdateMs = now;
+      }
+      const float elapsed = static_cast<float>(now - m_lastUpdateMs) / 1000.f;
+      m_lastUpdateMs = now;
+      const uint32_t elapsedSincePress = now - m_pressStartMs;
+      float speedFactor;
+      if (elapsedSincePress < 250)
+         speedFactor = 1.0f;
+      else if (elapsedSincePress < 500)
+         speedFactor = 2.f;
+      else if (elapsedSincePress < 1000)
+         speedFactor = 4.f;
+      else if (elapsedSincePress < 1500)
+         speedFactor = 8.f;
+      else
+         speedFactor = 16.f;
+      float calibrationBrightness = m_player->m_ptable->m_settings.GetFloat(GetCalibratedProperty());
+      calibrationBrightness = clamp(calibrationBrightness + direction * speedFactor * elapsed / 32.f, 0.f, 1.f);
+      m_player->m_ptable->m_settings.Set(GetCalibratedProperty(), calibrationBrightness, false);
+   }
+   else
+      InGameUIPage::AdjustItem(direction, isInitialPress);
+}
+
+void StereoSettingsPage::OnPointOfViewChanged()
+{
+   if (!m_staticPrepassDisabled)
+   {
+      m_player->m_renderer->DisableStaticPrePass(true);
+      m_staticPrepassDisabled = true;
+   }
+   m_player->m_renderer->UpdateStereoShaderState();
+   m_player->m_renderer->InitLayout();
+}
+
+void StereoSettingsPage::NotifyDirectSave()
+{
+   if (!m_notificationDone)
+   {
+      m_notificationDone = true;
+      m_player->m_liveUI->PushNotification("This change is directly persisted."s, 3000);
+   }
+}
+
+
+void StereoSettingsPage::BuildPage()
+{
+   ClearItems();
+
+   const bool stereoRT = m_player->m_renderer->m_stereo3D != STEREO_OFF;
+   const bool stereoSel = m_player->m_ptable->m_settings.GetPlayer_Stereo3D() != STEREO_OFF;
+   m_editedStereoMode = (stereoRT != stereoSel) ? m_player->m_ptable->m_settings.GetPlayer_Stereo3D() : m_player->m_renderer->m_stereo3D;
+   m_anaglyph.LoadSetupFromRegistry(m_player->m_ptable->m_settings, m_editedStereoMode - STEREO_ANAGLYPH_1);
+
+   // TODO this property is directly persisted. It does not follow the overall UI design: App/Table/Live state => Implement live state (will also enable table override)
+   // This is a bit hacky as we can change the stereo mode at runtime if already doing stereo, but not switch it on/off
+   AddItem(std::make_unique<InGameUIItem>( //
+      Settings::m_propPlayer_Stereo3D, //
+      [this]()
+      {
+         const bool stereoRT = m_player->m_renderer->m_stereo3D != STEREO_OFF;
+         const bool stereoSel = m_player->m_ptable->m_settings.GetPlayer_Stereo3D() != STEREO_OFF;
+         return (stereoRT != stereoSel) ? m_player->m_ptable->m_settings.GetPlayer_Stereo3D() : m_player->m_renderer->m_stereo3D;
+      }, //
+      [this](int, int v)
+      {
+         const bool stereoRT = m_player->m_renderer->m_stereo3D != STEREO_OFF;
+         const bool stereoSel = v != STEREO_OFF;
+         if (stereoRT != stereoSel)
+            m_player->m_liveUI->PushNotification("Toggling stereo rendering will be applied after restarting the game"s, 5000);
+         else
+            m_player->m_renderer->m_stereo3D = (StereoMode)v;
+         m_player->m_ptable->m_settings.SetPlayer_Stereo3D((StereoMode)v, false);
+         OnPointOfViewChanged();
+         BuildPage();
+      })).m_excludeFromDefault = true;
+
+   if (m_editedStereoMode == STEREO_OFF)
+      return;
+
+   // FIXME this will conflict with rendering, so just disabled for now
+   /* AddItem(std::make_unique<InGameUIItem>(
+      Settings::m_propPlayer_Stereo3DEnabled, //
+      [this]() { return m_player->m_renderer->m_stereo3Denabled; }, //
+      [this](bool v) {
+         m_player->m_renderer->m_stereo3Denabled = v;
+         m_player->m_renderer->InitLayout();
+         m_player->m_renderer->UpdateStereoShaderState();
+         if (m_player->m_renderer->IsUsingStaticPrepass())
+         {
+            m_player->m_renderer->DisableStaticPrePass(true);
+            m_player->m_renderer->DisableStaticPrePass(false);
+         }
+      })); */
+
+   // TODO this property is directly persisted. It does not follow the overall UI design: App/Table/Live state => Implement live state (will also enable table override)
+   AddItem(std::make_unique<InGameUIItem>( //
+      Settings::m_propPlayer_Stereo3DEyeSeparation, 1.f, "%4.1f mm"s, //
+      [this]() { return m_player->m_ptable->m_settings.GetPlayer_Stereo3DEyeSeparation(); }, //
+      [this](float, float v)
+      {
+         m_player->m_ptable->m_settings.SetPlayer_Stereo3DEyeSeparation(v, false);
+         OnPointOfViewChanged();
+         NotifyDirectSave();
+      }));
+
+   // TODO this property is directly persisted. It does not follow the overall UI design: App/Table/Live state => Implement live state (will also enable table override)
+   AddItem(std::make_unique<InGameUIItem>( //
+      Settings::m_propPlayer_Stereo3DBrightness, 100.f, "%4.1f %%"s, //
+      [this]() { return m_player->m_ptable->m_settings.GetPlayer_Stereo3DBrightness(); }, //
+      [this](float, float v)
+      {
+         m_player->m_ptable->m_settings.SetPlayer_Stereo3DBrightness(v, false);
+         m_player->m_renderer->UpdateStereoShaderState();
+         NotifyDirectSave();
+      }));
+
+   // TODO this property is directly persisted. It does not follow the overall UI design: App/Table/Live state => Implement live state (will also enable table override)
+   AddItem(std::make_unique<InGameUIItem>( //
+      Settings::m_propPlayer_Stereo3DSaturation, 100.f, "%4.1f %%"s, //
+      [this]() { return m_player->m_ptable->m_settings.GetPlayer_Stereo3DSaturation(); }, //
+      [this](float, float v)
+      {
+         m_player->m_ptable->m_settings.SetPlayer_Stereo3DSaturation(v, false);
+         m_player->m_renderer->UpdateStereoShaderState();
+         NotifyDirectSave();
+      }));
+
+   if (!IsAnaglyphStereoMode(m_editedStereoMode))
+      return;
+
+   // TODO this property is directly persisted. It does not follow the overall UI design: App/Table/Live state => Implement live state (will also enable table override)
+   AddItem(std::make_unique<InGameUIItem>( //
+      Settings::m_propPlayer_Stereo3DLeftContrast, 100.f, "%4.1f %%"s, //
+      [this]() { return m_player->m_ptable->m_settings.GetPlayer_Stereo3DLeftContrast(); }, //
+      [this](float, float v)
+      {
+         m_player->m_ptable->m_settings.SetPlayer_Stereo3DLeftContrast(v, false);
+         m_player->m_renderer->UpdateStereoShaderState();
+         NotifyDirectSave();
+      }));
+
+   // TODO this property is directly persisted. It does not follow the overall UI design: App/Table/Live state => Implement live state (will also enable table override)
+   AddItem(std::make_unique<InGameUIItem>( //
+      Settings::m_propPlayer_Stereo3DRightContrast, 100.f, "%4.1f %%"s, //
+      [this]() { return m_player->m_ptable->m_settings.GetPlayer_Stereo3DRightContrast(); }, //
+      [this](float, float v)
+      {
+         m_player->m_ptable->m_settings.SetPlayer_Stereo3DRightContrast(v, false);
+         m_player->m_renderer->UpdateStereoShaderState();
+         NotifyDirectSave();
+      }));
+
+   const int glassesIndex = m_editedStereoMode - STEREO_ANAGLYPH_1;
+
+   // TODO this property is directly persisted. It does not follow the overall UI design: App/Table/Live state => Implement live state (will also enable table override)
+   AddItem(std::make_unique<InGameUIItem>( //
+      Settings::m_propPlayer_AnaglyphFilter[glassesIndex], //
+      [this, glassesIndex]() { return m_player->m_ptable->m_settings.GetPlayer_AnaglyphFilter(glassesIndex); }, //
+      [this, glassesIndex](int, int v)
+      {
+         m_player->m_ptable->m_settings.SetPlayer_AnaglyphFilter(glassesIndex, v, false);
+         m_player->m_renderer->UpdateStereoShaderState();
+         NotifyDirectSave();
+      }));
+
+   // TODO this property is directly persisted. It does not follow the overall UI design: App/Table/Live state => Implement live state (will also enable table override)
+   AddItem(std::make_unique<InGameUIItem>( //
+      Settings::m_propPlayer_AnaglyphDynDesat[glassesIndex], 100.f, "%4.1f %%"s, //
+      [this, glassesIndex]() { return m_player->m_ptable->m_settings.GetPlayer_AnaglyphDynDesat(glassesIndex); }, //
+      [this, glassesIndex](float, float v)
+      {
+         m_player->m_ptable->m_settings.SetPlayer_AnaglyphDynDesat(glassesIndex, v, false);
+         m_player->m_renderer->UpdateStereoShaderState();
+         NotifyDirectSave();
+      }));
+
+   // TODO this property is directly persisted. It does not follow the overall UI design: App/Table/Live state => Implement live state (will also enable table override)
+   AddItem(std::make_unique<InGameUIItem>( //
+      Settings::m_propPlayer_AnaglyphDeghost[glassesIndex], 100.f, "%4.1f %%"s, //
+      [this, glassesIndex]() { return m_player->m_ptable->m_settings.GetPlayer_AnaglyphDeghost(glassesIndex); }, //
+      [this, glassesIndex](float, float v)
+      {
+         m_player->m_ptable->m_settings.SetPlayer_AnaglyphDeghost(glassesIndex, v, false);
+         m_player->m_renderer->UpdateStereoShaderState();
+         NotifyDirectSave();
+      }));
+
+   // TODO this property is directly persisted. It does not follow the overall UI design: App/Table/Live state => Implement live state (will also enable table override)
+   AddItem(std::make_unique<InGameUIItem>( //
+      Settings::m_propPlayer_Stereo3DDefocus, 100.f, "%4.1f %%"s, //
+      [this]() { return m_player->m_ptable->m_settings.GetPlayer_Stereo3DDefocus(); }, //
+      [this](float, float v)
+      {
+         m_player->m_ptable->m_settings.SetPlayer_Stereo3DDefocus(v, false);
+         m_player->m_renderer->UpdateStereoShaderState();
+         NotifyDirectSave();
+      }));
+
+   // TODO this property is directly persisted. It does not follow the overall UI design: App/Table/Live state => Implement live state (will also enable table override)
+   AddItem(std::make_unique<InGameUIItem>(
+      Settings::m_propPlayer_AnaglyphsRGB[glassesIndex], //
+      [this, glassesIndex]() { return m_player->m_ptable->m_settings.GetPlayer_AnaglyphsRGB(glassesIndex); }, //
+      [this, glassesIndex](bool v)
+      {
+         m_player->m_ptable->m_settings.SetPlayer_AnaglyphsRGB(glassesIndex, v, false);
+         m_player->m_renderer->UpdateStereoShaderState();
+         NotifyDirectSave();
+         BuildPage();
+      }));
+
+   AddItem(std::make_unique<InGameUIItem>("Calibrate"s, "Perform calibration to adjust rendering to the characteristic of your display, using your glasses, with your eyes."s,
+      [this, glassesIndex]() { m_calibrationStep = 0; }));
+
+   Anaglyph::AnaglyphPair colors = m_anaglyph.GetColorPair();
+   string infoText;
+   switch (colors)
+   {
+   case Anaglyph::RED_CYAN: infoText = "Glasses identified as "s + (m_anaglyph.IsReversedColorPair() ? "Cyan/Red" : "Red/Cyan"); break;
+   case Anaglyph::GREEN_MAGENTA: infoText = "Glasses identified as "s + (m_anaglyph.IsReversedColorPair() ? "Magenta/Green" : "Green/Magenta"); break;
+   case Anaglyph::BLUE_AMBER: infoText = "Glasses identified as "s + (m_anaglyph.IsReversedColorPair() ? "Amber/Blue" : "Blue/Amber"); break;
+   default: infoText = "Glasses were not identified."; break;
+   }
+   AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info,
+      std::format(
+         "{}, Screen Gamma: {}", infoText, m_player->m_ptable->m_settings.GetPlayer_AnaglyphsRGB(glassesIndex) ? "Standard sRGB display"s : std::to_string(m_anaglyph.GetDisplayGamma()))));
+}
+
+static void CenteredText(float y, float width, const char* text)
+{
+   ImGui::SetCursorPos(ImVec2((width - ImGui::CalcTextSize(text).x) * 0.5f, y));
+   ImGui::TextUnformatted(text);
+}
+
+void StereoSettingsPage::UpdateAnaglyphCalibrationModal()
+{
+   //const int glassesIndex = m_editedStereoMode - STEREO_ANAGLYPH_1;
+   const ImGuiIO& io = ImGui::GetIO();
+   ImGui::SetNextWindowPos(ImVec2(0.f, 0.f));
+   ImGui::SetNextWindowSize(io.DisplaySize);
+   ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.f, 0.f, 0.f, m_backgroundOpacity));
+
+   ImGui::Begin("Anaglyph Calibration", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings);
+   const ImVec2 win_size = ImGui::GetWindowSize();
+   ImDrawList* draw_list = ImGui::GetWindowDrawList();
+   const float s = min(win_size.x, win_size.y) / 5.f;
+   const float t = 1.f * s;
+
+   const float calibrationBrightness = m_player->m_ptable->m_settings.GetFloat(GetCalibratedProperty());
+
+   /* Initial implementation based on MBD calibration
+   draw_list->AddRectFilled(ImVec2(0.5f * win_size.x - t, 0.5f * win_size.y - t), ImVec2(0.5f * win_size.x + t, 0.5f * win_size.y + t),
+      ImColor(calibrationBrightness, calibrationBrightness, calibrationBrightness));
+   for (int x = 0; x < 2; x++)
+   {
+      for (int y = 0; y < 2; y++)
+      {
+         if ((x & 1) != (y & 1))
+         {
+            ImVec2 pos(0.5f * win_size.x - t + s * x, 0.5f * win_size.y - t + s * y);
+            draw_list->AddRectFilled(pos, pos + ImVec2(s, s),ImColor((calibrationStep % 3) == 0 ? 1.f : 0.f, (calibrationStep % 3) == 1 ? 1.f : 0.f, (calibrationStep % 3) == 2 ? 1.f : 0.f));
+         }
+      }
+   }*/
+
+   // Perform calibration using a human face, see https://people.cs.uchicago.edu/~glk/pubs/pdf/Kindlmann-FaceBasedLuminanceMatching-VIS-2002.pdf
+   static constexpr int faceLength[] = { 9, 4, 7, 5, 5, 4, 4, 5, 4, 4, 4, 5, 4 };
+   static constexpr ImVec2 face[] = {
+      ImVec2(96.5f, 86.9f),
+      ImVec2(17.6f, -48.1f),
+      ImVec2(7.5f, -1.3f),
+      ImVec2(13.1f, -0.8f),
+      ImVec2(19.8f, 0.3f),
+      ImVec2(22.5f, 1.6f),
+      ImVec2(-14.2f, 51.9f),
+      ImVec2(-25.7f, 14.2f),
+      ImVec2(-16.8f, 1.1f),
+      ImVec2(176.9f, 38.5f),
+      ImVec2(37.7f, 25.7f),
+      ImVec2(-7.8f, 33.7f),
+      ImVec2(-44.1f, -7.5f),
+      ImVec2(120.3f, 105.6f),
+      ImVec2(-14.7f, 39.8f),
+      ImVec2(-1.3f, 13.6f),
+      ImVec2(16.6f, 1.3f),
+      ImVec2(24.6f, -35.0f),
+      ImVec2(0.8f, -15.5f),
+      ImVec2(-9.1f, -5.3f),
+      ImVec2(120.8f, 160.4f),
+      ImVec2(20.8f, 11.5f),
+      ImVec2(68.7f, -10.4f),
+      ImVec2(-19.2f, -27.3f),
+      ImVec2(-45.7f, -8.8f),
+      ImVec2(116.8f, 171.1f),
+      ImVec2(-3.2f, 16.0f),
+      ImVec2(-24.9f, -0.5f),
+      ImVec2(-2.3f, -12.5f),
+      ImVec2(9.7f, -6.0f),
+      ImVec2(116.8f, 171.1f),
+      ImVec2(24.9f, 0.8f),
+      ImVec2(12.8f, 22.2f),
+      ImVec2(-40.9f, -6.9f),
+      ImVec2(141.6f, 171.9f),
+      ImVec2(68.7f, -10.4f),
+      ImVec2(-20.3f, 40.6f),
+      ImVec2(-35.5f, -8.0f),
+      ImVec2(154.5f, 194.0f),
+      ImVec2(-3.5f, 8.8f),
+      ImVec2(3.7f, 30.2f),
+      ImVec2(25.1f, -10.2f),
+      ImVec2(10.2f, -20.8f),
+      ImVec2(151.0f, 202.9f),
+      ImVec2(-23.3f, -2.4f),
+      ImVec2(2.9f, 43.0f),
+      ImVec2(24.0f, -10.4f),
+      ImVec2(89.0f, 194.8f),
+      ImVec2(38.8f, 5.6f),
+      ImVec2(2.9f, 43.0f),
+      ImVec2(-38.0f, -5.3f),
+      ImVec2(191.1f, 134.2f),
+      ImVec2(5.3f, -19.0f),
+      ImVec2(17.1f, -1.1f),
+      ImVec2(-3.2f, 47.3f),
+      ImVec2(74.6f, 151.9f),
+      ImVec2(7.9f, -23.8f),
+      ImVec2(26.5f, -3.0f),
+      ImVec2(-12.9f, 42.9f),
+      ImVec2(-9.7f, 6.0f),
+      ImVec2(65.5f, 148.9f),
+      ImVec2(6.8f, -38.6f),
+      ImVec2(10.6f, -0.8f),
+      ImVec2(-0.4f, 18.5f),
+   };
+   ImColor backCol(calibrationBrightness, calibrationBrightness, calibrationBrightness);
+   ImColor calCol((m_calibrationStep % 3) == 0 ? 1.f : 0.f, (m_calibrationStep % 3) == 1 ? 1.f : 0.f, (m_calibrationStep % 3) == 2 ? 1.f : 0.f);
+   for (int v = 0; v < 2; v++)
+   {
+      ImVec2 faceTrans[10];
+      ImVec2 faceOffset(win_size.x * 0.5f - 0.5f * t + (float)v * t, win_size.y * 0.5f);
+      draw_list->AddRectFilled(
+         ImVec2(0.5f * win_size.x - t + (float)v * t, 0.5f * win_size.y - t), ImVec2(0.5f * win_size.x + (float)v * t, 0.5f * win_size.y + t), v == 0 ? backCol : calCol);
+      const ImU32 col = ImGui::GetColorU32(v == 1 ? backCol.Value : calCol.Value);
+      for (int i = 0, p = 0; i < 13; p += faceLength[i], i++)
+      {
+         ImVec2 pos(0.f, 0.f);
+         for (int j = 0; j < faceLength[i]; j++)
+         {
+            pos = pos + face[p + j];
+            faceTrans[j] = faceOffset + (pos + ImVec2(-140.f, -140.f)) * 2.f * t / 320.f;
+         }
+         draw_list->AddConvexPolyFilled(faceTrans, faceLength[i], col);
+      }
+   }
+
+   // Face area
+   //draw_list->AddRect(ImVec2((win_size.x - 2.f * t) * 0.5f, win_size.y * 0.5f - t), ImVec2((win_size.x + 2.f * t) * 0.5f, win_size.y * 0.5f + t), IM_COL32_WHITE);
+
+   ImGui::PushFont(m_player->m_liveUI->GetOverlayFont(), m_player->m_liveUI->GetOverlayFont()->LegacySize);
+   float line_height = ImGui::GetTextLineHeight();
+   float y = win_size.y * 0.5f + t + line_height;
+   CenteredText(y + 0 * line_height, win_size.x, std::format("Anaglyph glasses calibration step #{}/6", m_calibrationStep + 1).c_str());
+   const string info = std::format("{} eye's {} perceived luminance: {:3d}%", m_calibrationStep < 3 ? "Left" : "Right",
+      (m_calibrationStep % 3) == 0      ? "red"s
+         : (m_calibrationStep % 3) == 1 ? "green"s
+                                        : "blue"s,
+      (int)(calibrationBrightness * 100.f));
+   CenteredText(y + 1 * line_height, win_size.x, info.c_str());
+   CenteredText(y + 3 * line_height, win_size.x, m_calibrationStep < 3 ? "Close your right eye" : "Close your left eye");
+   CenteredText(y + 5 * line_height, win_size.x, m_calibrationStep == 0 ? "Use Left Magna to exit calibration" : "Use Left Magna to move to previous step");
+   CenteredText(y + 6 * line_height, win_size.x, m_calibrationStep == 5 ? "Use Right Magna to exit calibration" : "Use Right Magna to move to next step");
+   CenteredText(y + 7 * line_height, win_size.x, "Use Left/Right Flipper to adjust face brightness until");
+   CenteredText(y + 8 * line_height, win_size.x, "Your eye does not favor or focus one face over the other.");
+   ImGui::PopFont();
+
+   line_height = ImGui::GetTextLineHeight();
+   y = win_size.y * 0.5f - t - 3.f * line_height;
+   CenteredText(y - line_height, win_size.x, "Background Opacity");
+   ImGui::SetCursorPos(ImVec2((win_size.x - 1.5f * t) * 0.5f, y));
+   ImGui::SetNextItemWidth(1.5f * t);
+   ImGui::SliderFloat("##Background Opacity", &m_backgroundOpacity, 0.f, 1.f);
+
+   ImGui::End();
+   ImGui::PopStyleColor();
+
+   m_player->m_renderer->UpdateStereoShaderState();
+}
+
+
+static vec3 MulVec3(const vec3& pv1, const vec3& pv2) { return vec3 { pv1.x * pv2.x, pv1.y * pv2.y, pv1.z * pv2.z }; }
+
+static vec3 Saturate(const vec3& color) { return vec3 { saturate(color.x), saturate(color.y), saturate(color.z) }; }
+
+static ImU32 GreyToRGBA32(const float grey, bool isLinear) { return isLinear ? GreyToRGBA32(sRGB(grey), false) : VPX::Colors::SRGBToRGBA32(vec3 { grey, grey, grey }, 1.f); }
+
+void StereoSettingsPage::RenderAnaglyphInformations() const
+{
+   if (!IsAnaglyphStereoMode(m_editedStereoMode))
+      return;
+
+   const ImGuiStyle& style = ImGui::GetStyle();
+
+   const vec3 leftEyeColor = m_anaglyph.GetLeftEyeGlassFilter(true); // linearRGB
+   const vec3 rightEyeColor = m_anaglyph.GetRightEyeGlassFilter(true); // linearRGB
+   const float leftFilterLuminance = VPX::Colors::LuminanceFromLinearRGB(leftEyeColor);
+   const float rightFilterLuminance = VPX::Colors::LuminanceFromLinearRGB(rightEyeColor);
+   if (leftFilterLuminance < 1e-5f || rightFilterLuminance < 1e-5f)
+      return;
+   const vec3 blackAnaglyph = Saturate(m_anaglyph.ComputeColor(vec3(0.f, 0.f, 0.f), vec3(0.f, 0.f, 0.f), true)); // linearRGB
+
+   const float barHeight = ImGui::GetTextLineHeight();
+   const float posx = GetWindowPos().x;
+   const float height = 9.f * (barHeight + style.ItemSpacing.y) + style.ItemSpacing.y;
+   const float posy = GetWindowPos().y - style.ItemSpacing.y - height;
+   const float width = GetWindowSize().x;
+
+   ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
+   draw_list->AddRectFilled(ImVec2(posx, posy), ImVec2(posx + width, posy + height), IM_COL32(0, 0, 0, 64));
+
+   vector<ImU32> sRGBColors;
+   for (int i = 0; i < 255; i++)
+   {
+      const vec3 sRGB = VPX::Colors::HSVToSRGB(vec3 { static_cast<float>(i) / 255.f, 1.0f, 1.0f });
+      sRGBColors.push_back(VPX::Colors::SRGBToRGBA32(sRGB, 1.f));
+   }
+
+   const float textWidth = ImGui::CalcTextSize("Right Perception").x;
+   constexpr float colorWidth = 60.f;
+
+   const float innerPosx = posx + style.ItemSpacing.x + textWidth + style.ItemSpacing.x + colorWidth + style.ItemSpacing.x;
+   const float innerPosy = posy + style.ItemSpacing.y;
+   const float innerWidth = width - 4.f * style.ItemSpacing.x - textWidth - colorWidth;
+   const float sampleWidth = innerWidth / static_cast<float>(sRGBColors.size());
+   float overallRetinalRivalry = 0.f;
+   float overallColorDistance = 0.f;
+   float overallGhostingLevel = 0.f;
+   for (size_t i = 0; i < sRGBColors.size(); i++)
+   {
+      const float i_ = static_cast<float>(i);
+      ImColor sRGBColor(sRGBColors[i]);
+      float y = innerPosy;
+
+      const vec3 inputSRGB(sRGBColor.Value.x, sRGBColor.Value.y, sRGBColor.Value.z); // sRGB
+      const vec3 inputLinearRGB = VPX::Colors::SRGBToLinearRGB(inputSRGB); // linearRGB
+      const vec3 anaglyphColor = m_anaglyph.ComputeColor(inputLinearRGB, inputLinearRGB, true); // linearRGB
+      const vec3 leftPerceivedColor = MulVec3(leftEyeColor, anaglyphColor); // linearRGB
+      const vec3 rightPerceivedColor = MulVec3(rightEyeColor, anaglyphColor); // linearRGB
+
+      const float leftPerceivedLuminance = VPX::Colors::LuminanceFromLinearRGB(leftPerceivedColor);
+      const float rightPerceivedLuminance = VPX::Colors::LuminanceFromLinearRGB(rightPerceivedColor);
+      const float retinalRivalry = saturate(sqrf(leftPerceivedLuminance / leftFilterLuminance - rightPerceivedLuminance / rightFilterLuminance) * 1.2f - 0.2f);
+      overallRetinalRivalry += retinalRivalry;
+
+      //const float rejection = 1.f - 0.5f * retinalRivalry; // We could model part of the information rejection that happens at high retinal rivalry levels
+      constexpr float rejection = 1.f;
+      const vec3 perceivedColor = Saturate(rejection * (leftPerceivedColor + rightPerceivedColor)); // linearRGB
+
+      const vec3 inColLAB = VPX::Colors::XYZToLAB(VPX::Colors::LinearRGBtoXYZ(inputLinearRGB));
+      const vec3 outColLAB = VPX::Colors::XYZToLAB(VPX::Colors::LinearRGBtoXYZ(perceivedColor));
+      const float perceivedColorDistance = saturate((outColLAB - inColLAB).LengthSquared());
+      overallColorDistance += perceivedColorDistance;
+
+      const float leftGhosting = VPX::Colors::LuminanceFromLinearRGB(MulVec3(leftEyeColor, Saturate(m_anaglyph.ComputeColor(vec3(0.f, 0.f, 0.f), inputLinearRGB, true)) - blackAnaglyph));
+      const float rightGhosting = VPX::Colors::LuminanceFromLinearRGB(MulVec3(rightEyeColor, Saturate(m_anaglyph.ComputeColor(inputLinearRGB, vec3(0.f, 0.f, 0.f), true)) - blackAnaglyph));
+      const float ghostingLevel = saturate(10.f * max(leftGhosting, rightGhosting));
+      overallGhostingLevel += ghostingLevel;
+
+      // Header line
+      if (i == 0)
+      {
+         const float dec = width - ImGui::CalcTextSize("The following color graphs should be viewed without anaglyph glasses.").x;
+         draw_list->AddText(ImVec2(posx + dec * 0.5f, y), IM_COL32_WHITE, "The following color graphs should be viewed without anaglyph glasses.");
+      }
+      y += barHeight + style.ItemSpacing.y;
+
+      // Rendered color
+      draw_list->AddRectFilled(ImVec2(innerPosx + i_ * sampleWidth, y), ImVec2(innerPosx + (i_ + 1.f) * sampleWidth, y + barHeight), sRGBColors[i]);
+      if (i == 0)
+         draw_list->AddText(ImVec2(posx + style.ItemSpacing.x, y), IM_COL32_WHITE, "Rendered Color");
+      y += barHeight + style.ItemSpacing.y;
+
+      // Displayed color
+      draw_list->AddRectFilled(ImVec2(innerPosx + i_ * sampleWidth, y), ImVec2(innerPosx + (i_ + 1.f) * sampleWidth, y + barHeight),
+         VPX::Colors::SRGBToRGBA32(Saturate(VPX::Colors::LinearRGBToSRGB(anaglyphColor)), 1.f));
+      if (i == 0)
+         draw_list->AddText(ImVec2(posx + style.ItemSpacing.x, y), IM_COL32_WHITE, "Displayed Color");
+      y += barHeight + style.ItemSpacing.y;
+
+      // Perceived color on left eye
+      draw_list->AddRectFilled(ImVec2(innerPosx + i_ * sampleWidth, y), ImVec2(innerPosx + (i_ + 1.f) * sampleWidth, y + barHeight),
+         VPX::Colors::SRGBToRGBA32(Saturate(VPX::Colors::LinearRGBToSRGB(leftPerceivedColor)), 1.f));
+      if (i == 0)
+      {
+         draw_list->AddText(ImVec2(posx + style.ItemSpacing.x, y), IM_COL32_WHITE, "Left Perception");
+         draw_list->AddRectFilled(ImVec2(posx + 2.f * style.ItemSpacing.x + textWidth, y), ImVec2(posx + 2.f * style.ItemSpacing.x + textWidth + colorWidth, y + barHeight),
+            VPX::Colors::SRGBToRGBA32(VPX::Colors::LinearRGBToSRGB(leftEyeColor), 1.f));
+      }
+      y += barHeight + style.ItemSpacing.y;
+
+      // Perceived color on right eye
+      draw_list->AddRectFilled(ImVec2(innerPosx + i_ * sampleWidth, y), ImVec2(innerPosx + (i_ + 1.f) * sampleWidth, y + barHeight),
+         VPX::Colors::SRGBToRGBA32(Saturate(VPX::Colors::LinearRGBToSRGB(rightPerceivedColor)), 1.f));
+      if (i == 0)
+      {
+         draw_list->AddText(ImVec2(posx + style.ItemSpacing.x, y), IM_COL32_WHITE, "Right Perception");
+         draw_list->AddRectFilled(ImVec2(posx + 2.f * style.ItemSpacing.x + textWidth, y), ImVec2(posx + 2.f * style.ItemSpacing.x + textWidth + colorWidth, y + barHeight),
+            VPX::Colors::SRGBToRGBA32(VPX::Colors::LinearRGBToSRGB(rightEyeColor), 1.f));
+      }
+      y += barHeight + style.ItemSpacing.y;
+
+      // Perceived color. This is just an estimation as the brain not only merges the 2 eyes, but also reacts to things like retinal rivalry (luminance eye balance) or spatial coherence.
+      draw_list->AddRectFilled(
+         ImVec2(innerPosx + i_ * sampleWidth, y), ImVec2(innerPosx + (i_ + 1.f) * sampleWidth, y + barHeight), VPX::Colors::SRGBToRGBA32(VPX::Colors::LinearRGBToSRGB(perceivedColor), 1.f));
+      if (i == 0)
+         draw_list->AddText(ImVec2(posx + style.ItemSpacing.x, y), IM_COL32_WHITE, "Perceived Color");
+      y += barHeight + style.ItemSpacing.y;
+
+      // Evaluate retinal rivalry (luminance unbalance between the 2 eyes)
+      draw_list->AddRectFilled(ImVec2(innerPosx + i_ * sampleWidth, y), ImVec2(innerPosx + (i_ + 1.f) * sampleWidth, y + barHeight), GreyToRGBA32(retinalRivalry, true));
+      if (i == 0)
+         draw_list->AddText(ImVec2(posx + style.ItemSpacing.x, y), IM_COL32_WHITE, "Retinal Rivalry");
+      else if (i == sRGBColors.size() - 1)
+         draw_list->AddText(
+            ImVec2(posx + 2.f * style.ItemSpacing.x + textWidth, y), IM_COL32_WHITE, std::format("{:5.1f}%", overallRetinalRivalry * 100.f / static_cast<float>(sRGBColors.size())).c_str());
+      y += barHeight + style.ItemSpacing.y;
+
+      // Evaluate ghosting level that is to say percentage of one eye perceived by the other
+      draw_list->AddRectFilled(ImVec2(innerPosx + i_ * sampleWidth, y), ImVec2(innerPosx + (i_ + 1.f) * sampleWidth, y + barHeight), GreyToRGBA32(ghostingLevel, true));
+      if (i == 0)
+         draw_list->AddText(ImVec2(posx + style.ItemSpacing.x, y), IM_COL32_WHITE, "Ghosting Level");
+      else if (i == sRGBColors.size() - 1)
+         draw_list->AddText(
+            ImVec2(posx + 2.f * style.ItemSpacing.x + textWidth, y), IM_COL32_WHITE, std::format("{:5.1f}%", overallGhostingLevel * 100.f / static_cast<float>(sRGBColors.size())).c_str());
+      y += barHeight + style.ItemSpacing.y;
+
+      // Evaluate color fidelity (hue and luminance distance, takling in account the overall luminance impact)
+      draw_list->AddRectFilled(ImVec2(innerPosx + i_ * sampleWidth, y), ImVec2(innerPosx + (i_ + 1.f) * sampleWidth, y + barHeight), GreyToRGBA32(perceivedColorDistance, true));
+      if (i == 0)
+         draw_list->AddText(ImVec2(posx + style.ItemSpacing.x, y), IM_COL32_WHITE, "Color Distance");
+      else if (i == sRGBColors.size() - 1)
+         draw_list->AddText(
+            ImVec2(posx + 2.f * style.ItemSpacing.x + textWidth, y), IM_COL32_WHITE, std::format("{:5.1f}%", overallColorDistance * 100.f / static_cast<float>(sRGBColors.size())).c_str());
+      y += barHeight + style.ItemSpacing.y;
+   }
+}
+
+}

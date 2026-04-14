@@ -4,12 +4,12 @@
 
 #pragma once
 
-#include "ui/resource.h"
+#include "dragpoint.h"
+#include "ui/win/resource.h"
 
 class RampData final : public BaseProperty
 {
 public:
-   TimerDataRoot m_tdr;
    float m_heightbottom;
    float m_heighttop;
    float m_widthbottom;
@@ -40,7 +40,8 @@ class Ramp :
    public IProvideClassInfo2Impl<&CLSID_Ramp, &DIID_IRampEvents, &LIBID_VPinballLib>,
    public ISelect,
    public IEditable,
-   public Hitable,
+   public IHitable,
+   public IRenderable,
    public IScriptable,
    public IHaveDragPoints,
    public IFireEvents,
@@ -53,7 +54,16 @@ public:
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
-   Ramp();
+   Ramp()
+   {
+      m_menuid = IDR_SURFACEMENU;
+      m_d.m_collidable = true;
+      m_d.m_visible = true;
+      m_d.m_depthBias = 0.0f;
+      m_d.m_wireDiameter = 6.0f;
+      m_d.m_wireDistanceX = 38.0f;
+      m_d.m_wireDistanceY = 88.0f;
+   }
    virtual ~Ramp();
 
    BEGIN_COM_MAP(Ramp)
@@ -70,7 +80,7 @@ public:
       CONNECTION_POINT_ENTRY(DIID_IRampEvents)
    END_CONNECTION_POINT_MAP()
 
-   STANDARD_EDITABLE_DECLARES(Ramp, eItemRamp, RAMP, 1)
+   STANDARD_EDITABLE_DECLARES(Ramp, eItemRamp, RAMP, VIEW_PLAYFIELD)
 
       //DECLARE_NOT_AGGREGATABLE(Ramp)
       // Remove the comment from the line above if you don't want your object to
@@ -88,7 +98,9 @@ public:
    void MoveOffset(const float dx, const float dy) final;
    void SetObjectPos() final;
 
+#ifndef __STANDALONE__
    void DoCommand(int icmd, int x, int y) final;
+#endif
 
    int GetMinimumPoints() const final { return 2; }
 
@@ -118,19 +130,18 @@ public:
    RampData m_d;
 
 private:
-   PinTable *m_ptable = nullptr;
-
    RenderDevice *m_rd = nullptr;
 
    int m_rampVertex;
-   float *m_rgheightInit;
+   float *m_rgheightInit = nullptr;
 
    int m_numVertices = 0;      // this goes along with dynamicVertexBuffer
    int m_numIndices = 0;
    Vertex3D_NoTex2* m_vertBuffer = nullptr;
    Vertex3D_NoTex2* m_vertBuffer2 = nullptr;
    vector<WORD> m_meshIndices;
-   MeshBuffer *m_meshBuffer = nullptr;
+   std::shared_ptr<MeshBuffer> m_meshBuffer;
+   std::shared_ptr<MeshBuffer> m_meshEdgeBuffer;
    bool m_dynamicVertexBufferRegenerate = false;
 
    vector<HitObject*> m_vhoCollidable; // Objects to that may be collide selectable

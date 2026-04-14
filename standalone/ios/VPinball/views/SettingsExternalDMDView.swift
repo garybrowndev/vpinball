@@ -1,12 +1,9 @@
 import SwiftUI
 
 struct SettingsExternalDMDView: View {
-    @EnvironmentObject var vpinballViewModel: VPinballViewModel
-    @EnvironmentObject var settingsModel: SettingsModel
+    @ObservedObject var settingsModel: SettingsModel
 
     var showInput: (String, String, UIKeyboardType, @escaping (String) -> Void) -> Void
-
-    let vpinballManager = VPinballManager.shared
 
     var body: some View {
         Section {
@@ -57,21 +54,17 @@ struct SettingsExternalDMDView: View {
             Text(.init("Send PinMAME and FlexDMD DMDs to ZeDMD and Pixelcade devices using [DMDServer](\(Link.libdmdutil.url.absoluteString)) and [ZeDMDOS](\(Link.zedmdos.url.absoluteString))."))
         }
         .onChange(of: settingsModel.externalDMD) {
-            handleExternalDMD()
+            settingsModel.handleExternalDMD()
         }
-        .onChange(of: [settingsModel.dmdServerAddr,
-                       settingsModel.zedmdWiFiAddr])
-        {
-            handleAddr()
+        .onChange(of: settingsModel.dmdServerAddr) {
+            settingsModel.handleDMDServerAddr()
+        }
+        .onChange(of: settingsModel.zedmdWiFiAddr) {
+            settingsModel.handleZeDMDWiFiAddr()
         }
         .onChange(of: settingsModel.dmdServerPort) {
-            handlePort()
+            settingsModel.handleDMDServerPort()
         }
-    }
-
-    func handleExternalDMD() {
-        vpinballManager.saveValue(.standalone, "DMDServer", settingsModel.externalDMD == .dmdServer)
-        vpinballManager.saveValue(.standalone, "ZeDMDWiFi", settingsModel.externalDMD == .zedmdWiFi)
     }
 
     func handleShowAddr() {
@@ -114,17 +107,6 @@ struct SettingsExternalDMDView: View {
         }
     }
 
-    func handleAddr() {
-        switch settingsModel.externalDMD {
-        case .dmdServer:
-            vpinballManager.saveValue(.standalone, "DMDServerAddr", settingsModel.dmdServerAddr)
-        case .zedmdWiFi:
-            vpinballManager.saveValue(.standalone, "ZeDMDWiFiAddr", settingsModel.zedmdWiFiAddr)
-        default:
-            break
-        }
-    }
-
     func handleShowPort() {
         switch settingsModel.externalDMD {
         case .dmdServer:
@@ -138,7 +120,7 @@ struct SettingsExternalDMDView: View {
     }
 
     func handlePortConfirm(value: String) {
-        if let port = Int(value), port >= 0 && port <= 65535 {
+        if let port = Int(value), port >= 0, port <= 65535 {
             switch settingsModel.externalDMD {
             case .dmdServer:
                 settingsModel.dmdServerPort = port
@@ -151,21 +133,10 @@ struct SettingsExternalDMDView: View {
             }
         }
     }
-
-    func handlePort() {
-        switch settingsModel.externalDMD {
-        case .dmdServer:
-            vpinballManager.saveValue(.standalone, "DMDServerPort", settingsModel.dmdServerPort)
-        default:
-            break
-        }
-    }
 }
 
 #Preview {
     List {
-        SettingsView()
+        SettingsExternalDMDView(settingsModel: SettingsModel()) { _, _, _, _ in }
     }
-    .environmentObject(VPinballViewModel.shared)
-    .environmentObject(SettingsModel())
 }

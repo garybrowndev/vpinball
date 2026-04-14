@@ -2,8 +2,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
     alias(libs.plugins.compose.compiler)
-    alias(libs.plugins.ksp)
     alias(libs.plugins.ktfmt)
+    alias(libs.plugins.kotlinx.serialization)
 }
 
 fun parseVersion(versionName: String): List<Int> {
@@ -75,15 +75,26 @@ android {
 
     defaultConfig {
         applicationId = "org.vpinball.vpinball_bgfx"
-        minSdk = 30
+        minSdk = 33
         targetSdk = 35
         versionCode = versionCodeValue
         versionName = versionNameValue
-        setProperty("archivesBaseName", "VPinball_BGFX-$versionFilename")
 
         vectorDrawables { useSupportLibrary = true }
 
         ndk { abiFilters += "arm64-v8a" }
+    }
+
+    flavorDimensions += "platform"
+    productFlavors {
+        create("quest") {
+            dimension = "platform"
+            buildConfigField("boolean", "IS_QUEST", "true")
+        }
+        create("mobile") {
+            dimension = "platform"
+            buildConfigField("boolean", "IS_QUEST", "false")
+        }
     }
 
     signingConfigs {
@@ -97,7 +108,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
         }
@@ -109,9 +121,21 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures {
+        buildConfig = true
+        compose = true
+    }
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
+}
+
+base {
+    archivesName.set("VPinballX_BGFX-$versionFilename")
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
 }
 
 ktfmt {
@@ -129,14 +153,11 @@ dependencies {
     implementation(libs.ui.tooling.preview)
     debugImplementation(libs.ui.tooling)
 
-    implementation(libs.androidx.room.runtime)
-    annotationProcessor(libs.androidx.room.compiler)
-    ksp(libs.androidx.room.compiler)
-    implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.browser)
     implementation(libs.haze)
 
     implementation(libs.kotlinx.datetime)
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.koin.compose)
     implementation(libs.koin.compose.navigation)
 }

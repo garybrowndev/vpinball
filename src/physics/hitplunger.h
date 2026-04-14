@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "collide.h"
+
 class Plunger;
 
 class PlungerMoverObject : public MoverObject
@@ -16,7 +18,7 @@ public:
 
    void SetObjects(const float len);
 
-   float MechPlunger() const; // Returns mechanical plunger position 0 at rest, +1 pulled (fully extended)
+   float MechPlunger() const;      // Returns mechanical plunger position 0 at rest, +1 pulled (fully extended)
    float MechPlungerSpeed() const; // Mechanical plunger speed from I/O controller, in plunger lengths per time step
 
    void PullBack(float speed);
@@ -179,6 +181,9 @@ public:
    // and KeyUp events.
    int m_autoFireTimer;
 
+   // Input slot that is used to trigger auto fire
+   int m_autoFireTimerInputStateSlot = -1;
+
    // Fire event bounce position.  When we reach this position,
    // we'll reverse course, simulating the bounce off the barrel
    // spring (or, if already in the bounce, the next reversal).
@@ -225,10 +230,17 @@ public:
    // slowly enough for our USB samples to keep up and give us an
    // accurate position reading; it's only on release that it starts
    // moving too fast.
-   float m_mech0, m_mech1, m_mech2;
+   struct MechSample
+   {
+      float pos;
+      uint64_t ts;
+   };
+   std::array<MechSample, 32> m_mech {};
+   int m_mechPos = 0;
+   float m_mechSpeed = 0.f;
 
    // scatter velocity (degree of randomness in the impulse when
-   // the plunger strikes the ball, to simulate the mechanical
+   // the plunger strikes the ball, to approximate the mechanical
    // randomness in a real plunger)
    float m_scatterVelocity;
 

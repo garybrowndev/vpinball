@@ -2,34 +2,31 @@
 
 #pragma once
 
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-
-#if defined(ENABLE_OPENGL) && !defined(__STANDALONE__)
-// Needed for external capture for VR on Windows
-#include <d3d11_1.h>
-#include <dxgi1_2.h>
-#pragma comment(lib, "d3d11.lib")
-#pragma comment(lib, "dxgi.lib")
 #endif
-
-#if defined(ENABLE_BGFX) && !defined(__STANDALONE__)
-#include <d3d11_1.h>
-#include <dxgi1_6.h>
+#ifndef NOMINMAX
+#define NOMINMAX
 #endif
 
 #ifdef __STANDALONE__
 #define __null 0
+#define __WINE_WINCON_H
 #endif
 
 #include <windows.h>
 
-#define DIRECTINPUT_VERSION 0x0800
-
 #ifdef __STANDALONE__
-#define RPC_NO_WINDOWS_H
+#ifdef GetClassInfo
+#undef GetClassInfo
 #endif
-#include <dinput.h>
+#endif
+
+#ifndef __STANDALONE__
+#define RPC_NO_WINDOWS_H
+#define COM_NO_WINDOWS_H
+#include <objbase.h>
+#endif
 
 #if defined(ENABLE_DX9)
  #ifdef _DEBUG
@@ -38,17 +35,13 @@
  #include "minid3d9.h"
 #endif
 
-#include <mmsystem.h>
-
 #ifndef __STANDALONE__
+#include <mmsystem.h>
+#endif
+
 #include <atlbase.h>
+#ifndef __STANDALONE__
 #include <atlctl.h>
-#else
-#undef PlaySound
-extern "C" {
-   #include <atlbase.h>
-}
-#undef strncpy
 #endif
 
 #ifdef _MSC_VER
@@ -58,14 +51,12 @@ extern "C" {
 #define PATH_SEPARATOR_CHAR '/'
 #define PATH_SEPARATOR_WCHAR L'/'
 #endif
-#define PATH_TABLES  (g_pvp->m_myPrefPath + "tables"  + PATH_SEPARATOR_CHAR)
-#define PATH_SCRIPTS (g_pvp->m_myPrefPath + "scripts" + PATH_SEPARATOR_CHAR)
-#define PATH_MUSIC   (g_pvp->m_myPrefPath + "music"   + PATH_SEPARATOR_CHAR)
-#define PATH_USER    (g_pvp->m_myPrefPath + "user"    + PATH_SEPARATOR_CHAR)
 
 #include <oleauto.h>
 
+#ifndef __STANDALONE__
 #include <wincrypt.h>
+#endif
 
 #ifndef __STANDALONE__
 #include <intrin.h>
@@ -83,28 +74,24 @@ extern "C" {
 #endif
 
 #include <vector>
-#include <string>
+using std::vector;
+
+#include <format>
 #include <algorithm>
+#ifndef __STANDALONE__
 #include <commdlg.h>
 #include <dlgs.h>
 #include <cderr.h>
+#endif
 
+#include <string>
 using namespace std::string_literals;
+using namespace std::string_view_literals;
 using std::string;
 using std::wstring;
-using std::vector;
 
-// try to load the file from the current directory
-// if that fails, try the User, Scripts and Tables sub-directories under where VP was loaded from
-// if that also fails, try the standard installation path
-static string defaultFileNameSearch[] = { string(), string(), string(), string(), string(), string(), string() };
-static const string defaultPathSearch[] = { string(), "user"s +PATH_SEPARATOR_CHAR, "scripts"s +PATH_SEPARATOR_CHAR, "tables"s +PATH_SEPARATOR_CHAR, string(), string(), string() };
 
 #ifndef __STANDALONE__
-
-#ifndef USER_DEFAULT_SCREEN_DPI
-  #define USER_DEFAULT_SCREEN_DPI 96 //!! ??
-#endif
 
 #ifndef WM_THEMECHANGED
   #define WM_THEMECHANGED            0x031A
@@ -143,9 +130,9 @@ static const string defaultPathSearch[] = { string(), "user"s +PATH_SEPARATOR_CH
 #include <wxx_treeview.h>		// Add CTreeView
 //#include <wxx_webbrowser.h>		// Add CAXWindow, CWebBrowser
 //#include <wxx_wincore.h>
-#endif
 
-#ifdef __STANDALONE__
+#else
+
 #define fopen_s(pFile, filename, mode) (((*(pFile)) = fopen((filename), (mode))) == nullptr)
 #define fprintf_s fprintf
 #define fread_s(buffer, bufferSize, elementSize, count, stream) fread(buffer, bufferSize, count, stream)
@@ -153,51 +140,63 @@ static const string defaultPathSearch[] = { string(), "user"s +PATH_SEPARATOR_CH
 
 #define sscanf_s sscanf
 
+#ifndef __MINGW32__
 #define localtime_s(x, y) localtime_r(y, x)
 #define gmtime_s(x, y) gmtime_r(y, x)
-
 #define _aligned_malloc(size, align) aligned_alloc(align, size)
 #define _aligned_free free
-
-#define strnlen_s strnlen
-#define sprintf_s snprintf
-#define _snprintf_s snprintf
+#endif
 
 #define _T(x) (x)
 #define AtoT(x) (x)
 #define _ASSERTE(expr) ((void)0)
 
-#undef GetCurrentDirectory
-#define GetCurrentDirectory GetCurrentDirectoryA
-
 #undef SetCurrentDirectory
 #define SetCurrentDirectory SetCurrentDirectoryA
-
-#undef GetModuleFileName
-#define GetModuleFileName GetModuleFileNameA
 
 #undef MessageBox
 #define MessageBox MessageBoxA
 
-#undef OutputDebugString
-#define OutputDebugString OutputDebugStringA
+typedef ULONG_PTR HCRYPTPROV;
+typedef ULONG_PTR HCRYPTHASH;
+typedef ULONG_PTR HCRYPTKEY;
+
+#pragma pack(push, 1)
+typedef struct {
+   WORD wFormatTag;
+   WORD nChannels;
+   DWORD nSamplesPerSec;
+   DWORD nAvgBytesPerSec;
+   WORD nBlockAlign;
+   WORD wBitsPerSample;
+   WORD cbSize;
+} WAVEFORMATEX, *LPWAVEFORMATEX;
+#pragma pack(pop)
+
+typedef struct {
+   DWORD lStructSize;
+   HWND hwndOwner;
+   HINSTANCE hInstance;
+   DWORD Flags;
+   LPSTR lpstrFindWhat;
+   LPSTR lpstrReplaceWith;
+   WORD wFindWhatLen;
+   WORD wReplaceWithLen;
+   LPARAM lCustData;
+   void* lpfnHook;
+   LPCSTR lpTemplateName;
+} FINDREPLACEA;
 
 #define FINDREPLACE FINDREPLACEA
 #define CREATESTRUCT CREATESTRUCTA
 #define WNDCLASS WNDCLASSA
 #define LOGFONT LOGFONTA
-#define MONITORINFOEX MONITORINFOEXA
 
 typedef LPSTR LPTSTR;
 typedef LPCSTR LPCTSTR;
 
-class SearchSelectDialog final { };
-class LayersListDialog final { };
 class ImageDialog final { };
 class SoundDialog final { };
-class AudioOptionsDialog final { };
-class VideoOptionsDialog final { };
-class VROptionsDialog final { };
 class EditorOptionsDialog final { };
 class CollectionManagerDialog final { };
 class PhysicsOptionsDialog final { };
@@ -209,27 +208,23 @@ class AboutDialog final { };
 class ToolbarDialog final { };
 class NotesDialog final { };
 class PropertyDialog final { };
-class ColorButton final { };
 class SCNotification final { };
 #endif
 
 #include "utils/Logger.h"
 
 #ifdef __STANDALONE__
-#include "standalone/inc/atl/atldef.h"
-#include "standalone/inc/atl/atlbase.h"
-#include "standalone/inc/atl/atlcom.h"
-#include "standalone/inc/atl/atlcomcli.h"
-#include "standalone/inc/atl/atlsafe.h"
+#include <atldef.h>
+#include <atlcom.h>
+#include <atlcomcli.h>
+#include <atlsafe.h>
 
-#include "standalone/inc/atlmfc/afx.h"
-#include "standalone/inc/atlmfc/afxdlgs.h"
-#include "standalone/inc/atlmfc/afxwin.h"
-#include "standalone/inc/atlmfc/atltypes.h"
+#include <afx.h>
+#include <afxdlgs.h>
+#include <afxwin.h>
+#include <atltypes.h>
 
 #include "standalone/inc/win32xx/win32xx.h"
-
-#include <cstdint>
 #endif
 
 #include "def.h"
@@ -238,113 +233,56 @@ class SCNotification final { };
 #include "math/vector.h"
 #include "math/matrix.h"
 #include "math/bbox.h"
+#include "math/MeshUtils.h"
 
-#include "ui/resource.h"
-
-#include "utils/memutil.h"
+#include "ui/win/resource.h"
 
 #include "dispid.h"
 
-#include "utils/variant.h"
 #include "utils/vector.h"
 #include "utils/vectorsort.h"
+#include "utils/color.h"
+
 #ifndef __STANDALONE__
 #include "vpinball.h"
 #else
 #include "standalone/vpinball_standalone_i.h"
 #endif
+
 #include "core/Settings.h"
 
 #include "utils/wintimer.h"
 
 #include "utils/eventproxy.h"
 
-#include "ui/worker.h"
-
 #include "utils/fileio.h"
+
 #include "pinundo.h"
+
 #include "iselect.h"
 
-#include "ieditable.h"
-#include "ui/codeview.h"
+#include "core/Scriptable.h"
 
-#include "utils/lzwreader.h"
-#include "utils/lzwwriter.h"
+#include "parts/Collection.h"
 
-#include "parts/Sound.h"
-#include "parts/pinbinary.h"
-
-#include "plugins/MsgPluginManager.h"
+#include "core/ieditable.h"
 
 #include "extern.h"
 
-#include "core/vpinball_h.h"
+#include "ui/win/WinEditor.h"
+
+#include "core/VPApp.h"
+
 #include "parts/pintable.h"
 
-#include "math/mesh.h"
-#include "physics/collide.h"
 #include "renderer/Renderer.h"
 
-#include "ui/sur.h"
-#include "ui/paintsur.h"
-#include "ui/hitsur.h"
-#include "ui/hitrectsur.h"
+#include "ui/win/sur.h"
 
-#include "parts/ball.h"
-
-#include "physics/collideex.h"
-#include "physics/hitball.h"
-#include "physics/hittimer.h"
 #include "physics/hitable.h"
-#include "physics/hitflipper.h"
-#include "physics/hitplunger.h"
+
 #include "core/player.h"
 
-#include "utils/color.h"
-
-#include "parts/dragpoint.h"
-#include "parts/timer.h"
-#include "parts/flipper.h"
-#include "parts/plunger.h"
-#include "parts/textbox.h"
-#include "parts/surface.h"
-#include "parts/dispreel.h"
-#include "parts/lightseq.h"
-#include "parts/bumper.h"
-#include "parts/trigger.h"
-#include "parts/light.h"
-#include "parts/kicker.h"
-#include "parts/decal.h"
-#include "parts/primitive.h"
-#include "parts/hittarget.h"
-#include "parts/gate.h"
-#include "parts/spinner.h"
-#include "parts/ramp.h"
-#include "parts/flasher.h"
-#include "parts/rubber.h"
-#include "parts/PartGroup.h"
-
-#include "utils/ushock_output.h"
-
-#include "physics/kdtree.h"
-
 #include "renderer/trace.h"
-#include "renderer/Window.h"
-
-inline void ShowError(const char* const sz)
-{
-   if(g_pvp)
-      g_pvp->MessageBox(sz, "Visual Pinball Error", MB_OK | MB_ICONEXCLAMATION);
-   else
-      MessageBox(nullptr, sz, "Visual Pinball Error", MB_OK | MB_ICONEXCLAMATION);
-}
-
-inline void ShowError(const string& sz)
-{
-   if(g_pvp)
-      g_pvp->MessageBox(sz.c_str(), "Visual Pinball Error", MB_OK | MB_ICONEXCLAMATION);
-   else
-      MessageBox(nullptr, sz.c_str(), "Visual Pinball Error", MB_OK | MB_ICONEXCLAMATION);
-}
 
 #include "editablereg.h"

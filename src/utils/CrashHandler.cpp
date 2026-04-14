@@ -1,4 +1,5 @@
 #include "core/stdafx.h"
+
 #include "CrashHandler.h"
 #include "BlackBox.h"
 #include "MemoryStatus.h"
@@ -13,20 +14,18 @@
 
 namespace
 {
-   char s_miniDumpFileName[MAX_PATH] = "crash.dmp";
-   char s_reportFileName[MAX_PATH] = "crash.txt";
+   static string s_miniDumpFileName = "crash.dmp"s;
+   static string s_reportFileName = "crash.txt"s;
 
    void WriteProcessName(FILE* f)
    {
       fprintf(f, "Process: ");
-      char buffer[MAX_PATH + 1];
-      const HMODULE hModule = nullptr;
-      GetModuleFileName(hModule, buffer, MAX_PATH);
-      const char* lastSeparatorPos = strrchr(buffer, PATH_SEPARATOR_CHAR);
+      const string buffer = GetExecutablePath();
+      const char* lastSeparatorPos = strrchr(buffer.c_str(), PATH_SEPARATOR_CHAR);
       if (lastSeparatorPos != nullptr)
          fprintf(f, "%s", lastSeparatorPos + 1); // +1 -> skip over separator
       else
-         fprintf(f, "%s", buffer);
+         fprintf(f, "%s", buffer.c_str());
    }
 
    typedef HRESULT(STDAPICALLTYPE *pRGV)(LPOSVERSIONINFOEXW osi);
@@ -191,13 +190,13 @@ namespace
       fprintf(f, "\n");
    }
 
-   bool WriteMiniDump(EXCEPTION_POINTERS* exceptionPtrs, const char* filename)
+   bool WriteMiniDump(EXCEPTION_POINTERS* exceptionPtrs, const string& filename)
    {
-      const HANDLE hDump = ::CreateFile(filename, GENERIC_WRITE, FILE_SHARE_READ, 0,
+      const HANDLE hDump = ::CreateFile(filename.c_str(), GENERIC_WRITE, FILE_SHARE_READ, 0,
          CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
       if (hDump != INVALID_HANDLE_VALUE)
       {
-         MINIDUMP_EXCEPTION_INFORMATION dumpInfo = { 0 };
+         MINIDUMP_EXCEPTION_INFORMATION dumpInfo = {};
          dumpInfo.ClientPointers = TRUE;
          dumpInfo.ExceptionPointers = exceptionPtrs;
          dumpInfo.ThreadId = ::GetCurrentThreadId();
@@ -268,66 +267,19 @@ namespace
 
    void WriteCallStack(FILE* f, PCONTEXT context)
    {
-      fprintf(f, "Call stack\n==========\n");
-
-      if (!context)
-      {
-         fprintf(f, "(no context)\n\n");
-         return;
-      }
-
-      HANDLE hProcess = GetCurrentProcess();
-      HANDLE hThread = GetCurrentThread();
-      SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
-      SymInitialize(hProcess, NULL, TRUE);
-
-      STACKFRAME64 stackFrame = {};
-#ifdef _WIN64
-      const DWORD machineType = IMAGE_FILE_MACHINE_AMD64;
-      stackFrame.AddrPC.Offset = context->Rip;
-      stackFrame.AddrFrame.Offset = context->Rbp;
-      stackFrame.AddrStack.Offset = context->Rsp;
-#else
-      const DWORD machineType = IMAGE_FILE_MACHINE_I386;
-      stackFrame.AddrPC.Offset = context->Eip;
-      stackFrame.AddrFrame.Offset = context->Ebp;
-      stackFrame.AddrStack.Offset = context->Esp;
-#endif
-      stackFrame.AddrPC.Mode = AddrModeFlat;
-      stackFrame.AddrFrame.Mode = AddrModeFlat;
-      stackFrame.AddrStack.Mode = AddrModeFlat;
-
-      char symBuf[sizeof(SYMBOL_INFO) + 256];
-      SYMBOL_INFO* symInfo = (SYMBOL_INFO*)symBuf;
-      symInfo->SizeOfStruct = sizeof(SYMBOL_INFO);
-      symInfo->MaxNameLen = 255;
-
-      for (int i = 0; i < 64; i++)
-      {
-         if (!StackWalk64(machineType, hProcess, hThread, &stackFrame, context, NULL,
-            SymFunctionTableAccess64, SymGetModuleBase64, NULL))
-            break;
-         if (stackFrame.AddrPC.Offset == 0)
-            break;
-
-         DWORD64 disp64 = 0;
-         DWORD disp32 = 0;
-         IMAGEHLP_LINE64 lineInfo = {};
-         lineInfo.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
-
-         if (SymFromAddr(hProcess, stackFrame.AddrPC.Offset, &disp64, symInfo))
-         {
-            if (SymGetLineFromAddr64(hProcess, stackFrame.AddrPC.Offset, &disp32, &lineInfo))
-               fprintf(f, "  [%d] %s (%s:%u)\n", i, symInfo->Name, lineInfo.FileName, lineInfo.LineNumber);
-            else
-               fprintf(f, "  [%d] %s + 0x%llX\n", i, symInfo->Name, disp64);
-         }
-         else
-         {
-            fprintf(f, "  [%d] 0x%016llX\n", i, stackFrame.AddrPC.Offset);
-         }
-      }
-      fprintf(f, "\n");
+      #ifdef ENABLE_BGFX
+      char temp[8192];
+      bx::StaticMemoryBlockWriter smb(temp, BX_COUNTOF(temp));
+      uintptr_t stack[32];
+      const uint32_t num = bx::getCallStackExact(3, BX_COUNTOF(stack), stack); // 3 to skip exception handler calls
+      const int32_t total = bx::writeCallstack(&smb, stack, num, bx::ErrorIgnore {});
+      temp[total] = '\0';
+      fprintf(f, "Call stack\n==========\n%s\n", temp);
+      #else
+      char callStack[2048] = {};
+      rde::StackTrace::GetCallStack(context, true, callStack, sizeof(callStack) - 1);
+      fprintf(f, "Call stack\n==========\n%s\n", callStack);
+      #endif
    }
 
    volatile unsigned long s_inFilter = 0;
@@ -350,13 +302,11 @@ namespace
       const bool miniDumpOK = WriteMiniDump(exceptionPtrs, s_miniDumpFileName);
 
       FILE* f;
-      if ((fopen_s(&f, s_reportFileName, "wt") == 0) && f)
+      if ((fopen_s(&f, s_reportFileName.c_str(), "wt") == 0) && f)
 	  {
 		  WriteHeader(f);
 		  WriteExceptionInfo(f, exceptionPtrs);
-		  fflush(f);
 		  WriteCallStack(f, exceptionPtrs->ContextRecord);
-		  fflush(f);
 
 		  WriteEnvironmentInfo(f);
 		  const rde::MemoryStatus memStatus = rde::MemoryStatus::GetCurrent();
@@ -379,13 +329,13 @@ namespace rde
       SetUnhandledExceptionFilter(MyExceptionFilter);
    }
 
-   void CrashHandler::SetMiniDumpFileName(const char* name)
+   void CrashHandler::SetMiniDumpFileName(const string& name)
    {
-      strncpy_s(s_miniDumpFileName, sizeof(s_miniDumpFileName), name);
+      s_miniDumpFileName = name;
    }
 
-   void CrashHandler::SetCrashReportFileName(const char* name)
+   void CrashHandler::SetCrashReportFileName(const string& name)
    {
-      strncpy_s(s_reportFileName, sizeof(s_reportFileName), name);
+      s_reportFileName = name;
    }
 }

@@ -68,7 +68,7 @@ Function vpmKeyDown(ByVal keycode)
 			Case keyEnter        swCopy = swEnter :        .Switch(swCopy) = True
 			Case keySlamDoorHit  swCopy = swSlamTiltX :    .Switch(swCopy) = True
 			Case keyCoinDoor     swCopy = swCoinDoorX :    If toggleKeyCoinDoor Then .Switch(swCopy) = Not .Switch(swCopy) Else .Switch(swCopy) = Not inverseKeyCoinDoor
-			Case keyBangBack     vpmNudge.DoNudge   0, 6
+			Case keyBangBack     vpmNudge.DoMechTilt
 			Case LeftTiltKey     vpmNudge.DoNudge  75, 2
 			Case RightTiltKey    vpmNudge.DoNudge 285, 2
 			Case CenterTiltKey   vpmNudge.DoNudge   0, 2
@@ -85,18 +85,18 @@ Function vpmKeyUp(ByVal keycode)
 		Select Case keycode
 			Case LeftFlipperKey
 				.Switch(swLLFlip) = False : vpmKeyUp = False : vpmFlips.FlipL False
-				If keycode = keyStagedFlipperL Then ' as vbs will not evaluate the Case keyStagedFlipperL then, also handle it here
+				If keycode = StagedLeftFlipperKey Then ' as vbs will not evaluate the Case StagedLeftFlipperKey then, also handle it here
 					vpmFlips.FlipUL False
 					If vpmFlips.FlipperSolNumber(2) <> 0 Then .Switch(swULFlip) = False
 				End If
 			Case RightFlipperKey
 				.Switch(swLRFlip) = False : vpmKeyUp = False : vpmFlips.FlipR False
-				If keycode = keyStagedFlipperR Then ' as vbs will not evaluate the Case keyStagedFlipperR then, also handle it here
+				If keycode = StagedRightFlipperKey Then ' as vbs will not evaluate the Case StagedRightFlipperKey then, also handle it here
 					vpmFlips.FlipUR False
 					If vpmFlips.FlipperSolNumber(3) <> 0 Then .Switch(swURFlip) = False
 				End If
-			Case keyStagedFlipperL vpmFlips.FlipUL False : If vpmFlips.FlipperSolNumber(2) <> 0 Then .Switch(swULFlip) = False
-			Case keyStagedFlipperR vpmFlips.FlipUR False : If vpmFlips.FlipperSolNumber(3) <> 0 Then .Switch(swURFlip) = False
+			Case StagedLeftFlipperKey vpmFlips.FlipUL False : If vpmFlips.FlipperSolNumber(2) <> 0 Then .Switch(swULFlip) = False
+			Case StagedRightFlipperKey vpmFlips.FlipUR False : If vpmFlips.FlipperSolNumber(3) <> 0 Then .Switch(swURFlip) = False
 			Case keyCancel       swCopy = swCancel :       .Switch(swCopy) = False
 			Case keyDown         swCopy = swDown :         .Switch(swCopy) = False
 			Case keyUp           swCopy = swUp :           .Switch(swCopy) = False

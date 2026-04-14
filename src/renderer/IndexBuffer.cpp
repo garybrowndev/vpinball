@@ -15,7 +15,7 @@ public:
    bgfx::IndexBufferHandle m_ib = BGFX_INVALID_HANDLE;
    bgfx::DynamicIndexBufferHandle m_dib = BGFX_INVALID_HANDLE;
    bool IsCreated() const override { return m_isStatic ? bgfx::isValid(m_ib) : bgfx::isValid(m_dib); }
-   
+
    #elif defined(ENABLE_OPENGL)
    GLuint m_ib = 0;
    void Bind() const { glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ib); };
@@ -59,15 +59,19 @@ void SharedIndexBuffer::Upload()
 {
    if (!IsCreated())
    {
-      unsigned int size = m_count * m_bytePerElement;
+      const unsigned int size = m_count * m_bytePerElement;
 
       // Create data block
       #if defined(ENABLE_BGFX)
       const bgfx::Memory* mem = bgfx::alloc(size);
       uint8_t* data = mem->data;
+      #ifdef _DEBUG
+      for (const PendingUpload& upload : m_pendingUploads)
+         assert(upload.mem == nullptr);
+      #endif
 
       #elif defined(ENABLE_OPENGL)
-      uint8_t* data = (uint8_t*)malloc(size);
+      uint8_t* const data = new uint8_t[size];
 
       #elif defined(ENABLE_DX9)
       CHECKD3D(m_buffers[0]->m_rd->GetCoreDevice()->CreateIndexBuffer(size, D3DUSAGE_WRITEONLY | (m_isStatic ? 0 : D3DUSAGE_DYNAMIC), m_format == IndexBuffer::FMT_INDEX16 ? D3DFMT_INDEX16 : D3DFMT_INDEX32, D3DPOOL_DEFAULT, &m_ib, nullptr));
@@ -113,7 +117,7 @@ void SharedIndexBuffer::Upload()
          Bind();
          glBufferData(GL_ELEMENT_ARRAY_BUFFER, size, data, m_isStatic ? GL_STATIC_DRAW : GL_DYNAMIC_DRAW);
       }
-      free(data);
+      delete [] data;
 
       #elif defined(ENABLE_DX9)
       CHECKD3D(m_ib->Unlock());
@@ -163,10 +167,11 @@ IndexBuffer::IndexBuffer(RenderDevice* rd, const unsigned int numIndices, const 
    , m_size(numIndices * (format == FMT_INDEX16 ? 2 : 4))
 {
    assert(m_count > 0);
-   assert((numIndices < 65536) || (format == IndexBuffer::FMT_INDEX32));
-   for (SharedIndexBuffer* block : m_rd->m_pendingSharedIndexBuffers)
+   const unsigned int maxCount = format == IndexBuffer::FMT_INDEX16 ? UINT16_MAX : UINT32_MAX;
+   assert(numIndices <= maxCount);
+   for (std::shared_ptr<SharedIndexBuffer> block : m_rd->m_pendingSharedIndexBuffers)
    {
-      if (block->m_format == m_indexFormat && block->m_isStatic == m_isStatic)
+      if (block->m_format == m_indexFormat && block->m_isStatic == m_isStatic && (block->GetCount() + numIndices) <= maxCount)
       {
          m_sharedBuffer = block;
          break;
@@ -174,15 +179,15 @@ IndexBuffer::IndexBuffer(RenderDevice* rd, const unsigned int numIndices, const 
    }
    if (m_sharedBuffer == nullptr)
    {
-      m_sharedBuffer = new SharedIndexBuffer(m_indexFormat, m_isStatic);
+      m_sharedBuffer = std::make_shared<SharedIndexBuffer>(m_indexFormat, m_isStatic);
       m_rd->m_pendingSharedIndexBuffers.push_back(m_sharedBuffer);
    }
    m_indexOffset = m_sharedBuffer->Add(this);
    m_offset = m_indexOffset * m_sizePerIndex;
 }
 
-IndexBuffer::IndexBuffer(RenderDevice* rd, const unsigned int numIndices, const unsigned int* indices)
-   : IndexBuffer(rd, numIndices, false, IndexBuffer::FMT_INDEX32)
+IndexBuffer::IndexBuffer(RenderDevice* rd, const unsigned int numIndices, const unsigned int* indices, const bool isDynamic)
+   : IndexBuffer(rd, numIndices, isDynamic, IndexBuffer::FMT_INDEX32)
 {
    void* buf;
    Lock(buf);
@@ -190,8 +195,8 @@ IndexBuffer::IndexBuffer(RenderDevice* rd, const unsigned int numIndices, const 
    Unlock();
 }
 
-IndexBuffer::IndexBuffer(RenderDevice* rd, const unsigned int numIndices, const WORD* indices)
-   : IndexBuffer(rd, numIndices, false, IndexBuffer::FMT_INDEX16)
+IndexBuffer::IndexBuffer(RenderDevice* rd, const unsigned int numIndices, const WORD* indices, const bool isDynamic)
+   : IndexBuffer(rd, numIndices, isDynamic, IndexBuffer::FMT_INDEX16)
 {
    void* buf;
    Lock(buf);
@@ -199,23 +204,20 @@ IndexBuffer::IndexBuffer(RenderDevice* rd, const unsigned int numIndices, const 
    Unlock();
 }
 
-IndexBuffer::IndexBuffer(RenderDevice* rd, const vector<WORD>& indices)
-   : IndexBuffer(rd, (unsigned int)indices.size(), indices.data())
+IndexBuffer::IndexBuffer(RenderDevice* rd, const vector<WORD>& indices, const bool isDynamic)
+   : IndexBuffer(rd, (unsigned int)indices.size(), indices.data(), isDynamic)
 {
 }
 
-IndexBuffer::IndexBuffer(RenderDevice* rd, const vector<unsigned int>& indices)
-   : IndexBuffer(rd, (unsigned int)indices.size(), indices.data())
+IndexBuffer::IndexBuffer(RenderDevice* rd, const vector<unsigned int>& indices, const bool isDynamic)
+   : IndexBuffer(rd, (unsigned int)indices.size(), indices.data(), isDynamic)
 {
 }
 
 IndexBuffer::~IndexBuffer()
 {
    if (m_sharedBuffer->Remove(this))
-   {
       RemoveFromVectorSingle(m_rd->m_pendingSharedIndexBuffers, m_sharedBuffer);
-      delete m_sharedBuffer;
-   }
 }
 
 bool IndexBuffer::IsSharedBuffer() const { return m_sharedBuffer->IsShared(); }
@@ -252,7 +254,7 @@ void IndexBuffer::Unlock()
    m_sharedBuffer->Unlock();
 }
 
-void IndexBuffer::ApplyOffset(VertexBuffer* vb)
+void IndexBuffer::ApplyOffset(std::shared_ptr<VertexBuffer> vb)
 {
    const unsigned int offset = vb->GetVertexOffset();
    if (offset == 0)
@@ -264,14 +266,14 @@ void IndexBuffer::ApplyOffset(VertexBuffer* vb)
          const unsigned int count = upload.size / m_sizePerIndex;
          if (m_indexFormat == FMT_INDEX16)
          {
-            uint16_t* const __restrict indices = (uint16_t*)upload.data;
+            uint16_t* const __restrict indices = reinterpret_cast<uint16_t*>(upload.data);
             for (unsigned int i = 0; i < count; i++)
                indices[i] += offset;
          }
          else // FMT_INDEX32
          {
             assert(m_indexFormat == FMT_INDEX32);
-            uint32_t* const __restrict indices = (uint32_t*)upload.data;
+            uint32_t* const __restrict indices = reinterpret_cast<uint32_t*>(upload.data);
             for (unsigned int i = 0; i < count; i++)
                indices[i] += offset;
          }

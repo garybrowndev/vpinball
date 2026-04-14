@@ -11,12 +11,12 @@ class Dream7Display;
 class B2SScreen
 {
 public:
-   B2SScreen(B2SData* pB2SData, MsgPluginAPI* msgApi, VPXPluginAPI* vpxApi);
+   B2SScreen(B2SData* pB2SData, MsgPluginAPI* msgApi, VPXPluginAPI* vpxApi, unsigned int endpointId);
    ~B2SScreen();
 
    SDL_Rect& GetPlayfieldSize() { return m_playfieldSize; }
    void SetPlayfieldSize(const SDL_Rect& playfieldSize) { m_playfieldSize = playfieldSize; }
-   string GetBackglassMonitor() const { return m_backglassMonitor; }
+   const string& GetBackglassMonitor() const { return m_backglassMonitor; }
    void SetBackglassMonitor(const string& backglassMonitor) { m_backglassMonitor = backglassMonitor; }
    SDL_Rect& GetBackglassSize() { return m_backglassSize; }
    void SetBackglassSize(const SDL_Rect& backglassSize) { m_backglassSize = backglassSize; }
@@ -40,7 +40,7 @@ public:
    void SetBackgroundSize(const SDL_Rect& backgroundSize) { m_backgroundSize = backgroundSize; }
    SDL_Point& GetBackgroundLocation() { return m_backgroundLocation; }
    void SetBackgroundLocation(const SDL_Point& backgroundLocation) { m_backgroundLocation = backgroundLocation; }
-   string GetBackgroundPath() const { return m_backgroundPath; }
+   const string& GetBackgroundPath() const { return m_backgroundPath; }
    void SetBackgroundPath(const string& backgroundPath) { m_backgroundPath = backgroundPath; }
    SDL_Rect& GetBackglassCutOff() { return m_backglassCutOff; }
    bool IsDMDToBeShown() const { return m_dmdToBeShown; }
@@ -67,6 +67,7 @@ private:
    B2SSettings* m_pB2SSettings;
    MsgPluginAPI* m_msgApi;
    VPXPluginAPI* m_vpxApi;
+   unsigned int m_endpointId;
    Form* m_pFormBackglass;
    Form* m_pFormDMD;
    SDL_Rect m_playfieldSize;
