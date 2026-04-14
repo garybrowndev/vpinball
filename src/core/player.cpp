@@ -985,6 +985,7 @@ Player::~Player()
    ushock_output_shutdown();
 
    m_BallHistory.UnInit(*this);
+   m_renderer->m_renderDevice->SubmitRenderFrame(); // Flush pending GPU resources from Ball History cleanup
 
    delete m_physics;
    m_physics = nullptr;

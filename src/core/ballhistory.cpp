@@ -2529,6 +2529,7 @@ void BallHistory::ClearDraws(Player& player)
    BHLOG_FLUSH();
    for (auto& drawnBall : m_DrawnBalls)
    {
+      drawnBall.second->RenderRelease();
       if (player.m_ptable->HasPart(drawnBall.second))
          player.m_ptable->RemovePart(drawnBall.second); // RemovePart calls Release
       else
@@ -2538,6 +2539,7 @@ void BallHistory::ClearDraws(Player& player)
 
    for (auto& drawnIntersectionCircle : m_DrawnIntersectionCircles)
    {
+      drawnIntersectionCircle.second->RenderRelease();
       if (player.m_ptable->HasPart(drawnIntersectionCircle.second))
          player.m_ptable->RemovePart(drawnIntersectionCircle.second);
       else
@@ -2547,6 +2549,7 @@ void BallHistory::ClearDraws(Player& player)
 
    for (auto& drawnLines : m_DrawnLines)
    {
+      drawnLines.second->RenderRelease();
       if (player.m_ptable->HasPart(drawnLines.second))
          player.m_ptable->RemovePart(drawnLines.second);
       else
