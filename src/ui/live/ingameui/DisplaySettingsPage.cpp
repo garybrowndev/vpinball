@@ -96,6 +96,18 @@ DisplaySettingsPage::DisplaySettingsPage(VPXWindowId wndId)
       }
    }
 
+   // Override auto-detect with saved AR lock if present
+   {
+      const std::filesystem::path arPath = m_player->m_ptable->m_settings.GetIniPath().parent_path() / ("arlock_" + std::to_string(static_cast<int>(m_wndId)) + ".txt");
+      FILE* _f = nullptr; fopen_s(&_f, arPath.string().c_str(), "r");
+      if (_f) {
+         int saved = -1;
+         if (fscanf_s(_f, "%d", &saved) == 1 && saved >= 0 && saved < static_cast<int>(std::size(aspectRatios)))
+            m_arLock = saved;
+         fclose(_f);
+      }
+   }
+
    BuildPage();
 }
 
@@ -354,6 +366,9 @@ void DisplaySettingsPage::BuildWindowPage()
          [this](int, int v)
          {
             m_arLock = v;
+            const std::filesystem::path arPath = m_player->m_ptable->m_settings.GetIniPath().parent_path() / ("arlock_" + std::to_string(static_cast<int>(m_wndId)) + ".txt");
+            FILE* _f = nullptr; fopen_s(&_f, arPath.string().c_str(), "w");
+            if (_f) { fprintf(_f, "%d", v); fclose(_f); }
             BuildPage();
          }, //
          [](Settings&) { /* UI state, not persisted */ }, //
@@ -415,7 +430,7 @@ void DisplaySettingsPage::BuildWindowPage()
       else
 #endif
       {
-         Settings::GetRegistry().Register(Settings::GetWindow_Width_Property(m_wndId)->WithRange(m_isMainWindow ? 320 : 0, min(maxWidth, containerWidth - wndPos.x)));
+         Settings::GetRegistry().Register(Settings::GetWindow_Width_Property(m_wndId)->WithRange(m_isMainWindow ? 320 : 0, min(maxWidth, containerWidth)));
          AddItem(std::make_unique<InGameUIItem>(
                     Settings::m_propWindow_Width[m_wndId], "%d"s, //
                     [this]() { return (m_isMainWindow ? m_player->m_playfieldWnd : GetOutput(m_wndId).GetWindow())->GetWidth(); }, //
@@ -455,7 +470,7 @@ void DisplaySettingsPage::BuildWindowPage()
             .m_excludeFromDefault
             = true;
 
-         Settings::GetRegistry().Register(Settings::GetWindow_Height_Property(m_wndId)->WithRange(m_isMainWindow ? 320 : 0, min(maxHeight, containerHeight - wndPos.y)));
+         Settings::GetRegistry().Register(Settings::GetWindow_Height_Property(m_wndId)->WithRange(m_isMainWindow ? 320 : 0, min(maxHeight, containerHeight)));
          AddItem(std::make_unique<InGameUIItem>(
                     Settings::m_propWindow_Height[m_wndId], "%d"s, //
                     [this]() { return (m_isMainWindow ? m_player->m_playfieldWnd : GetOutput(m_wndId).GetWindow())->GetHeight(); }, //
@@ -575,6 +590,9 @@ void DisplaySettingsPage::BuildEmbeddedPage()
       [this](int, int v)
       {
          m_arLock = v;
+         const std::filesystem::path arPath = m_player->m_ptable->m_settings.GetIniPath().parent_path() / ("arlock_" + std::to_string(static_cast<int>(m_wndId)) + ".txt");
+         FILE* _f = nullptr; fopen_s(&_f, arPath.string().c_str(), "w");
+         if (_f) { fprintf(_f, "%d", v); fclose(_f); }
          BuildPage();
       }, //
       [](Settings&) { /* UI state, not persisted */ }, //
