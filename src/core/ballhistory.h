@@ -396,6 +396,7 @@ public:
 
    static const int CountdownSoundSeconds;
    static const float TimeLowSoundSeconds;
+   static const int ResultDisplayDurationMs; // how long to hold pass/fail screen (visuals + sound) before next countdown
 
    ModeStateType m_ModeState;
    ConfigModeStateType m_ConfigModeState;
@@ -476,6 +477,8 @@ public:
    std::vector<RunRecord> m_RunRecords;
    std::size_t m_CurrentRunRecord;
    int m_RunStartTimeMs;
+   int m_ResultDisplayEndTimeMs; // non-zero while in result-hold period (pass/fail sound + visuals before next countdown)
+   std::vector<HitBall*> m_ResultDisplayLockedBalls; // balls we locked for result-hold; tracked so we can unlock if interrupted (menu open, mode change)
 
    int m_CountdownSoundPlayed;
    bool m_TimeLowSoundPlaying;

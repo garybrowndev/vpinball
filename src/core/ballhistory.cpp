@@ -206,6 +206,7 @@ TrainerOptions::RunRecord::RunRecord()
 
 const int TrainerOptions::CountdownSoundSeconds = 3;
 const float TrainerOptions::TimeLowSoundSeconds = 4.0f;
+const int TrainerOptions::ResultDisplayDurationMs = 1500;
 
 TrainerOptions::TrainerOptions()
    : m_ModeState(ModeStateType::ModeStateType_Start)
@@ -245,6 +246,7 @@ TrainerOptions::TrainerOptions()
    , m_BallStartOptionsRecordsSize(0)
    , m_CurrentRunRecord(0)
    , m_RunStartTimeMs(0)
+   , m_ResultDisplayEndTimeMs(0)
    , m_CountdownSoundPlayed(0)
    , m_TimeLowSoundPlaying(false)
    , m_SetupBallStarts(true)
@@ -1204,6 +1206,13 @@ void BallHistory::SetControl(bool control)
       m_Control = control;
       if (m_Control)
       {
+         // Menu opened mid-result-hold: cancel the hold and unlock any balls we locked,
+         // otherwise they'd stay stuck-in-kicker after the user exits trainer mode.
+         for (HitBall* ball : m_MenuOptions.m_TrainerOptions.m_ResultDisplayLockedBalls)
+            ball->m_d.m_lockedInKicker = false;
+         m_MenuOptions.m_TrainerOptions.m_ResultDisplayLockedBalls.clear();
+         m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs = 0;
+
          StopAllSounds();
          g_pplayer->SetPlayState(!g_pplayer->IsPlaying());
          g_pplayer->m_noTimeCorrect = true;
@@ -8648,6 +8657,35 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
       return;
    }
 
+   // Result display period: pass/fail fired, we're holding to let sound play and visuals show.
+   // Ball stays at current position, phase logic is skipped. After the hold expires, fall
+   // through to normal flow which will initialize the next run (m_RunStartTimeMs == 0 path).
+   if (m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs != 0)
+   {
+      if (currentTimeMs < m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs)
+      {
+         // First frame of result display: lock the trainer ball(s) and remember them so
+         // we can unlock if the user interrupts (e.g., opens menu). After this, m_ControlVBalls
+         // filters out locked balls so the tracked vector is the only reliable reference.
+         if (m_MenuOptions.m_TrainerOptions.m_ResultDisplayLockedBalls.empty())
+         {
+            for (HitBall* ball : m_ControlVBalls)
+            {
+               ball->m_d.m_lockedInKicker = true;
+               m_MenuOptions.m_TrainerOptions.m_ResultDisplayLockedBalls.push_back(ball);
+            }
+         }
+         DrawTrainerModeVisuals(player, currentTimeMs);
+         return;
+      }
+      // Hold expired — unlock balls and proceed to next run setup.
+      for (HitBall* ball : m_MenuOptions.m_TrainerOptions.m_ResultDisplayLockedBalls)
+         ball->m_d.m_lockedInKicker = false;
+      m_MenuOptions.m_TrainerOptions.m_ResultDisplayLockedBalls.clear();
+      m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs = 0;
+      m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+   }
+
    std::string errorMessage;
    bool cancelRun = false;
 
@@ -8881,6 +8919,11 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
       m_MenuOptions.m_MenuError.clear();
       if (m_MenuOptions.m_TrainerOptions.m_SetupBallStarts)
       {
+         // Transition from countdown to active run: hide trainer visuals (start/end/corridor markers).
+         // The ResetTrainerRunStartTime guard for MenuStateType_Trainer_Results ensures this block
+         // fires only once per run, so there's no flicker from repeated clear/redraw.
+         ClearDraws(player);
+
          // Note: Do NOT call Init() here — it resets m_RunStartTimeMs which restarts
          // the countdown, creating an infinite loop for drop-mode (zero velocity) runs.
          m_BallHistoryRecords.resize(BallHistorySizeDefault);
@@ -9068,13 +9111,13 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
             currentRunRecord.m_StartToPassLocationIndexes = startToPassLocationIndexes;
             m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
             m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
-            m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+            m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs = currentTimeMs + TrainerOptions::ResultDisplayDurationMs;
             m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
             m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
             m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
             if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled)
             {
-               PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_PASS);
+               PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_PASS, true);
             }
          }
       }
@@ -9143,13 +9186,13 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
          currentRunRecord.m_StartToFailLocationIndexes = startToFailLocationIndexes;
          m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
          m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
-         m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+         m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs = currentTimeMs + TrainerOptions::ResultDisplayDurationMs;
          m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
          m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
          m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
          if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
          {
-            PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL);
+            PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL, true);
          }
       }
 
@@ -9181,13 +9224,13 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
                currentRunRecord.m_StartToPassCorridorIndex = startToPassCorridorIndex;
                m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
                m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
-               m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+               m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs = currentTimeMs + TrainerOptions::ResultDisplayDurationMs;
                m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
                m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
                m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
                if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled)
                {
-                  PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_PASS);
+                  PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_PASS, true);
                }
             }
          }
@@ -9234,13 +9277,13 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
                currentRunRecord.m_StartToFailCorridorIndex = startToFailCorridorIndex;
                m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
                m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
-               m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+               m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs = currentTimeMs + TrainerOptions::ResultDisplayDurationMs;
                m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
                m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
                m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
                if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
                {
-                  PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL);
+                  PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL, true);
                }
             }
          }
@@ -9287,13 +9330,13 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
             currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
             m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
             m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
-            m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+            m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs = currentTimeMs + TrainerOptions::ResultDisplayDurationMs;
             m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
             m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
             m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
             if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
             {
-               PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL);
+               PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL, true);
             }
             break;
          default:
@@ -9308,15 +9351,16 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
       currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
       m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
       m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
-      m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+      m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs = currentTimeMs + TrainerOptions::ResultDisplayDurationMs;
       m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
       m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
       m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
       if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
       {
-         PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL);
+         PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL, true);
       }
    }
+
 }
 
 int32_t BallHistory::ProcessMenuChangeValue(int32_t value, int32_t delta, int32_t min, int32_t max, bool skip)
@@ -9911,4 +9955,4 @@ std::string BallHistory::FormatFloat(float val)
 }
 // ================================================================================================================================================================================================================================================
 
-#endif
+#endif
