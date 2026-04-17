@@ -871,9 +871,6 @@ BallHistory::BallHistory(PinTable& pinTable)
 
 void BallHistory::Init(Player& player, int currentTimeMs, bool loadSettings)
 {
-   // Direct file write to verify Init runs
-   { FILE* _f = nullptr; fopen_s(&_f, "C:\\code\\Pinball\\vpinball_ballhistory\\bh_direct.log", "a"); if (_f) { fprintf(_f, "Init called timeMs=%d loadSettings=%d\n", currentTimeMs, loadSettings); fclose(_f); } }
-
    BHLOG("currentTimeMs=%d loadSettings=%d", currentTimeMs, loadSettings);
    SetControl(false);
    m_WasControlled = false;
@@ -966,8 +963,13 @@ void BallHistory::Process(Player& player, int currentTimeMs)
       }
       else if (BallChanged())
       {
-         m_WasControlled = false;
-         Init(player, currentTimeMs, false);
+         // Only reset for non-Trainer modes during active runs to avoid
+         // resetting m_RunStartTimeMs which restarts the countdown
+         if (m_MenuOptions.m_MenuState != MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results)
+         {
+            m_WasControlled = false;
+            Init(player, currentTimeMs, false);
+         }
       }
 
       ProcessMode(player, currentTimeMs);
@@ -1054,7 +1056,6 @@ bool BallHistory::ProcessKeys(Player& player, EnumAssignKeys action, bool isPres
 {
    if (action != EnumAssignKeys::eCKeys)
    {
-      { FILE* _f = nullptr; fopen_s(&_f, "C:\\code\\Pinball\\vpinball_ballhistory\\bh_direct.log", "a"); if (_f) { fprintf(_f, "ProcessKeys action=%d isPressed=%d timeMs=%d process=%d\n", action, isPressed, currentTimeMs, process); fclose(_f); } }
       BHLOG("action=%d isPressed=%d timeMs=%d process=%d", action, isPressed, currentTimeMs, process);
       BHLOG_FLUSH();
    }
@@ -1221,6 +1222,7 @@ void BallHistory::SetControl(bool control)
       {
          SaveSettings(*g_pplayer);
          g_pplayer->SetPlayState(!g_pplayer->IsPlaying());
+         g_pplayer->m_noTimeCorrect = true;
       }
    }
 }
@@ -1239,6 +1241,11 @@ void BallHistory::ToggleRecall()
 
 void BallHistory::ResetTrainerRunStartTime()
 {
+   // Don't reset during an active trainer run — ApplyPlayingState calls this on
+   // pause/focus-change, which would restart the countdown mid-run
+   if (m_MenuOptions.m_MenuState == MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results)
+      return;
+
    m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
    m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
    m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
@@ -4723,6 +4730,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results;
 
                ToggleControl();
+               m_WasControlled = false; // Trainer manages ball state itself, don't let one-time restore overwrite it
 
                m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord = 0;
                m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
@@ -4737,6 +4745,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results;
 
                ToggleControl();
+               m_WasControlled = false; // Trainer manages ball state itself
 
                m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
                m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
@@ -8836,6 +8845,8 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
       
       for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
       {
+         // Lock ball so physics skips it entirely — position is safe to set from render thread
+         m_ControlVBalls[controlVBallIndex]->m_d.m_lockedInKicker = true;
          m_ControlVBalls[controlVBallIndex]->m_d.m_pos = currentRunRecord.m_StartPositions[controlVBallIndex];
          m_ControlVBalls[controlVBallIndex]->m_d.m_vel.SetZero();
          m_ControlVBalls[controlVBallIndex]->m_angularmomentum.SetZero();
@@ -8878,29 +8889,34 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
       m_MenuOptions.m_MenuError.clear();
       if (m_MenuOptions.m_TrainerOptions.m_SetupBallStarts)
       {
-         Init(player, currentTimeMs, false);
+         // Note: Do NOT call Init() here — it resets m_RunStartTimeMs which restarts
+         // the countdown, creating an infinite loop for drop-mode (zero velocity) runs.
+         m_BallHistoryRecords.resize(BallHistorySizeDefault);
+         m_BallHistoryRecordsSize = 0;
+         m_BallHistoryRecordsHeadIndex = 0;
 
+         // Use player.m_vball (not m_ControlVBalls which filters locked balls)
          bool anyVelocityAngularMomentumSet = false;
-         for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
+         for (std::size_t ballIndex = 0; ballIndex < player.m_vball.size(); ++ballIndex)
          {
-            m_ControlVBalls[controlVBallIndex]->m_d.m_pos = currentRunRecord.m_StartPositions[controlVBallIndex];
-            m_ControlVBalls[controlVBallIndex]->m_d.m_vel = currentRunRecord.m_StartVelocities[controlVBallIndex];
-            m_ControlVBalls[controlVBallIndex]->m_angularmomentum = currentRunRecord.m_StartAngularMomentums[controlVBallIndex];
-
-            if (m_ControlVBalls[controlVBallIndex]->m_d.m_vel.IsZero() == false || m_ControlVBalls[controlVBallIndex]->m_angularmomentum.IsZero() == false)
+            HitBall& ball = player.m_vball[ballIndex]->m_hitBall;
+            if (ballIndex < currentRunRecord.m_StartPositions.size())
             {
-               m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = false;
-            }
+               ball.m_d.m_pos = currentRunRecord.m_StartPositions[ballIndex];
+               ball.m_d.m_vel = currentRunRecord.m_StartVelocities[ballIndex];
+               ball.m_angularmomentum = currentRunRecord.m_StartAngularMomentums[ballIndex];
+               ball.m_d.m_lockedInKicker = false; // unlock so physics moves it after countdown
 
-            if (currentRunRecord.m_StartVelocities[controlVBallIndex].IsZero() == false || currentRunRecord.m_StartAngularMomentums[controlVBallIndex].IsZero() == false)
-            {
-               anyVelocityAngularMomentumSet = true;
+               if (currentRunRecord.m_StartVelocities[ballIndex].IsZero() == false || currentRunRecord.m_StartAngularMomentums[ballIndex].IsZero() == false)
+               {
+                  anyVelocityAngularMomentumSet = true;
+               }
             }
          }
 
+         m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = false;
          if (anyVelocityAngularMomentumSet == false)
          {
-            m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = false;
             player.m_renderer->m_trailForBalls = m_UseTrailsForBallsInitialValue;
          }
       }
@@ -8975,6 +8991,10 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
 
          m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = false;
       }
+
+      // Wait for physics thread to unlock the ball and repopulate m_ControlVBalls
+      if (m_ControlVBalls.empty())
+         return;
 
       float remainingRunTime
          = ((m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * OneSecondMs) - runElapsedTimeMs + (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs)) / 1000.0f;
