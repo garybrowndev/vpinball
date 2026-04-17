@@ -835,7 +835,7 @@ const char* BallHistory::TrainerModeBallCorridorOpeningPositionLeft3DKeyName = "
 const char* BallHistory::TrainerModeBallCorridorOpeningPositionRight3DKeyName = "BallCorridorOpeningPositionRight3D";
 
 BallHistory::BallHistory(PinTable& pinTable)
-   : m_PreviousProcessKeysAction(EnumAssignKeys::eCKeys)
+   : m_PreviousProcessKeysAction(EnumAssignKeys::eNone)
    , m_PreviousProcessKeyIsPressed(false)
    , m_ShowStatus(false)
    , m_Control(false)
@@ -1050,7 +1050,7 @@ void BallHistory::Process(Player& player, int currentTimeMs)
 
 bool BallHistory::ProcessKeys(Player& player, EnumAssignKeys action, bool isPressed, int currentTimeMs, bool process)
 {
-   if (action != EnumAssignKeys::eCKeys)
+   if (action != EnumAssignKeys::eNone)
    {
       BHLOG("action=%d isPressed=%d timeMs=%d process=%d", action, isPressed, currentTimeMs, process);
    }
@@ -1065,7 +1065,7 @@ bool BallHistory::ProcessKeys(Player& player, EnumAssignKeys action, bool isPres
       m_MenuOptions.m_SkipKeyRightPressed = false;
    }
 
-   if (action != EnumAssignKeys::eCKeys)
+   if (action != EnumAssignKeys::eNone)
    {
       m_PreviousProcessKeysAction = action;
       m_PreviousProcessKeyIsPressed = isPressed;
@@ -1076,7 +1076,7 @@ bool BallHistory::ProcessKeys(Player& player, EnumAssignKeys action, bool isPres
 
    if (process)
    {
-      m_PreviousProcessKeysAction = EnumAssignKeys::eCKeys;
+      m_PreviousProcessKeysAction = EnumAssignKeys::eNone;
       m_PreviousProcessKeyIsPressed = false;
    }
 

@@ -17,7 +17,7 @@ To build (and merge):
 - Build VPinball Release / x64
 
 To try out
-- Hit "C" button while playing
+- Hit "V" button while playing
 - Read menus/descriptions and figure it out
 - DM  [@garybrowndev](https://www.github.com/garybrowndev) if you have feedback or issues
 

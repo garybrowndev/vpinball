@@ -32,7 +32,7 @@ enum EnumAssignKeys
    eTweak,
    eBallHistoryMenu,
    eBallHistoryRecall,
-   eCKeys
+   eNone // sentinel for "no key action" — historically named eCKeys when C was the activation key
 };
 
 #ifndef __BALLHISTORY_WIN32__

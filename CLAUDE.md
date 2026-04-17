@@ -117,8 +117,8 @@ This is the primary area of active development (~10,800 lines combined). Key con
 - **`BallHistoryRecord`** — timestamped collection of `BallHistoryState` for all tracked balls
 - **Platform guard** — `#ifdef __BALLHISTORY_WIN32__` wraps the full implementation; non-Windows platforms get a no-op stub
 - **`EnumAssignKeys` enum** — defined in `ballhistory.h` (was previously in `pininput.h` which upstream removed). Ball History is the sole consumer.
-- **UI** — rendered via ImGui overlay (`PrintScreenRecord` handles on-screen text/menus). Uses default ImGui font (custom fonts crash in ImGui 1.92+ due to atlas rebuild). Activated in-game by pressing "C"
-- **Input** — C/R keys registered as InputManager actions (`InputManager.cpp`). Flipper/plunger keys dispatched via ImGui in `LiveUI.cpp`.
+- **UI** — rendered via ImGui overlay (`PrintScreenRecord` handles on-screen text/menus). Uses default ImGui font (custom fonts crash in ImGui 1.92+ due to atlas rebuild). Activated in-game by pressing "V". (Originally C, moved to V because C collides with `Manual Ball Control` in some table scripts — `Example.vpx` toggles its ball-control flag on `keycode = 46` which is C; see commit history.)
+- **Input** — V (menu) and R (recall) keys registered as InputManager actions (`InputManager.cpp`). Flipper/plunger keys dispatched via ImGui in `LiveUI.cpp`.
 - **Settings persistence** — trainer configurations saved/loaded via `CSimpleIni` (.ini files)
 - **Rendering** — draws fake balls, intersection circles, lines using the VPinball parts system (`CComObject<Ball>`, `CComObject<Light>`, `CComObject<Rubber>`)
 
@@ -126,7 +126,7 @@ This is the primary area of active development (~10,800 lines combined). Key con
 
 - `Player` class (`src/core/player.h`) — owns the `BallHistory` instance; constructor inits, destructor uninits, `ApplyPlayingState` resets trainer timing
 - `LiveUI` (`src/ui/live/LiveUI.cpp`) — calls `BallHistory::Process`, `ProcessKeys`, `ProcessMouse` each frame during `RenderUI`
-- `InputManager` (`src/input/InputManager.cpp`) — registers C and R key actions that call `BallHistory::ProcessKeys`
+- `InputManager` (`src/input/InputManager.cpp`) — registers V (menu) and R (recall) key actions that call `BallHistory::ProcessKeys`
 - `HitBall` (`src/physics/hitball.h`) — the physics ball object whose state gets captured. Has `friend struct BallHistory` for `m_oldpos` access.
 - `PinTable` (`src/parts/pintable.h`) — provides table metadata, part management (`AddPart`/`RemovePart`), and element access via `GetParts()`
 

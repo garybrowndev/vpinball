@@ -421,7 +421,7 @@ void LiveUI::RenderUI()
       g_pplayer->m_BallHistory.DrawMenu = true;
       g_pplayer->m_BallHistory.Process(*g_pplayer, tick);
       g_pplayer->m_BallHistory.DrawMenu = false;
-      g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, EnumAssignKeys::eCKeys, false, tick, true);
+      g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, EnumAssignKeys::eNone, false, tick, true);
    }
 
    ImGui::PopFont();
