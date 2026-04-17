@@ -731,7 +731,7 @@ void InputManager::CreateInputActions()
 
 #ifdef __BALLHISTORY_WIN32__
    // Ball History key actions
-   AddAction(std::make_unique<InputAction>(this, "BallHistoryMenu"s, "Ball History Menu"s, keyMapping(SDL_SCANCODE_C),
+   AddAction(std::make_unique<InputAction>(this, "BallHistoryMenu"s, "Ball History Menu"s, keyMapping(SDL_SCANCODE_V),
       [this](const InputAction&, bool, bool isPressed)
       {
          uint32_t tick = msec();
