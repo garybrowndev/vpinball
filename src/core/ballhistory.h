@@ -62,23 +62,35 @@ public:
 
 #include <set>
 #include <mutex>
-#include <deque>
 
 #include "simpleini/SimpleIni.h"
 
-// Ball History debug logger — only active in Debug builds
-// Writes to ballhistory_debug.log, buffered to avoid I/O on every call
+// Ball History debug logger — only active in Debug builds.
+// Each call flushes immediately (simpler than buffering; debug-only, perf is irrelevant).
+// Logs go to <settings-folder>/logs/<name>.log. SetLogFolder() creates the logs/ subfolder.
 #if defined(_DEBUG) && defined(__BALLHISTORY_WIN32__)
 class BHLog
 {
 public:
-   static void SetLogFolder(const std::string& folder)
+   // Canonical log filenames — add new ones here, never hardcode paths elsewhere.
+   static constexpr const char* LogFile_Debug = "ballhistory_debug.log";
+
+   static void SetLogFolder(const std::string& settingsFolder)
    {
-      s_logPath = folder + "\\ballhistory_debug.log";
+      s_logFolder = settingsFolder + "\\logs";
+      CreateDirectory(s_logFolder.c_str(), NULL); // ignore result; already-exists is fine
+   }
+
+   // Returns empty string if SetLogFolder hasn't been called yet.
+   static std::string GetLogPath(const char* filename)
+   {
+      if (s_logFolder.empty()) return std::string();
+      return s_logFolder + "\\" + filename;
    }
 
    static void Log(const char* func, const char* fmt, ...)
    {
+      if (s_logFolder.empty()) return;
       char msg[512];
       va_list args;
       va_start(args, fmt);
@@ -87,38 +99,24 @@ public:
       va_end(args);
 
       std::lock_guard<std::mutex> lock(s_mutex);
-      s_buffer.push_back(msg);
-      if (s_buffer.size() >= 50)
-         Flush();
-   }
-
-   static void Flush()
-   {
-      if (s_buffer.empty())
-         return;
-      const char* path = s_logPath.empty() ? "C:\\code\\Pinball\\vpinball_ballhistory\\ballhistory_debug.log" : s_logPath.c_str();
+      const std::string path = GetLogPath(LogFile_Debug);
       FILE* f = nullptr;
-      fopen_s(&f, path, "a");
+      fopen_s(&f, path.c_str(), "a");
       if (f)
       {
-         for (const auto& line : s_buffer)
-            fprintf(f, "%s\n", line.c_str());
+         fprintf(f, "%s\n", msg);
          fclose(f);
       }
-      s_buffer.clear();
    }
 
 private:
    static std::mutex s_mutex;
-   static std::deque<std::string> s_buffer;
-   static std::string s_logPath;
+   static std::string s_logFolder;
 };
 
 #define BHLOG(fmt, ...) BHLog::Log(__FUNCTION__, fmt, ##__VA_ARGS__)
-#define BHLOG_FLUSH() BHLog::Flush()
 #else
 #define BHLOG(fmt, ...) ((void)0)
-#define BHLOG_FLUSH() ((void)0)
 #endif
 #include "renderer/typedefs3D.h"
 #include "imgui/imgui.h"

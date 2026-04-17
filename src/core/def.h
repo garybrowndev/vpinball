@@ -916,12 +916,7 @@ inline void strncpy_s(char* const __restrict dest, const size_t dest_size, const
    {
       for (; i < dest_size-1 && src[i] != '\0'; ++i)
          dest[i] = src[i];
-      if (src[i] != '\0')
-      {
-         // Log truncation instead of asserting — helps diagnose where it happens
-         FILE* _tf = nullptr; fopen_s(&_tf, "C:\\code\\Pinball\\vpinball_ballhistory\\strncpy_truncation.log", "a");
-         if (_tf) { fprintf(_tf, "strncpy_s truncation: dest_size=%zu src_len>=%zu src='%.100s...'\n", dest_size, i+1, src); fclose(_tf); }
-      }
+      // Upstream asserts on truncation here; we silently truncate to avoid assert dialogs.
    }
    dest[i] = '\0';
 }

@@ -26,8 +26,7 @@ bool BallHistory::DrawMenu = false;
 
 #if defined(_DEBUG) && defined(__BALLHISTORY_WIN32__)
 std::mutex BHLog::s_mutex;
-std::deque<std::string> BHLog::s_buffer;
-std::string BHLog::s_logPath;
+std::string BHLog::s_logFolder;
 #endif
 
 // ================================================================================================================================================================================================================================================
@@ -860,7 +859,6 @@ BallHistory::BallHistory(PinTable& pinTable)
    , m_ActiveBallKickerColor(Color::Yellow)
    , m_UseTrailsForBallsInitialValue(0)
 {
-   { FILE* _f = nullptr; fopen_s(&_f, "C:\\code\\Pinball\\vpinball_ballhistory\\bh_constructor.log", "w"); if (_f) { fprintf(_f, "BallHistory constructor called\n"); fclose(_f); } }
    m_MenuOptions.m_TrainerOptions.m_GameplayDifficultyTableDefault = int32_t(pinTable.GetGlobalDifficulty());
    pinTable.get_Gravity(&m_MenuOptions.m_TrainerOptions.m_GravityTableDefault);
    pinTable.get_Friction((&m_MenuOptions.m_TrainerOptions.m_PlayfieldFrictionTableDefault));
@@ -897,8 +895,7 @@ void BallHistory::Init(Player& player, int currentTimeMs, bool loadSettings)
       {
          BHLog::SetLogFolder(settingsFolderPath);
          BHLOG("settingsFolderPath=%s", settingsFolderPath.c_str());
-         BHLOG_FLUSH();
-         BOOL createDir = CreateDirectory(settingsFolderPath.c_str(), NULL);
+            BOOL createDir = CreateDirectory(settingsFolderPath.c_str(), NULL);
          if (createDir == TRUE || GetLastError() == ERROR_ALREADY_EXISTS)
          {
             std::string settingsFileName;
@@ -930,7 +927,6 @@ void BallHistory::UnInit(Player& player)
 
    ClearDraws(player);
    BHLOG("done");
-   BHLOG_FLUSH();
 }
 
 void BallHistory::Process(Player& player, int currentTimeMs)
@@ -1057,7 +1053,6 @@ bool BallHistory::ProcessKeys(Player& player, EnumAssignKeys action, bool isPres
    if (action != EnumAssignKeys::eCKeys)
    {
       BHLOG("action=%d isPressed=%d timeMs=%d process=%d", action, isPressed, currentTimeMs, process);
-      BHLOG_FLUSH();
    }
 
    if (!ImGui::IsKeyDown(ImGuiKey_LeftShift))
@@ -1202,7 +1197,6 @@ bool BallHistory::Control()
 void BallHistory::SetControl(bool control)
 {
    BHLOG("control=%d (was %d)", control, m_Control);
-   BHLOG_FLUSH();
    ClearDraws(*g_pplayer);
 
    if (m_Control != control)
@@ -2533,7 +2527,6 @@ void BallHistory::DrawNormalModeVisuals(Player& player, int currentTimeMs)
 void BallHistory::ClearDraws(Player& player)
 {
    BHLOG("balls=%zu circles=%zu lines=%zu", m_DrawnBalls.size(), m_DrawnIntersectionCircles.size(), m_DrawnLines.size());
-   BHLOG_FLUSH();
    for (auto& drawnBall : m_DrawnBalls)
    {
       drawnBall.second->RenderRelease();
@@ -4135,7 +4128,6 @@ std::size_t BallHistory::GetTotalPermutations()
 void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs)
 {
    BHLOG("menuAction=%d menuState=%d modeType=%d timeMs=%d", menuAction, m_MenuOptions.m_MenuState, m_MenuOptions.m_ModeType, currentTimeMs);
-   BHLOG_FLUSH();
    ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_ProcessMenuUsec);
 
    ClearDraws(player);
@@ -4152,21 +4144,21 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
    switch (m_MenuOptions.m_MenuState)
    {
    case MenuOptionsRecord::MenuStateType::MenuStateType_Root_SelectMode:
-      BHLOG("Root_SelectMode: about to call MenuTitleText"); BHLOG_FLUSH();
+      BHLOG("Root_SelectMode: about to call MenuTitleText");
       PrintScreenRecord::MenuTitleText("Ball History Mode");
-      BHLOG("Root_SelectMode: MenuTitleText done"); BHLOG_FLUSH();
-      BHLOG("Root_SelectMode: calling MenuText Normal (selected=%d)", m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Normal); BHLOG_FLUSH();
+      BHLOG("Root_SelectMode: MenuTitleText done");
+      BHLOG("Root_SelectMode: calling MenuText Normal (selected=%d)", m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Normal);
       PrintScreenRecord::MenuText(m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Normal, "Normal");
-      BHLOG("Root_SelectMode: MenuText Normal done"); BHLOG_FLUSH();
+      BHLOG("Root_SelectMode: MenuText Normal done");
       PrintScreenRecord::MenuText(m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Trainer, "Trainer");
-      BHLOG("Root_SelectMode: MenuText Trainer done"); BHLOG_FLUSH();
+      BHLOG("Root_SelectMode: MenuText Trainer done");
       PrintScreenRecord::MenuText(m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Disabled, "Disabled");
-      BHLOG("Root_SelectMode: MenuText Disabled done"); BHLOG_FLUSH();
+      BHLOG("Root_SelectMode: MenuText Disabled done");
 
       switch (m_MenuOptions.m_ModeType)
       {
       case MenuOptionsRecord::ModeType::ModeType_Normal:
-         BHLOG("Root_SelectMode: calling ShowSection Normal"); BHLOG_FLUSH();
+         BHLOG("Root_SelectMode: calling ShowSection Normal");
          ShowSection(DescriptionSectionTitle,
          {
             "Use plunger to configure 'Normal' options",
