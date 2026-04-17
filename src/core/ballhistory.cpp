@@ -1208,14 +1208,13 @@ void BallHistory::SetControl(bool control)
       {
          // Menu opened mid-result-hold: cancel the hold and unlock any balls we locked,
          // otherwise they'd stay stuck-in-kicker after the user exits trainer mode.
-         for (HitBall* ball : m_MenuOptions.m_TrainerOptions.m_ResultDisplayLockedBalls)
+         for (HitBall* ball : m_MenuOptions.m_TrainerOptions.m_TrainerLockedBalls)
             ball->m_d.m_lockedInKicker = false;
-         m_MenuOptions.m_TrainerOptions.m_ResultDisplayLockedBalls.clear();
+         m_MenuOptions.m_TrainerOptions.m_TrainerLockedBalls.clear();
          m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs = 0;
 
          StopAllSounds();
          g_pplayer->SetPlayState(!g_pplayer->IsPlaying());
-         g_pplayer->m_noTimeCorrect = true;
          m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
          m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
          m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
@@ -1225,7 +1224,6 @@ void BallHistory::SetControl(bool control)
       {
          SaveSettings(*g_pplayer);
          g_pplayer->SetPlayState(!g_pplayer->IsPlaying());
-         g_pplayer->m_noTimeCorrect = true;
       }
    }
 }
@@ -8667,21 +8665,21 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
          // First frame of result display: lock the trainer ball(s) and remember them so
          // we can unlock if the user interrupts (e.g., opens menu). After this, m_ControlVBalls
          // filters out locked balls so the tracked vector is the only reliable reference.
-         if (m_MenuOptions.m_TrainerOptions.m_ResultDisplayLockedBalls.empty())
+         if (m_MenuOptions.m_TrainerOptions.m_TrainerLockedBalls.empty())
          {
             for (HitBall* ball : m_ControlVBalls)
             {
                ball->m_d.m_lockedInKicker = true;
-               m_MenuOptions.m_TrainerOptions.m_ResultDisplayLockedBalls.push_back(ball);
+               m_MenuOptions.m_TrainerOptions.m_TrainerLockedBalls.push_back(ball);
             }
          }
          DrawTrainerModeVisuals(player, currentTimeMs);
          return;
       }
       // Hold expired — unlock balls and proceed to next run setup.
-      for (HitBall* ball : m_MenuOptions.m_TrainerOptions.m_ResultDisplayLockedBalls)
+      for (HitBall* ball : m_MenuOptions.m_TrainerOptions.m_TrainerLockedBalls)
          ball->m_d.m_lockedInKicker = false;
-      m_MenuOptions.m_TrainerOptions.m_ResultDisplayLockedBalls.clear();
+      m_MenuOptions.m_TrainerOptions.m_TrainerLockedBalls.clear();
       m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs = 0;
       m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
    }
@@ -8875,11 +8873,17 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
       
       for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
       {
-         // Lock ball so physics skips it entirely — position is safe to set from render thread
-         m_ControlVBalls[controlVBallIndex]->m_d.m_lockedInKicker = true;
-         m_ControlVBalls[controlVBallIndex]->m_d.m_pos = currentRunRecord.m_StartPositions[controlVBallIndex];
-         m_ControlVBalls[controlVBallIndex]->m_d.m_vel.SetZero();
-         m_ControlVBalls[controlVBallIndex]->m_angularmomentum.SetZero();
+         // Lock ball so physics skips it entirely — position is safe to set from render thread.
+         // Track the ball in m_TrainerLockedBalls so we can unlock if the user interrupts
+         // the countdown (e.g., opens menu). m_ControlVBalls is filtered to non-locked balls,
+         // so once we set lockedInKicker the ball drops out of it on the next frame — only
+         // the tracking vector keeps a reliable reference.
+         HitBall* ball = m_ControlVBalls[controlVBallIndex];
+         ball->m_d.m_lockedInKicker = true;
+         ball->m_d.m_pos = currentRunRecord.m_StartPositions[controlVBallIndex];
+         ball->m_d.m_vel.SetZero();
+         ball->m_angularmomentum.SetZero();
+         m_MenuOptions.m_TrainerOptions.m_TrainerLockedBalls.push_back(ball);
       }
 
       if (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun > 0)
@@ -8923,6 +8927,10 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
          // The ResetTrainerRunStartTime guard for MenuStateType_Trainer_Results ensures this block
          // fires only once per run, so there's no flicker from repeated clear/redraw.
          ClearDraws(player);
+
+         // Countdown locked the balls via m_TrainerLockedBalls; the ball-setup loop below will
+         // unlock them via m_d.m_lockedInKicker = false, so drop our tracking entries here.
+         m_MenuOptions.m_TrainerOptions.m_TrainerLockedBalls.clear();
 
          // Note: Do NOT call Init() here — it resets m_RunStartTimeMs which restarts
          // the countdown, creating an infinite loop for drop-mode (zero velocity) runs.
