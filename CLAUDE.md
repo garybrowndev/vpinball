@@ -176,9 +176,56 @@ After `UnInit`, call `m_renderer->m_renderDevice->SubmitRenderFrame()` to flush 
 ## Debugging
 
 - **Crash handler** produces resolved x64 stack traces in `crash.txt` (fixed `IMAGE_FILE_MACHINE_AMD64` in `StackTrace.cpp`, rewrote `WriteCallStack` in `CrashHandler.cpp`). Always check `crash.txt` first.
-- **Ball History debug logger** (`BHLog` class in `ballhistory.h`): writes to `BallHistory/ballhistory_debug.log` in Debug builds. Call `BHLOG(fmt, ...)` and `BHLOG_FLUSH()`.
-- **Direct file writes** for quick diagnostics: `{ FILE* _f = nullptr; fopen_s(&_f, "C:\\path\\log.log", "a"); if (_f) { fprintf(_f, "msg\n"); fclose(_f); } }`
-- **strncpy_s assertion** (`def.h:919`): upstream's custom `strncpy_s` asserts on truncation. Changed to log instead of assert.
+- **Ball History debug logger** (`BHLog` class in `ballhistory.h`): writes to `<exe-folder>/BallHistory/logs/ballhistory_debug.log` in Debug builds. Call `BHLOG(fmt, ...)`. Each call auto-flushes; there is NO `BHLOG_FLUSH` macro.
+- **Canonical log filenames** are declared as `static constexpr const char*` members on `BHLog` (e.g., `BHLog::LogFile_Debug`). Add new log filenames there, never hardcode paths.
+- **Log folder auto-create**: `BHLog::SetLogFolder()` creates the `logs/` subfolder. Called from `BallHistory::Init` after `GetSettingsFolderPath()`.
+- **Direct file writes for transient diagnostics** should also use `<exe-folder>/BallHistory/logs/` via `BHLog::GetLogPath("name.log")` — do NOT hardcode paths.
+
+## Debugging Lessons Learned (expensive mistakes to not repeat)
+
+### 1. Specific numeric values in a symptom point at VBScript, not physics
+
+When debugging "trainer ball freezes on first run," I saw the ball's velocity getting set to **exactly `-0.01`** every physics step. I spent many hours assuming it was a contact-solver friction bug, a physics-thread race, or a timing issue, and wrote hundreds of lines of deferred-state / gravity-kick machinery that all turned out to be unnecessary.
+
+**The actual cause**: `Example.vpx`'s embedded VBScript has a "Manual Ball Control" feature bound to keycode 46 (C). Pressing C toggles its `EnableBallControl` flag. A table timer then sets `ball.velx = 0; ball.vely = BCyveloffset (= -0.01)` every tick. My Ball History menu key was ALSO C, so opening the menu silently enabled the script's control — ball froze.
+
+**The fix was one line**: `SDL_SCANCODE_C` → `SDL_SCANCODE_V` in `InputManager.cpp`.
+
+**Lesson: if a physics symptom's value is a specific literal (like `-0.01`), grep the table's script/config for that constant FIRST.** If the table script uses it, the problem is interaction with the script — not the physics engine. This single check would have saved the entire multi-session debugging saga.
+
+### 2. Win32 `PlaySound` with `SND_SYNC` blocks the main thread
+
+VPinball's `BallHistory::PlaySound(UINT, bool async = false)` wraps `::PlaySound` with `SND_RESOURCE | (async ? SND_ASYNC : SND_SYNC)`. The default is sync, which **blocks rendering until the sound finishes** (often ~500ms). All trainer end-of-run pass/fail sounds were sync → rendering froze → visuals changes (e.g., the trainer ball-teleport to next start) happened during the frozen window, so users saw "sound then suddenly both ball-teleport and visuals appear." Pass `true` (async) for end-of-run sounds.
+
+### 3. Win32 `PlaySound` with `SND_ASYNC` has only ONE sound slot
+
+A new `PlaySound` call cancels whatever is currently playing. If pass-sound fires async and the next frame's countdown-beep fires async, **pass-sound gets cut off after ~16ms**. Solution: delay the subsequent sound. We use a **result-hold period** (`m_ResultDisplayEndTimeMs`, ~1.5s) where the trainer sits on the pass/fail frame — no next-countdown kicks in yet, so no competing sound. See `ProcessModeTrainer` top-of-function handler.
+
+### 4. Ball locks need tracking vectors so they can be undone on interruption
+
+`m_lockedInKicker = true` freezes a ball. Multiple trainer phases (countdown ball hold, result-hold) use this. But `m_ControlVBalls` is **filtered to non-locked balls** — once we lock a ball, it's no longer in `m_ControlVBalls`, so we've lost the reference.
+
+If the user opens the menu (interrupts trainer) mid-lock, nothing ever unlocks the ball → it stays stuck forever. Fix: track all balls we lock in `m_TrainerLockedBalls` vector. On `SetControl(true)` (menu opens), iterate the vector and unlock.
+
+### 5. `MenuStateType_Trainer_Results` is misleadingly named
+
+Despite the name, this state spans **both** the active run AND the post-run results screen. Two guards in `Process()` and `ResetTrainerRunStartTime()` check `m_MenuState == Trainer_Results` to prevent external events (ball changed, focus lost) from calling `Init()` mid-trainer. See comments in the code. Rename candidate: `Trainer_Active` or `Trainer_RunningOrResults`.
+
+### 6. `m_WasControlled` one-time restore path
+
+`Process()` at the end of the branch runs a "one-time restore" when `m_Control` flips from true → false AND `m_WasControlled` was true. The restore calls `UpdateBallState` which warps the ball to the last-viewed history record. This is wrong for a freshly-started trainer run, so the trainer start/resume paths set `m_WasControlled = false` immediately after `ToggleControl()`. Arguably cleaner to move this check into the restore block itself.
+
+### 7. Don't misdiagnose — trust boundary evidence before writing fix code
+
+I wrote two "Fix Trainer ball freeze" commits before finding the actual C-key cause. Both commits contained a mix of:
+- **Real bug fixes** (kept): `Init()` removal from trainer setup (countdown loop), `ResetTrainerRunStartTime` guard, ball-lock during countdown, use of `player.m_vball` instead of filtered `m_ControlVBalls`
+- **Misdiagnosis code** (reverted): `m_trainerApplyState` deferred-state machinery, 100-step gravity kick in `HitBall::UpdateVelocities`, `ClearDraws` at wrong place causing corridor flicker
+
+Use `git rebase -i` to drop misdiagnosis commits and re-apply only the real fixes as one clean commit. The trainer-debug-wip branch preserved the misdiagnosis work before nuking it from main history.
+
+### 8. Debug instrumentation should go on a side branch
+
+When adding extensive debug logging, file writes, trace counters, etc., commit them to a `-wip` branch before reverting from main. That way if the diagnosis turns out wrong, the code is discoverable for next time.
 
 ## Code Style
 
@@ -190,5 +237,16 @@ After `UnInit`, call `m_renderer->m_renderDevice->SubmitRenderFrame()` to flush 
 
 ## Known Issues
 
-- **Ball frozen after pause/unpause**: After Ball History pauses (SetControl) and unpauses, the ball doesn't move despite `IsPlaying()` returning true and Ball History not overwriting state. Physics engine has the ball registered (`m_vmover`). Under investigation — suspected physics timing issue after `SetPlayState` cycle. See commits on `integration` branch.
 - **RenderDevice pending buffer assertion**: Debug-only assertion on exit after Ball History use (`m_pendingSharedIndexBuffers.empty()`). Mitigated by `SubmitRenderFrame()` in destructor but may still fire in some exit paths.
+- **Trainer key collision with table scripts**: The V key is now the default for the Ball History menu (was C until the Example.vpx Manual Ball Control script collision was diagnosed). Other tables MAY still use V — audit table scripts if a new collision is suspected. Signal for a collision: specific ball velocity values keep getting written every physics step. Grep the table script for the value.
+
+## Trainer phase timeline (for quick reference)
+
+A trainer run flows through these phases in `ProcessModeTrainer`:
+
+1. **Result hold** (top-of-function): if `m_ResultDisplayEndTimeMs != 0` and we're inside the window, draw visuals + lock balls via `m_TrainerLockedBalls`, return early. Skips all phase logic while pass/fail sound plays and visuals are shown at the result location.
+2. **Phase 1 — countdown**: `runElapsedTimeMs < countdown`. Draw trainer visuals, lock balls at start position, play countdown beeps. Track locked balls in `m_TrainerLockedBalls`.
+3. **Phase 2 — active run**: transition fires `m_SetupBallStarts` block once — clears visuals, unlocks balls, sets pos/vel/angmom from `RunRecord`, clears `m_TrainerLockedBalls`. Physics runs. Pass/fail detection ongoing.
+4. **Pass/fail/timeout**: sets `m_ResultDisplayEndTimeMs = currentTimeMs + ResultDisplayDurationMs`, plays async sound, advances `m_CurrentRunRecord`. Next frame goes back to phase 1 (result hold).
+
+All pass/fail/timeout sites use **async** (`PlaySound(id, true)`) — never sync — because sync blocks rendering.
