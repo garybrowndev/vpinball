@@ -2415,8 +2415,15 @@ void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex
    }
    else
    {
-      // Re-create GPU resources safely at end of frame (avoid mid-frame release/setup)
-      g_pplayer->m_renderer->m_renderDevice->AddEndOfFrameCmd([pLine]() {
+      std::string nameCopy = name;
+      // Re-create GPU resources safely at end of frame (avoid mid-frame release/setup).
+      // Guard against ClearDraws firing between schedule and end-of-frame: look up by name
+      // and compare pointer identity. If the object was cleared (or replaced), skip — calling
+      // RenderRelease on a torn-down Rubber whose m_rd is null trips an assert in light.cpp.
+      g_pplayer->m_renderer->m_renderDevice->AddEndOfFrameCmd([pLine, nameCopy, this]() {
+         auto it = m_DrawnLines.find(nameCopy);
+         if (it == m_DrawnLines.end() || it->second != pLine)
+            return;
          pLine->RenderRelease();
          pLine->RenderSetup(g_pplayer->m_renderer->m_renderDevice);
       });
@@ -2466,8 +2473,12 @@ void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name
    }
    else
    {
-      // Re-create GPU resources safely at end of frame
-      g_pplayer->m_renderer->m_renderDevice->AddEndOfFrameCmd([pIntersectionCircle]() {
+      std::string nameCopy = name;
+      // Re-create GPU resources safely at end of frame. Same guard as DrawLine.
+      g_pplayer->m_renderer->m_renderDevice->AddEndOfFrameCmd([pIntersectionCircle, nameCopy, this]() {
+         auto it = m_DrawnIntersectionCircles.find(nameCopy);
+         if (it == m_DrawnIntersectionCircles.end() || it->second != pIntersectionCircle)
+            return;
          pIntersectionCircle->RenderRelease();
          pIntersectionCircle->RenderSetup(g_pplayer->m_renderer->m_renderDevice);
       });
@@ -2534,13 +2545,16 @@ void BallHistory::DrawNormalModeVisuals(Player& player, int currentTimeMs)
 void BallHistory::ClearDraws(Player& player)
 {
    BHLOG("balls=%zu circles=%zu lines=%zu", m_DrawnBalls.size(), m_DrawnIntersectionCircles.size(), m_DrawnLines.size());
+   // Each draw-slot object has TWO refs: one from the explicit AddRef() right after
+   // CreateInstance (keeps object alive in our map), and one from AddPart (owned by
+   // the table). We need a matching Release for each: RemovePart covers the table's
+   // ref, and an explicit Release covers the map's ref.
    for (auto& drawnBall : m_DrawnBalls)
    {
       drawnBall.second->RenderRelease();
       if (player.m_ptable->HasPart(drawnBall.second))
-         player.m_ptable->RemovePart(drawnBall.second); // RemovePart calls Release
-      else
-         drawnBall.second->Release();
+         player.m_ptable->RemovePart(drawnBall.second);
+      drawnBall.second->Release();
    }
    m_DrawnBalls.clear();
 
@@ -2549,8 +2563,7 @@ void BallHistory::ClearDraws(Player& player)
       drawnIntersectionCircle.second->RenderRelease();
       if (player.m_ptable->HasPart(drawnIntersectionCircle.second))
          player.m_ptable->RemovePart(drawnIntersectionCircle.second);
-      else
-         drawnIntersectionCircle.second->Release();
+      drawnIntersectionCircle.second->Release();
    }
    m_DrawnIntersectionCircles.clear();
 
@@ -2559,8 +2572,7 @@ void BallHistory::ClearDraws(Player& player)
       drawnLines.second->RenderRelease();
       if (player.m_ptable->HasPart(drawnLines.second))
          player.m_ptable->RemovePart(drawnLines.second);
-      else
-         drawnLines.second->Release();
+      drawnLines.second->Release();
    }
    m_DrawnLines.clear();
 }
