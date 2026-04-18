@@ -9047,6 +9047,11 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
          m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = true;
       }
 
+      // Guard so only one detection block resolves the run per frame. Without this,
+      // two blocks (e.g. corridor-pass + kicker-fail) can both increment m_CurrentRunRecord,
+      // leaving the next record default-constructed with m_Result = ResultType_Unknown.
+      bool resultSetThisFrame = false;
+
       if (m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size() > 0)
       {
          bool allPass = true;
@@ -9123,6 +9128,7 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
             m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
             m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
             m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+            resultSetThisFrame = true;
             if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled)
             {
                PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_PASS, true);
@@ -9187,7 +9193,7 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
             break;
          }
       }
-      if (anyFail == true)
+      if (anyFail == true && !resultSetThisFrame)
       {
          currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_FailedLocation;
          currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
@@ -9198,13 +9204,14 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
          m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
          m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
          m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+         resultSetThisFrame = true;
          if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
          {
             PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL, true);
          }
       }
 
-      if (BallCorridorReadyForTrainer())
+      if (BallCorridorReadyForTrainer() && !resultSetThisFrame)
       {
          TrainerOptions::BallCorridorOptionsRecord& bcor = m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord;
          float passWidth = GetDefaultBallRadius() * (bcor.m_PassRadiusPercent / 100.0f);
@@ -9225,7 +9232,7 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
                }
             }
 
-            if (resultType != TrainerOptions::RunRecord::ResultType::ResultType_Unknown)
+            if (resultType != TrainerOptions::RunRecord::ResultType::ResultType_Unknown && !resultSetThisFrame)
             {
                currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_PassedCorridor;
                currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
@@ -9236,6 +9243,7 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
                m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
                m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
                m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+               resultSetThisFrame = true;
                if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled)
                {
                   PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_PASS, true);
@@ -9278,7 +9286,7 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
                }
             }
 
-            if (resultType != TrainerOptions::RunRecord::ResultType::ResultType_Unknown)
+            if (resultType != TrainerOptions::RunRecord::ResultType::ResultType_Unknown && !resultSetThisFrame)
             {
                currentRunRecord.m_Result = resultType;
                currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
@@ -9289,6 +9297,7 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
                m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
                m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
                m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+               resultSetThisFrame = true;
                if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
                {
                   PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL, true);
@@ -9321,7 +9330,7 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
             break;
          }
       }
-      if (oneKicker == true)
+      if (oneKicker == true && !resultSetThisFrame)
       {
          switch (m_MenuOptions.m_TrainerOptions.m_BallKickerBehaviorMode)
          {
@@ -9342,6 +9351,7 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
             m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
             m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
             m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+            resultSetThisFrame = true;
             if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
             {
                PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL, true);
