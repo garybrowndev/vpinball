@@ -1,4 +1,31 @@
 #include "ScoreBoard.h"
+#include <locale>
+#include <sstream>
+
+namespace {
+#ifdef __MINGW32__
+#include <winnls.h>
+static const char point = []() -> char {
+   char buf[4];
+   if (GetLocaleInfoA(LOCALE_USER_DEFAULT, LOCALE_STHOUSAND, buf, sizeof(buf)) > 0)
+      return ((unsigned char)buf[0] == 0xA0u) ? ' ' : buf[0]; // NBSP grouping separator -> space
+   return ',';
+}();
+#else
+static const char point = ((unsigned char)std::use_facet<std::numpunct<char>>(std::locale("")).thousands_sep() == 0xA0u/*NBSP grouping separator*/) ? ' ' : std::use_facet<std::numpunct<char>>(std::locale("")).thousands_sep(); // gets the OS locale thousands separator (e.g. ',' or '.' or ''' or ' ')
+#endif
+
+string FormatScore(const int value)
+{
+   string s = std::to_string(abs(value));
+   for (int i = static_cast<int>(s.length()) - 3; i > 0; i -= 3) // or should we rather respect locale grouping sizes? (e.g. in India, the first grouping is 3 digits, but then it groups by 2 digits, e.g. 1,00,000 for one hundred thousand instead of 100,000)
+      s.insert(i, 1, point);
+   if (value < 0)
+      s.insert(0, 1, '-');
+   return s;
+}
+}
+
 
 namespace Flex {
 
@@ -12,7 +39,7 @@ ScoreBoard::ScoreBoard(FlexDMD* pFlexDMD, Font* pScoreFont, Font* pHighlightFont
 
    m_pTextFont = pTextFont;
    m_pTextFont->AddRef();
-   
+
    m_pLowerLeft = new Label(pFlexDMD, pTextFont, string(), string());
    AddActor(m_pLowerLeft);
 
@@ -42,7 +69,7 @@ ScoreBoard::~ScoreBoard()
 
 void ScoreBoard::SetBackground(Actor* pBackground)
 {
-   if (m_pBackground) 
+   if (m_pBackground)
       RemoveActor(m_pBackground);
    m_pBackground = pBackground;
    if (m_pBackground)
@@ -68,7 +95,7 @@ void ScoreBoard::SetFonts(Font* scoreFont, Font* highlightFont, Font* textFont)
    m_pTextFont->Release();
    m_pTextFont = textFont;
    m_pTextFont->AddRef();
-   
+
    SetHighlightedPlayer(m_highlightedPlayer);
    m_pLowerLeft->SetFont(textFont);
    m_pLowerRight->SetFont(textFont);
@@ -87,33 +114,33 @@ void ScoreBoard::SetHighlightedPlayer(int player)
 
 void ScoreBoard::SetScore(int score1, int score2, int score3, int score4)
 {
-   m_pScores[0]->SetText(std::to_string(score1));
-   m_pScores[1]->SetText(std::to_string(score2));
-   m_pScores[2]->SetText(std::to_string(score3));
-   m_pScores[3]->SetText(std::to_string(score4));
+   m_pScores[0]->SetText(FormatScore(score1));
+   m_pScores[1]->SetText(FormatScore(score2));
+   m_pScores[2]->SetText(FormatScore(score3));
+   m_pScores[3]->SetText(FormatScore(score4));
 }
 
 void ScoreBoard::Update(float delta)
 {
-    Group::Update(delta);
-    SetBounds(0, 0, GetParent()->GetWidth(), GetParent()->GetHeight());
-    float yText = GetHeight() - m_pTextFont->GetBitmapFont()->GetBaseHeight() - 1.f;
-    // float yLine2 = 1 + m_pHighlightFont->m_pBitmapFont->m_baseHeight + (GetHeight() - 2 -  m_pTextFont->m_pBitmapFont->m_baseHeight - 2 * m_pHighlightFont->m_pBitmapFont->m_baseHeight ) / 2;
-    float yLine2 = (GetHeight() - m_pTextFont->GetBitmapFont()->GetBaseHeight()) / 2.0f;
-    float dec = (float)(m_pHighlightFont->GetBitmapFont()->GetBaseHeight() - m_pScoreFont->GetBitmapFont()->GetBaseHeight()) / 2.0f;
-    // float yLine2 = (1.f + yText) * 0.5f;
-    m_pScores[0]->Pack();
-    m_pScores[1]->Pack();
-    m_pScores[2]->Pack();
-    m_pScores[3]->Pack();
-    m_pLowerLeft->Pack();
-    m_pLowerRight->Pack();
-    m_pScores[0]->SetAlignedPosition(1, 1 + (m_highlightedPlayer == 1 ? 0 : dec), Alignment_TopLeft);
-    m_pScores[1]->SetAlignedPosition(GetWidth() - 1, 1 + (m_highlightedPlayer == 2 ? 0 : dec), Alignment_TopRight);
-    m_pScores[2]->SetAlignedPosition(1, yLine2 + (m_highlightedPlayer == 3 ? 0 : dec), Alignment_TopLeft);
-    m_pScores[3]->SetAlignedPosition(GetWidth() - 1, yLine2 + (m_highlightedPlayer == 4 ? 0 : dec), Alignment_TopRight);
-    m_pLowerLeft->SetAlignedPosition(1, yText, Alignment_TopLeft);
-    m_pLowerRight->SetAlignedPosition(GetWidth() - 1, yText, Alignment_TopRight);
+   Group::Update(delta);
+   SetBounds(0, 0, GetParent()->GetWidth(), GetParent()->GetHeight());
+   float yText = (float)(GetHeight() - m_pTextFont->GetBitmapFont()->GetBaseHeight() - 1);
+   // float yLine2 = 1 + m_pHighlightFont->m_pBitmapFont->m_baseHeight + (GetHeight() - 2 -  m_pTextFont->m_pBitmapFont->m_baseHeight - 2 * m_pHighlightFont->m_pBitmapFont->m_baseHeight ) / 2;
+   float yLine2 = (float)(GetHeight() - m_pTextFont->GetBitmapFont()->GetBaseHeight()) / 2.0f;
+   float dec = (float)(m_pHighlightFont->GetBitmapFont()->GetBaseHeight() - m_pScoreFont->GetBitmapFont()->GetBaseHeight()) / 2.0f;
+   // float yLine2 = (1.f + yText) * 0.5f;
+   m_pScores[0]->Pack();
+   m_pScores[1]->Pack();
+   m_pScores[2]->Pack();
+   m_pScores[3]->Pack();
+   m_pLowerLeft->Pack();
+   m_pLowerRight->Pack();
+   m_pScores[0]->SetAlignedPosition(1.f, 1.f + (m_highlightedPlayer == 1 ? 0.f : dec), Alignment_TopLeft);
+   m_pScores[1]->SetAlignedPosition((float)(GetWidth() - 1), 1.f + (m_highlightedPlayer == 2 ? 0.f : dec), Alignment_TopRight);
+   m_pScores[2]->SetAlignedPosition(1.f, yLine2 + (m_highlightedPlayer == 3 ? 0.f : dec), Alignment_TopLeft);
+   m_pScores[3]->SetAlignedPosition((float)(GetWidth() - 1), yLine2 + (m_highlightedPlayer == 4 ? 0.f : dec), Alignment_TopRight);
+   m_pLowerLeft->SetAlignedPosition(1.f, yText, Alignment_TopLeft);
+   m_pLowerRight->SetAlignedPosition((float)(GetWidth() - 1), yText, Alignment_TopRight);
 }
 
 void ScoreBoard::Draw(Flex::SurfaceGraphics* pGraphics)

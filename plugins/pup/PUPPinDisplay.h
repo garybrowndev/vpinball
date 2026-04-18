@@ -1,3 +1,5 @@
+// license:GPLv3+
+
 #pragma once
 
 #include "common.h"
@@ -14,7 +16,7 @@ public:
 
    PSC_IMPLEMENT_REFCOUNT()
 
-   void Init(int screenNum, const string& rootDir);
+   void Init(int screenNum, const string& romName);
    void playlistadd(int screenNum, const string& folder, int sort, int restSeconds);
    void playlistplay(int screenNum, const string& playlist);
    void playlistplayex(int screenNum, const string& playlist, const string& playfilename, int volume, int forceplay);
@@ -53,7 +55,7 @@ public:
    void LabelInit(int screenNum);
    const string& GetGetGame() const;
    void SetGetGame(const string& value);
-   const string& GetGetRoot() const;
+   string GetGetRoot() const;
    void SetGetRoot(const string& value);
    void SoundAdd(const string& sname, const string& fname, int svol, double sX, double sy, const string& SP);
    void SoundPlay(const string& sname);
@@ -66,7 +68,7 @@ public:
    string GetVersion() const;
    // void GrabDC2(int pWidth, int pHeight, const string& wintitle, SAFEARRAY **pixels);
    void playevent(int ScreenNum, const string& playlist, const string& playfilename, int volume, int priority, int playtype, int Seconds, const string& Special);
-   void SetPosVideo(int ScreenNum, int StartPos, int EndPos, int Mode, const string& Special);
+   void SetPosVideo(int ScreenNum, int StartPos, int EndPos, int mode, const string& Special);
    void PuPClose();
 
 private:

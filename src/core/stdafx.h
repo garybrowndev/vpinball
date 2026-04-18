@@ -5,19 +5,16 @@
 // Disable Warning C4635: XML document comment target: badly-formed XML
 #pragma warning(disable : 4635)
 
-#ifndef __ANDROID__
-#define SDL_MAIN_HANDLED // https://wiki.libsdl.org/SDL3/SDL_SetMainReady#remarks
-#endif
+// static analysis warnings that are too strict for our use cases
+#pragma warning(disable : 26481)
+#pragma warning(disable : 26482)
+#pragma warning(disable : 26485)
+#pragma warning(disable : 26440)
+#pragma warning(disable : 26446)
 
 //#define DISABLE_FORCE_NVIDIA_OPTIMUS // do not enable NVIDIA Optimus cards (on Laptops, etc) by default
 
 //#define DISABLE_FORCE_AMD_HIGHPERF // do not enable AMD high performance device (on Laptops, etc) by default
-
-#if defined(ENABLE_OPENGL) || defined(__STANDALONE__)
-#define DISABLE_FORCE_NVIDIA_OPTIMUS
-#endif
-
-//#define TWOSIDED_TRANSPARENCY // transparent hit targets are rendered backsided first, then frontsided
 
 // Needed by ImPlot when using ImGUI
 #define IMGUI_DEFINE_MATH_OPERATORS
@@ -39,9 +36,9 @@
 //#define DEBUG_NO_SOUND
 //#define DEBUG_REFCOUNT_TRIGGER
 
-//#define ENABLE_TRACE // enables all TRACE_FUNCTION() calls to use D3DPERF_Begin/EndEvent
-
-//#define DEBUG_XXX // helps to detect out-of-bounds access, needs to link dbghelp.lib then
+#ifdef ENABLE_DX9
+ //#define ENABLE_TRACE // enables all TRACE_FUNCTION() calls to use D3DPERF_Begin/EndEvent
+#endif
 
 #define EDITOR_BG_WIDTH    1000
 #define EDITOR_BG_HEIGHT   750
@@ -56,8 +53,6 @@
 #include "physics/physconst.h"
 
 //
-
-#define MAX_BALL_TRAIL_POS 10 // fake/artistic ball motion trail
 
 #define MAX_REELS          32
 
@@ -75,7 +70,6 @@
 #define ADAPT_VSYNC_FACTOR 0.95 // safety factor where vsync is turned off (f.e. drops below 60fps * 0.95 = 57fps)
 
 #define ACCURATETIMERS          // if undefd, timers will only be triggered as often as frames are rendered (e.g. they can fall behind)
-#define MAX_TIMER_MSEC_INTERVAL 1 // amount of msecs to wait (at least) until same timer can be triggered again (e.g. they can fall behind, if set to > 1, as update cycle is 1000Hz)
 #define MAX_TIMERS_MSEC_OVERALL 5 // amount of msecs that all timers combined can take per frame (e.g. they can fall behind, if set to < somelargevalue)
 
 //#define PLAYBACK              // bitrotted, also how to record the playback to c:\badlog.txt ?? via LOG ??
@@ -83,7 +77,9 @@
 
 //#define DEBUGPHYSICS          // enables detailed physics/collision handling output for the 'F11' stats/debug texts
 
+#if defined(_DEBUG)
 #define DEBUG_BALL_SPIN         // enables dots glued to balls if in 'F11' mode
+#endif
 
 //
 
@@ -92,8 +88,6 @@
 #define MAX_CUSTOM_PARAM_INDEX  9
 
 #define MAX_OPEN_TABLES         9
-
-#define AUTOSAVE_DEFAULT_TIME   10
 
 #define DEFAULT_SECURITY_LEVEL  0
 
@@ -127,19 +121,8 @@
 #define STRICT
 
 #ifndef _WIN32_WINNT
-  /*#if defined(ENABLE_DX9) // XP-compatibility / old SDK/toolset
-    #if defined(_WIN64) && defined(CRASH_HANDLER)
-      // Windows XP _WIN32_WINNT_WINXP
-      #define _WIN32_WINNT 0x0501
-    #else
-      // Windows 2000 _WIN32_WINNT_WIN2K
-      #define _WIN32_WINNT 0x0500
-    #endif
-  #else*/
-    // Windows Vista _WIN32_WINNT_VISTA
-    #define _WIN32_WINNT 0x0600
-  //#endif
-
+  // Windows Vista _WIN32_WINNT_VISTA
+  #define _WIN32_WINNT 0x0600
   #define WINVER _WIN32_WINNT
 #endif
 
@@ -161,6 +144,12 @@
 #endif
 
 #include "main.h"
+
+#ifndef __STANDALONE__
+#ifdef _WIN32
+__forceinline void ListView_SetItemText_Safe(HWND hwndLV, WPARAM iItem, int iSubItem, LPCSTR pszText) { ListView_SetItemText(hwndLV, iItem, iSubItem, (LPSTR)pszText); }
+#endif
+#endif
 
 //{{AFX_INSERT_LOCATION}}
 // Microsoft Visual C++ will insert additional declarations immediately before the previous line.

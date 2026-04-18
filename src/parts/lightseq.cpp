@@ -1,63 +1,50 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
+#include "lightseq.h"
+#include "light.h"
+#include "primitive.h"
+#include "parts/flasher.h"
 
-LightSeq::LightSeq()
+LightSeq *LightSeq::CopyForPlay() const
 {
-}
-
-LightSeq::~LightSeq()
-{
-}
-
-LightSeq *LightSeq::CopyForPlay(PinTable *live_table) const
-{
-   STANDARD_EDITABLE_COPY_FOR_PLAY_IMPL(LightSeq, live_table)
+   STANDARD_EDITABLE_COPY_FOR_PLAY_IMPL(LightSeq)
    return dst;
 }
 
-HRESULT LightSeq::Init(PinTable *const ptable, const float x, const float y, const bool fromMouseClick, const bool forPlay)
+HRESULT LightSeq::Init(const float x, const float y, const bool fromMouseClick, const bool forPlay)
 {
-   m_ptable = ptable;
    SetDefaults(fromMouseClick);
    m_d.m_v.x = x;
    m_d.m_v.y = y;
-   return forPlay ? S_OK : InitVBA(true, nullptr);
+   return S_OK;
 }
 
 void LightSeq::SetDefaults(const bool fromMouseClick)
 {
-#define regKey Settings::DefaultPropsLightSequence
-
-   m_d.m_updateinterval = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "UpdateInterval"s, 25) : 25;
-
+#define LinkProp(field, prop) field = fromMouseClick ? g_app->m_settings.GetDefaultPropsLightSeq_##prop() : Settings::GetDefaultPropsLightSeq_##prop##_Default()
    string tmp;
-   const bool hr = g_pvp->m_settings.LoadValue(regKey, "Collection"s, tmp);
-   if (!hr || !fromMouseClick)
-      m_d.m_wzCollection.clear();
-   else
-      m_d.m_wzCollection = MakeWString(tmp);
-
-   m_d.m_vCenter.x = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "CenterX"s, (float)(EDITOR_BG_WIDTH / 2)) : (EDITOR_BG_WIDTH / 2);
-   m_d.m_vCenter.y = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "CenterY"s, (float)((2 * EDITOR_BG_WIDTH) / 2)) : ((2 * EDITOR_BG_WIDTH) / 2);
-   m_d.m_tdr.m_TimerEnabled = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "TimerEnabled"s, false) : false;
-   m_d.m_tdr.m_TimerInterval = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "TimerInterval"s, 100) : 100;
-
-#undef regKey
+   LinkProp(m_d.m_updateinterval, UpdateInterval);
+   LinkProp(tmp, Collection); 
+   m_d.m_wzCollection = MakeWString(tmp);
+   LinkProp(m_d.m_vCenter.x, CenterX);
+   LinkProp(m_d.m_vCenter.y, CenterY);
+   LinkProp(m_timerEnabled, TimerEnabled);
+   LinkProp(m_timerInterval, TimerInterval);
+#undef LinkProp
 }
 
 void LightSeq::WriteRegDefaults()
 {
-#define regKey Settings::DefaultPropsLightSequence
-
-   g_pvp->m_settings.SaveValue(regKey, "UpdateInterval"s, m_d.m_updateinterval);
-   g_pvp->m_settings.SaveValue(regKey, "Collection"s, MakeString(m_d.m_wzCollection));
-   g_pvp->m_settings.SaveValue(regKey, "CenterX"s, m_d.m_vCenter.x);
-   g_pvp->m_settings.SaveValue(regKey, "CenterY"s, m_d.m_vCenter.y);
-   g_pvp->m_settings.SaveValue(regKey, "TimerEnabled"s, m_d.m_tdr.m_TimerEnabled);
-   g_pvp->m_settings.SaveValue(regKey, "TimerInterval"s, m_d.m_tdr.m_TimerInterval);
-
-#undef regKey
+#define LinkProp(field, prop) g_app->m_settings.SetDefaultPropsLightSeq_##prop(field, false)
+   LinkProp(m_d.m_updateinterval, UpdateInterval);
+   string tmp = MakeString(m_d.m_wzCollection);
+   LinkProp(tmp, Collection);
+   LinkProp(m_d.m_vCenter.x, CenterX);
+   LinkProp(m_d.m_vCenter.y, CenterY);
+   LinkProp(m_timerEnabled, TimerEnabled);
+   LinkProp(m_timerInterval, TimerInterval);
+#undef LinkProp
 }
 
 void LightSeq::SetObjectPos()
@@ -145,24 +132,6 @@ void LightSeq::RenderOutline(Sur * const psur)
    psur->Ellipse(m_d.m_vCenter.x, m_d.m_vCenter.y - 2.5f, 2.0f);
 }
 
-// Renders the image onto the Blueprint, but we don't want light seqs on the blue print as it is non-essensial
-void LightSeq::RenderBlueprint(Sur *psur, const bool solid)
-{
-}
-
-
-void LightSeq::PhysicSetup(PhysicsEngine* physics, const bool isUI)
-{
-   if (isUI)
-   {
-      // FIXME implement UI picking
-   }
-}
-
-void LightSeq::PhysicRelease(PhysicsEngine* physics, const bool isUI)
-{
-}
-
 #pragma region Rendering
 
 void LightSeq::RenderSetup(RenderDevice *device)
@@ -243,7 +212,7 @@ void LightSeq::RenderSetup(RenderDevice *device)
              pLight->get_X(&x);
              pLight->get_Y(&y);
 
-             if (pLight->m_backglass)
+             if (pLight->m_desktopBackdrop)
              {
                  // if the light is on the backglass then scale up its Y position
                  y *= 2.666f; // 2 little devils ;-)
@@ -253,9 +222,9 @@ void LightSeq::RenderSetup(RenderDevice *device)
          {
              Flasher* const pFlasher = (Flasher*)m_pcollection->m_visel.ElementAt(i);
              pFlasher->get_X(&x);
-             pFlasher->get_Y(&y);             
+             pFlasher->get_Y(&y);
          }
-         else if (type == eItemPrimitive)
+         else //if (type == eItemPrimitive)
          {
              Primitive* const pPrimitive = (Primitive*)m_pcollection->m_visel.ElementAt(i);
              pPrimitive->get_X(&x);
@@ -378,70 +347,48 @@ STDMETHODIMP LightSeq::InterfaceSupportsErrorInfo(REFIID riid)
    return S_FALSE;
 }
 
-HRESULT LightSeq::SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool saveForUndo)
+void LightSeq::Save(IObjectWriter& writer, const bool saveForUndo)
 {
-   BiffWriter bw(pstm, hcrypthash);
-
-   bw.WriteVector2(FID(VCEN), m_d.m_v);
-   bw.WriteWideString(FID(COLC), m_d.m_wzCollection);
-   bw.WriteFloat(FID(CTRX), m_d.m_vCenter.x);
-   bw.WriteFloat(FID(CTRY), m_d.m_vCenter.y);
-   bw.WriteInt(FID(UPTM), m_d.m_updateinterval);
-   bw.WriteBool(FID(TMON), m_d.m_tdr.m_TimerEnabled);
-   bw.WriteInt(FID(TMIN), m_d.m_tdr.m_TimerInterval);
-   bw.WriteWideString(FID(NAME), m_wzName);
-   bw.WriteBool(FID(BGLS), m_backglass);
-   
-   ISelect::SaveData(pstm, hcrypthash);
-   
-   bw.WriteTag(FID(ENDB));
-
-   return S_OK;
+   writer.WriteVector2(FID(VCEN), m_d.m_v);
+   writer.WriteWideString(FID(COLC), m_d.m_wzCollection);
+   writer.WriteFloat(FID(CTRX), m_d.m_vCenter.x);
+   writer.WriteFloat(FID(CTRY), m_d.m_vCenter.y);
+   writer.WriteInt(FID(UPTM), m_d.m_updateinterval);
+   writer.WriteBool(FID(TMON), m_timerEnabled);
+   writer.WriteInt(FID(TMIN), m_timerInterval);
+   writer.WriteWideString(FID(NAME), m_wzName);
+   writer.WriteBool(FID(BGLS), m_desktopBackdrop);
+   SaveSharedEditableFields(writer);
+   writer.EndObject();
 }
 
-HRESULT LightSeq::InitLoad(IStream *pstm, PinTable *ptable, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey)
+void LightSeq::Load(IObjectReader& reader)
 {
    SetDefaults(false);
-
-   BiffReader br(pstm, this, version, hcrypthash, hcryptkey);
-
-   m_ptable = ptable;
-
-   br.Load();
-   return S_OK;
-}
-
-bool LightSeq::LoadToken(const int id, BiffReader * const pbr)
-{
-   switch(id)
-   {
-       case FID(PIID): { int pid; pbr->GetInt(&pid); } break;
-       case FID(VCEN): pbr->GetVector2(m_d.m_v); break;
-       case FID(COLC): pbr->GetWideString(m_d.m_wzCollection); break;
-       case FID(CTRX): pbr->GetFloat(m_d.m_vCenter.x); break;
-       case FID(CTRY): pbr->GetFloat(m_d.m_vCenter.y); break;
-       case FID(UPTM): pbr->GetInt(m_d.m_updateinterval); break;
-       case FID(TMON): pbr->GetBool(m_d.m_tdr.m_TimerEnabled); break;
-       case FID(TMIN): pbr->GetInt(m_d.m_tdr.m_TimerInterval); break;
-       case FID(NAME): pbr->GetWideString(m_wzName, std::size(m_wzName)); break;
-       case FID(BGLS): pbr->GetBool(m_backglass); break;
-       default:
-       {
-           ISelect::LoadToken(id, pbr);
-           break;
-       }
-   }
-   return true;
-}
-
-HRESULT LightSeq::InitPostLoad()
-{
-   return S_OK;
+   reader.AsObject(
+      [this](int tag, IObjectReader& reader)
+      {
+         switch (tag)
+         {
+         case FID(PIID): reader.AsInt(); break;
+         case FID(VCEN): m_d.m_v = reader.AsVector2(); break;
+         case FID(COLC): m_d.m_wzCollection = reader.AsWideString(); break;
+         case FID(CTRX): m_d.m_vCenter.x = reader.AsFloat(); break;
+         case FID(CTRY): m_d.m_vCenter.y = reader.AsFloat(); break;
+         case FID(UPTM): m_d.m_updateinterval = reader.AsInt(); break;
+         case FID(TMON): m_timerEnabled = reader.AsBool(); break;
+         case FID(TMIN): m_timerInterval = reader.AsInt(); break;
+         case FID(NAME): m_wzName = reader.AsWideString(); break;
+         case FID(BGLS): m_desktopBackdrop = reader.AsBool(); break;
+         default: LoadSharedEditableField(tag, reader); break;
+         }
+         return true;
+      });
 }
 
 STDMETHODIMP LightSeq::get_Collection(BSTR *pVal)
 {
-   *pVal = SysAllocString(m_d.m_wzCollection.c_str());
+   *pVal = SysAllocStringLen(m_d.m_wzCollection.c_str(), static_cast<UINT>(m_d.m_wzCollection.length()));
    return S_OK;
 }
 

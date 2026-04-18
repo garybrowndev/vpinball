@@ -9,6 +9,8 @@ static std::mutex mtx;
 
 #include "imgui/imgui.h"
 
+#include "parts/hittarget.h"
+
 float c_hardScatter = 0.0f;
 
 
@@ -79,7 +81,7 @@ float LineSeg::HitTestBasic(const BallS& ball, const float dtime, CollisionEvent
    if (rigid)
    {
       if ((bnd < -ball.m_radius/**2.0f*/) || (lateral && bcpd < 0.f))
-         return -1.0f;	// (ball normal distance) excessive pentratration of object skin ... no collision HACK //!! *2 necessary?
+         return -1.0f;	// (ball normal distance) excessive penetration of object skin ... no collision HACK //!! *2 necessary?
 
       if (lateral && (bnd <= (float)PHYS_TOUCH))
       {

@@ -1,5 +1,40 @@
 #pragma once
 
+class Player;
+class PinTable;
+
+// EnumAssignKeys was previously in pininput.h which upstream removed.
+// Ball History is the sole consumer, so the enum lives here now.
+enum EnumAssignKeys
+{
+   eLeftFlipperKey,
+   eRightFlipperKey,
+   eStagedLeftFlipperKey,
+   eStagedRightFlipperKey,
+   eLeftTiltKey,
+   eRightTiltKey,
+   eCenterTiltKey,
+   ePlungerKey,
+   eFrameCount,
+   eDBGBalls,
+   eDebugger,
+   eAddCreditKey,
+   eAddCreditKey2,
+   eStartGameKey,
+   eMechanicalTilt,
+   eRightMagnaSave,
+   eLeftMagnaSave,
+   eExitGame,
+   eVolumeUp,
+   eVolumeDown,
+   eLockbarKey,
+   eEscape,
+   eTweak,
+   eBallHistoryMenu,
+   eBallHistoryRecall,
+   eNone // sentinel for "no key action" — historically named eCKeys when C was the activation key
+};
+
 #ifndef __BALLHISTORY_WIN32__
 
 struct BallHistory 
@@ -26,11 +61,69 @@ public:
 #else
 
 #include <set>
+#include <mutex>
 
 #include "simpleini/SimpleIni.h"
+
+// Ball History debug logger — only active in Debug builds.
+// Each call flushes immediately (simpler than buffering; debug-only, perf is irrelevant).
+// Logs go to <settings-folder>/logs/<name>.log. SetLogFolder() creates the logs/ subfolder.
+#if defined(_DEBUG) && defined(__BALLHISTORY_WIN32__)
+class BHLog
+{
+public:
+   // Canonical log filenames — add new ones here, never hardcode paths elsewhere.
+   static constexpr const char* LogFile_Debug = "ballhistory_debug.log";
+
+   static void SetLogFolder(const std::string& settingsFolder)
+   {
+      s_logFolder = settingsFolder + "\\logs";
+      CreateDirectory(s_logFolder.c_str(), NULL); // ignore result; already-exists is fine
+   }
+
+   // Returns empty string if SetLogFolder hasn't been called yet.
+   static std::string GetLogPath(const char* filename)
+   {
+      if (s_logFolder.empty()) return std::string();
+      return s_logFolder + "\\" + filename;
+   }
+
+   static void Log(const char* func, const char* fmt, ...)
+   {
+      if (s_logFolder.empty()) return;
+      char msg[512];
+      va_list args;
+      va_start(args, fmt);
+      int len = snprintf(msg, sizeof(msg) - 1, "[%u] %s: ", msec(), func);
+      vsnprintf(msg + len, sizeof(msg) - len - 1, fmt, args);
+      va_end(args);
+
+      std::lock_guard<std::mutex> lock(s_mutex);
+      const std::string path = GetLogPath(LogFile_Debug);
+      FILE* f = nullptr;
+      fopen_s(&f, path.c_str(), "a");
+      if (f)
+      {
+         fprintf(f, "%s\n", msg);
+         fclose(f);
+      }
+   }
+
+private:
+   static std::mutex s_mutex;
+   static std::string s_logFolder;
+};
+
+#define BHLOG(fmt, ...) BHLog::Log(__FUNCTION__, fmt, ##__VA_ARGS__)
+#else
+#define BHLOG(fmt, ...) ((void)0)
+#endif
 #include "renderer/typedefs3D.h"
 #include "imgui/imgui.h"
 #include "physics/HitBall.h"
+#include "parts/ball.h"
+#include "parts/light.h"
+#include "parts/rubber.h"
 
 struct BallHistoryState
 {
@@ -303,6 +396,7 @@ public:
 
    static const int CountdownSoundSeconds;
    static const float TimeLowSoundSeconds;
+   static const int ResultDisplayDurationMs; // how long to hold pass/fail screen (visuals + sound) before next countdown
 
    ModeStateType m_ModeState;
    ConfigModeStateType m_ConfigModeState;
@@ -383,6 +477,8 @@ public:
    std::vector<RunRecord> m_RunRecords;
    std::size_t m_CurrentRunRecord;
    int m_RunStartTimeMs;
+   int m_ResultDisplayEndTimeMs; // non-zero while in result-hold period (pass/fail sound + visuals before next countdown)
+   std::vector<HitBall*> m_TrainerLockedBalls; // balls we locked for trainer purposes (countdown or result-hold); tracked so we can unlock if interrupted (menu open, mode change)
 
    int m_CountdownSoundPlayed;
    bool m_TimeLowSoundPlaying;

@@ -3,16 +3,16 @@
 
 namespace B2SLegacy {
 
-class Sound
+class Sound final
 {
 public:
-   Sound(const vector<unsigned char>& stream);
-   ~Sound();
+   Sound(vector<uint8_t>&& stream) : m_pStream(std::move(stream)) {}
+   ~Sound() {}
 
-   uint8_t* GetStream() { return m_pStream; }
+   const uint8_t* GetStream() const { return m_pStream.data(); }
 
 private:
-   uint8_t* m_pStream;
+   vector<uint8_t> m_pStream;
 };
 
 }

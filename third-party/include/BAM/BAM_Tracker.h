@@ -55,10 +55,10 @@ namespace BAM_Tracker {
 	};
 
 	/// <summary>
-	/// Data recived from BAM Tracker.
+	/// Data received from BAM Tracker.
 	/// </summary>
 	struct TData {
-		// values for HRTimer to synchonize tracker and client timers.
+		// values for HRTimer to synchronize tracker and client timers.
 		LARGE_INTEGER Time_StartValue;
 		double Time_OneMillisecond;
 
@@ -87,15 +87,15 @@ namespace BAM_Tracker {
 		/// <param name="P">Output position [3 x double].</param>
 		/// <param name="d">Played data: start and end position with timestamps.</param>
 		/// <param name="Tnow">Current time.</param>
-		void InterpolatePosition(double *P, TPlayerData &d, double Tnow) const
+		void InterpolatePosition(double *P, const TPlayerData &d, double Tnow) const
 		{
 			// 'a' - Blending factor between two points. 
 			// Based on time stamps for start & end point (Tstart & Tend) and current time (Tnow).
 			double Tstart = d.StartPosition[3];
 			double Tend = d.EndPosition[3];
-			double Tepsilon = 1.0; // 1 ms differenc is to small but it will never happed.
+			double Tepsilon = 1.0; // 1 ms difference is to small but it will never happed.
 			double dT = Tend - Tstart;
-			
+
 			// Block interpolation if for long time there is no new HT data
 			constexpr double dTmin = 200; // time, when we start to slow down move if there is no new HT data
 			constexpr double dTmax = 400; // max time without HT data
@@ -209,9 +209,9 @@ namespace BAM_Tracker {
 			if (!m_pData)
 				return false;
 
-			static double lastP[4] = { 0 };
-			static TPlayerData lastPD = { 0 };
-			static TPlayerData d2 = { 0 };
+			static double lastP[4] = {};
+			static TPlayerData lastPD = {};
+			static TPlayerData d2 = {};
 			
 			TPlayerData d = m_pData->Data[m_pData->UsedDataSlot];
 

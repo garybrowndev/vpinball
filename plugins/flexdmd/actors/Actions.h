@@ -3,7 +3,7 @@
 #include "Actor.h"
 #include "AnimatedActor.h"
 #include "Group.h"
-#include "ScriptablePlugin.h"
+#include "plugins/ScriptablePlugin.h"
 
 #include "tweeny-3.2.0.h"
 
@@ -112,7 +112,7 @@ public:
 
    bool Update(float secondsElapsed) override
    {
-      m_time += m_secondsToWait;
+      m_time += secondsElapsed;
       if (m_time >= m_secondsToWait && m_pAction->Update(secondsElapsed))
       {
          // Prepare for restart

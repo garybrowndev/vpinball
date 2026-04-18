@@ -16,8 +16,7 @@ Scene::Scene(FlexDMD* pFlexDMD, AnimationType animateIn, float pauseS, Animation
 
 Scene::~Scene()
 {
-   for (auto it = m_tweens.begin(); it != m_tweens.end();)
-      m_tweens.erase(it);
+   m_tweens.clear();
 }
 
 void Scene::OnStageStateChanged()
@@ -38,8 +37,7 @@ void Scene::UpdateState()
    }
    else if (!shouldBeActive && m_active) {
       m_active = false;
-      for (auto it = m_tweens.begin(); it != m_tweens.end();)
-         m_tweens.erase(it);
+      m_tweens.clear();
    }
 }
 
@@ -47,7 +45,7 @@ float Scene::StartAnimation(AnimationType animation)
 {
    float alphaLength = 0.5f;
    float scrollWLength = 0.5f;
-   float scrollHLength = scrollWLength * GetHeight() / GetWidth();
+   float scrollHLength = scrollWLength * (float)GetHeight() / (float)GetWidth();
    // TODO Missing animations: ZoomIn = 2, ZoomOut = 3
    switch (animation) {
       case AnimationType_FadeIn:
@@ -77,7 +75,7 @@ float Scene::StartAnimation(AnimationType animation)
       case AnimationType_ScrollOffLeft:
       {
          SetX(0);
-         AddTween(GetX(), -GetWidth(), scrollWLength, ([this](float newValue) {
+         AddTween(GetX(), (float)-GetWidth(), scrollWLength, ([this](float newValue) {
             this->SetX(newValue);
             return false;
          }));
@@ -86,7 +84,7 @@ float Scene::StartAnimation(AnimationType animation)
       case AnimationType_ScrollOffRight:
       {
          SetX(0);
-         AddTween(GetX(), GetWidth(), scrollWLength, ([this](float newValue) {
+         AddTween(GetX(), (float)GetWidth(), scrollWLength, ([this](float newValue) {
             this->SetX(newValue);
             return false;
          }));
@@ -94,7 +92,7 @@ float Scene::StartAnimation(AnimationType animation)
       }
       case AnimationType_ScrollOnLeft:
       {
-         SetX(GetWidth());
+         SetX((float)GetWidth());
          AddTween(GetX(), 0.0f, scrollWLength, ([this](float newValue) {
             this->SetX(newValue);
             return false;
@@ -103,7 +101,7 @@ float Scene::StartAnimation(AnimationType animation)
       }
       case AnimationType_ScrollOnRight:
       {
-         SetX(-GetWidth());
+         SetX((float)-GetWidth());
          AddTween(GetX(), 0.0f, scrollWLength, ([this](float newValue) {
             this->SetX(newValue);
             return false;
@@ -113,7 +111,7 @@ float Scene::StartAnimation(AnimationType animation)
       case AnimationType_ScrollOffUp:
       {
          SetY(0);
-         AddTween(GetY(), -GetHeight(), scrollHLength, ([this](float newValue) {
+         AddTween(GetY(), (float)-GetHeight(), scrollHLength, ([this](float newValue) {
             this->SetY(newValue);
             return false;
          }));
@@ -122,7 +120,7 @@ float Scene::StartAnimation(AnimationType animation)
       case AnimationType_ScrollOffDown:
       {
          SetY(0);
-         AddTween(GetY(), GetHeight(), scrollHLength, ([this](float newValue) {
+         AddTween(GetY(), (float)GetHeight(), scrollHLength, ([this](float newValue) {
             this->SetY(newValue);
             return false;
          }));
@@ -130,7 +128,7 @@ float Scene::StartAnimation(AnimationType animation)
       }
       case AnimationType_ScrollOnUp:
       {
-         SetY(GetHeight());
+         SetY((float)GetHeight());
          AddTween(GetY(), 0.0f, scrollHLength, ([this](float newValue) {
             this->SetY(newValue);
             return false;
@@ -139,7 +137,7 @@ float Scene::StartAnimation(AnimationType animation)
       }
       case AnimationType_ScrollOnDown:
       {
-         SetY(-GetHeight());
+         SetY((float)-GetHeight());
          AddTween(GetY(), 0.0f, scrollHLength, ([this](float newValue) {
             this->SetY(newValue);
             return false;
@@ -182,7 +180,7 @@ float Scene::StartAnimation(AnimationType animation)
       case AnimationType_None:
          return 0.0f;
       default:
-         LOGE("Unsupported animation in scene '%s': %d", GetName().c_str(), animation);
+         LOGE("Unsupported animation in scene '" + GetName() + "': " + std::to_string(animation));
          return 0.0f;
    }
 }
@@ -197,9 +195,9 @@ void Scene::Update(float secondsElapsed)
    for (auto it = m_tweens.begin(); it != m_tweens.end();) {
       it->step((int)(secondsElapsed * 1000.0f));
       if (it->progress() >= 1.0f)
-         m_tweens.erase(it);
+         it = m_tweens.erase(it);
       else
-        ++it;
+         ++it;
    }
 }
 

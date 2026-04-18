@@ -1,3 +1,5 @@
+// license:GPLv3+
+
 #include "PUPPinDisplay.h"
 
 #include "PUPManager.h"
@@ -29,9 +31,9 @@ PUPPinDisplay::~PUPPinDisplay()
    m_pupManager.Unload();
 }
 
-void PUPPinDisplay::Init(int screenNum, const string& RootDir)
+void PUPPinDisplay::Init(int screenNum, const string& romName)
 {
-   m_pupManager.SetGameDir(RootDir);
+   m_pupManager.SetGameDir(romName);
    m_pupManager.AddScreen(screenNum);
 }
 
@@ -45,7 +47,7 @@ void PUPPinDisplay::playlistadd(int screenNum, const string& folder, int sort, i
       return;
 
    if (pScreen->GetPlaylist(folder)) {
-      LOGE("Playlist already exists: screenNum=%d, folder=%s", screenNum, folder.c_str());
+      LOGE(std::format("Playlist already exists: screenNum={}, folder={}", screenNum, folder));
       return;
    }
 
@@ -54,8 +56,16 @@ void PUPPinDisplay::playlistadd(int screenNum, const string& folder, int sort, i
 
 void PUPPinDisplay::playlistplay(int screenNum, const string& playlist)
 {
+   // Play next file from playlist (shuffled or in order) with default volume and no priority
    std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(screenNum, true);
-   NOT_IMPLEMENTED("Not implemented: screenNum=%d, playlist=%s", screenNum, playlist.c_str());
+   if (pScreen)
+   {
+      PUPPlaylist* pPlaylist = pScreen->GetPlaylist(playlist);
+      if (pPlaylist)
+         pScreen->Play(pPlaylist, ""s, pPlaylist->GetVolume(), 0, false, 0, false);
+      else
+         LOGE(std::format("Playlist not found: screenNum={}, playlist={}", screenNum, playlist));
+   }
 }
 
 void PUPPinDisplay::playlistplayex(int screenNum, const string& playlist, const string& playfilename, int volume, int priority)
@@ -74,7 +84,7 @@ void PUPPinDisplay::play(int screenNum, const string& playlist, const string& pl
       PUPPlaylist* pPlaylist = pScreen->GetPlaylist(playlist);
       if (!pPlaylist)
       {
-         LOGE("Playlist not found: screen={%s}, playlist=%s", pScreen->ToString(false).c_str(), playlist.c_str());
+         LOGE(std::format("Playlist not found: screen={{{}}}, playlist={}", pScreen->ToString(false), playlist));
          return;
       }
       pScreen->Play(playlist, playfilename, pPlaylist->GetVolume(), 0);
@@ -84,32 +94,32 @@ void PUPPinDisplay::play(int screenNum, const string& playlist, const string& pl
 void PUPPinDisplay::setWidth(int screenNum, int width)
 {
    std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(screenNum, true);
-   NOT_IMPLEMENTED("Not implemented: screenNum=%d, width=%d", screenNum, width);
+   NOT_IMPLEMENTED(std::format("Not implemented: screenNum={}, width={}", screenNum, width));
 }
 
 void PUPPinDisplay::setHeight(int screenNum, int Height)
 {
    std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(screenNum, true);
-   NOT_IMPLEMENTED("Not implemented: screenNum=%d, height=%d", screenNum, Height);
+   NOT_IMPLEMENTED(std::format("Not implemented: screenNum={}, height={}", screenNum, Height));
 }
 
 void PUPPinDisplay::setPosX(int screenNum, int Posx)
 {
    std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(screenNum, true);
-   NOT_IMPLEMENTED("Not implemented: screenNum=%d, Posx=%d", screenNum, Posx);
+   NOT_IMPLEMENTED(std::format("Not implemented: screenNum={}, Posx={}", screenNum, Posx));
 }
 
 void PUPPinDisplay::setPosY(int screenNum, int PosY)
 {
    std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(screenNum, true);
-   NOT_IMPLEMENTED("Not implemented: screenNum=%d, PosY=%d", screenNum, PosY);
+   NOT_IMPLEMENTED(std::format("Not implemented: screenNum={}, PosY={}", screenNum, PosY));
 }
 
 void PUPPinDisplay::setAspect(int screenNum, int aspectWide, int aspectHigh)
 {
    //**** Set 0,0 to fittoscreen.
    std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(screenNum, true);
-   NOT_IMPLEMENTED("Not implemented: screenNum=%d, aspectWide=%d, aspectHigh=%d", screenNum, aspectWide, aspectHigh);
+   NOT_IMPLEMENTED(std::format("Not implemented: screenNum={}, aspectWide={}, aspectHigh={}", screenNum, aspectWide, aspectHigh));
 }
 
 void PUPPinDisplay::setVolume(int screenNum, int vol)
@@ -155,13 +165,13 @@ void PUPPinDisplay::CloseApp()
 bool PUPPinDisplay::GetisPlaying(int screenNum) const
 {
    std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(screenNum, true);
-   return pScreen ? pScreen->IsPlaying() : false;
+   return pScreen ? pScreen->IsMainPlaying() : false;
 }
 
 void PUPPinDisplay::SetisPlaying(int screenNum, bool value)
 {
    std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(screenNum, true);
-   NOT_IMPLEMENTED("Not implemented: screenNum=%d, value=%d", screenNum, value);
+   NOT_IMPLEMENTED(std::format("Not implemented: screenNum={}, value={}", screenNum, value));
 }
 
 void PUPPinDisplay::SetLength(int screenNum, int StopSecs)
@@ -180,24 +190,25 @@ void PUPPinDisplay::SetLoop(int screenNum, int LoopState)
       pScreen->SetLoop(LoopState);
 }
 
-void PUPPinDisplay::SetBackGround(int screenNum, int Mode)
+void PUPPinDisplay::SetBackGround(int screenNum, int mode)
 {
-   // if you set Mode=1, it will set current playing file as background (loop it always).  Mode=0 to cancel background.  Note if user has 'POP-UP' mode this will be disabled automagically (you don't need to worry about it).
+   // if you set Mode=1, it will set current playing file as background (loop it always).  Mode=0 to cancel background.
+   LOGD(std::format("SetBackGround called: screenNum={}, mode={}", screenNum, mode));
    std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(screenNum, true);
    if (pScreen)
-      pScreen->SetAsBackGround(Mode);
+      pScreen->SetAsBackGround(mode);
 }
 
-void PUPPinDisplay::BlockPlay(int screenNum, int Mode)
+void PUPPinDisplay::BlockPlay(int screenNum, int mode)
 {
    std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(screenNum, true);
-   NOT_IMPLEMENTED("Not implemented: screenNum=%d, mode=%d", screenNum, Mode);
+   NOT_IMPLEMENTED(std::format("Not implemented: screenNum={}, mode={}", screenNum, mode));
 }
 
 void PUPPinDisplay::SetScreen(int screenNum)
 {
    std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(screenNum, true);
-   NOT_IMPLEMENTED("Not implemented: screenNum=%d", screenNum);
+   NOT_IMPLEMENTED(std::format("Not implemented: screenNum={}", screenNum));
 }
 
 void PUPPinDisplay::SetScreenEx(int screenNum, int xpos, int ypos, int swidth, int sheight, int popup) 
@@ -206,25 +217,26 @@ void PUPPinDisplay::SetScreenEx(int screenNum, int xpos, int ypos, int swidth, i
    if (!pScreen)
       return;
    switch (popup) {
-      case 0: pScreen->SetMode(PUPScreen::Mode::Show); break;
-      case 1: pScreen->SetMode(PUPScreen::Mode::ForcePop); break;
-      default: pScreen->SetMode(PUPScreen::Mode::MusicOnly); break;
+   case 0: pScreen->SetMode(PUPScreen::Mode::Show); break; // See Stranger Things
+   case 1: pScreen->SetMode(PUPScreen::Mode::ForcePop); break;
+   case 2: pScreen->SetMode(PUPScreen::Mode::MusicOnly); break; // See Stranger Things
+   default: pScreen->SetMode(PUPScreen::Mode::MusicOnly); break;
    }
    if (swidth && sheight) {
       // If not 0, this is used to define a custom screen size from script. The only known use case is when using PUPDMDControl to render to a real DMD
-      LOGE("Not fully implemented: screenNum=%d, xpos=%d, ypos=%d, swidth=%d, sheight=%d, popup=%d", screenNum, xpos, ypos, swidth, sheight, popup);
+      LOGE(std::format("Not fully implemented: screenNum={}, xpos={}, ypos={}, swidth={}, sheight={}, popup={}", screenNum, xpos, ypos, swidth, sheight, popup));
    }
 }
 
 int PUPPinDisplay::GetSN() const
 {
-   NOT_IMPLEMENTED("Not implemented");
+   NOT_IMPLEMENTED("Not implemented"s);
    return 0;
 }
 
 void PUPPinDisplay::SetSN(int Value)
 {
-   NOT_IMPLEMENTED("Not implemented: value=%d", Value);
+   NOT_IMPLEMENTED("Not implemented: value=" + std::to_string(Value));
 }
 
 void PUPPinDisplay::B2SData(const string& tIndex, int Value)
@@ -234,24 +246,24 @@ void PUPPinDisplay::B2SData(const string& tIndex, int Value)
    auto ec = std::from_chars(tmp.c_str(), tmp.c_str() + tmp.length(), result).ec;
    assert(ec == std::errc{});
 
-   m_pupManager.QueueTriggerData({ tIndex[0], result, Value });
+   m_pupManager.QueueDOFEvent(tIndex[0], result, Value);
 }
 
 const string& PUPPinDisplay::GetB2SFilter() const
 {
-   NOT_IMPLEMENTED("Not implemented");
+   NOT_IMPLEMENTED("Not implemented"s);
    return emptystring;
 }
 
 void PUPPinDisplay::SetB2SFilter(const string& value)
 {
-   NOT_IMPLEMENTED("Not implemented: value=%s", value.c_str());
+   NOT_IMPLEMENTED("Not implemented: value=" + value);
 }
 
 void PUPPinDisplay::Show(int screenNum)
 {
    std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(screenNum, true);
-   NOT_IMPLEMENTED("Not implemented: screenNum=%d", screenNum);
+   NOT_IMPLEMENTED("Not implemented: screenNum=" + std::to_string(screenNum));
 }
 
 void PUPPinDisplay::Hide(int screenNum)
@@ -283,36 +295,42 @@ void PUPPinDisplay::SendMSG(const string& szMsg)
                if (pScreen) {
                   int fn = json["FN"s].as<int>();
                   switch (fn) {
+                     case 2:
+                        // See pDisableLoopRefresh — form state flags (FF/FO), controls Windows form redraw
+                        // { "mt":301, "SN": XX, "FN": 2, "FF":0/1, "FO":0/1 }
+                        NOT_IMPLEMENTED(std::format("Loop refresh flags not implemented: screen={{{}}}, FF={}, FO={}", pScreen->ToString(false), json["FF"s].as<int>(0), json["FO"s].as<int>(0)));
+                        break;
                      case 3:
-                        // hide/show overlay text - { "mt":301, "SN": XX, "FN":3, "OT": 0 } - OT 0/1 overlay text on off bool
-                        NOT_IMPLEMENTED("Show/Hide screen not implemented. szMsg=%s", szMsg.c_str());
+                        // See pDMDSetHUD — show/hide overlay window (overlay image + labels)
+                        // { "mt":301, "SN": XX, "FN":3, "OT": 0 } - OT 0/1
+                        pScreen->m_hudVisible = (json["OT"s].as<int>(0) != 0);
                         break;
                      case 4:
                         // set StayOnTop { "mt":301, "SN": XX, "FN":4, "FS":1/0 }
-                        LOGD("Stay on top requested: screen={%s}, fn=%d, szMsg=%s", pScreen->ToString(false).c_str(), fn, szMsg.c_str());
+                        LOGD(std::format("Stay on top requested: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
                         pScreen->SetMode((json["FS"s].exists() && json["FS"s].as<int>() == 1) ? PUPScreen::Mode::ForceOn : PUPScreen::Mode::ForceBack);
                         break;
                      case 6:
                         // Bring screen to the front
-                        LOGD("Bring screen to front requested: screen={%s}, fn=%d, szMsg=%s", pScreen->ToString(false).c_str(), fn, szMsg.c_str());
-                        pScreen->SendToFront();
+                        LOGD(std::format("Bring screen to front requested: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
+                        m_pupManager.SendScreenToFront(pScreen.get());
                         break;
                      case 10:
                         // set all displays all volume { "mt":301, "SN": XX, "FN":10, "VL":9}  VL=volume level
-                        NOT_IMPLEMENTED("Set all displays all volume not implemented: screen={%s}, fn=%d, szMsg=%s", pScreen->ToString(false).c_str(), fn, szMsg.c_str());
+                        NOT_IMPLEMENTED(std::format("Set all displays all volume not implemented: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
                         break;
                      case 11:
                         // set all volume { "mt":301, "SN": XX, "FN":11, "VL":9}  VL=volume level
-                        LOGD("Set all volume requested: screen={%s}, fn=%d, szMsg=%s", pScreen->ToString(false).c_str(), fn, szMsg.c_str());
+                        LOGD(std::format("Set all volume requested: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
                         pScreen->SetVolume(static_cast<float>(json["VL"s].as<double>()));
                         break;
                      case 12:
                         // "{ ""mt"":301, ""SN"": 18, ""FN"":12 }" 'STOPSCREEN
-                        NOT_IMPLEMENTED("StopScreen? not implemented. szMsg=%s", szMsg.c_str());
+                        NOT_IMPLEMENTED("StopScreen? not implemented. szMsg=" + szMsg);
                         break;
                      case 15:
                         // set screen custompos { 'mt':301, 'SN':15,'FN':15,'CP':'parent_screen,x,y,w,h'} CP = CustomPos String, coordinates relative in %
-                        LOGD("Set screen custompos requested: screen={%s}, fn=%d, szMsg=%s",pScreen->ToString(false).c_str(), fn, szMsg.c_str());
+                        LOGD(std::format("Set screen custompos requested: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
                         pScreen->SetCustomPos(json["CP"s].as_str());
                         break;
                      case 16:
@@ -320,96 +338,105 @@ void PUPPinDisplay::SendMSG(const string& szMsg)
                         //   { ""mt"":301, ""SN"": 2, ""FN"":16, ""EX"": """&PuPMiniGameExe  &""", ""WT"": """&PuPMiniGameTitle&""", ""RS"":1 , ""TO"":15 , ""WZ"":0 , ""SH"": 1 , ""FT"":""Visual Pinball Player"" }
                         //   { ""mt"":301, ""SN"": 2, ""FN"":16, ""EX"": ""Pupinit.bat"", ""WT"": """", ""RS"":1 , ""TO"":15 , ""WZ"":0 , ""SH"": 1 , ""FT"":""Visual Pinball Player"" }
                         // EX: Windows executable / WT: Window Title / WZ: Window Z order / RS: ? / TO: ? / SH: ? / FT: ?
-                        NOT_IMPLEMENTED("Executing OS executable is not implemented. szMsg=%s", szMsg.c_str());
+                        NOT_IMPLEMENTED("Executing OS executable is not implemented. szMsg=" + szMsg);
                         break;
                      case 17:
                         // set window z order { ""mt"":301, ""SN"": ""2"", ""FN"":17, ""WT"":""Visual Pinball Player"", ""WZ"": 1, ""WP"": 1 }
                         // See https://learn.microsoft.com/fr-fr/windows/win32/api/winuser/nf-winuser-setwindowpos
                         // WT: Window Title / WZ: hWndInsertAfter / WP: uFlags
-                        NOT_IMPLEMENTED("Set OS window z ordering is not implemented. szMsg=%s", szMsg.c_str());
+                        NOT_IMPLEMENTED("Set OS window z ordering is not implemented. szMsg=" + szMsg);
                         break;
                      case 22:
-                        // set screen transparency { "mt":301, "SN": 16, "FN":22, "AM":1, "AV":255 } AV: Alpha Value (0-255), AM: Alpha mode enabled 0/1?
-                        NOT_IMPLEMENTED("Set screen transparency not implemented: screen={%s}, fn=%d, szMsg=%s", pScreen->ToString(false).c_str(), fn, szMsg.c_str());
+                     {
+                        // set screen transparency { "mt":301, "SN": 16, "FN":22, "AM":1, "AV":255 }
+                        // AV: Alpha Value (0-255), AM: Alpha mode enabled (1) or disabled (0)
+                        int am = json["AM"s].as<int>(0);
+                        if (am)
+                           pScreen->m_screenAlpha = static_cast<float>(json["AV"s].as<int>(255)) / 255.f;
+                        else
+                           pScreen->m_screenAlpha = 1.f;
                         break;
+                     }
                      case 30:
                         // {'mt':301, 'SN': XX, 'FN':30, 'PM':1 } set (play ?) jukebox mode: jukebox mode will auto advance to next media in playlist and you can use next/prior sub to manuall advance
-                        NOT_IMPLEMENTED("Jukebox mode not implemented: screen={%s}, fn=%d, szMsg=%s", pScreen->ToString(false).c_str(), fn, szMsg.c_str());
+                        NOT_IMPLEMENTED(std::format("Jukebox mode not implemented: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
                         break;
                      case 31:
                         // pup jukebox control - {'mt':301, 'SN': XX, 'FN':31, 'PM':1 } - PM 1 = next, PM 2 = previous
-                        NOT_IMPLEMENTED("Jukebox mode not implemented: screen={%s}, fn=%d, szMsg=%s", pScreen->ToString(false).c_str(), fn, szMsg.c_str());
+                        NOT_IMPLEMENTED(std::format("Jukebox mode not implemented: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
                         break;
                      case 32:
                         // "{ ""mt"":301, ""SN"": 1, ""FN"":32, ""FQ"":3 }"   'set no antialias on font render if real
-                        NOT_IMPLEMENTED("Font quality is not implemented: screen={%s}, fn=%d, szMsg=%s", pScreen->ToString(false).c_str(), fn, szMsg.c_str());
+                        NOT_IMPLEMENTED(std::format("Font quality is not implemented: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
                         break;
                      case 33:
                         // "{ ""mt"":301, ""SN"": 1, ""FN"":33 }"             'set pupdmd for mirror and hide behind other pups
                         // TODO expose the DMD screen to other pluginsthrough the generic controllar plugin API
-                        NOT_IMPLEMENTED("DMD mirroring is not implemented: screen={%s}, fn=%d, szMsg=%s", pScreen->ToString(false).c_str(), fn, szMsg.c_str());
+                        NOT_IMPLEMENTED(std::format("DMD mirroring is not implemented: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
                         break;
                      case 34:
                         // "{ ""mt"":301, ""SN"": "& pDisp &", ""FN"": 34 }"             'hideoverlay text during next videoplay on DMD auto return
-                        NOT_IMPLEMENTED("Uknown function not implemented: screen={%s}, fn=%d, szMsg=%s", pScreen->ToString(false).c_str(), fn, szMsg.c_str());
+                        NOT_IMPLEMENTED(std::format("Unknown function not implemented: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
                         break;
                      case 41:
                         // 'set safeloop mode on current playing media.  Good for background videos that refresh often?  { "mt":301, "SN": XX, "FN":41 }
-                        NOT_IMPLEMENTED("Safe loop mode not implemented: screen={%s}, fn=%d, szMsg=%s", pScreen->ToString(false).c_str(), fn, szMsg.c_str());
+                        NOT_IMPLEMENTED(std::format("Safe loop mode not implemented: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
                         break;
                      case 42:
-                        // will temporary volume duck all pups (not masterid) till masterid currently playing video ends.  will auto-return all pups to normal.
-                        // VolLevel is number,  0 to mute 99 for 99%
-                        // ALL may be omitted, not sure how it affects
-                        // "{ ""mt"":301, ""SN"": "& MasterPuPID& ", ""FN"": 42, ""DV"": "&VolLevel&" , ""ALL"":1 }"                 
-                        NOT_IMPLEMENTED("Temporary volume ducking is not implemented: screen={%s}, fn=%d, szMsg=%s", pScreen->ToString(false).c_str(), fn, szMsg.c_str());
+                     {
+                        // See PUPDMD AudioDuckPuP — temporarily duck all screens except master
+                        // "{ ""mt"":301, ""SN"": "& MasterPuPID& ", ""FN"": 42, ""DV"": "&VolLevel&" , ""ALL"":1 }"
+                        float duckLevel = static_cast<float>(json["DV"s].as<int>(50)) / 100.0f;
+                        m_pupManager.DuckAllExcept(sn, duckLevel);
                         break;
+                     }
                      case 45:
                         // slow pc mode { "mt":301, "SN":XX, "FN":45, "SP":1 } - SP 0/1 = slow pc mode bool
-                        NOT_IMPLEMENTED("Slow PC mode is not implemented: screen={%s}, fn=%d, szMsg=%s", pScreen->ToString(false).c_str(), fn, szMsg.c_str());
+                        NOT_IMPLEMENTED(std::format("Slow PC mode is not implemented: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
                         break;
                      case 46:
-                        // pad all text { "mt":301, "SN": XX, "FN":46, "PA":1 } - PA 0/1 = padd text bool
-                        NOT_IMPLEMENTED("Pas all text is not implemented: screen={%s}, fn=%d, szMsg=%s", pScreen->ToString(false).c_str(), fn, szMsg.c_str());
+                        // See pDMDAlwaysPAD — pad all text with space before/after for shadow clipping
+                        // { "mt":301, "SN": XX, "FN":46, "PA":1 } - PA 0/1 = pad text bool
+                        NOT_IMPLEMENTED(std::format("Pad text not implemented: screen={{{}}}, PA={}", pScreen->ToString(false), json["PA"s].as<int>(0)));
                         break;
                      case 50:
                         // pSetAspectRatio(PuPID, arWidth, arHeight) "{ ""mt"":301, ""SN"": "&PuPID& ", ""FN"": 50, ""WIDTH"": "&arWidth&", ""HEIGHT"": "&arHeight&" }"   
-                        NOT_IMPLEMENTED("Set aspect ratio is not implemented: screen={%s}, fn=%d, szMsg=%s", pScreen->ToString(false).c_str(), fn, szMsg.c_str());
+                        NOT_IMPLEMENTED(std::format("Set aspect ratio is not implemented: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
                         break;
                      case 51:
                         // set media play position in ms { "mt":301, "SN": XX, "FN":51, "SP": 3431} - SP position in ms
-                        NOT_IMPLEMENTED("Set precise media position is not implemented: screen={%s}, fn=%d, szMsg=%s", pScreen->ToString(false).c_str(), fn, szMsg.c_str());
+                        NOT_IMPLEMENTED(std::format("Set precise media position is not implemented: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
                         break;
                      case 52:
                         // pDMDSetTextQuality(AALevel)  '0 to 4 aa.  4 is sloooooower.  default 1,  perhaps use 2-3 if small desktop view.  only affect text quality.  can set per label too with 'qual' settings.
                         // "{ ""mt"":301, ""SN"": 5, ""FN"":52, ""SC"": "& AALevel &" }"    'slow pc mode
-                        NOT_IMPLEMENTED("Font antialiasing level is not implemented: screen={%s}, fn=%d, szMsg=%s", pScreen->ToString(false).c_str(), fn, szMsg.c_str());
+                        NOT_IMPLEMENTED(std::format("Font antialiasing level is not implemented: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
                         break;
                      case 53:
                         // Experimental frame rescale, FORCE higher frame size to autosize and rescale nicer,  like AA and auto-fit.
                         // "{ ""mt"":301, ""SN"": "&PuPID& ", ""FN"": 53, ""XW"": "&fWidth&", ""YH"": "&fHeight&", ""FR"":1 }"
-                        NOT_IMPLEMENTED("Experimental frame rescale is not implemented: screen={%s}, fn=%d, szMsg=%s", pScreen->ToString(false).c_str(), fn, szMsg.c_str());
+                        NOT_IMPLEMENTED(std::format("Experimental frame rescale is not implemented: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
                         break;
                      default:
-                        NOT_IMPLEMENTED("Uknown function not implemented: screen={%s}, fn=%d, szMsg=%s", pScreen->ToString(false).c_str(), fn, szMsg.c_str());
+                        NOT_IMPLEMENTED(std::format("Unknown function not implemented: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
                         break;
                   }
                }
                else {
-                  LOGE("Screen not found: screenNum=%d, szMsg=%s", sn, szMsg.c_str());
+                  LOGE(std::format("Screen not found: screenNum={}, szMsg={}", sn, szMsg));
                }
             }
             else {
-               NOT_IMPLEMENTED("Not implemented: mt=%d, szMsg=%s", mt, szMsg.c_str());
+               NOT_IMPLEMENTED(std::format("Not implemented: mt={}, szMsg={}", mt, szMsg));
             }
             break;
          default:
-            NOT_IMPLEMENTED("Not implemented: mt=%d, szMsg=%s", mt, szMsg.c_str());
+            NOT_IMPLEMENTED(std::format("Not implemented: mt={}, szMsg={}", mt, szMsg));
             break;
       }
    }
    else {
-      LOGE("No message type found: szMsg=%s", szMsg.c_str());
+      LOGE("No message type found: szMsg=" + szMsg);
    }
 
    return;
@@ -438,13 +465,11 @@ void PUPPinDisplay::LabelNew(int screenNum, const string& LabelName, const strin
    if (!pScreen)
       return;
 
-   if (!pScreen->IsLabelInit()) {
-      LOGE("LabelInit has not been called: screenNum=%d", screenNum);
-      return;
-   }
+   if (!pScreen->IsLabelInit())
+      pScreen->SetLabelInit();
 
-   pScreen->AddLabel(new PUPLabel(&m_pupManager, LabelName, FontName, static_cast<float>(Size), Color, 
-      static_cast<float>(Angle), (PUP_LABEL_XALIGN)xAlign, (PUP_LABEL_YALIGN)yAlign, 
+   pScreen->AddLabel(new PUPLabel(&m_pupManager, LabelName, FontName, static_cast<float>(Size), Color,
+      static_cast<float>(Angle) / 10.0f, (PUP_LABEL_XALIGN)xAlign, (PUP_LABEL_YALIGN)yAlign,
       static_cast<float>(xMargin), static_cast<float>(yMargin), PageNum, Visible));
 
    return;
@@ -470,24 +495,31 @@ void PUPPinDisplay::LabelSet(int screenNum, const string& LabelName, const strin
    if (!pScreen)
       return;
 
+   // See pDMDSetHUD — pBackground visibility controls the HUD layer
+   if (StrCompareNoCase(LabelName, "pBackground"s))
+      pScreen->m_hudVisible = Visible;
+
    PUPLabel* pLabel = pScreen->GetLabel(LabelName);
    if (!pLabel) {
       if (m_warnedLabels[screenNum].find(LabelName) == m_warnedLabels[screenNum].end())
       {
-         LOGE("Invalid label: screen={%s}, labelName=%s", pScreen->ToString(false).c_str(), LabelName.c_str());
+         LOGE(std::format("Invalid label: screen={{{}}}, labelName={}", pScreen->ToString(false), LabelName));
          m_warnedLabels[screenNum].insert(LabelName);
       }
       return;
    }
 
    pLabel->SetCaption(Caption);
-   pLabel->SetVisible(Visible);
+   // Animations override visibility in the renderer — a label with an active
+   // animation renders regardless of m_visible
+   if (!pLabel->IsAnimating())
+      pLabel->SetVisible(Visible);
    pLabel->SetSpecial(Special);
 }
 
 void PUPPinDisplay::LabelSetEx()
 {
-   NOT_IMPLEMENTED("Not implemented");
+   NOT_IMPLEMENTED("Not implemented"s);
 }
 
 /*
@@ -511,53 +543,65 @@ void PUPPinDisplay::LabelInit(int screenNum)
 {
    std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(screenNum, true);
    if (pScreen)
+   {
       pScreen->SetLabelInit();
+      // See pDMDSetHUD — pBackground label created automatically during LabelInit
+      if (!pScreen->GetLabel("pBackground"))
+      {
+         pScreen->AddLabel(new PUPLabel(&m_pupManager, "pBackground"s, "Liberation Sans"s, 50.f, 0xFF, 0.f,
+            PUP_LABEL_XALIGN_CENTER, PUP_LABEL_YALIGN_CENTER, 0.f, 0.f, -1, true));
+      }
+   }
 }
 
 const string& PUPPinDisplay::GetGetGame() const
 {
-   NOT_IMPLEMENTED("Not implemented");
+   NOT_IMPLEMENTED("Not implemented"s);
    return emptystring;
 }
 
 void PUPPinDisplay::SetGetGame(const string& value)
 {
-   NOT_IMPLEMENTED("Not implemented: value=%s", value.c_str());
+   NOT_IMPLEMENTED("Not implemented: value=" + value);
 }
 
-const string& PUPPinDisplay::GetGetRoot() const
+string PUPPinDisplay::GetGetRoot() const
 {
-   return m_pupManager.GetRootPath();
+   // The return path is either the default one when not playing or the one actually being played (which may be a per table or a global folder)
+   if (m_pupManager.GetPath().empty())
+      return m_pupManager.GetRootPath().string();
+   else
+      return (m_pupManager.GetPath().parent_path() / ""sv).string();
 }
 
 void PUPPinDisplay::SetGetRoot(const string& value)
 {
-   NOT_IMPLEMENTED("Not implemented: value=%s", value.c_str());
+   NOT_IMPLEMENTED("Not implemented: value=" + value);
 }
 
 void PUPPinDisplay::SoundAdd(const string& sname, const string& fname, int svol, double sX, double sy, const string& SP)
 {
-   NOT_IMPLEMENTED("Not implemented: sname=%s, fname=%s, svol=%d, sX=%f, sy=%f, SP=%s", sname.c_str(), fname.c_str(), svol, sX, sy, SP.c_str());
+   NOT_IMPLEMENTED(std::format("Not implemented: sname={}, fname={}, svol={}, sX={}, sy={}, SP={}", sname, fname, svol, sX, sy, SP));
 }
 
 void PUPPinDisplay::SoundPlay(const string& sname)
 {
-   NOT_IMPLEMENTED("Not implemented: sname=%s", sname.c_str());
+   NOT_IMPLEMENTED("Not implemented: sname=" + sname);
 }
 
 void PUPPinDisplay::PuPSound(const string& sname, int sX, int sy, int sz, int vol, const string& SP)
 {
-   NOT_IMPLEMENTED("Not implemented: sname=%s, sX=%d, sy=%d, sz=%d, vol=%d, SP=%s", sname.c_str(), sX, sy, sz, vol, SP.c_str());
+   NOT_IMPLEMENTED(std::format("Not implemented: sname={}, sX={}, sy={}, sz={}, vol={}, SP={}", sname, sX, sy, sz, vol, SP));
 }
 
 void PUPPinDisplay::InitPuPMenu(int Param1)
 {
-   NOT_IMPLEMENTED("Not implemented: param1=%d", Param1);
+   NOT_IMPLEMENTED("Not implemented: param1=" + std::to_string(Param1));
 }
 
 const string& PUPPinDisplay::GetB2SDisplays() const
 {
-   NOT_IMPLEMENTED("Not implemented");
+   NOT_IMPLEMENTED("Not implemented"s);
    return emptystring;
 }
 
@@ -567,7 +611,7 @@ int PUPPinDisplay::GetGameUpdate(const string& GameTitle, int Func, int FuncData
    // - forward key up / key down
    // - check for mini game state
    // - readback the value of the score
-   NOT_IMPLEMENTED("Not implemented: gameTitle=%s, func=%d, funcData=%d, extra=%s", GameTitle.c_str(), Func, FuncData, Extra.c_str());
+   NOT_IMPLEMENTED(std::format("Not implemented: gameTitle={}, func={}, funcData={}, extra={}", GameTitle, Func, FuncData, Extra));
    return 0;
 }
 
@@ -584,7 +628,8 @@ string PUPPinDisplay::GetVersion() const
    constexpr int nVersionNo1 = 5;
    constexpr int nVersionNo2 = 99;
    constexpr int nVersionNo3 = 99;
-   return std::to_string(nVersionNo0) + '.' + std::to_string(nVersionNo1) + '.' + std::to_string(nVersionNo2) + '.' + std::to_string(nVersionNo3);
+   static const string version = std::to_string(nVersionNo0) + '.' + std::to_string(nVersionNo1) + '.' + std::to_string(nVersionNo2) + '.' + std::to_string(nVersionNo3);
+   return version;
 }
 
 /* STDMETHODIMP PUPPinDisplay::GrabDC2(int pWidth, int pHeight, BSTR wintitle, SAFEARRAY** pixels)
@@ -599,42 +644,60 @@ void PUPPinDisplay::playevent(int screenNum, const string& playlist, const strin
    std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(screenNum, true);
    if (!pScreen)
       return;
-   // TODO handle seconds and Special
-   pScreen->Play(playlist, playfilename, static_cast<float>(volume), priority);
 
-   //  'playtype for triggers
-   //  'ptNormal=0;
-   //  'ptLoop=1;
-   //  'ptSplashReset=2;
-   //  'ptSplashResume=3;
-   //  'ptStopScreen=4;
-   //  'ptStopFile=5;
-   //  'ptSetBG=6;
-   //  'ptPlaySSF=7;
-   //  'ptSkipSameP=8;
-   //  'ptCustomFunc=9;
-   //  'ptForcePlay=10;
-   //  'ptQueueSameP=11;
-   //  'ptQueueAlways=12;
+   // playtype: 0=Normal, 1=Loop, 2=SplashReset, 3=SplashResume, 4=StopScreen,
+   //           5=StopFile, 6=SetBG, 7=PlaySSF, 8=SkipSameP, 9=CustomFunc,
+   //           10=ForcePlay, 11=QueueSameP, 12=QueueAlways
    switch (playtype) {
-   case 0:
-      // Normal
+   case 0: // Normal
+      pScreen->Play(playlist, playfilename, static_cast<float>(volume), priority);
+      if (Seconds > 0)
+         pScreen->SetLength(Seconds);
       break;
    case 1: // Loop
+      pScreen->Play(playlist, playfilename, static_cast<float>(volume), priority);
       pScreen->SetLoop(1);
       break;
-   case 6: // SetBG
-      pScreen->SetAsBackGround(1);
+   case 2: // SplashReset
+   case 3: // SplashResume
+      pScreen->Play(playlist, playfilename, static_cast<float>(volume), priority);
+      if (Seconds > 0)
+         pScreen->SetLength(Seconds);
       break;
+   case 4: // StopScreen
+      pScreen->Stop(priority);
+      break;
+   case 5: // StopFile
+   {
+      PUPPlaylist* pPlaylist = pScreen->GetPlaylist(playlist);
+      if (pPlaylist)
+         pScreen->Stop(pPlaylist, playfilename);
+      break;
+   }
+   case 6: // SetBG
+   {
+      PUPPlaylist* pPlaylist = pScreen->GetPlaylist(playlist);
+      if (pPlaylist)
+         pScreen->Play(pPlaylist, playfilename, static_cast<float>(volume), priority, false, Seconds, true);
+      break;
+   }
+   case 8: // SkipSamePriority
+   {
+      PUPPlaylist* pPlaylist = pScreen->GetPlaylist(playlist);
+      if (pPlaylist)
+         pScreen->Play(pPlaylist, playfilename, static_cast<float>(volume), priority, true, Seconds, false);
+      break;
+   }
    default:
-      NOT_IMPLEMENTED("Not implemented: playevent playtype=%d", playtype);
+      NOT_IMPLEMENTED("Not implemented: playevent playtype=" + std::to_string(playtype));
+      break;
    }
 }
 
-void PUPPinDisplay::SetPosVideo(int screenNum, int StartPos, int EndPos, int Mode, const string& Special)
+void PUPPinDisplay::SetPosVideo(int screenNum, int StartPos, int EndPos, int mode, const string& Special)
 {
    std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(screenNum, true);
-   NOT_IMPLEMENTED("Not implemented: screenNum=%d, startPos=%d, endPos=%d, mode=%d, special=%s", screenNum, StartPos, EndPos, Mode, Special.c_str());
+   NOT_IMPLEMENTED(std::format("Not implemented: screenNum={}, startPos={}, endPos={}, mode={}, special={}", screenNum, StartPos, EndPos, mode, Special));
 }
 
 void PUPPinDisplay::PuPClose()

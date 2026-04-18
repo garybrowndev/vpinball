@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "ui/resource.h"
+#include "ui/win/resource.h"
 
 class IHaveDragPoints;
 
@@ -26,6 +26,8 @@ public:
    void Init(IHaveDragPoints *pihdp, const float x, const float y, const float z, const bool smooth);
 
    // From ISelect
+   void UIRenderPass1(Sur *const psur) final { /* handled by owner */ }
+   void UIRenderPass2(Sur *const psur) final { /* handled by owner */ }
    void OnLButtonDown(int x, int y) final;
    void OnLButtonUp(int x, int y) final;
    void MoveOffset(const float dx, const float dy) final;
@@ -36,16 +38,19 @@ public:
    Vertex2D GetCenter() const final;
    void PutCenter(const Vertex2D &pv) final;
 
+#ifndef __STANDALONE__
    void EditMenu(CMenu &menu) final;
    void DoCommand(int icmd, int x, int y) final;
+#endif
+
    void SetSelectFormat(Sur *psur) final;
    void SetMultiSelectFormat(Sur *psur) final;
    IEditable *GetIEditable() final;
    const IEditable *GetIEditable() const final;
    PinTable *GetPTable() final { return GetIEditable()->GetPTable(); }
    const PinTable *GetPTable() const final { return GetIEditable()->GetPTable(); }
-   IDispatch *GetDispatch() final { return (IDispatch *)this; }
-   const IDispatch *GetDispatch() const final { return (const IDispatch *)this; }
+   IDispatch *GetIDispatch() final { return (IDispatch *)this; }
+   const IDispatch *GetIDispatch() const final { return (const IDispatch *)this; }
 
    int GetSelectLevel() const final { return 2; } // So dragpoints won't be band-selected with the main objects
 
@@ -68,7 +73,7 @@ public:
    void Delete() final;
    void Uncreate() final;
 
-   bool LoadToken(const int id, BiffReader *const pbr) final;
+   bool LoadToken(const int id, IObjectReader& reader);
 
    // IControlPoint
 public:
@@ -93,6 +98,14 @@ public:
    bool m_slingshot;
    bool m_autoTexture;
 
+   bool IsUILocked() const final { return m_uiLocked; }
+   void SetUILock(bool lock) final { m_uiLocked = lock; }
+   bool IsUIVisible() const final { return m_uiVisible; }
+   void SetUIVisible(bool visible) final { m_uiVisible = visible; }
+
+   bool m_uiLocked = false; // Can not be dragged in the editor
+   bool m_uiVisible = true; // UI visibility (not the same as rendering visibility which is a member of part data)
+
 private:
 #if defined(_M_X64) || defined(_M_AMD64) || !defined(_MSC_VER)
    IHaveDragPoints *m_pihdp;
@@ -108,7 +121,7 @@ private:
 class IHaveDragPoints
 {
 public:
-   IHaveDragPoints();
+   IHaveDragPoints() = default;
 
    virtual ~IHaveDragPoints();
 
@@ -119,9 +132,8 @@ public:
 
    virtual int GetMinimumPoints() const { return 3; }
 
-   virtual HRESULT SavePointData(IStream *pstm, HCRYPTHASH hcrypthash);
-   //virtual HRESULT InitPointLoad(IStream *pstm, HCRYPTHASH hcrypthash);
-   void LoadPointToken(BiffReader *pbr);
+   void SavePoints(IObjectWriter& writer) const;
+   void LoadPointToken(IObjectReader& reader);
 
    virtual void ClearPointsForOverwrite();
 
@@ -130,11 +142,8 @@ public:
 
    void FlipPointY(const Vertex2D& pvCenter);
    void FlipPointX(const Vertex2D& pvCenter);
-   void RotateDialog();
    void RotatePoints(const float ang, const Vertex2D& pvCenter, const bool useElementCenter);
-   void ScaleDialog();
    void ScalePoints(const float scalex, const float scaley, const Vertex2D& pvCenter, const bool useElementCenter);
-   void TranslateDialog();
    void TranslatePoints(const Vertex2D &pvOffset);
    void ReverseOrder();
 
@@ -142,12 +151,6 @@ public:
 
    friend class DragPoint;
 
-   PropertyPane *m_propVisuals;
-   PropertyPane *m_propPosition;
-
-// Ported at: VisualPinball.Engine/Math/DragPoint.cs
-
-protected:
    template <typename T>
    void GetRgVertex(vector<T> &vv, const bool loop = true, const float accuracy = 4.f) const // 4 = maximum precision that we allow for
    {

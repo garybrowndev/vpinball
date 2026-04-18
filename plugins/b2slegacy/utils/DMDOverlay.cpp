@@ -10,6 +10,20 @@
 
 namespace B2SLegacy {
 
+MSGPI_BOOL_VAL_SETTING(scoreViewDMDOverlayProp, "ScoreViewDMDOverlay", "ScoreView DMD Overlay", "Enable a DMD overlay on the Score View", true, false);
+MSGPI_BOOL_VAL_SETTING(scoreViewDMDAutoPosProp, "ScoreViewDMDAutoPos", "ScoreView DMD Automatic position", "Enable automatic DMD bounds detection", true, false);
+MSGPI_INT_VAL_SETTING(scoreViewDMDXProp, "ScoreViewDMDX", "ScoreView DMD X position", "DMD overlay X position", true, 0, 0xFFFF, 0);
+MSGPI_INT_VAL_SETTING(scoreViewDMDYProp, "ScoreViewDMDY", "ScoreView DMD Y position", "DMD overlay Y position", true, 0, 0xFFFF, 0);
+MSGPI_INT_VAL_SETTING(scoreViewDMDWProp, "ScoreViewDMDW", "ScoreView DMD width", "DMD overlay width", true, 0, 0xFFFF, 0);
+MSGPI_INT_VAL_SETTING(scoreViewDMDHProp, "ScoreViewDMDH", "ScoreView DMD height", "DMD overlay height", true, 0, 0xFFFF, 0);
+
+MSGPI_BOOL_VAL_SETTING(backglassDMDOverlayProp, "BackglassDMDOverlay", "Backglass DMD Overlay", "Enable a DMD overlay on the Backglass", true, false);
+MSGPI_BOOL_VAL_SETTING(backglassDMDAutoPosProp, "BackglassDMDAutoPos", "Backglass DMD Automatic position", "Enable automatic DMD bounds detection", true, false);
+MSGPI_INT_VAL_SETTING(backglassDMDXProp, "BackglassDMDX", "Backglass DMD X position", "DMD overlay X position", true, 0, 0xFFFF, 0);
+MSGPI_INT_VAL_SETTING(backglassDMDYProp, "BackglassDMDY", "Backglass DMD Y position", "DMD overlay Y position", true, 0, 0xFFFF, 0);
+MSGPI_INT_VAL_SETTING(backglassDMDWProp, "BackglassDMDW", "Backglass DMD width", "DMD overlay width", true, 0, 0xFFFF, 0);
+MSGPI_INT_VAL_SETTING(backglassDMDHProp, "BackglassDMDH", "Backglass DMD height", "DMD overlay height", true, 0, 0xFFFF, 0);
+
 DMDOverlay::DMDOverlay(ResURIResolver& resURIResolver, VPXTexture& dmdTex, VPXTexture backImage, VPXPluginAPI* vpxApi)
    : m_resURIResolver(resURIResolver)
    , m_dmdTex(dmdTex)
@@ -18,21 +32,68 @@ DMDOverlay::DMDOverlay(ResURIResolver& resURIResolver, VPXTexture& dmdTex, VPXTe
 {
 }
 
-void DMDOverlay::LoadSettings(MsgPluginAPI* const msgApi, const string& pluginId, const string& prefix)
+DMDOverlay::~DMDOverlay()
 {
-   char buf[32];
-   msgApi->GetSetting(pluginId.c_str(), (prefix + "DMDOverlay").c_str(), buf, sizeof(buf));
-   m_enable = atoi(buf) != 0;
-   msgApi->GetSetting(pluginId.c_str(), (prefix + "DMDAutoPos").c_str(), buf, sizeof(buf));
-   m_detectDmdFrame = atoi(buf) != 0;
-   msgApi->GetSetting(pluginId.c_str(), (prefix + "DMDX").c_str(), buf, sizeof(buf));
-   m_frame.x = atoi(buf);
-   msgApi->GetSetting(pluginId.c_str(), (prefix + "DMDY").c_str(), buf, sizeof(buf));
-   m_frame.y = atoi(buf);
-   msgApi->GetSetting(pluginId.c_str(), (prefix + "DMDWidth").c_str(), buf, sizeof(buf));
-   m_frame.z = atoi(buf);
-   msgApi->GetSetting(pluginId.c_str(), (prefix + "DMDHeight").c_str(), buf, sizeof(buf));
-   m_frame.w = atoi(buf);
+   m_stopSearching = true;
+   if (m_frameSearch.valid())
+      m_frameSearch.get();
+}
+
+void DMDOverlay::RegisterSettings(const MsgPluginAPI* const msgApi, unsigned int endpointId)
+{
+   msgApi->RegisterSetting(endpointId, &backglassDMDOverlayProp);
+   msgApi->RegisterSetting(endpointId, &backglassDMDAutoPosProp);
+   msgApi->RegisterSetting(endpointId, &backglassDMDXProp);
+   msgApi->RegisterSetting(endpointId, &backglassDMDYProp);
+   msgApi->RegisterSetting(endpointId, &backglassDMDWProp);
+   msgApi->RegisterSetting(endpointId, &backglassDMDHProp);
+   msgApi->RegisterSetting(endpointId, &scoreViewDMDOverlayProp);
+   msgApi->RegisterSetting(endpointId, &scoreViewDMDAutoPosProp);
+   msgApi->RegisterSetting(endpointId, &scoreViewDMDXProp);
+   msgApi->RegisterSetting(endpointId, &scoreViewDMDYProp);
+   msgApi->RegisterSetting(endpointId, &scoreViewDMDWProp);
+   msgApi->RegisterSetting(endpointId, &scoreViewDMDHProp);
+}
+
+void DMDOverlay::LoadSettings(bool isScoreView)
+{
+   if (isScoreView)
+   {
+      m_enable = scoreViewDMDOverlayProp_Val != 0;
+      m_detectDmdFrame = scoreViewDMDAutoPosProp_Val != 0;
+      if (!m_detectDmdFrame)
+      {
+         m_frame.x = scoreViewDMDXProp_Val;
+         m_frame.y = scoreViewDMDYProp_Val;
+         m_frame.z = scoreViewDMDWProp_Val;
+         m_frame.w = scoreViewDMDHProp_Val;
+      }
+   }
+   else
+   {
+      m_enable = backglassDMDOverlayProp_Val != 0;
+      m_detectDmdFrame = backglassDMDAutoPosProp_Val != 0;
+      if (!m_detectDmdFrame)
+      {
+         m_frame.x = backglassDMDXProp_Val;
+         m_frame.y = backglassDMDYProp_Val;
+         m_frame.z = backglassDMDWProp_Val;
+         m_frame.w = backglassDMDHProp_Val;
+      }
+   }
+}
+
+void DMDOverlay::UpdateBackgroundImage(VPXTexture backImage)
+{
+   if (m_backImage != backImage)
+   {
+      m_backImage = backImage;
+      if (m_detectDmdFrame)
+      {
+         m_frame = ivec4();
+         m_detectSrcId.id = 0;
+      }
+   }
 }
 
 void DMDOverlay::Render(VPXRenderContext2D* ctx)
@@ -40,7 +101,7 @@ void DMDOverlay::Render(VPXRenderContext2D* ctx)
    if (!m_enable)
       return;
 
-   ResURIResolver::DisplayState dmd = m_resURIResolver.GetDisplayState("ctrl://default/display");
+   ResURIResolver::DisplayState dmd = m_resURIResolver.GetDisplayState("ctrl://default/display"s);
    if (dmd.state.frame == nullptr)
       return;
 
@@ -56,41 +117,41 @@ void DMDOverlay::Render(VPXRenderContext2D* ctx)
    if (m_frameSearch.valid() && m_frameSearch.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
       m_frame = m_frameSearch.get();
 
-   if (m_frame.z == 0.f || m_frame.w == 0.f)
+   if (m_frame.z == 0 || m_frame.w == 0)
       return;
 
-   if (m_vpxApi) {
-      m_vpxApi->UpdateTexture(&m_dmdTex, dmd.source->width, dmd.source->height,
-         dmd.source->frameFormat == CTLPI_DISPLAY_FORMAT_LUM8         ? VPXTextureFormat::VPXTEXFMT_BW
-            : dmd.source->frameFormat == CTLPI_DISPLAY_FORMAT_SRGB565 ? VPXTextureFormat::VPXTEXFMT_sRGB565
-                                                                      : VPXTextureFormat::VPXTEXFMT_sRGB8,
-         dmd.state.frame);
-   }
-
-   float scaledX, scaledY, scaledW, scaledH;
-   
-   if (m_detectDmdFrame) {
-      // Autodetection: Scale from background image space to source space
+   if (m_detectDmdFrame && m_backImage)
+   {
       const VPXTextureInfo* const texInfo = m_vpxApi->GetTextureInfo(m_backImage);
-      float scaleX = static_cast<float>(ctx->srcWidth) / static_cast<float>(texInfo->width);
-      float scaleY = static_cast<float>(ctx->srcHeight) / static_cast<float>(texInfo->height);
-
-      scaledX = static_cast<float>(m_frame.x) * scaleX;
-      scaledY = static_cast<float>(m_frame.y) * scaleY;
-      scaledW = static_cast<float>(m_frame.z) * scaleX;
-      scaledH = static_cast<float>(m_frame.w) * scaleY;
-   }
-   else {
-      // Manual coordinates: use direct frame coordinates, flip Y to start from top
-      scaledX = static_cast<float>(m_frame.x);
-      scaledY = ctx->srcHeight - static_cast<float>(m_frame.y) - static_cast<float>(m_frame.w);
-      scaledW = static_cast<float>(m_frame.z);
-      scaledH = static_cast<float>(m_frame.w);
+      if (texInfo)
+      {
+         ctx->srcWidth = static_cast<float>(texInfo->width);
+         ctx->srcHeight = static_cast<float>(texInfo->height);
+      }
    }
 
-   vec4 glassArea, glassAmbient(1.f, 1.f, 1.f, 1.f), glassTint(1.f, 1.f, 1.f, 1.f), glassPad;
+   switch (dmd.source->frameFormat)
+   {
+   case CTLPI_DISPLAY_FORMAT_LUM32F: m_vpxApi->UpdateTexture(&m_dmdTex, dmd.source->width, dmd.source->height, VPXTextureFormat::VPXTEXFMT_BW32F, dmd.state.frame); break;
+   case CTLPI_DISPLAY_FORMAT_SRGB888: m_vpxApi->UpdateTexture(&m_dmdTex, dmd.source->width, dmd.source->height, VPXTextureFormat::VPXTEXFMT_sRGB8, dmd.state.frame); break;
+   case CTLPI_DISPLAY_FORMAT_SRGB565: m_vpxApi->UpdateTexture(&m_dmdTex, dmd.source->width, dmd.source->height, VPXTextureFormat::VPXTEXFMT_sRGB565, dmd.state.frame); break;
+   default: return;
+   }
+
+   vec4 glassArea(0.f, 0.f, 0.f, 0.f);
+   vec4 glassAmbient(1.f, 1.f, 1.f, 1.f);
+   vec4 glassTint(1.f, 1.f, 1.f, 1.f);
+   vec4 glassPad(0.f, 0.f, 0.f, 0.f);
    vec4 dmdTint(1.f, 1.f, 1.f, 1.f);
-   ctx->DrawDisplay(ctx, VPXDisplayRenderStyle::VPXDMDStyle_Plasma,
+   VPXDisplayRenderStyle style = VPXDisplayRenderStyle::VPXDMDStyle_Plasma;
+   switch (dmd.source->hardware & 0xFFFF0000)
+   {
+   case CTLPI_DISPLAY_HARDWARE_NEON_PLASMA: style = VPXDisplayRenderStyle::VPXDMDStyle_Plasma; break;
+   case CTLPI_DISPLAY_HARDWARE_RED_LED: style = VPXDisplayRenderStyle::VPXDMDStyle_RedLED; break;
+   case CTLPI_DISPLAY_HARDWARE_RGB_LED: style = VPXDisplayRenderStyle::VPXDMDStyle_GenLED; break;
+   case CTLPI_DISPLAY_HARDWARE_CRT_DISPLAY: style = VPXDisplayRenderStyle::VPXDMDStyle_CRT; break;
+   }
+   ctx->DrawDisplay(ctx, style,
       // First layer: glass
       nullptr, glassTint.x, glassTint.y, glassTint.z, 0.f, // Glass texture, tint and roughness
       glassArea.x, glassArea.y, glassArea.z, glassArea.w, // Glass texture coordinates (inside overall glass texture)
@@ -99,94 +160,146 @@ void DMDOverlay::Render(VPXRenderContext2D* ctx)
       m_dmdTex, dmdTint.x, dmdTint.y, dmdTint.z, 1.f, 1.f, // DMD emitter, emitter tint, emitter brightness, emitter alpha
       glassPad.x, glassPad.y, glassPad.z, glassPad.w, // Emitter padding (from glass border)
       // Render quad
-      scaledX, scaledY, scaledW, scaledH);
+      static_cast<float>(m_frame.x), static_cast<float>(m_frame.y), static_cast<float>(m_frame.z), static_cast<float>(m_frame.w));
 }
 
-ivec4 DMDOverlay::SearchDmdSubFrame(VPXTexture image, float dmdAspectRatio)
+ivec4 DMDOverlay::SearchDmdSubFrame(VPXTexture image, float dmdAspectRatio) const
 {
-   ivec4 subFrame;
-
-   if (!m_vpxApi)
-      return subFrame;
-   
-   VPXTextureInfo* texInfo = m_vpxApi->GetTextureInfo(image);
+   const VPXTextureInfo* const texInfo = m_vpxApi->GetTextureInfo(image);
    if (texInfo == nullptr)
-      return subFrame;
+      return ivec4();
 
    unsigned int pos_step;
    switch (texInfo->format)
    {
-   case VPXTEXFMT_BW: pos_step = 1; break;
+   case VPXTEXFMT_BW32F: pos_step = 1; break;
    case VPXTEXFMT_sRGB8: pos_step = 3; break;
    case VPXTEXFMT_sRGBA8: pos_step = 4; break;
    default: pos_step = 0;
    }
 
-   // Find the largest dark rectangle in the background image
-   float maxHeuristic = 0.f;
-   float selectedAspectRatio = 1.f;
-   std::stack<int> st;
-   vector<int> heights(texInfo->width, 0); // height of empty columns above each pixels in the row as we scan them downward
-   unsigned int pos = 0;
-   for (unsigned int y = 0; y < texInfo->height; ++y)
+   // Heuristic to select large rectangles, favoring screen centered ones
+   auto heuristic = [texW = static_cast<float>(texInfo->width)](const ivec4& frame)
+   { return static_cast<float>(frame.z) / texW - 1.f * fabs(0.5f - static_cast<float>(frame.x + frame.z / 2) / texW); };
+
+   const int padding = (2 * texInfo->width) / 1920;
+   float lumMin = 0.f;
+   float lumMax = 256.f;
+   ivec4 searchFrame(0, 0, texInfo->width, texInfo->height);
+   ivec4 bestFrame;
+   for (int search = 0; search < 7; search++)
    {
-      for (unsigned int x = 0; x < texInfo->width; ++x,pos+=pos_step)
-      {
-         uint8_t lum = 0;
-         switch (texInfo->format)
-         {
-         case VPXTEXFMT_BW: lum = texInfo->data[pos]; break;
-         case VPXTEXFMT_sRGB8: lum = static_cast<uint8_t>(0.299f * texInfo->data[pos] + 0.587f * texInfo->data[pos + 1] + 0.114f * texInfo->data[pos + 2]); break;
-         case VPXTEXFMT_sRGBA8: lum = static_cast<uint8_t>(0.299f * texInfo->data[pos] + 0.587f * texInfo->data[pos + 1] + 0.114f * texInfo->data[pos + 2]); break;
-         default: return subFrame;
-         }
-         if (lum < 8)
-            heights[x] += 1;
-         else
-            heights[x] = 0;
-      }
+      const float lumLimit = (lumMin + lumMax) * 0.5f;
 
-      // Evaluate each rectangle that can be formed with the heights of the columns
-      for (unsigned int x = 0; x <= texInfo->width; ++x)
+      LOGD(std::format("DMD area search thr: {} area is {},{} {}x{}", lumLimit, searchFrame.x, searchFrame.y, searchFrame.z, searchFrame.w));
+
+      // Find the largest dark rectangle in the background image
+      ivec4 subFrame;
+      ivec4 searchSubFrame;
+      std::stack<int> st;
+      vector<int> heights(texInfo->width, 0); // height of empty columns above each pixels in the row as we scan them downward
+      for (int y = searchFrame.y; y < (searchFrame.y + searchFrame.w); ++y)
       {
-         while (!st.empty() && (x == texInfo->width || heights[st.top()] > heights[x]))
+         // If disabled while searching, just abort
+         if (m_stopSearching)
+            return ivec4();
+         unsigned int pos = (y * texInfo->width + searchFrame.x) * pos_step;
+         for (int x = searchFrame.x; x < (searchFrame.x + searchFrame.z); ++x, pos += pos_step)
          {
-            const int height = heights[st.top()];
-            st.pop();
-            const int width = st.empty() ? x : x - st.top() - 1;
-            const float aspectRatio = static_cast<float>(width) / static_cast<float>(height);
-            const float arMatch = aspectRatio < dmdAspectRatio ? aspectRatio / dmdAspectRatio : dmdAspectRatio / aspectRatio;
-            const float heuristic = static_cast<float>(height * width) * sqrtf(arMatch);
-            if (heuristic > maxHeuristic)
+            float lum = 0;
+            switch (texInfo->format)
             {
-               maxHeuristic = heuristic;
-               subFrame.x = st.empty() ? 0 : st.top() + 1;
-               subFrame.y = texInfo->height - y - 1;
-               subFrame.z = width;
-               subFrame.w = height;
+            case VPXTEXFMT_BW32F:
+               lum = 255.f * static_cast<float*>(texInfo->data)[pos];
+               break;
+
+            case VPXTEXFMT_sRGB8:
+            case VPXTEXFMT_sRGBA8:
+               lum = 0.299f * static_cast<float>(static_cast<uint8_t*>(texInfo->data)[pos]) + 0.587f * static_cast<float>(static_cast<uint8_t*>(texInfo->data)[pos + 1]) + 0.114f * static_cast<float>(static_cast<uint8_t*>(texInfo->data)[pos + 2]);
+               break;
+
+            default: return ivec4();
             }
+            if (lum < lumLimit)
+               heights[x] += 1;
+            else
+               heights[x] = 0;
          }
-         if (x < texInfo->width)
-            st.push(x);
+
+         // Evaluate each rectangle that can be formed with the heights of the columns
+         for (int x = searchFrame.x; x <= searchFrame.x + searchFrame.z; ++x)
+         {
+            while (!st.empty() && (x == (searchFrame.x + searchFrame.z) || heights[st.top()] > heights[x]))
+            {
+               const int height = heights[st.top()];
+               st.pop();
+               const int width = st.empty() ? (x - searchFrame.x) : (x - st.top() - 1);
+               if (width > 6 * padding && height > 3 * padding)
+               {
+                  ivec4 unpaddedFrame;
+                  unpaddedFrame.x = st.empty() ? searchFrame.x : st.top() + 1;
+                  unpaddedFrame.y = y - height + 1;
+                  unpaddedFrame.z = width;
+                  unpaddedFrame.w = height;
+                  // Extends search frame for next pass to include this area even if not selected
+                  if (searchSubFrame.z == 0)
+                     searchSubFrame = unpaddedFrame;
+                  else
+                  {
+                     ivec4 newSearchFrame;
+                     newSearchFrame.x = std::min(searchSubFrame.x, unpaddedFrame.x);
+                     newSearchFrame.y = std::min(searchSubFrame.y, unpaddedFrame.y);
+                     newSearchFrame.z = std::max(searchSubFrame.x + searchSubFrame.z, unpaddedFrame.x + unpaddedFrame.z) - newSearchFrame.x;
+                     newSearchFrame.w = std::max(searchSubFrame.y + searchSubFrame.w, unpaddedFrame.y + unpaddedFrame.w) - newSearchFrame.y;
+                     searchSubFrame = newSearchFrame;
+                  }
+                  // Add some padding and fit to searched aspect ratio
+                  ivec4 frame;
+                  frame.x = unpaddedFrame.x + padding;
+                  frame.y = unpaddedFrame.y + padding;
+                  frame.z = unpaddedFrame.z - 2 * padding;
+                  frame.w = unpaddedFrame.w - 2 * padding;
+                  if (const float ar = static_cast<float>(frame.z) / static_cast<float>(frame.w); ar > dmdAspectRatio)
+                  {
+                     const int w = static_cast<int>(static_cast<float>(frame.w) * dmdAspectRatio);
+                     frame.x += (frame.z - w) / 2;
+                     frame.z = w;
+                  }
+                  else
+                  {
+                     const int h = static_cast<int>(static_cast<float>(frame.z) / dmdAspectRatio);
+                     frame.y += (frame.w - h) / 2;
+                     frame.w = h;
+                  }
+                  // Selected area must be large enough (at least 1/3 of the backglass width)
+                  if ((3 * frame.z >= static_cast<int>(texInfo->width)) && (heuristic(frame) > heuristic(subFrame)))
+                     subFrame = frame;
+               }
+            }
+            if (x < (searchFrame.x + searchFrame.z))
+               st.push(x);
+         }
+      }
+
+      LOGD(std::format("DMD area search {} -> {}, thr: {} lead to {},{} {}x{} Heur:{}, PrevHeur: {}", lumMin, lumMax, lumLimit, subFrame.x, subFrame.y, subFrame.z, subFrame.w,
+         heuristic(subFrame), heuristic(bestFrame)));
+
+      // There are no heuristics between luminance levels, this can lead to unwanted behavior (for example drifting inside a box)
+      if (subFrame.w > 0) // && (bestFrame.w == 0 || (heuristic(subFrame) > 0.6f * heuristic(bestFrame))))
+      {
+         lumMax = lumLimit;
+         bestFrame = subFrame;
+         searchFrame = searchSubFrame;
+      }
+      else
+      {
+         lumMin = lumLimit;
       }
    }
 
-   // Do not select a too small area
-   if (static_cast<unsigned int>(subFrame.z * subFrame.w) < texInfo->width * texInfo->height / 16)
-      subFrame = ivec4();
+   bestFrame.y = texInfo->height - 1 - bestFrame.y - bestFrame.w;
 
-   return subFrame;
-}
-
-void DMDOverlay::UpdateBackgroundImage(VPXTexture backImage)
-{
-   if (m_backImage != backImage) {
-      m_backImage = backImage;
-      if (m_detectDmdFrame) {
-         m_frame = ivec4();
-         m_detectSrcId.id = 0;
-      }
-   }
+   return bestFrame;
 }
 
 }

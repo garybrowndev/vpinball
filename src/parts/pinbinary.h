@@ -4,22 +4,20 @@
 
 #pragma once
 
-class PinBinary : public ILoadable
+class PinBinary
 {
 public:
-   PinBinary();
-   virtual ~PinBinary();
+   PinBinary() = default;
+   virtual ~PinBinary() = default;
 
-   bool ReadFromFile(const string& filename);
-   bool WriteToFile(const string& filename);
-   HRESULT SaveToStream(IStream *pstream);
-   HRESULT LoadFromStream(IStream *pstream, int version);
+   void Save(IObjectWriter& writer) const;
+   void Load(IObjectReader& reader);
 
-   // ILoadable callback
-   bool LoadToken(const int id, BiffReader * const pbr) override;
+   bool ReadFromFile(const std::filesystem::path& filename);
+   bool WriteToFile(const string& filename) const;
 
    string m_name;
-   string m_path;
+   std::filesystem::path m_path;
    vector<uint8_t> m_buffer;
 };
 

@@ -4,13 +4,14 @@
 #include <Windows.h>
 
 #include <cassert>
+#include <cmath>
 #include <cstdint>
 #include <tchar.h>
 #include <string>
 #include <chrono>
 
-#include "MsgPlugin.h"
-#include "ControllerPlugin.h"
+#include "plugins/MsgPlugin.h"
+#include "plugins/ControllerPlugin.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 // PinUp Player DMD events plugin
@@ -22,7 +23,7 @@
 // directory. Since these dll are closed source, they are not distributed
 // with the plugin and must be obtained from PinUp distribution separately.
 //
-// For some strange reason, PinUp does not do its matching on the PinMame DMD but on a 
+// For some strange reason, PinUp does not do its matching on the PinMAME DMD but on a 
 // stretched to fit 128x32 frame, shaded using 0xFF4500 color (C# Colors.OrangeRed), 
 // with non linear shading for 2 bitplane frames.
 
@@ -76,7 +77,7 @@ void onUpdateDMD(void* userData)
    else
       return;
 
-   msgApi->RunOnMainThread(1. / 60., onUpdateDMD, nullptr);
+   msgApi->RunOnMainThread(endpointId, 1. / 60., onUpdateDMD, nullptr);
    
    DisplayFrame frame = dmdId.GetIdentifyFrame(dmdId.id);
 
@@ -87,13 +88,13 @@ void onUpdateDMD(void* userData)
    if (dmdId.width == 128 && dmdId.height == 32)
    {
       for (unsigned int i = 0; i < 128 * 32; i++)
-         memcpy(&rgbFrame[i * 3], &palette[frame.frame[i] * 3], 3);
+         memcpy(&rgbFrame[i * 3], &palette[static_cast<const uint8_t*>(frame.frame)[i] * 3], 3);
    }
    else if (dmdId.width == 128 && dmdId.height < 32)
    {
       const unsigned int ofsY = ((32 - dmdId.height) / 2) * 128;
       for (unsigned int i = 0; i < 128 * 16; i++)
-         memcpy(&rgbFrame[(ofsY + i) * 3], &palette[frame.frame[i] * 3], 3);
+         memcpy(&rgbFrame[(ofsY + i) * 3], &palette[static_cast<const uint8_t*>(frame.frame)[i] * 3], 3);
    }
    else if (dmdId.width <= 256 && dmdId.height == 64)
    {
@@ -124,7 +125,7 @@ void onUpdateDMD(void* userData)
                   const float weight = radius * radius - fabsf(dx - 0.5f) * fabsf(dy - 0.5f);
                   if (/*px >= 0 &&*/ static_cast<unsigned int>(px) < dmdId.width
                      && /*py >= 0 &&*/ static_cast<unsigned int>(py) < dmdId.height) // unsigned int tests include the >= 0 ones
-                     lum += frame.frame[py * dmdId.width + px] * weight;
+                     lum += static_cast<const uint8_t*>(frame.frame)[py * dmdId.width + px] * weight;
                   sum += weight;
                }
             }
@@ -150,6 +151,33 @@ void onSerumTrigger(const unsigned int eventId, void* userData, void* eventData)
       pupTrigger(*trigger);
 }
 
+#ifdef _WIN32
+template <class T>
+static T GetModulePath(HMODULE hModule)
+{
+   T path;
+   DWORD size = MAX_PATH;
+   while (true)
+   {
+      path.resize(size);
+      DWORD length;
+      if constexpr (std::is_same_v<T, std::string>)
+         length = ::GetModuleFileNameA(hModule, path.data(), size);
+      else
+         length = ::GetModuleFileNameW(hModule, path.data(), size);
+      if (length == 0)
+         return {};
+      if (length < size)
+      {
+         path.resize(length); // Trim excess
+         return path;
+      }
+      // length == size could both mean that it just did fit in, or it was truncated, so try again with a bigger buffer
+      size *= 2;
+   }
+}
+#endif
+
 void onGameStart(const unsigned int eventId, void* userData, void* eventData)
 {
    // Select main DMD from the list of DMD sources (this is not fully clean as this rely on the fact that PinMAME sends the game start event after declaring its displays, we should listen for display source changes)
@@ -174,15 +202,15 @@ void onGameStart(const unsigned int eventId, void* userData, void* eventData)
    HMODULE hm = nullptr;
    if (GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, _T("PluginLoad"), &hm) == 0)
       return;
-   TCHAR path[MAX_PATH];
-   if (GetModuleFileName(hm, path, MAX_PATH) == 0)
+#ifdef _UNICODE
+   std::wstring fullpath = GetModulePath<std::wstring>(hm);
+#else
+   std::string fullpath = GetModulePath<std::string>(hm);
+#endif
+   if (fullpath.empty())
       return;
-   #ifdef _UNICODE
-      std::wstring fullpath(path);
-   #else
-      std::string fullpath(path);
-   #endif
-   fullpath = fullpath.substr(0, fullpath.find_last_of(_T("\\/"))) + _T('\\');
+   fullpath.erase(fullpath.find_last_of(_T("\\/")));
+   fullpath += _T('\\');
    #if (INTPTR_MAX == INT32_MAX)
       fullpath += _T("dmddevicePUP.DLL");
    #else
@@ -211,7 +239,7 @@ void onGameStart(const unsigned int eventId, void* userData, void* eventData)
 
 void onGameEnd(const unsigned int eventId, void* userData, void* eventData)
 {
-   dmdId = { 0 };
+   dmdId = {};
    if (dmdDevicePupDll)
    {
       pupClose();
@@ -233,7 +261,7 @@ MSGPI_EXPORT void MSGPIAPI PinUpEventsPluginLoad(const uint32_t sessionId, const
    msgApi->SubscribeMsg(sessionId, onGameEndId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_EVT_ON_GAME_END), onGameEnd, nullptr);
    msgApi->SubscribeMsg(sessionId, onSerumTriggerId = msgApi->GetMsgID("Serum", "OnDmdTrigger"), onSerumTrigger, nullptr);
    dmdDevicePupDll = nullptr;
-   constexpr unsigned int mapping4[] = { 0, 1, 4, 15 };
+   static constexpr unsigned int mapping4[] = { 0, 1, 4, 15 };
    for (int i = 0; i < 4; i++)
    {
       palette4[i * 3 + 0] = (mapping4[i] * 0xFF) / 0xF; // R
@@ -250,11 +278,13 @@ MSGPI_EXPORT void MSGPIAPI PinUpEventsPluginLoad(const uint32_t sessionId, const
 
 MSGPI_EXPORT void MSGPIAPI PinUpEventsPluginUnload()
 {
-   msgApi->UnsubscribeMsg(onGameStartId, onGameStart);
-   msgApi->UnsubscribeMsg(onGameEndId, onGameEnd);
+   msgApi->UnsubscribeMsg(onGameStartId, onGameStart, nullptr);
+   msgApi->UnsubscribeMsg(onGameEndId, onGameEnd, nullptr);
    msgApi->ReleaseMsgID(onGameStartId);
    msgApi->ReleaseMsgID(onGameEndId);
    msgApi->ReleaseMsgID(onSerumTriggerId);
    msgApi->ReleaseMsgID(getDmdSrcId);
+   dmdId.id.id = 0;
+   msgApi->FlushPendingCallbacks(endpointId);
    msgApi = nullptr;
 }

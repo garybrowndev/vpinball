@@ -1,3 +1,5 @@
+// license:GPLv3+
+
 #include "common.h"
 
 #include <sstream>
@@ -7,7 +9,7 @@
 
 namespace Flex {
 
-static inline char cLower(char c)
+constexpr inline char cLower(char c)
 {
    if (c >= 'A' && c <= 'Z')
       c ^= 32; //ASCII convention
@@ -47,17 +49,14 @@ bool try_parse_int(const string& str, int& value)
 
 bool try_parse_color(const string& str, ColorRGBA32& value)
 {
-   string hexStr;
-   if (str[0] == '#')
-      hexStr = str.substr(1);
-   else
-      hexStr = str;
+   const size_t start = (!str.empty() && str[0] == '#') ? 1 : 0;
+   string hexStr(str, start);
 
    if (hexStr.size() == 6)
-      hexStr += "FF";
-
-   if (hexStr.size() != 8)
-      return false;
+      hexStr += "FF"sv;
+   else
+      if (hexStr.size() != 8)
+         return false;
 
    uint32_t rgba;
    std::stringstream ss;
@@ -85,10 +84,11 @@ string normalize_path_separators(const string& szPath)
 {
    string szResult = szPath;
 
-   if (PATH_SEPARATOR_CHAR == '/')
+   #if '/' == PATH_SEPARATOR_CHAR
       std::ranges::replace(szResult.begin(), szResult.end(), '\\', PATH_SEPARATOR_CHAR);
-   else
+   #else
       std::ranges::replace(szResult.begin(), szResult.end(), '/', PATH_SEPARATOR_CHAR);
+   #endif
 
    auto end = std::unique(szResult.begin(), szResult.end(),
       [](char a, char b) { return a == b && a == PATH_SEPARATOR_CHAR; });
@@ -113,21 +113,21 @@ string find_case_insensitive_file_path(const string& szPath)
       if (std::filesystem::exists(p, ec))
          return p.string();
 
-      auto parent = p.parent_path();
+      const auto parent = p.parent_path();
       string base;
       if (parent.empty() || parent == p) {
-         base = ".";
+         base = "."sv;
       } else {
          base = self(self, parent.string());
          if (base.empty())
             return string();
       }
 
-      for (auto& ent : std::filesystem::directory_iterator(base, ec)) {
+      for (const auto& ent : std::filesystem::directory_iterator(base, ec)) {
          if (!ec && StrCompareNoCase(ent.path().filename().string(), p.filename().string())) {
             auto found = ent.path().string();
             if (found != path) {
-               LOGI("case insensitive file match: requested \"%s\", actual \"%s\"", path.c_str(), found.c_str());
+               LOGI(std::format("Case insensitive file match: requested \"{}\", actual \"{}\"", path, found));
             }
             return found;
          }
@@ -144,6 +144,33 @@ string find_case_insensitive_file_path(const string& szPath)
    return string();
 }
 
+#ifdef _WIN32
+template <class T>
+static T GetModulePath(HMODULE hModule)
+{
+   T path;
+   DWORD size = MAX_PATH;
+   while (true)
+   {
+      path.resize(size);
+      DWORD length;
+      if constexpr (std::is_same_v<T, std::string>)
+         length = ::GetModuleFileNameA(hModule, path.data(), size);
+      else
+         length = ::GetModuleFileNameW(hModule, path.data(), size);
+      if (length == 0)
+         return {};
+      if (length < size)
+      {
+         path.resize(length); // Trim excess
+         return path;
+      }
+      // length == size could both mean that it just did fit in, or it was truncated, so try again with a bigger buffer
+      size *= 2;
+   }
+}
+#endif
+
 string GetPluginPath()
 {
 #ifdef _WIN32
@@ -154,16 +181,15 @@ string GetPluginPath()
             _T("FlexDMDPluginLoad"), &hm) == 0)
         return string();
 
-    TCHAR buf[MAX_PATH];
-    if (GetModuleFileName(hm, buf, MAX_PATH) == 0)
-        return string();
-
 #ifdef _UNICODE
-    const int size_needed = WideCharToMultiByte(CP_UTF8, 0, buf, -1, nullptr, 0, nullptr, nullptr);
+    const std::wstring buf = GetModulePath<std::wstring>(hm);
+    if (buf.empty())
+       return string();
+    const int size_needed = WideCharToMultiByte(CP_UTF8, 0, buf.c_str(), -1, nullptr, 0, nullptr, nullptr);
     string pathBuf(size_needed - 1, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, buf, -1, pathBuf.data(), size_needed, nullptr, nullptr);
+    WideCharToMultiByte(CP_UTF8, 0, buf.c_str(), -1, pathBuf.data(), size_needed, nullptr, nullptr);
 #else
-    const string pathBuf(buf);
+    const string pathBuf = GetModulePath<string>(hm);
 #endif
 #else
     Dl_info info{};

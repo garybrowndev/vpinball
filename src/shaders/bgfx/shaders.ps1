@@ -2,15 +2,18 @@
 
 $gen_ball = $true
 $gen_basic = $true
-$gen_blur = $true
 $gen_dmd = $true
 $gen_flasher = $true
 $gen_light = $true
+
+# Postprocess shaders
+$gen_blur = $true
 $gen_motionblur = $true
 $gen_postprocess = $true
 $gen_stereo = $true
 $gen_tonemap = $true
 $gen_antialiasing = $true
+
 $gen_imgui = $true
 $gen_mipmap = $true
 
@@ -21,13 +24,14 @@ $debug = $false
 function Process-Shader {
    Param($Source, $OutputFile, $Header, $Type, $Defines=@())
 
-   $outputs = @('mtl ', 'essl', 'glsl', 'dx11', 'spv ')
+   $outputs = @('mtl', 'essl', 'glsl', 'dxbc', 'dxil', 'spv')
    $targets = @(
-      '--platform osx     -p metal -O 3', # '--platform ios -p metal'
-      '--platform windows -p 320_es    ', # '--platform android -p 320_es'
-      '--platform windows -p 440       ', # '--platform linux -p440'
-      '--platform windows -p s_5_0 -O 3', # '--platform windows -p s_5_0 --debug -O 0' for debug in Renderdoc & MS Visual Studio (see https://www.intel.com/content/www/us/en/developer/articles/technical/shader-debugging-for-bgfx-rendering-engine.html)
-      '--platform windows -p spirv     ')
+      '--platform osx     -p metal',      # Metal      '--platform ios -p metal'
+      '--platform android -p 320_es    ', # OpenGL ES  '--platform android -p 320_es'
+      '--platform linux   -p 440       ', # OpenGL     '--platform linux -p440'
+      '--platform windows -p s_5_0 -O 3', # DirectX 11 '--platform windows -p s_5_0 --debug -O 0' for debug in Renderdoc & MS Visual Studio (see https://www.intel.com/content/www/us/en/developer/articles/technical/shader-debugging-for-bgfx-rendering-engine.html)
+      '--platform windows -p s_6_0 -O 3', # DirectX 12 '--platform windows -p s_6_0 --debug -O 0' for debug in Renderdoc & MS Visual Studio (see https://www.intel.com/content/www/us/en/developer/articles/technical/shader-debugging-for-bgfx-rendering-engine.html)
+      '--platform linux   -p spirv     ') # Vulkan
    $shaderc = ".\shaderc.exe"
 
    $OutputPath = ("../bgfx_" + $OutputFile)
@@ -35,13 +39,14 @@ function Process-Shader {
 
    Add-Content -Path $OutputPath -Value ("`n//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////`n// Build of " + $Type + " shader from " + $Source + " to " + $ShortName + " with options: " + $Defines)
    Write-Host ("> " + $Type + " shader from " + $Source + " to " + $ShortName + " with " + $Defines)
-   for($i = 0; $i -lt 5; $i++)
+   for($i = 0; $i -lt 6; $i++)
    {
       $CmdLine = "-f " + $Source + " " + $targets[$i] + " --bin2c " + $Header + $outputs[$i] + " --type " + $Type
       #$CmdLine = "-f " + $Source + " " + $Target + " -o shaders/" + $Header + ".bin --type " + $Type
+	  $CmdLine = $CmdLine + " --define TARGET_" + $outputs[$i] + ";"
       If($Defines.count -ne 0)
       {
-         $CmdLine = $CmdLine + " --define " + ($Defines -join ';')
+         $CmdLine = $CmdLine + ($Defines -join ';')
       }
       if ($debug)
       {
@@ -49,6 +54,7 @@ function Process-Shader {
       }
       $CmdLine = $CmdLine + " -o tmp.h"
       $Parms = $CmdLine.Split(" ")
+      #Write-Host $CmdLine
       & "$shaderc" $Parms
       Get-Content -Path "tmp.h" | Add-Content -Path $OutputPath
       Remove-Item "tmp.h"
@@ -179,20 +185,17 @@ if ($gen_stereo)
 {
 	Write-Host "`n>>>>>>>>>>>>>>>> Stereo shaders"
 	New-Item -Path . -Name "../bgfx_stereo.h" -ItemType "File" -Force -Value "// Stereo Shaders`n"
-	for($k = 0; $k -lt 2; $k++)
+	Process-Shader "fs_pp_stereo.sc" "stereo.h" "fs_pp_stereo_sbs_" "fragment" @("SBS", "NOSTEREO")
+	Process-Shader "fs_pp_stereo.sc" "stereo.h" "fs_pp_stereo_tb_" "fragment" @("TB", "NOSTEREO")
+	Process-Shader "fs_pp_stereo.sc" "stereo.h" "fs_pp_stereo_int_" "fragment" @("INT", "NOSTEREO")
+	Process-Shader "fs_pp_stereo.sc" "stereo.h" "fs_pp_stereo_flipped_int_" "fragment" @("FLIPPED_INT", "NOSTEREO")
+	Process-Shader "fs_pp_stereo.sc" "stereo.h" "fs_pp_stereo_anaglyph_deghost_" "fragment" @("ANAGLYPH", "DEGHOST", "NOSTEREO")
+	foreach ($colors in @("SRGB", "GAMMA"))
 	{
-	   Process-Shader "fs_pp_stereo.sc" "stereo.h" ("fs_pp_stereo_sbs" + $stOutput[$k]) "fragment" @("SBS", $stereo[$k])
-	   Process-Shader "fs_pp_stereo.sc" "stereo.h" ("fs_pp_stereo_tb" + $stOutput[$k]) "fragment" @("TB", $stereo[$k])
-	   Process-Shader "fs_pp_stereo.sc" "stereo.h" ("fs_pp_stereo_int" + $stOutput[$k]) "fragment" @("INT", $stereo[$k])
-	   Process-Shader "fs_pp_stereo.sc" "stereo.h" ("fs_pp_stereo_flipped_int" + $stOutput[$k]) "fragment" @("FLIPPED_INT", $stereo[$k])
-	   Process-Shader "fs_pp_stereo.sc" "stereo.h" ("fs_pp_stereo_anaglyph_deghost" + $stOutput[$k]) "fragment" @("ANAGLYPH", "DEGHOST", $stereo[$k])
-	   foreach ($colors in @("SRGB", "GAMMA"))
-	   {
-		  foreach ($desat in @("NODESAT", "DYNDESAT"))
-		  {
-			 Process-Shader "fs_pp_stereo.sc" "stereo.h" ("fs_pp_stereo_anaglyph_lin_" + $colors.ToLower() + "_" + $desat.ToLower() + $stOutput[$k]) "fragment" @("ANAGLYPH", $desat, $colors, $stereo[$k])
-		  }
-	   }
+		foreach ($desat in @("NODESAT", "DYNDESAT"))
+		{
+			Process-Shader "fs_pp_stereo.sc" "stereo.h" ("fs_pp_stereo_anaglyph_lin_" + $colors.ToLower() + "_" + $desat.ToLower() + "_") "fragment" @("ANAGLYPH", $desat, $colors, "NOSTEREO")
+		}
 	}
 }
 
@@ -233,6 +236,7 @@ if ($gen_antialiasing)
 	  Process-Shader "fs_pp_nfaa.sc" "antialiasing.h" ("fs_pp_nfaa" + $stOutput[$k]) "fragment" @($stereo[$k])
 	  Process-Shader "fs_pp_dlaa_edge.sc" "antialiasing.h" ("fs_pp_dlaa_edge" + $stOutput[$k]) "fragment" @($stereo[$k])
 	  Process-Shader "fs_pp_dlaa.sc" "antialiasing.h" ("fs_pp_dlaa" + $stOutput[$k]) "fragment" @($stereo[$k])
+	  Process-Shader "fs_pp_faaa.sc" "antialiasing.h" ("fs_pp_faaa" + $stOutput[$k]) "fragment" @($stereo[$k])
 	  foreach ($variant in @("FXAA1", "FXAA2", "FXAA3"))
 	  {
 		 Process-Shader "fs_pp_fxaa.sc" "antialiasing.h" ("fs_pp_" + $variant.ToLower() + $stOutput[$k]) "fragment" @($stereo[$k], $variant)

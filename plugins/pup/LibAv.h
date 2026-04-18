@@ -8,16 +8,24 @@ extern "C" {
    #include "libswresample/swresample.h"
 }
 
-namespace PUP {
+namespace LibAV
+{
 
 #ifdef _WIN32
 // As LibAvCodec is fairly heavy, we only load it when used to limit startup time impact
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #include <tchar.h>
 #endif
 
+#ifdef CDECL
+#undef CDECL
+#endif
 #ifdef _WIN64
    // Windows x64 always uses standard calling convention (implicit)
    #define CDECL
@@ -49,6 +57,7 @@ public:
    typedef int(CDECL* fn_av_seek_frame)(AVFormatContext* s, int stream_index, int64_t timestamp, int flags);
    typedef int(CDECL* fn_avformat_open_input)(AVFormatContext** ps, const char* url, const AVInputFormat* fmt, AVDictionary** options);
    typedef void(CDECL* fn_avformat_close_input)(AVFormatContext** s);
+   typedef int(CDECL* fn_avformat_find_stream_info)(AVFormatContext* ic, AVDictionary** options);
 
    typedef AVPacket*(CDECL* fn_av_packet_alloc)(void);
    typedef void(CDECL* fn_av_packet_free)(AVPacket** pkt);
@@ -70,8 +79,9 @@ public:
    typedef void(CDECL* fn_av_free)(void* ptr);
    typedef int(CDECL* fn_av_image_fill_arrays)(uint8_t* dst_data[4], int dst_linesize[4], const uint8_t* src, enum AVPixelFormat pix_fmt, int width, int height, int align);
    typedef int(CDECL* fn_av_image_get_buffer_size)(enum AVPixelFormat pix_fmt, int width, int height, int align);
-   typedef void*(CDECL* fn_av_malloc)(size_t size)av_malloc_attrib av_alloc_size(1);
+   typedef void*(CDECL* fn_av_malloc)(size_t size) av_alloc_size(1);
    typedef int(CDECL* fn_av_samples_get_buffer_size)(int* linesize, int nb_channels, int nb_samples, enum AVSampleFormat sample_fmt, int align);
+   typedef void(CDECL* fn_av_log_set_level)(int level);
 
    typedef void(CDECL* fn_swr_free)(struct SwrContext** s);
    typedef int(CDECL* fn_swr_alloc_set_opts2)(struct SwrContext** ps, const AVChannelLayout* out_ch_layout, enum AVSampleFormat out_sample_fmt, int out_sample_rate, const AVChannelLayout* in_ch_layout, enum AVSampleFormat in_sample_fmt, int in_sample_rate, int log_offset, void* log_ctx);
@@ -89,6 +99,7 @@ public:
    fn_av_seek_frame _av_seek_frame = nullptr;
    fn_avformat_open_input _avformat_open_input = nullptr;
    fn_avformat_close_input _avformat_close_input = nullptr;
+   fn_avformat_find_stream_info _avformat_find_stream_info = nullptr;
 
    fn_av_packet_alloc _av_packet_alloc = nullptr;
    fn_av_packet_free _av_packet_free = nullptr;
@@ -112,6 +123,7 @@ public:
    fn_av_image_get_buffer_size _av_image_get_buffer_size = nullptr;
    fn_av_malloc _av_malloc = nullptr;
    fn_av_samples_get_buffer_size _av_samples_get_buffer_size = nullptr;
+   fn_av_log_set_level _av_log_set_level = nullptr;
 
    fn_swr_alloc_set_opts2 _swr_alloc_set_opts2 = nullptr;
    fn_swr_convert _swr_convert = nullptr;
@@ -137,9 +149,9 @@ private:
    #ifdef _WIN32
       HINSTANCE hinstLib;
       #if (INTPTR_MAX == INT32_MAX)
-      bool x64 = false;
+      constexpr bool x64 = false;
       #else
-      bool x64 = true;
+      constexpr bool x64 = true;
       #endif
 
       HMODULE hm = nullptr;
@@ -153,7 +165,8 @@ private:
       #else
       std::string basepath(path);
       #endif
-      basepath = basepath.substr(0, basepath.find_last_of(_T("\\/"))) + _T('\\');
+      basepath.erase(basepath.find_last_of(_T("\\/")));
+      basepath += _T('\\');
 
       hinstLib = LoadLibraryEx((basepath + (x64 ? _T("avcodec64-61.dll"): _T("avcodec-61.dll"))).c_str(), NULL, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
       if (hinstLib)
@@ -182,6 +195,7 @@ private:
          _av_seek_frame = reinterpret_cast<fn_av_seek_frame>(GetProcAddress(hinstLib, "av_seek_frame"));
          _avformat_open_input = reinterpret_cast<fn_avformat_open_input>(GetProcAddress(hinstLib, "avformat_open_input"));
          _avformat_close_input = reinterpret_cast<fn_avformat_close_input>(GetProcAddress(hinstLib, "avformat_close_input"));
+         _avformat_find_stream_info = reinterpret_cast<fn_avformat_find_stream_info>(GetProcAddress(hinstLib, "avformat_find_stream_info"));
          isLoaded &= _av_find_best_stream && _av_read_frame && _av_seek_frame && _avformat_open_input && _avformat_close_input;
       }
 
@@ -198,6 +212,7 @@ private:
          _av_image_get_buffer_size = reinterpret_cast<fn_av_image_get_buffer_size>(GetProcAddress(hinstLib, "av_image_get_buffer_size"));
          _av_malloc = reinterpret_cast<fn_av_malloc>(GetProcAddress(hinstLib, "av_malloc"));
          _av_samples_get_buffer_size = reinterpret_cast<fn_av_samples_get_buffer_size>(GetProcAddress(hinstLib, "av_samples_get_buffer_size"));
+         _av_log_set_level = reinterpret_cast<fn_av_log_set_level>(GetProcAddress(hinstLib, "av_log_set_level"));
          isLoaded &= _av_get_bytes_per_sample && _av_fast_malloc && _av_frame_alloc && _av_frame_copy_props && _av_frame_free && _av_free && _av_image_fill_arrays && _av_image_get_buffer_size && _av_malloc && _av_samples_get_buffer_size;
       }
 
@@ -240,6 +255,7 @@ private:
       _av_seek_frame = &av_seek_frame;
       _avformat_open_input = &avformat_open_input;
       _avformat_close_input = &avformat_close_input;
+      _avformat_find_stream_info = &avformat_find_stream_info;
 
       _av_fast_malloc = &av_fast_malloc;
       _av_frame_alloc = &av_frame_alloc;
@@ -250,6 +266,7 @@ private:
       _av_image_get_buffer_size = &av_image_get_buffer_size;
       _av_malloc = &av_malloc;
       _av_samples_get_buffer_size = &av_samples_get_buffer_size;
+      _av_log_set_level = &av_log_set_level;
 
       _swr_alloc_set_opts2 = &swr_alloc_set_opts2;
       _swr_convert = &swr_convert;
@@ -261,6 +278,9 @@ private:
       _sws_getCachedContext = &sws_getCachedContext;
       _sws_scale = &sws_scale;
    #endif
+
+      if (_av_log_set_level)
+         _av_log_set_level(AV_LOG_ERROR);
    }
 
 };

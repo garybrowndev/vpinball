@@ -4,7 +4,8 @@
 
 #pragma once
 
-#include "ui/resource.h"
+#include "physics/hitplunger.h"
+#include "ui/win/resource.h"
 
 constexpr int MAXTIPSHAPE = 256;
 
@@ -22,7 +23,6 @@ public:
    float m_mechStrength;
    PlungerType m_type;
    int m_animFrames;
-   TimerDataRoot m_tdr;
    float m_parkPosition;
    string m_szSurface;
    float m_scatterVelocity;
@@ -105,7 +105,8 @@ class Plunger :
 
    public ISelect,
    public IEditable,
-   public Hitable,
+   public IHitable,
+   public IRenderable,
    public IScriptable,
    public IFireEvents,
    public IPerPropertyBrowsing // Ability to fill in dropdown in property browser
@@ -115,7 +116,7 @@ public:
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
-   HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) override;
+   HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
    BEGIN_COM_MAP(Plunger)
       COM_INTERFACE_ENTRY(IDispatch)
@@ -134,10 +135,10 @@ public:
    // Remove the comment from the line above if you don't want your object to
    // support aggregation.
 
-   Plunger();
+   Plunger() { }
    virtual ~Plunger();
 
-   STANDARD_EDITABLE_DECLARES(Plunger, eItemPlunger, PLUNGER, 1)
+   STANDARD_EDITABLE_DECLARES(Plunger, eItemPlunger, PLUNGER, VIEW_PLAYFIELD)
 
    void MoveOffset(const float dx, const float dy) final;
    void SetObjectPos() final;
@@ -156,10 +157,8 @@ public:
    PlungerData m_d;
 
 private:
-   PinTable *m_ptable = nullptr;
-
    RenderDevice *m_rd = nullptr;
-   MeshBuffer *m_meshBuffer = nullptr;
+   std::shared_ptr<MeshBuffer> m_meshBuffer;
 
    HitPlunger *m_phitplunger = nullptr;
 

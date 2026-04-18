@@ -25,8 +25,8 @@ public:
    void FillRectangle(const SDL_Rect& rect);
    void TranslateTransform(int x, int y);
    void ResetTransform();
-   Matrix* GetTransform() const { return m_pModelMatrix; }
-   void SetTransform(Matrix* pModelMatrix);
+   const Matrix& GetTransform() const { return m_pModelMatrix; }
+   void SetTransform(const Matrix& pModelMatrix);
    VPXTexture GetTexture();
    void SyncTexture();
    void DrawToContext(VPXRenderContext2D* ctx, int left, int top);
@@ -45,7 +45,7 @@ private:
    void DrawLine(int x1, int y1, int x2, int y2, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
    void SetPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
    void SetPixelBlended(int x, int y, uint8_t r, uint8_t g, uint8_t b, uint8_t a);
-   void UpdateTexture(VPXTexture* texture, int width, int height, VPXTextureFormat format, const uint8_t* image);
+   void UpdateTexture(VPXTexture* texture, int width, int height, VPXTextureFormat format, const void* image);
 
    VPXPluginAPI* m_vpxApi;
    VPXTexture m_texture;
@@ -55,7 +55,7 @@ private:
    int m_bufferSize;
    int m_translateX;
    int m_translateY;
-   Matrix* m_pModelMatrix;
+   Matrix m_pModelMatrix;
    uint32_t m_color;
    uint8_t m_alpha;
    bool m_needsTextureUpdate;

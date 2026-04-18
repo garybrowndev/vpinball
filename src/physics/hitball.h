@@ -2,7 +2,10 @@
 
 #pragma once
 
-#include "physics/collide.h"
+#include "collide.h"
+
+// Fake/artistic ball motion trail length, but also used for spin kill, so may not be lower than 10 (to keep 100ms of ball history at 10ms interval)
+#define MAX_BALL_TRAIL_POS 10
 
 
 class BallMoverObject : public MoverObject
@@ -20,7 +23,7 @@ struct BallS
 {
    Vertex3Ds m_pos = Vertex3Ds(0.f, 0.f, 0.f);
    Vertex3Ds m_vel = Vertex3Ds(0.f, 0.f, 0.f); // ball velocity
-   float m_radius = 25.f;
+   float m_radius = DEFAULT_BALL_SIZE;
    float m_mass   = 1.f;
    vector<IFireEvents*>* m_vpVolObjs; // vector of triggers and kickers we are now inside (stored as IFireEvents* though, as HitObject.m_obj stores it like that!)
    bool m_lockedInKicker = false;
@@ -67,8 +70,6 @@ public:
 
    Vertex3Ds m_oldVel;       // hack for kicker hole handling only
 
-   Vertex3Ds m_lastRenderedPos; // position where last render occured
-
    Vertex3Ds m_lastEventPos; // last hit event position (to filter hit 'equal' hit events)
    float m_lastEventSqrDist = 0.f; // distance travelled since last event
 
@@ -76,11 +77,17 @@ public:
 
    Matrix3 m_orientation;
 
-   Vertex3Ds m_oldpos[MAX_BALL_TRAIL_POS]; // used for killing spin and for ball trails
-   unsigned int m_ringcounter_oldpos = 0;
-
 #ifdef C_DYNAMIC
    int m_dynamic = C_DYNAMIC; // used to determine static ball conditions and velocity quenching
    float m_drsq = 0.0f;       // square of distance moved
 #endif
+
+   void OnPhysicStepProcessed(uint64_t physicsTimeUs);
+   const Vertex3Ds& GetOldPosition(uint64_t physicsTimeUs) const;
+
+private:
+   Vertex3Ds m_oldpos[MAX_BALL_TRAIL_POS]; // used for killing spin (see C_BALL_SPIN_HACK) and for ball trails
+
+   friend struct BallHistory;
+   friend struct BallHistoryRecord;
 };

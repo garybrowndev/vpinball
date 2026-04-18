@@ -1,6 +1,7 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
+#include "parts/plunger.h"
 
 #define PLUNGERHEIGHT 50.0f
 
@@ -81,7 +82,6 @@ PlungerMoverObject::PlungerMoverObject(Plunger* const plunger)
    , m_jointEnd { HitLineZ(plunger), HitLineZ(plunger) }
 {
    // clear the mech plunger reading history
-   m_mech0 = m_mech1 = m_mech2 = 0.0f;
    m_addRetractMotion = false;
    m_retractMotion = false;
    m_retractWaitLoop = 0;
@@ -170,11 +170,11 @@ void PlungerMoverObject::SetObjects(const float len)
 // Pinscape device with plunger speed support.
 float PlungerMoverObject::MechPlunger() const
 {
-   const float pos = g_pplayer->m_curMechPlungerPos / static_cast<float>(JOYRANGEMX);
+   const float pos = g_pplayer->m_pininput.GetPlungerPos();
    if (g_pplayer->m_pininput.m_linearPlunger)
    {
       // Linear plunger device - the joystick must be calibrated such that the park
-      // position reads as 0 and the fully retracted position reads as JOYRANGEMX.  The
+      // position reads as 0 and the fully retracted position reads as 1.0.  The
       // scaling factor between physical units and joystick units must be the same on the
       // positive and negative sides.  (The maximum forward position is not calibrated.)
       return lerp(m_restPos, 1.f, pos);
@@ -182,8 +182,8 @@ float PlungerMoverObject::MechPlunger() const
    else
    {
       // Standard plunger device - the joystick must be calibrated such that the park
-      // position reads as 0, the fully retracted position reads as -JOYRANGEMX, and the
-      // full forward position reads as -JOYRANGEMX.
+      // position reads as 0, the fully retracted position reads as -1.0, and the
+      // full forward position reads as -1.0.
       return m_restPos + ((pos < 0) ? pos * m_restPos : pos * (1.0f - m_restPos));
    }
 }
@@ -204,12 +204,8 @@ float PlungerMoverObject::MechPlunger() const
 // unreliable at best.
 float PlungerMoverObject::MechPlungerSpeed() const
 {
-   // Get the current speed reading
-   float v = g_pplayer->GetMechPlungerSpeed();
-
-   // normalized the joystick input to -1..+1
-   v *= 1.0f / (2.f * JOYRANGEMX);
-
+   // Get the current speed reading, normalized in -1..+1
+   //
    // The joystick report is device-defined speed units.  We
    // need to convert these to local speed units.  Since the
    // report units are device-specific, the conversion factor
@@ -224,7 +220,7 @@ float PlungerMoverObject::MechPlungerSpeed() const
    // plunger length, that happens to equal VP9's native speed
    // units, so the scaling factor should be set to about 100%
    // when a Pinscape Pico is in use.
-   v *= g_pplayer->m_plungerSpeedScale;
+   float v = g_pplayer->m_pininput.GetPlungerSpeed();
 
    // Scale to the virtual plunger we're operating.  The device
    // units are inherently relative to the length of the actual
@@ -233,7 +229,7 @@ float PlungerMoverObject::MechPlungerSpeed() const
    // simulated plunger length.
    v *= m_frameLen;
 
-   // Now apply the "mechanical strength" scaling.  This lets
+   // Now apply the "fire strength" scaling.  This lets
    // the game set the relative strength of the plunger to be
    // higher or lower than "standard" (which is an arbitrary
    // reference point).  The strength is relative to the mass.
@@ -242,7 +238,7 @@ float PlungerMoverObject::MechPlungerSpeed() const
    // the scale of the user-adjustable unit conversion factor
    // above, but we'll include it for consistency with other
    // places in the code where the mech strength is used.)
-   v *= m_plunger->m_d.m_mechStrength / m_mass;
+   v *= m_plunger->m_d.m_speedFire / m_mass;
 
    // Return the result
    return v;
@@ -373,10 +369,7 @@ void PlungerMoverObject::Fire(float startPos)
    // starting distance.  Note that the release motion
    // is upwards, so the speed is negative.
    const float dx = startPos - m_restPos;
-   const float normalize = (float)g_pplayer->m_ptable->m_plungerNormalize / 13.0f / 100.0f;
-   m_fireSpeed = -m_plunger->m_d.m_speedFire
-      * dx * m_frameLen / m_mass
-      * normalize;
+   m_fireSpeed = -m_plunger->m_d.m_speedFire * dx * m_frameLen / (m_mass * 13.0f);
 
    // Figure the target stopping position for the
    // bounce off of the barrel spring.  Treat this
@@ -410,8 +403,29 @@ void PlungerMoverObject::UpdateVelocities()
    const bool isMech = m_plunger->m_d.m_mechPlunger;
    const float mech = isMech ? MechPlunger() : 0.0f;
 
-   // calculate the delta from the last reading
-   const float dmech = m_mech0 - mech;
+   // Compute the mech speed, taking in account the hardware device acquisition rate (which can vary greatly from 1ms for newer device to up to 25ms on older ones)
+   if (isMech)
+   {
+      const int nSamples = static_cast<int>(m_mech.size());
+      if (m_mech[m_mechPos].pos != mech)
+      {
+         m_mechPos = (m_mechPos + 1) % nSamples;
+         m_mech[m_mechPos].pos = mech;
+         m_mech[m_mechPos].ts = usec();
+      }
+      // Compute speed in meters per second, considering a standard full range of travel of 3" (as we are comparing gainst a standard threshold)
+      const uint64_t now = m_mech[m_mechPos].ts;
+      int prevMechPos = (m_mechPos + (nSamples - 1)) % nSamples;
+      while (prevMechPos != m_mechPos)
+      {
+         const int nextPos = (prevMechPos + (nSamples - 1)) % nSamples;
+         // We limit to the last 10ms to limit noise (always taking at least 2 samples, if the device update acquisition period is too high)
+         if (now - m_mech[nextPos].ts > 10000UL)
+            break;
+         prevMechPos = nextPos;
+      }
+      m_mechSpeed = (m_mech[m_mechPos].pos - m_mech[prevMechPos].pos) * static_cast<float>(3. * 2.54 * 0.01 * 1000000.) / static_cast<float>(m_mech[m_mechPos].ts - m_mech[prevMechPos].ts);
+   }
 
    // Frame-to-frame mech movement threshold for detecting a release
    // motion.  1.0 is the full range of travel, which corresponds
@@ -420,17 +434,15 @@ void PlungerMoverObject::UpdateVelocities()
    // to move the plunger manually, but slower than the plunger
    // typically moves under spring power when released.  It appears
    // from observation that a real plunger moves at something on the
-   // order of 3 m/s.  Figure the fastest USB update interval will
-   // be 10ms, typical is probably 25ms, and slowest is maybe 40ms;
-   // and figure the bracket speed range down to about 1 m/s.  This
-   // gives us a distance per USB interval of from 25mm to 100mm.
-   // 25mm translates to .32 of our distance units (0.0-1.0 scale).
+   // order of 3 m/s.
    // The lower we make this, the more sensitive we'll be at
    // detecting releases, but if we make it too low we might mistake
-   // manual movements for releases.  In practice, it seems safe to
-   // lower it to about 0.2 - this doesn't seem to cause false
-   // positives and seems reliable at identifying actual releases.
-   constexpr float ReleaseThreshold = 0.2f;
+   // manual movements for releases. In practice, it seems safe to
+   // lower it to about 1 m/s - this doesn't seem to cause false
+   // positives and seems reliable at identifying actual releases 
+   // from the release beginning (the speed reaches 3 to 4m/s on
+   // impact, but starts at 0m/s on release and ramps up quickly).
+   constexpr float ReleaseThreshold = -1.f; // 1m/s limit
 
    // note if we're acting as an auto plunger
    const bool autoPlunger = m_plunger->m_d.m_autoPlunger;
@@ -459,10 +471,11 @@ void PlungerMoverObject::UpdateVelocities()
       // mechanical plunger and we're operating as an auto plunger.
       // When the timer reaches zero, we'll send the corresponding
       // KeyUp event and cancel the timer.
-      if ((--m_autoFireTimer == 0) && (g_pplayer != nullptr))
-         g_pplayer->m_pininput.FireActionEvent(ePlungerKey, false);
+      m_autoFireTimer--;
+      if (g_pplayer && (m_autoFireTimerInputStateSlot != -1) && (m_autoFireTimer == 0))
+         g_pplayer->m_pininput.GetInputActions()[g_pplayer->m_pininput.GetLaunchBallActionId()]->SetDirectState(m_autoFireTimerInputStateSlot, false);
    }
-   else if (autoPlunger && dmech > ReleaseThreshold)
+   else if (autoPlunger && m_mechSpeed < ReleaseThreshold)
    {
       // Release motion detected in Auto Plunger mode.
       //
@@ -498,7 +511,11 @@ void PlungerMoverObject::UpdateVelocities()
       // perform any other tasks it normally does when the
       // actual Launch Ball button is pressed.
       if (g_pplayer)
-         g_pplayer->m_pininput.FireActionEvent(ePlungerKey, true);
+      {
+         if (m_autoFireTimerInputStateSlot < 0)
+            m_autoFireTimerInputStateSlot = g_pplayer->m_pininput.GetInputActions()[g_pplayer->m_pininput.GetLaunchBallActionId()]->NewDirectStateSlot();
+         g_pplayer->m_pininput.GetInputActions()[g_pplayer->m_pininput.GetLaunchBallActionId()]->SetDirectState(m_autoFireTimerInputStateSlot, true);
+      }
 
       // start the timer to send the corresponding KeyUp in 100ms
       m_autoFireTimer = 101;
@@ -587,7 +604,7 @@ void PlungerMoverObject::UpdateVelocities()
       // position in one physics frame.
       m_speed = (mech - pos) * m_frameLen;
    }
-   else if (dmech > ReleaseThreshold && !g_pplayer->m_pininput.HasMechPlungerSpeed())
+   else if (m_mechSpeed < ReleaseThreshold && !g_pplayer->m_pininput.HasMechPlungerSpeed())
    {
       // Normal mode, fast forward motion detected, external
       // device is NOT providing speed input data.  Consider this
@@ -636,14 +653,11 @@ void PlungerMoverObject::UpdateVelocities()
       // physically accurate than our synthetic event estimate.
 
       // Go back through the recent history to find the apex of the
-      // release.  Our "threshold" calculation is basically attempting
-      // to measure the instantaneous speed of the plunger as the
-      // difference in position divided by the time interval.  But
-      // the time interval is extremely imprecise, because joystick
-      // reports aren't synchronized to our clock.  In practice the
-      // time between USB reports is in the 10-30ms range, which gives
-      // us a considerable range of error in calculating an instantaneous
-      // speed.
+      // release as we are detecting the release after the plunger has
+      // reached a high enough velocity (but was released before) and
+      // we may have a very imprecise measure on old USB devices with
+      // a 10 to 30ms acquisition/transfer period (newer devices may 
+      // have an acquisition/transfer period as low as 1ms).
       //
       // So instead of relying on the instantaneous speed alone, now
       // that we're pretty sure a release motion is under way, go back
@@ -651,13 +665,10 @@ void PlungerMoverObject::UpdateVelocities()
       // started.  Scan the history for monotonically ascending values,
       // and take the highest one we find.  That's probably where the
       // user actually released the plunger.
-      float apex = m_mech0;
-      if (m_mech1 > apex)
-      {
-         apex = m_mech1;
-         if (m_mech2 > apex)
-            apex = m_mech2;
-      }
+      float apex = 0.f;
+      for (const auto& sample : m_mech)
+         if (sample.pos > apex && (m_mech[0].ts - sample.ts < 30000UL)) // only consider the recent enough samples
+            apex = sample.pos;
 
       // trigger a release from the apex position
       Fire(apex);
@@ -685,7 +696,7 @@ void PlungerMoverObject::UpdateVelocities()
       const float target = autoPlunger ? m_restPos : mech;
 
       // figure the current difference in positions
-      const float error = target - pos;
+      const float dx = target - pos;
 
       // Model the software plunger as though it were connected to the
       // mechanical plunger by a spring with spring constant 'mech
@@ -698,12 +709,9 @@ void PlungerMoverObject::UpdateVelocities()
       // at it, apply some damping to the current speed to simulate
       // friction.
       //
-      // The 'normalize' factor is the table's normalization constant
-      // divided by 1300, for historical reasons.  Old versions applied
-      // a 1/13 adjustment factor, which appears to have been empirically
-      // chosen to get the speed in the right range.  The m_plungerNormalize
-      // factor has default value 100 in this version, so we need to
-      // divide it by 100 to get a multiplier value.
+      // Old versions applied a 1/13 adjustment factor, which appears 
+      // to have been empirically chosen to get the speed in the right
+      // range.
       //
       // The 'dt' factor represents the amount of time that we're applying
       // this acceleration.  This is in "VP 9 physics frame" units, where
@@ -713,12 +721,9 @@ void PlungerMoverObject::UpdateVelocities()
       // runs physics frames at roughly 10x the rate of VP 9, so the time
       // per frame is about 1/10 the VP 9 time.
       constexpr float plungerFriction = 0.95f;
-      const float normalize = (float)g_pplayer->m_ptable->m_plungerNormalize / 13.0f / 100.0f;
-      constexpr float dt = 0.1f;
+      constexpr float dt = 0.1f; // 1ms
       m_speed *= plungerFriction;
-      m_speed += error * m_frameLen
-         * m_plunger->m_d.m_mechStrength / m_mass
-         * normalize * dt;
+      m_speed += dt * m_plunger->m_d.m_mechStrength * dx * m_frameLen / (m_mass * 13.0f);
 
       // add any reverse impulse to the result
       m_speed += m_reverseImpulse;
@@ -726,17 +731,6 @@ void PlungerMoverObject::UpdateVelocities()
 
    // cancel any reverse impulse
    m_reverseImpulse = 0.0f;
-
-   // Shift the current mech reading into the history list, if it's
-   // different from the last reading.  Only keep distinct readings;
-   // the physics loop tends to run faster than the USB reporting
-   // rate, so we might see the same USB report several times here.
-   if (mech != m_mech0)
-   {
-      m_mech2 = m_mech1;
-      m_mech1 = m_mech0;
-      m_mech0 = mech;
-   }
 }
 
 float HitPlunger::HitTest(const BallS& ball, const float dtime, CollisionEvent& coll) const
@@ -970,7 +964,7 @@ void HitPlunger::Collide(const CollisionEvent& coll)
          return;
 #endif
    }
-   g_pplayer->m_liveUI->m_ballControl.SetDraggedBall(pball); // Ball control most recently collided with plunger
+   g_pplayer->m_liveUI->m_ballControl.SetDraggedBall(pball->m_pBall); // Ball control most recently collided with plunger
 
 #ifdef C_DISP_GAIN 
    // correct displacements, mostly from low velocity blindness, an alternative to true acceleration processing     

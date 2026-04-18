@@ -3,6 +3,8 @@
 #include "../collections/RunningAnimationsCollection.h"
 #include "../utils/Timer.h"
 
+#include <map>
+
 namespace B2SLegacy {
 
 class B2SData;
@@ -27,7 +29,7 @@ public:
       bool bringToFront,
       bool randomStart,
       int randomQuality);
-   ~B2SAnimationBase();
+   ~B2SAnimationBase() override;
 
    B2SAnimation* GetB2SAnimation() const { return m_pB2SAnimation; }
    const string& GetName() const { return m_szName; }

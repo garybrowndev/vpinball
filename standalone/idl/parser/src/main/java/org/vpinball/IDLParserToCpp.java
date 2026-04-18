@@ -105,6 +105,7 @@ public class IDLParserToCpp {
 		FileOutputStream outputStream = new FileOutputStream(out);
 
 		outputStream.write("#include \"core/stdafx.h\"\n".getBytes());
+		outputStream.write("#include \"core/ScriptGlobalTable.h\"\n".getBytes());
 		outputStream.write("#include \"olectl.h\"\n".getBytes());
 		
 		if (includes != null && includes.size() > 0) {
@@ -425,6 +426,7 @@ public class IDLParserToCpp {
 		eventDispIdMap.put("DISPID_GameEvents_Paused", 1005);
 		eventDispIdMap.put("DISPID_GameEvents_UnPaused", 1006);
 		eventDispIdMap.put("DISPID_GameEvents_OptionEvent", 1007);
+		eventDispIdMap.put("DISPID_GameEvents_SoundDone", 1008);
 		eventDispIdMap.put("DISPID_SurfaceEvents_Slingshot", 1101);
 		eventDispIdMap.put("DISPID_FlipperEvents_Collide", 1200);
 		eventDispIdMap.put("DISPID_TimerEvents_Timer", 1300);
@@ -498,21 +500,21 @@ public class IDLParserToCpp {
 		buffer.append("size_t min = 1, max = ARRAY_SIZE(idsNamesList) - 1, i;\n");
 		buffer.append("int r;\n");
 
-		// Crash on exit temporary workaround
+		// Crash on exit workaround
 		buffer.append("#ifdef __STANDALONE__\n");
-		buffer.append("if (!g_pplayer->m_ptable->m_pcv->m_pScript) return DISP_E_MEMBERNOTFOUND;\n");
+		buffer.append("if (!g_pplayer || !g_pplayer->m_scriptInterpreter) return DISP_E_MEMBERNOTFOUND;\n");
 		buffer.append("#endif\n");
 
 		buffer.append("while(min <= max) {\n");
 		buffer.append("i = (min + max) / 2;\n");
 		buffer.append("if (idsNamesList[i].dispId == dispid) {\n");
-		buffer.append("wcscpy(wzName, m_wzName);\n");
+		buffer.append("wcscpy(wzName, m_wzName.c_str());\n");
 		buffer.append("wcscat(wzName, idsNamesList[i].name);\n");
 		buffer.append("LPOLESTR fnNames = (LPOLESTR)wzName;\n");
 		buffer.append("DISPID tDispid;\n");
 		buffer.append("CComPtr<IDispatch> disp;\n");
-		buffer.append("g_pplayer->m_ptable->m_pcv->m_pScript->GetScriptDispatch(nullptr, &disp);\n");
-		buffer.append("if (SUCCEEDED(disp->GetIDsOfNames(IID_NULL, &fnNames, 1, 0, &tDispid))) {\n");
+		buffer.append("g_pplayer->m_scriptInterpreter->GetScriptDispatch(&disp);\n");
+		buffer.append("if (disp && SUCCEEDED(disp->GetIDsOfNames(IID_NULL, &fnNames, 1, 0, &tDispid))) {\n");
 		buffer.append("return disp->Invoke(tDispid, IID_NULL, LOCALE_USER_DEFAULT, DISPATCH_METHOD, pdispparams, nullptr, nullptr, nullptr);\n");
 		buffer.append("}\n");
 		buffer.append("return DISP_E_MEMBERNOTFOUND;\n");
@@ -930,14 +932,6 @@ public class IDLParserToCpp {
 		IDLParserToCpp parser = new IDLParserToCpp();
 
 		parser.parse(
-				"../../inc/b2s/B2S.idl",
-				"b2s_i_proxy.cpp",
-				Arrays.asList(
-						new IDLInterface("_Server", "Server")),
-				Arrays.asList("Server.h"),
-				true);
-
-		parser.parse(
 			"../../../src/core/vpinball.idl",
 			"vpinball_standalone_i_proxy.cpp",
 			Arrays.asList(
@@ -1005,11 +999,34 @@ public class IDLParserToCpp {
 				new IDLInterface("IDispReelEvents", "DispReel"),
 				new IDLInterface("ILightSeq", "LightSeq"),
 				new IDLInterface("ILightSeqEvents", "LightSeq"),
-				new IDLInterface("IVPDebug", "DebuggerModule", "VPDebug"),
+				new IDLInterface("IVPDebug", "ScriptInterpreter::DebuggerModule", "VPDebug"),
 				new IDLInterface("IDecal", "Decal"),
+				new IDLInterface("IDecalEvents", "Decal"),
 				new IDLInterface("IBall", "Ball", "IBall"),
 				new IDLInterface("IBallEvents", "Ball")),
-			Arrays.asList(),
+			Arrays.asList(
+				"parts/ball.h",
+				"parts/bumper.h",
+				"parts/decal.h",
+				"parts/dispreel.h",
+				"parts/dragpoint.h",
+				"parts/flasher.h",
+				"parts/flipper.h",
+				"parts/gate.h",
+				"parts/hittarget.h",
+				"parts/kicker.h",
+				"parts/light.h",
+				"parts/lightseq.h",
+				"parts/PartGroup.h",
+				"parts/plunger.h",
+				"parts/primitive.h",
+				"parts/ramp.h",
+				"parts/rubber.h",
+				"parts/spinner.h",
+				"parts/surface.h",
+				"parts/textbox.h",
+				"parts/timer.h",
+				"parts/trigger.h"),
 			false);
 	}
 }

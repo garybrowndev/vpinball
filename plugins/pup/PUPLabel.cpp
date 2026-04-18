@@ -1,6 +1,10 @@
+// license:GPLv3+
+
 /*
  * This code was derived from notes at:
  *
+ * https://www.nailbuster.com/wikipinup/doku.php?id=pup_dmd
+ * https://nailbuster.com/pupupdatesv14/PUPDMDFramework_Starter_v1_1.zip
  * https://nailbuster.com/pup/PUPDMD_Reference_v13.zip
  */
 
@@ -15,8 +19,118 @@
 #pragma warning(pop)
 
 #include <filesystem>
+#include <format>
+
+#define LOG_PUPLABEL 0
 
 namespace PUP {
+
+#ifndef M_PI
+#define M_PI 3.1415926535897932384626433832795
+#endif
+
+// FIXME rotation is done via CPU (90/270 degress render blank via GPU?)
+static SDL_Surface* RotateSurface(SDL_Surface* src, float angleDeg)
+{
+   if (!src || angleDeg == 0.f)
+      return nullptr;
+
+   const float rad = -angleDeg * (float)(M_PI / 180.0);
+   const float c = cosf(rad);
+   const float s = sinf(rad);
+   const float absC = fabsf(c);
+   const float absS = fabsf(s);
+
+   const int srcW = src->w;
+   const int srcH = src->h;
+   const int dstW = (int)ceilf(srcW * absC + srcH * absS);
+   const int dstH = (int)ceilf(srcW * absS + srcH * absC);
+
+   SDL_Surface* dst = SDL_CreateSurface(dstW, dstH, SDL_PIXELFORMAT_RGBA32);
+   if (!dst)
+      return nullptr;
+
+   SDL_LockSurface(src);
+   SDL_LockSurface(dst);
+
+   const uint32_t* srcPixels = (const uint32_t*)src->pixels;
+   uint32_t* dstPixels = (uint32_t*)dst->pixels;
+   const int srcPitch = src->pitch / 4;
+   const int dstPitch = dst->pitch / 4;
+
+   const float srcCx = srcW * 0.5f;
+   const float srcCy = srcH * 0.5f;
+   const float dstCx = dstW * 0.5f;
+   const float dstCy = dstH * 0.5f;
+
+   for (int dy = 0; dy < dstH; dy++)
+   {
+      for (int dx = 0; dx < dstW; dx++)
+      {
+         const float rx = (dx - dstCx) * c + (dy - dstCy) * s + srcCx;
+         const float ry = -(dx - dstCx) * s + (dy - dstCy) * c + srcCy;
+         const int sx = (int)rx;
+         const int sy = (int)ry;
+         if (sx >= 0 && sx < srcW && sy >= 0 && sy < srcH)
+            dstPixels[dy * dstPitch + dx] = srcPixels[sy * srcPitch + sx];
+         else
+            dstPixels[dy * dstPitch + dx] = 0;
+      }
+   }
+
+   SDL_UnlockSurface(dst);
+   SDL_UnlockSurface(src);
+   return dst;
+}
+
+// See pDMDLabelSetFilter — apply pixel filter to an RGBA32 surface
+// fmode: 1=invertRGB, 2=invert(+alpha), 3=grayscale, 4=invertalpha, 5=clear
+static void ApplyFilter(SDL_Surface* surf, int filterMode)
+{
+   if (!surf || filterMode <= 0 || filterMode > 5)
+      return;
+
+   SDL_LockSurface(surf);
+   uint32_t* pixels = (uint32_t*)surf->pixels;
+   const int pitch = surf->pitch / 4;
+   const int w = surf->w;
+   const int h = surf->h;
+
+   for (int y = 0; y < h; y++)
+   {
+      for (int x = 0; x < w; x++)
+      {
+         uint32_t& px = pixels[y * pitch + x];
+         const uint8_t r = px & 0xFF;
+         const uint8_t g = (px >> 8) & 0xFF;
+         const uint8_t b = (px >> 16) & 0xFF;
+         const uint8_t a = (px >> 24) & 0xFF;
+
+         switch (filterMode)
+         {
+         case 1: // invertRGB
+            px = (a << 24) | ((255 - b) << 16) | ((255 - g) << 8) | (255 - r);
+            break;
+         case 2: // invert (RGB + alpha)
+            px = ((255 - a) << 24) | ((255 - b) << 16) | ((255 - g) << 8) | (255 - r);
+            break;
+         case 3: // grayscale
+         {
+            const uint8_t gray = static_cast<uint8_t>(0.299f * r + 0.587f * g + 0.114f * b);
+            px = (a << 24) | (gray << 16) | (gray << 8) | gray;
+            break;
+         }
+         case 4: // invertalpha
+            px = ((255 - a) << 24) | (b << 16) | (g << 8) | r;
+            break;
+         case 5: // clear
+            px = 0;
+            break;
+         }
+      }
+   }
+   SDL_UnlockSurface(surf);
+}
 
 #ifndef GetRValue
 #define GetRValue(rgba32) static_cast<uint8_t>(rgba32)
@@ -24,10 +138,13 @@ namespace PUP {
 #define GetBValue(rgba32) static_cast<uint8_t>((rgba32) >> 16)
 #endif
 
+std::mutex PUPLabel::m_fontMutex;
+
 PUPLabel::PUPLabel(PUPManager* manager, const string& szName, const string& szFont, float size, int color, float angle, PUP_LABEL_XALIGN xAlign, PUP_LABEL_YALIGN yAlign, float xPos,
    float yPos, int pagenum, bool visible)
    : m_pManager(manager)
    , m_szName(szName)
+   , m_pFont(szFont.empty() ? nullptr : manager->GetFont(szFont))
    , m_size(size)
    , m_color(color)
    , m_angle(angle)
@@ -35,13 +152,13 @@ PUPLabel::PUPLabel(PUPManager* manager, const string& szName, const string& szFo
    , m_yAlign(yAlign)
    , m_xPos(xPos)
    , m_yPos(yPos)
+   , m_onShowVisible(visible)
    , m_visible(visible)
    , m_pagenum(pagenum)
-   , m_pFont(szFont.empty() ? nullptr : manager->GetFont(szFont))
 {
    if (!szFont.empty() && !m_pFont)
    {
-      LOGE("Font not found: label=%s, font=%s", szName.c_str(), szFont.c_str());
+      LOGE("Font not found: label=" + szName + ", font=" + szFont);
    }
 }
 
@@ -62,21 +179,21 @@ void PUPLabel::SetCaption(const string& szCaption)
    szText = string_replace_all(szText, "\\r"s, '\n');
 
    {
-      std::lock_guard<std::mutex> lock(m_mutex);
+      std::lock_guard lock(m_mutex);
       if (m_szCaption != szText)
       {
          m_type = PUP_LABEL_TYPE_TEXT;
          m_szPath.clear();
 
          const string szExt = extension_from_path(szText);
-         if (szExt == "gif" || szExt == "png" || szExt == "apng" || szExt == "bmp" || szExt == "jpg")
+         if (szExt == "gif" || szExt == "png" || szExt == "apng" || szExt == "bmp" || szExt == "jpg" || szExt == "jpeg")
          {
             std::filesystem::path fs_path(normalize_path_separators(szText));
             string playlistFolder = fs_path.parent_path().string();
             PUPPlaylist* pPlaylist = m_pScreen->GetPlaylist(playlistFolder);
             if (pPlaylist)
             {
-               string szPath = pPlaylist->GetPlayFilePath(fs_path.filename().string());
+               std::filesystem::path szPath = pPlaylist->GetPlayFilePath(fs_path.filename());
                if (!szPath.empty())
                {
                   m_szPath = szPath;
@@ -84,14 +201,14 @@ void PUPLabel::SetCaption(const string& szCaption)
                }
                else
                {
-                  LOGE("Image not found: screen=%d, label=%s, path=%s", m_pScreen->GetScreenNum(), m_szName.c_str(), szText.c_str());
+                  LOGE(std::format("Image not found: screen={}, label={}, path={}", m_pScreen->GetScreenNum(), m_szName, szText));
                   // we need to set a path otherwise the caption will be used as text
                   m_szPath = szText;
                }
             }
             else
             {
-               LOGE("Image playlist not found: screen=%d, label=%s, path=%s, playlist=%s", m_pScreen->GetScreenNum(), m_szName.c_str(), szText.c_str(), playlistFolder.c_str());
+               LOGE(std::format("Image playlist not found: screen={}, label={}, path={}, playlist={}", m_pScreen->GetScreenNum(), m_szName, szText, playlistFolder));
             }
          }
 
@@ -103,13 +220,15 @@ void PUPLabel::SetCaption(const string& szCaption)
 
 void PUPLabel::SetVisible(bool visible)
 {
-   std::lock_guard<std::mutex> lock(m_mutex);
+   std::lock_guard lock(m_mutex);
    m_visible = visible;
 }
 
 void PUPLabel::SetSpecial(const string& szSpecial)
 {
-   LOGD("PUPLabel::SetSpecial: name=%s, caption=%s, json=%s", m_szName.c_str(), m_szCaption.c_str(), szSpecial.c_str());
+   #if LOG_PUPLABEL
+   LOGD(std::format("PUPLabel::SetSpecial: name={}, caption={}, json={}", m_szName, m_szCaption, szSpecial));
+   #endif
 
    string str = trim_string(szSpecial);
    if (str.empty())
@@ -135,232 +254,405 @@ void PUPLabel::SetSpecial(const string& szSpecial)
                mColor = ?
          */
       {
-         std::lock_guard<std::mutex> lock(m_mutex);
+         std::lock_guard lock(m_mutex);
          switch (json["at"s].as<int>(0))
          {
          case 1:
-            if (json["len"s].exists() && json["fc"s].exists() && json["fq"s].exists() && json["fq"s].as<int>() > 0)
-               m_animation = std::make_unique<Animation>(this, json["len"s].as<int>(), json["fc"s].as<int>(), 1000 / json["fq"s].as<int>());
+            // See pDMDLabelFlash — fq is the toggle interval in milliseconds, fc is optional
+            if (json["len"s].exists() && json["fq"s].exists() && json["fq"s].as<int>() > 0)
+               m_animation = std::make_unique<Animation>(this, json["len"s].as<int>(), json["fc"s].as<int>(m_color), json["fq"s].as<int>());
             else
             {
-               LOGE("Invalid label animation specified: {%s}", szSpecial.c_str());
+               LOGE("Invalid label animation specified: {" + szSpecial + '}');
             }
             break;
             
          case 2:
-            if (json["len"s].exists() && json["fc"s].exists())
-               m_animation = std::make_unique<Animation>(this, json["len"s].as<int>(), json["fc"s].as<int>(), 
+            // See pDMDLabelMoveHorz / pDMDLabelMoveVert / pDMDLabelMoveTO
+            // See pDMDLabelMoveHorzFade / pDMDLabelMoveVertFade — af = alpha fade start time (ms before end)
+            if (json["len"s].exists())
+            {
+               int len = json["len"s].as<int>();
+               int mlen = json["mlen"s].as<int>(0);
+               if (mlen == 0) mlen = len;
+               m_animation = std::make_unique<Animation>(this, len, json["fc"s].as<int>(m_color),
                   json["xps"s].as<int>(0), json["xpe"s].as<int>(0), json["yps"s].as<int>(0), json["ype"s].as<int>(0),
-                  json["mlen"s].as<int>(0), json["tt"s].as<int>(0), json["mColor"s].as<int>(0));
+                  mlen, json["tt"s].as<int>(0), json["mColor"s].as<int>(m_color));
+               m_animation->m_alphaFade = json["af"s].as<int>(0);
+            }
             else
             {
-               LOGE("Invalid label animation specified: {%s}", szSpecial.c_str());
+               LOGE("Invalid label animation specified: {" + szSpecial + '}');
             }
             break;
 
+         case 3:
+         {
+            // See pDMDZoomBig — zoom from hstart% to hend% over len ms
+            float hstart = static_cast<float>(json["hstart"s].as<double>(100));  // default 100% (normal size)
+            float hend = static_cast<float>(json["hend"s].as<double>(200));    // default 200% (double size)
+            m_animation = std::make_unique<Animation>(this, json["len"s].as<int>(1000), json["fc"s].as<int>(m_color), hstart, hend, 0);  // 1000ms fallback
+            break;
+         }
+
+         case 4:
+         {
+            // See pDMDLabelPulseText / pDMDLabelPulseImage — bounce zoom between hstart% and hend%
+            // See pDMDLabelPulseNumber — numstart/numend count up during animation.
+            // pspeed=0 means use a default bounce speed derived from the zoom range.
+            float hstart = static_cast<float>(json["hstart"s].as<double>(80));   // default 80% from pDMDLabelPulseText
+            float hend = static_cast<float>(json["hend"s].as<double>(120));      // default 120% from pDMDLabelPulseText
+            int pspeed = json["pspeed"s].as<int>(0);
+            if (pspeed == 0)
+               pspeed = std::max(1, static_cast<int>(hend - hstart));
+            m_animation = std::make_unique<Animation>(this, json["len"s].as<int>(3000), json["fc"s].as<int>(m_color), hstart, hend, pspeed);  // 3000ms fallback if len missing
+            m_animation->m_numStart = json["numstart"s].as<int>(INT_MIN);   // INT_MIN = no number counting
+            m_animation->m_numEnd = json["numend"s].as<int>(INT_MIN);
+            m_animation->m_numFormat = json["numformat"s].as<int>(0);       // 0=plain, 1=thousands separators
+            break;
+         }
+
+         case 5:
+         {
+            // See pDMDLabelFadeOut / pDMDLabelFadeIn — alpha ease from astart to aend over len ms
+            int astart = json["astart"s].as<int>(255);   // default 255 (fully visible) from pDMDLabelFadeOut
+            int aend = json["aend"s].as<int>(0);          // default 0 (invisible) from pDMDLabelFadeOut
+            m_animation = std::make_unique<Animation>(this, json["len"s].as<int>(1000), json["fc"s].as<int>(m_color), astart, aend, 0, false);  // 1000ms fallback
+            break;
+         }
+
+         case 6:
+         {
+            // See pDMDLabelFadePulse — alpha oscillates between astart and aend
+            int astart = json["astart"s].as<int>(70);    // default 70 (dim) from pDMDLabelFadePulse
+            int aend = json["aend"s].as<int>(255);        // default 255 (full) from pDMDLabelFadePulse
+            int pspeed = json["pspeed"s].as<int>(40);     // default 40 (alpha units per tick) from pDMDLabelFadePulse
+            m_animation = std::make_unique<Animation>(this, json["len"s].as<int>(3000), json["fc"s].as<int>(m_color), astart, aend, pspeed, false);  // 3000ms fallback
+            break;
+         }
+
+         case 7:
+         {
+            // See pDMDScreenFadeOut / pDMDScreenFadeIn — same as at=5 but for parent screen
+            int astart = json["astart"s].as<int>(255);   // default 255 from pDMDScreenFadeOut
+            int aend = json["aend"s].as<int>(0);          // default 0 from pDMDScreenFadeOut
+            m_animation = std::make_unique<Animation>(this, json["len"s].as<int>(1000), json["fc"s].as<int>(m_color), astart, aend, 0, true);  // 1000ms fallback
+            break;
+         }
+
+         case 8:
+         {
+            // See pDMDLabelWiggleText / pDMDLabelWiggleImage — rotation bounces between rstart and rend
+            // Uses GPU rotation since wiggle angles are small (never hits 90°/270°).
+            float rstart = static_cast<float>(json["rstart"s].as<double>(-45)) / 10.0f;  // default -4.5 deg from pDMDLabelWiggleText
+            float rend = static_cast<float>(json["rend"s].as<double>(45)) / 10.0f;       // default +4.5 deg from pDMDLabelWiggleText
+            int rspeed = json["rspeed"s].as<int>(5);   // default 5 from pDMDLabelWiggleText, 0 = use range as speed
+            if (rspeed == 0)
+               rspeed = std::max(1, static_cast<int>(fabsf(rend - rstart)));
+            m_animation = std::make_unique<Animation>(this, json["len"s].as<int>(3000), json["fc"s].as<int>(m_color), rstart, rend, rspeed, 0);  // 3000ms fallback
+            break;
+         }
+
+         case 10:
+            // See pDMDLabelClone / pDMDLabelCloneDelay — delayed show.
+            // True cloning (creating a duplicate label) is not yet implemented.
+            NOT_IMPLEMENTED("at=10 clone not implemented"s);
+            break;
+
          default:
-            LOGE("Unsupported Label.SetSpecial animation type: %d", json["at"s].as<int>(0));
+            LOGE("Unsupported Label.SetSpecial animation type: " + std::to_string(json["at"s].as<int>(0)));
             break;
          }
       }
       break;
-   
+
    case 2:
-      if (json["zback"s].exists() && json["zback"s].as<int>() == 1)
-         m_pScreen->SendLabelToBack(this);
-
-      if (json["ztop"s].exists() && json["ztop"s].as<int>() == 1)
-         m_pScreen->SendLabelToFront(this);
-
+   {
+      std::lock_guard lock(m_mutex);
+      for (auto& [key, value] : json.as_object())
       {
-         std::lock_guard<std::mutex> lock(m_mutex);
-
-         if (json["size"s].exists())
+         if (key == "mt")
          {
+
+         }
+         else if (key == "zback")
+         {
+            // See pDMDLabelSendToBack
+            if (value.as<int>() == 1)
+               m_pScreen->SendLabelToBack(this);
+         }
+         else if (key == "ztop")
+         {
+            // See pDMDLabelSendToFront
+            if (value.as<int>() == 1)
+               m_pScreen->SendLabelToFront(this);
+         }
+         else if (key == "size")
+         {
+            // See pDMDLabelSetSizeText — height as percent of display height
             m_size = static_cast<float>(json["size"s].as<double>());
             m_dirty = true;
          }
-
-         if (json["xpos"s].exists())
+         else if (key == "xpos")
          {
-            m_xPos = static_cast<float>(json["xpos"s].as<double>());
-            m_dirty = true;
+            // See pDMDLabelSetPos — position as percent of display width/height
+            m_xPos = static_cast<float>(value.as<double>());
          }
-
-         if (json["ypos"s].exists())
+         else if (key == "ypos")
          {
-            m_yPos = static_cast<float>(json["ypos"s].as<double>());
-            m_dirty = true;
+            m_yPos = static_cast<float>(value.as<double>());
          }
-
-         if (json["fname"s].exists())
+         else if (key == "fname")
          {
-            string szFont = json["fname"s].as_str();
+            string szFont = value.as_str();
             m_pFont = m_pManager->GetFont(szFont);
             if (!m_pFont)
-               LOGE("Label font not found: name=%s, font=%s", m_szName.c_str(), szFont.c_str());
+               LOGE("Label font not found: name=" + m_szName + ", font=" + szFont);
             m_dirty = true;
          }
-
-         if (json["fonth"s].exists())
+         else if (key == "fonth")
          {
-            m_size = static_cast<float>(json["fonth"s].as<double>());
+            m_size = static_cast<float>(value.as<double>());
             m_dirty = true;
          }
-
-         if (json["color"s].exists())
+         else if (key == "color")
          {
-            m_color = json["color"s].as<int>();
+            // See pDMDLabelSetColor
+            m_color = value.as<int>();
             m_dirty = true;
          }
-
-         if (json["xalign"s].exists())
+         else if (key == "xalign")
          {
-            m_xAlign = (PUP_LABEL_XALIGN)json["xalign"s].as<int>();
+            // See PDMDLabelSetAlign — 0=left 1=center 2=right, 0=top 1=center 2=bottom
+            // Dirty because TTF_SetFontWrapAlignment uses xAlign for multi-line text justification
+            m_xAlign = (PUP_LABEL_XALIGN)value.as<int>();
             m_dirty = true;
          }
-
-         if (json["yalign"s].exists())
+         else if (key == "yalign")
          {
-            m_yAlign = (PUP_LABEL_YALIGN)json["yalign"s].as<int>();
-            m_dirty = true;
+            m_yAlign = (PUP_LABEL_YALIGN)value.as<int>();
          }
-
-         if (json["pagenum"s].exists())
+         else if (key == "pagenum")
          {
-            m_pagenum = json["pagenum"s].as<int>();
-            m_dirty = true;
+            m_pagenum = value.as<int>();
          }
-
-         if (json["stopani"s].exists())
+         else if (key == "stopani")
          {
-            // stop any pup animations on label/image (zoom/flash/pulse).  this is not about animated gifs
+            // See pDMDLabelStopAnis — stop any pup animations on label/image (zoom/flash/pulse), not animated gifs
             m_animation = nullptr;
+            m_alpha = 1.0f;
+            m_zoom = 100.0f;
+            m_gradState = 0;
+            m_filterMode = 0;
+            m_autoFitWidth = 0;
+            m_autoFitHeight = 0;
             m_dirty = true;
          }
-
-         if (json["rotate"s].exists())
+         else if (key == "rotate")
          {
-            // in tenths.  so 900 is 90 degrees. rotate support for images too.  note images must be aligned center to rotate properly(default)
-            m_angle = static_cast<float>(json["rotate"s].as<double>() / 10.0);
+            // See pDMDLabelSetRotate — in tenths, so 900 is 90 degrees. rotate support for images too.
+            // note images must be aligned center to rotate properly(default)
+            m_angle = static_cast<float>(value.as<double>() / 10.0);
             m_dirty = true;
          }
-
-         if (json["zoom"s].exists())
+         else if (key == "zoom")
          {
-            // 120 for 120% of current height, 80% etc...
-            NOT_IMPLEMENTED("zoom not implemented");
+            // See pDMDLabelSetZoom — 120 for 120% of current height, 80% etc...
+            m_zoom = static_cast<float>(value.as<double>());
+         }
+         else if (key == "alpha")
+         {
+            // See pDMDLabelSetAlpha — 0-255  255=full, 0=blank
+            m_alpha = saturate((float)value.as<int>() / 255.0f);
+         }
+         else if (key == "gradstate")
+         {
+            // See pDMDLabelSetColorGradient — gradstate controls gradient blend (0=off, 1+=on)
+            m_gradState = value.as<int>();
             m_dirty = true;
          }
-
-         if (json["alpha"s].exists())
+         else if (key == "gradcolor")
          {
-            // '0-255  255=full, 0=blank
-            NOT_IMPLEMENTED("alpha not implemented");
+            // See pDMDLabelSetColorGradientPercent — end color of the vertical gradient
+            m_gradColor = value.as<int>();
             m_dirty = true;
          }
-
-         if (json["gradstate"s].exists() && json["gradcolor"s].exists())
+         else if (key == "grayscale")
          {
-            // color=gradcolor, gradstate = 0 (gradstate is percent)
-            NOT_IMPLEMENTED("gradstate/gradcolor not implemented");
+            // See pDMDLabelSetGrayScale — shortcut for filter mode 3 on images. 1=on, 0=off
+            m_filterMode = (value.as<int>() == 1) ? 3 : 0;
             m_dirty = true;
          }
-
-         if (json["grayscale"s].exists())
+         else if (key == "filter")
          {
-            // only on image objects.  will show as grayscale.  1=gray filter on 0=off normal mode
-            NOT_IMPLEMENTED("filter not implemented");
+            // See pDMDLabelSetFilter — fmode 1=invertRGB, 2=invert, 3=grayscale, 4=invertalpha, 5=clear/blur
+            m_filterMode = value.as<int>();
             m_dirty = true;
          }
-
-         if (json["filter"s].exists())
+         else if (key == "shadowstate")
          {
-            // fmode 1-5 (invertRGB, invert,grayscale,invertalpha,clear),blur)
-            NOT_IMPLEMENTED("filter not implemented");
+            // See pDMDLabelSetShadow / pDMDLabelSetBorder / pDMDLabelSetOutShadow
+            // shadowstate is a simple on/off: 0 disables shadow, non-zero enables drop shadow (type 1)
+            m_shadowType = (value.as<int>() != 0) ? 1 : 0;
             m_dirty = true;
          }
-
-         if (json["shadowcolor"s].exists())
+         else if (key == "shadowcolor")
          {
-            m_shadowColor = json["shadowcolor"s].as<int>();
+            m_shadowColor = value.as<int>();
             m_dirty = true;
          }
-
-         if (json["shadowtype"s].exists())
+         else if (key == "shadowtype")
          {
-            // ST = 1 (Shadow), ST = 2 (Border)
-            NOT_IMPLEMENTED("shadowtype not implemented");
+            // shadowtype sets the rendering mode directly: 0=none, 1=drop shadow, 2=border
+            m_shadowType = value.as<int>();
             m_dirty = true;
          }
-
-         if (json["xoffset"s].exists())
+         else if (key == "xoffset")
          {
-            m_xoffset = static_cast<float>(json["xoffset"s].as<double>());
+            // See pDMDLabelSetShadow / pDMDLabelSetBorder — shadow displacement as % of font height
+            m_xoffset = static_cast<float>(value.as<double>());
             m_dirty = true;
          }
-
-         if (json["yoffset"s].exists())
+         else if (key == "yoffset")
          {
-            m_yoffset = static_cast<float>(json["yoffset"s].as<double>());
+            m_yoffset = static_cast<float>(value.as<double>());
             m_dirty = true;
          }
-
-         if (json["anigif"s].exists())
+         else if (key == "anigif")
          {
-            m_anigif = json["anigif"s].as<int>();
+            // See pDMDPNGAnimate — speed is frame timer, 100 is ~30fps
+            m_anigif = value.as<int>();
+            m_animating = m_anigif > 0;
             m_dirty = true;
          }
-
-         if (json["width"s].exists())
+         else if (key == "animate")
          {
-            m_imageWidth = static_cast<float>(json["width"s].as<double>());
+            // See pDMDPNGAnimate / pDMDPNGAnimateOnce — animation interval in ms, 0 stops
+            int interval = value.as<int>();
+            if (interval < 1)
+            {
+               m_animating = false;
+            }
+            else
+            {
+               m_visible = true;
+               m_anigif = interval;
+               m_animating = true;
+               m_dirty = true;
+            }
+         }
+         else if (key == "anistart")
+         {
+            int interval = value.as<int>();
+            m_anigif = interval;
+            m_animating = interval > 0;
             m_dirty = true;
          }
-
-         if (json["height"s].exists())
+         else if (key == "gifloop")
          {
-            m_imageHeight = static_cast<float>(json["height"s].as<double>());
+            // See pDMDPNGAnimateEx — 1=loop forever (default), 0=play once
+            m_gifLoop = (value.as<int>() == 1);
+         }
+         else if (key == "gifstart")
+         {
+            // See pDMDPNGAnimateEx / pDMDPNGShowFrame — start frame index, -1 resets to full range
+            m_gifStart = value.as<int>();
+            if (m_gifStart < 0)
+            {
+               m_gifStart = 0;
+               m_gifEnd = -1;
+            }
+            m_animationFrame = -1;
+            m_animationStart = SDL_GetTicks();
+         }
+         else if (key == "gifend")
+         {
+            // See pDMDPNGAnimateEx / pDMDPNGShowFrame — end frame index, start==end shows single frame
+            m_gifEnd = value.as<int>();
+            if (m_gifStart == m_gifEnd && m_gifEnd >= 0)
+               m_dirty = true;
+         }
+         else if (key == "aniendhide")
+         {
+            // See pDMDPNGAnimateOnce — 1=hide label when animation completes
+            m_hideOnAnimEnd = (value.as<int>() == 1);
+         }
+         else if (key == "anidispose")
+         {
+            // See pDMDPNGAnimateOnceAndDispose — marks for cleanup after play
+         }
+         else if (key == "width")
+         {
+            // See pDMDLabelSetSizeImage — width/height as percent of display dimensions
+            m_imageWidth = static_cast<float>(value.as<double>());
             m_dirty = true;
          }
-
-         if (json["autow"s].exists())
+         else if (key == "height")
          {
-            NOT_IMPLEMENTED("autow not implemented");
+            m_imageHeight = static_cast<float>(value.as<double>());
             m_dirty = true;
          }
-
-         if (json["autoh"s].exists())
+         else if (key == "autow")
          {
-            NOT_IMPLEMENTED("autoh not implemented");
+            // See pDMDLabelSetAutoSize — auto-shrink font to fit within specified dimensions
+            m_autoFitWidth = static_cast<float>(value.as<double>());
             m_dirty = true;
          }
-
-         if (json["shadowstate"s].exists())
+         else if (key == "autoh")
          {
-            m_shadowState = json["shadowstate"s].as<int>();
+            m_autoFitHeight = static_cast<float>(value.as<double>());
             m_dirty = true;
          }
-
-         if (json["outline"s].exists())
+         else if (key == "outline")
          {
-            m_outline = (json["outline"s].as<int>() == 1);
+            // See pDMDLabelSetBorder / pDMDLabelSetOutShadow — outline=1 upgrades shadow to border mode (type 2)
+            m_outline = value.as<int>();
+            if (m_outline == 1)
+               m_shadowType = 2;
             m_dirty = true;
+         }
+         else if (key == "bold")
+         {
+            m_bold = (value.as<int>() == 1);
+            m_dirty = true;
+         }
+         else if (key == "italic")
+         {
+            m_italic = (value.as<int>() == 1);
+            m_dirty = true;
+         }
+         else if (key == "v2")
+         {
+            // See pupCreateLabel / pupCreateLabelImage
+            // v2 enables absolute positioning: xpos/ypos=0 means literally 0%,
+            // disabling the default behavior where 0 maps to center/right/bottom edge
+            m_useAbsolutePos = true;
+            m_dirty = true;
+         }
+         else
+         {
+            NOT_IMPLEMENTED(key + " not implemented");
          }
       }
+   }
+      break;
+
+   case 0:
+      // mt=0 or missing mt
+      // Batman66 sends mt=0 which spams the log
       break;
 
    default:
-      LOGE("Unsupported Label.SetSpecial mt mode: %d", json["mt"s].as<int>(0));
+      LOGE("Unsupported Label.SetSpecial mt mode: " + std::to_string(json["mt"s].as<int>(0)));
       break;
    }
 }
 
-void PUPLabel::Render(VPXRenderContext2D* const ctx, SDL_Rect& rect, int pagenum)
+void PUPLabel::Render(VPXRenderContext2D* const ctx, const SDL_Rect& rect, int pagenum, float screenAlpha)
 {
-   std::lock_guard<std::mutex> lock(m_mutex);
+   std::lock_guard lock(m_mutex);
 
-   if (!m_visible || pagenum != m_pagenum || m_szCaption.empty() || (m_animation && !m_animation->m_visible))
+   if ((!m_visible && !m_animation) || pagenum != m_pagenum || m_szCaption.empty())
       return;
    
    int fontColor = m_animation ? m_animation->m_color : m_color;
@@ -380,14 +672,16 @@ void PUPLabel::Render(VPXRenderContext2D* const ctx, SDL_Rect& rect, int pagenum
    {
       m_dirty = false;
       if (!m_szPath.empty())
+      {
          m_pendingTextureUpdate = std::async(std::launch::async, [this]() {
-            std::lock_guard<std::mutex> lock(m_mutex);
+            std::lock_guard lock(m_mutex);
             return UpdateImageTexture(m_type, m_szPath);
          });
+      }
       else if (m_pFont)
          m_pendingTextureUpdate = std::async(std::launch::async, [this, rect, fontColor]() {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            return UpdateLabelTexture(rect.h, m_pFont, m_szCaption, m_size, fontColor, m_shadowState, m_shadowColor, { m_xoffset, m_yoffset} );
+            std::lock_guard lock(m_mutex);
+            return UpdateLabelTexture(rect.h, m_pFont, m_szCaption, m_size, fontColor, m_shadowType, m_shadowColor, { m_xoffset, m_yoffset} );
          });
    }
 
@@ -396,17 +690,52 @@ void PUPLabel::Render(VPXRenderContext2D* const ctx, SDL_Rect& rect, int pagenum
 
    if (m_renderState.m_pAnimation)
    {
-      int expectedFrame = static_cast<int>(static_cast<float>(SDL_GetTicks() - m_animationStart) * (float)(60. / 1000.)) % m_renderState.m_pAnimation->count;
+      const int frameCount = m_renderState.m_pAnimation->count;
+      const int startFrame = (m_gifStart >= 0 && m_gifStart < frameCount) ? m_gifStart : 0;
+      const int endFrame = (m_gifEnd >= 0 && m_gifEnd < frameCount) ? m_gifEnd : frameCount - 1;
+
+      int expectedFrame = startFrame;
+      if (startFrame != endFrame)
+      {
+         int elapsed = static_cast<int>(SDL_GetTicks() - m_animationStart);
+         float speed = m_anigif > 0 ? m_anigif / 100.f : 1.f;
+         elapsed = static_cast<int>(elapsed * speed);
+         const int startOffset = startFrame > 0 ? m_renderState.m_accumulatedDelays[startFrame - 1] : 0;
+         const int rangeDuration = m_renderState.m_accumulatedDelays[endFrame] - startOffset;
+         if (rangeDuration > 0)
+         {
+            if (m_gifLoop)
+            {
+               elapsed = elapsed % rangeDuration;
+            }
+            else if (elapsed >= rangeDuration)
+            {
+               elapsed = rangeDuration - 1;
+               if (m_animating)
+               {
+                  m_animating = false;
+                  if (m_hideOnAnimEnd)
+                     m_visible = false;
+               }
+            }
+         }
+         const auto& delays = m_renderState.m_accumulatedDelays;
+         expectedFrame = static_cast<int>(std::upper_bound(delays.begin() + startFrame, delays.begin() + endFrame + 1, startOffset + elapsed) - delays.begin());
+         if (expectedFrame > endFrame)
+            expectedFrame = endFrame;
+         if (expectedFrame < startFrame)
+            expectedFrame = startFrame;
+      }
       if (expectedFrame != m_animationFrame)
       {
          m_animationFrame = expectedFrame;
-         // TODO perform conversion on the anciliary thread and not at render time
+         // TODO perform conversion on the ancillary thread and not at render time
          SDL_Surface* surf = m_renderState.m_pAnimation->frames[m_animationFrame];
          if (surf->format != SDL_PIXELFORMAT_RGBA32)
             surf = SDL_ConvertSurface(surf, SDL_PIXELFORMAT_RGBA32);
          SDL_LockSurface(surf);
          // TODO handle situations where width != pitch
-         UpdateTexture(&m_renderState.m_pTexture, surf->w, surf->h, VPXTextureFormat::VPXTEXFMT_sRGBA8, static_cast<uint8_t*>(surf->pixels));
+         UpdateTexture(&m_renderState.m_pTexture, surf->w, surf->h, VPXTextureFormat::VPXTEXFMT_sRGBA8, surf->pixels);
          SDL_UnlockSurface(surf);
          if (surf != m_renderState.m_pAnimation->frames[m_animationFrame])
             SDL_DestroySurface(surf);
@@ -428,35 +757,108 @@ void PUPLabel::Render(VPXRenderContext2D* const ctx, SDL_Rect& rect, int pagenum
 
    SDL_FRect dest = { static_cast<float>(rect.x), static_cast<float>(rect.y), width, height };
 
-   dest.x += static_cast<float>(rect.w) * (m_xPos == 0.f ? 0.5f : (m_xPos / 100.0f));
+   float xposPercent = m_xPos / 100.0f;
+   if (m_xPos == 0.f && !m_useAbsolutePos)
+   {
+      if (m_xAlign == PUP_LABEL_XALIGN_CENTER)
+         xposPercent = 0.5f;
+      else if (m_xAlign == PUP_LABEL_XALIGN_RIGHT)
+         xposPercent = 1.0f;
+   }
+
+   dest.x += static_cast<float>(rect.w) * xposPercent;
+
    if (m_xAlign == PUP_LABEL_XALIGN_CENTER)
       dest.x -= (width / 2.f);
    else if (m_xAlign == PUP_LABEL_XALIGN_RIGHT)
       dest.x -= width;
 
-   dest.y += static_cast<float>(rect.h) * (m_yPos == 0.f ? 0.5f : (m_yPos / 100.0f));
+   float yposPercent = m_yPos / 100.0f;
+   if (m_yPos == 0.f && !m_useAbsolutePos)
+   {
+      if (m_yAlign == PUP_LABEL_YALIGN_CENTER)
+         yposPercent = 0.5f;
+      else if (m_yAlign == PUP_LABEL_YALIGN_BOTTOM)
+         yposPercent = 1.0f;
+   }
+
+   dest.y += static_cast<float>(rect.h) * yposPercent;
+
    if (m_yAlign == PUP_LABEL_YALIGN_CENTER)
       dest.y -= (height / 2.f);
    else if (m_yAlign == PUP_LABEL_YALIGN_BOTTOM)
       dest.y -= height;
 
+   if (m_shadowType == 2)
+   {
+      const float fontHeight = (m_size / 100.0f) * static_cast<float>(rect.h);
+      dest.x += static_cast<float>(static_cast<int>(fontHeight * (m_xoffset / 100.0f))) * -2.f;
+      dest.y += static_cast<float>(static_cast<int>(fontHeight * (m_yoffset / 100.0f))) * -2.f;
+   }
+
+   bool visible = true;
+   int color = 0xFFFFFFFF;
    if (m_animation)
    {
       if (m_animation->Update(rect, dest))
+      {
+         if (m_animation->IsScreenFade() && m_pScreen)
+            m_pScreen->m_screenAlpha = m_animation->m_alpha;
+         else if (m_animation->IsFade())
+            m_alpha = m_animation->m_alpha;
+         if (m_animation->IsZoom())
+            m_zoom = m_animation->m_zoom;
+         if (m_animation->m_alphaFade > 0)
+            m_alpha = 0.f;
+         // Persist final motion position so label stays where the animation left it
+         m_xPos += (m_animation->m_xOffset / static_cast<float>(rect.w)) * 100.f;
+         m_yPos += (m_animation->m_yOffset / static_cast<float>(rect.h)) * 100.f;
          m_animation = nullptr;
+         return;
+      }
+      else
+      {
+         // See pDMDScreenFadeOut / pDMDScreenFadeIn — at=7 fades the entire screen
+         if (m_animation->IsScreenFade() && m_pScreen)
+            m_pScreen->m_screenAlpha = m_animation->m_alpha;
 
-      dest.x += m_animation->m_xOffset;
-      dest.y += m_animation->m_yOffset;
+         dest.x += m_animation->m_xOffset;
+         dest.y += m_animation->m_yOffset;
+         visible = m_animation->m_visible;
+         color = m_animation->m_color;
+      }
    }
 
-   VPXTextureInfo* texInfo = GetTextureInfo(m_renderState.m_pTexture);
-   ctx->DrawImage(ctx, m_renderState.m_pTexture, 1.f, 1.f, 1.f, 1.f,
-      0.f, 0.f, static_cast<float>(texInfo->width), static_cast<float>(texInfo->height), 
-      0.f, 0.f, -m_angle, // FIXME compute center (used to be SDL_FPoint center = { height / 2.0f, 0 };)
-      dest.x, dest.y, dest.w, dest.h);
+   float alpha = (m_animation ? m_animation->m_alpha : m_alpha) * screenAlpha;
+
+   float zoom = m_animation ? m_animation->m_zoom : m_zoom;
+   if (zoom != 100.0f)
+   {
+      const float scale = zoom / 100.0f;
+      const float cx = dest.x + dest.w * 0.5f;
+      const float cy = dest.y + dest.h * 0.5f;
+      dest.w *= scale;
+      dest.h *= scale;
+      dest.x = cx - dest.w * 0.5f;
+      dest.y = cy - dest.h * 0.5f;
+   }
+
+   if (visible && alpha > 0.f)
+   {
+      // FIXME implement color (as the animation may animate it)
+      // FIXME rotation is done via CPU (90/270 degress render blank via GPU?)
+      // Wiggle animation uses GPU rotation since the angles are small
+      const VPXTextureInfo* texInfo = GetTextureInfo(m_renderState.m_pTexture);
+      const float drawAngle = (m_animation && m_animation->IsWiggle()) ? m_animation->m_wiggle : 0.f;
+      const float pivotX = (drawAngle != 0.f) ? static_cast<float>(texInfo->width) * 0.5f : 0.f;
+      const float pivotY = (drawAngle != 0.f) ? static_cast<float>(texInfo->height) * 0.5f : 0.f;
+      ClipDrawImage(ctx, m_renderState.m_pTexture, 1.f, 1.f, 1.f, alpha,
+         0.f, 0.f, static_cast<float>(texInfo->width), static_cast<float>(texInfo->height),
+         pivotX, pivotY, drawAngle, dest, rect);
+   }
 }
 
-PUPLabel::RenderState PUPLabel::UpdateImageTexture(PUP_LABEL_TYPE type, const string& szPath)
+PUPLabel::RenderState PUPLabel::UpdateImageTexture(PUP_LABEL_TYPE type, const std::filesystem::path& szPath)
 {
    SetThreadName("PUPLabel.Upd." + m_szName);
 
@@ -465,25 +867,35 @@ PUPLabel::RenderState PUPLabel::UpdateImageTexture(PUP_LABEL_TYPE type, const st
    // Handle Image 'labels'
    if (type == PUP_LABEL_TYPE_IMAGE)
    {
-      SDL_Surface* image = IMG_Load(szPath.c_str());
+      SDL_Surface* image = IMG_Load(szPath.string().c_str());
       if (image && image->format != SDL_PIXELFORMAT_RGBA32) {
          SDL_Surface* newImage = SDL_ConvertSurface(image, SDL_PIXELFORMAT_RGBA32);
          SDL_DestroySurface(image);
          image = newImage;
       }
       if (image) {
+         if (m_filterMode > 0)
+            ApplyFilter(image, m_filterMode);
          rs.m_pTexture = CreateTexture(image);
          SDL_DestroySurface(image);
       }
       else
       {
-         LOGE("Unable to load image: %s", szPath.c_str());
+         LOGE("Unable to load image: " + szPath.string());
       }
    }
    else if (type == PUP_LABEL_TYPE_GIF)
    {
-      rs.m_pAnimation = IMG_LoadAnimation(szPath.c_str());
+      rs.m_pAnimation = std::shared_ptr<IMG_Animation>(IMG_LoadAnimation(szPath.string().c_str()), IMG_FreeAnimation);
       if (rs.m_pAnimation) {
+         rs.m_accumulatedDelays.resize(rs.m_pAnimation->count);
+         int accum = 0;
+         for (int i = 0; i < rs.m_pAnimation->count; i++)
+         {
+            accum += rs.m_pAnimation->delays[i];
+            rs.m_accumulatedDelays[i] = accum;
+         }
+         rs.m_totalDuration = accum;
          SDL_Surface* image = rs.m_pAnimation->frames[0];
          if (image) {
             if (image->format == SDL_PIXELFORMAT_RGBA32)
@@ -498,7 +910,7 @@ PUPLabel::RenderState PUPLabel::UpdateImageTexture(PUP_LABEL_TYPE type, const st
          }
       }
       else
-         LOGE("Unable to load animation: %s", szPath.c_str());
+         LOGE("Unable to load animation: " + szPath.string());
    }
    return rs;
 }
@@ -507,86 +919,131 @@ PUPLabel::RenderState PUPLabel::UpdateLabelTexture(int outHeight, TTF_Font* pFon
 {
    SetThreadName("PUPLabel.Upd." + m_szName);
 
-   // TTF_Font may not be accessed simultaneously from multiple thread so serialize updates using a mutex
-   static std::mutex fontMutex;
-   std::lock_guard<std::mutex> lock(fontMutex);
+   // TTF_Font may not be accessed simultaneously from multiple thread so serialize updates using a global static mutex
+   std::lock_guard lock(m_fontMutex);
 
    RenderState rs;
    rs.m_prerenderedHeight = outHeight;
    rs.m_prerenderedColor = color;
 
-   float height = (size / 100.0f) * static_cast<float>(outHeight);
-   TTF_SetFontSize(pFont, height);
+   const float fontHeight = (size / 100.0f) * static_cast<float>(outHeight);
+   TTF_FontStyleFlags style = TTF_STYLE_NORMAL;
+   // FIXME TTF_STYLE_BOLD gives bad results (test with Blood Machines, during Bonus sequence)
+   // style |= m_bold ? TTF_STYLE_BOLD : 0;
+   if (m_italic) style |= TTF_STYLE_ITALIC;
+   TTF_SetFontSize(pFont, fontHeight);
+   // FIXME TTF_SetFontOutline does not gives clean outlines
+   // TTF_SetFontOutline(pFont, m_outline);
    TTF_SetFontOutline(pFont, 0);
+   TTF_SetFontStyle(pFont, style);
+   TTF_SetFontHinting(pFont, TTF_HINTING_NORMAL);
+   TTF_SetFontWrapAlignment(pFont,
+      m_xAlign == PUP_LABEL_XALIGN_CENTER ? TTF_HORIZONTAL_ALIGN_CENTER :
+      m_xAlign == PUP_LABEL_XALIGN_RIGHT  ? TTF_HORIZONTAL_ALIGN_RIGHT :
+                                             TTF_HORIZONTAL_ALIGN_LEFT);
 
-   SDL_Color textColor = { GetRValue(m_color), GetGValue(m_color), GetBValue(m_color) };
-   SDL_Surface* pTextSurface = TTF_RenderText_Blended_Wrapped(pFont, szCaption.c_str(), szCaption.length(), textColor, 0);
+   string text = szCaption;
+   std::replace_if(text.begin(), text.end(), [pFont](char c) { return c != '\n' && !TTF_FontHasGlyph(pFont, c); }, ' ');
+
+   // See pDMDLabelSetAutoSize — shrink font until text fits within autow/autoh dimensions
+   const float maxW = (m_autoFitWidth > 0) ? (m_autoFitWidth / 100.0f) * static_cast<float>(outHeight) * (16.0f / 9.0f) : 0;
+   const float maxH = (m_autoFitHeight > 0) ? (m_autoFitHeight / 100.0f) * static_cast<float>(outHeight) : 0;
+   float adjustedHeight = fontHeight;
+
+   SDL_Color textColor = { GetRValue(m_color), GetGValue(m_color), GetBValue(m_color), 255 };
+   SDL_Surface* pTextSurface = TTF_RenderText_Blended_Wrapped(pFont, text.c_str(), text.length(), textColor, 0);
    if (!pTextSurface)
    {
-      LOGE("Unable to render text: label=%s, error=%s", m_szName.c_str(), SDL_GetError());
+      LOGE("Unable to render text: label=" + m_szName + ", error=" + SDL_GetError());
       return rs;
    }
 
-   SDL_Surface* pMergedSurface = nullptr;
-
-   if (shadowstate)
+   while (pTextSurface && (maxW > 0 || maxH > 0))
    {
-      SDL_Color shadowColor = { GetRValue(shadowcolor), GetGValue(shadowcolor), GetBValue(shadowcolor) };
-      SDL_Surface* pShadowSurface = TTF_RenderText_Blended_Wrapped(pFont, szCaption.c_str(), szCaption.length(), shadowColor, 0);
-      if (!pShadowSurface)
+      bool fits = true;
+      if (maxW > 0 && pTextSurface->w > maxW) fits = false;
+      if (maxH > 0 && pTextSurface->h > maxH) fits = false;
+      if (fits || adjustedHeight < 4.f) break;
+      adjustedHeight -= 2.f;
+      TTF_SetFontSize(pFont, adjustedHeight);
+      SDL_DestroySurface(pTextSurface);
+      pTextSurface = TTF_RenderText_Blended_Wrapped(pFont, text.c_str(), text.length(), textColor, 0);
+   }
+
+   const int xoffset = static_cast<int>(fontHeight * (offset.x / 100.0f));
+   const int yoffset = static_cast<int>(fontHeight * (offset.y / 100.0f));
+   const int absxoff = abs(xoffset);
+   const int absyoff = abs(yoffset);
+
+   if (shadowstate == 2 && (absxoff != 0 || absyoff != 0))
+   {
+      // See pDMDLabelSetBorder — border/outline mode: render shadow text at offsets around
+      // all edges to form a border, then render foreground text centered on top
+      SDL_Surface* pMergedSurface = SDL_CreateSurface(pTextSurface->w + absxoff * 2, pTextSurface->h + absyoff * 2, SDL_PIXELFORMAT_RGBA32);
+      if (!pMergedSurface)
       {
-         LOGE("Unable to render text: label=%s, error=%s", m_szName.c_str(), SDL_GetError());
-         delete pTextSurface;
+         LOGE("Unable to render text: label=" + m_szName + ", error=" + SDL_GetError());
+         SDL_DestroySurface(pTextSurface);
          return rs;
       }
 
-      int xoffset = (int)(((abs(offset.x) / 100.0f) * height) / 2.f);
-      int yoffset = (int)(((abs(offset.y) / 100.0f) * height) / 2.f);
-
-      pMergedSurface = SDL_CreateSurface(pTextSurface->w + xoffset, pTextSurface->h + yoffset, SDL_PIXELFORMAT_RGBA32);
-      if (pMergedSurface)
+      const SDL_Color shadowColor = { GetRValue(shadowcolor), GetGValue(shadowcolor), GetBValue(shadowcolor), 255 };
+      SDL_Surface* pShadowSurface = TTF_RenderText_Blended_Wrapped(pFont, text.c_str(), text.length(), shadowColor, 0);
+      if (pShadowSurface)
       {
-         //SDL_FillSurfaceRect(pMergedSurface, NULL, SDL_MapRGBA(pMergedSurface->format, 255, 255, 0, 255));
-         if (!m_outline)
+         const int offsets[][2] = {
+            {0, 0}, {absxoff, 0}, {absxoff * 2, 0},
+            {0, absyoff}, {absxoff * 2, absyoff},
+            {0, absyoff * 2}, {absxoff, absyoff * 2}, {absxoff * 2, absyoff * 2}
+         };
+         for (const auto& off : offsets)
          {
-            SDL_Rect shadowRect = { (xoffset < 0) ? 0 : xoffset, (yoffset < 0) ? 0 : yoffset, pShadowSurface->w, pShadowSurface->h };
-            SDL_BlitSurface(pShadowSurface, NULL, pMergedSurface, &shadowRect);
-
-            SDL_Rect textRect = { (xoffset > 0) ? 0 : xoffset, (yoffset > 0) ? 0 : yoffset, pTextSurface->w, pTextSurface->h };
-            SDL_BlitSurface(pTextSurface, NULL, pMergedSurface, &textRect);
+            SDL_Rect r = { off[0], off[1], pShadowSurface->w, pShadowSurface->h };
+            SDL_BlitSurface(pShadowSurface, nullptr, pMergedSurface, &r);
          }
-         else
+         SDL_DestroySurface(pShadowSurface);
+      }
+
+      SDL_Rect textRect = { absxoff, absyoff, pTextSurface->w, pTextSurface->h };
+      SDL_BlitSurface(pTextSurface, nullptr, pMergedSurface, &textRect);
+      SDL_DestroySurface(pTextSurface);
+
+      if (m_gradState > 0)
+      {
+         SDL_LockSurface(pMergedSurface);
+         uint32_t* pixels = (uint32_t*)pMergedSurface->pixels;
+         const int pitch = pMergedSurface->pitch / 4;
+         const int h = pMergedSurface->h;
+         for (int y = 0; y < h; y++)
          {
-            SDL_Rect shadowRects[8]
-               = { { 0, 0, pShadowSurface->w, pShadowSurface->h }, { xoffset / 2, 0, pShadowSurface->w, pShadowSurface->h }, { xoffset, 0, pShadowSurface->w, pShadowSurface->h },
+            const float t = (float)y / (float)(h > 1 ? h - 1 : 1);
+            const uint8_t gr = GetRValue(m_color) + static_cast<uint8_t>(t * (GetRValue(m_gradColor) - GetRValue(m_color)));
+            const uint8_t gg = GetGValue(m_color) + static_cast<uint8_t>(t * (GetGValue(m_gradColor) - GetGValue(m_color)));
+            const uint8_t gb = GetBValue(m_color) + static_cast<uint8_t>(t * (GetBValue(m_gradColor) - GetBValue(m_color)));
+            for (int x = 0; x < pMergedSurface->w; x++)
+            {
+               uint32_t& px = pixels[y * pitch + x];
+               const uint8_t a = (px >> 24) & 0xFF;
+               if (a > 0)
+                  px = (a << 24) | (gb << 16) | (gg << 8) | gr;
+            }
+         }
+         SDL_UnlockSurface(pMergedSurface);
+      }
 
-                    { 0, yoffset / 2, pShadowSurface->w, pShadowSurface->h }, { xoffset, yoffset / 2, pShadowSurface->w, pShadowSurface->h },
+      if (m_filterMode > 0)
+         ApplyFilter(pMergedSurface, m_filterMode);
 
-                    { 0, yoffset, pShadowSurface->w, pShadowSurface->h }, { xoffset / 2, yoffset, pShadowSurface->w, pShadowSurface->h },
-                    { xoffset, yoffset, pShadowSurface->w, pShadowSurface->h } };
-
-            for (int i = 0; i < 8; ++i)
-               SDL_BlitSurface(pShadowSurface, NULL, pMergedSurface, &shadowRects[i]);
-
-            SDL_Rect textRect = { xoffset / 2, yoffset / 2, pTextSurface->w, pTextSurface->h };
-            SDL_BlitSurface(pTextSurface, NULL, pMergedSurface, &textRect);
+      if (m_angle != 0.f)
+      {
+         SDL_Surface* pRotated = RotateSurface(pMergedSurface, m_angle);
+         if (pRotated)
+         {
+            SDL_DestroySurface(pMergedSurface);
+            pMergedSurface = pRotated;
          }
       }
 
-      SDL_DestroySurface(pShadowSurface);
-   }
-   else
-   {
-      pMergedSurface = SDL_CreateSurface(pTextSurface->w, pTextSurface->h, SDL_PIXELFORMAT_RGBA32);
-      if (pMergedSurface)
-      {
-         //SDL_FillSurfaceRect(pMergedSurface, NULL, SDL_MapRGBA(pMergedSurface->format, 255, 255, 0, 255));
-         SDL_BlitSurface(pTextSurface, NULL, pMergedSurface, NULL);
-      }
-   }
-
-   if (pMergedSurface)
-   {
       rs.m_pTexture = CreateTexture(pMergedSurface);
       if (rs.m_pTexture)
       {
@@ -594,30 +1051,107 @@ PUPLabel::RenderState PUPLabel::UpdateLabelTexture(int outHeight, TTF_Font* pFon
          rs.m_height = static_cast<float>(pMergedSurface->h);
       }
       SDL_DestroySurface(pMergedSurface);
+      return rs;
    }
 
+   SDL_Surface* pMergedSurface = SDL_CreateSurface(pTextSurface->w + absxoff, pTextSurface->h + absyoff, SDL_PIXELFORMAT_RGBA32);
+   if (!pMergedSurface)
+   {
+      LOGE("Unable to render text: label=" + m_szName + ", error=" + SDL_GetError());
+      SDL_DestroySurface(pTextSurface);
+      return rs;
+   }
+
+   if (shadowstate && (xoffset != 0 || yoffset != 0))
+   {
+      // See pDMDLabelSetShadow — drop shadow: render shadow text at offset, foreground at origin
+      const SDL_Color shadowColor = { GetRValue(shadowcolor), GetGValue(shadowcolor), GetBValue(shadowcolor), 255 };
+      SDL_Surface* pShadowSurface = TTF_RenderText_Blended_Wrapped(pFont, text.c_str(), text.length(), shadowColor, 0);
+      if (pShadowSurface)
+      {
+         SDL_Rect shadowRect = { (xoffset < 0) ? 0 : xoffset, (yoffset < 0) ? 0 : yoffset, pShadowSurface->w, pShadowSurface->h };
+         SDL_BlitSurface(pShadowSurface, nullptr, pMergedSurface, &shadowRect);
+
+         SDL_Rect textRect = { (xoffset < 0) ? -xoffset : 0, (yoffset < 0) ? -yoffset : 0, pTextSurface->w, pTextSurface->h };
+         SDL_BlitSurface(pTextSurface, nullptr, pMergedSurface, &textRect);
+         SDL_DestroySurface(pShadowSurface);
+      }
+      else
+      {
+         LOGE("Failed to render shadow: label=" + m_szName + ", error=" + SDL_GetError());
+         SDL_Rect textRect = { (xoffset < 0) ? -xoffset : 0, (yoffset < 0) ? -yoffset : 0, pTextSurface->w, pTextSurface->h };
+         SDL_BlitSurface(pTextSurface, nullptr, pMergedSurface, &textRect);
+      }
+   }
+   else
+   {
+      SDL_BlitSurface(pTextSurface, nullptr, pMergedSurface, nullptr);
+   }
    SDL_DestroySurface(pTextSurface);
 
+   // See pDMDLabelSetColorGradient — apply vertical gradient from color to gradcolor
+   if (m_gradState > 0)
+   {
+      SDL_LockSurface(pMergedSurface);
+      uint32_t* pixels = (uint32_t*)pMergedSurface->pixels;
+      const int pitch = pMergedSurface->pitch / 4;
+      const int h = pMergedSurface->h;
+      for (int y = 0; y < h; y++)
+      {
+         const float t = (float)y / (float)(h > 1 ? h - 1 : 1);
+         const uint8_t gr = GetRValue(m_color) + static_cast<uint8_t>(t * (GetRValue(m_gradColor) - GetRValue(m_color)));
+         const uint8_t gg = GetGValue(m_color) + static_cast<uint8_t>(t * (GetGValue(m_gradColor) - GetGValue(m_color)));
+         const uint8_t gb = GetBValue(m_color) + static_cast<uint8_t>(t * (GetBValue(m_gradColor) - GetBValue(m_color)));
+         for (int x = 0; x < pMergedSurface->w; x++)
+         {
+            uint32_t& px = pixels[y * pitch + x];
+            const uint8_t a = (px >> 24) & 0xFF;
+            if (a > 0)
+               px = (a << 24) | (gb << 16) | (gg << 8) | gr;
+         }
+      }
+      SDL_UnlockSurface(pMergedSurface);
+   }
+
+   if (m_filterMode > 0)
+      ApplyFilter(pMergedSurface, m_filterMode);
+
+   if (m_angle != 0.f)
+   {
+      SDL_Surface* pRotated = RotateSurface(pMergedSurface, m_angle);
+      if (pRotated)
+      {
+         SDL_DestroySurface(pMergedSurface);
+         pMergedSurface = pRotated;
+      }
+   }
+
+   rs.m_pTexture = CreateTexture(pMergedSurface);
+   if (rs.m_pTexture)
+   {
+      rs.m_width = static_cast<float>(pMergedSurface->w);
+      rs.m_height = static_cast<float>(pMergedSurface->h);
+   }
+   SDL_DestroySurface(pMergedSurface);
    return rs;
 }
 
 string PUPLabel::ToString() const
 {
-   return "name=" + m_szName + ", caption=" + m_szCaption + ", visible=" + (m_visible ? "true" : "false") + ", size=" + std::to_string(m_size) + ", color=" + std::to_string(m_color)
-      + ", angle=" + std::to_string(m_angle) + ", xAlign="
-      + (m_xAlign == PUP_LABEL_XALIGN_LEFT        ? "LEFT"
+   return std::format("name={}, caption={}, visible={}, size={}, color={}, angle={}, xAlign={}, yAlign={}, xPos={}, yPos={}, pagenum={}, szPath={}", m_szName, m_szCaption,
+      (m_visible ? "true" : "false"), m_size, m_color, m_angle,
+      (m_xAlign == PUP_LABEL_XALIGN_LEFT          ? "LEFT"
             : m_xAlign == PUP_LABEL_XALIGN_CENTER ? "CENTER"
-                                                  : "RIGHT")
-      + ", yAlign="
-      + (m_yAlign == PUP_LABEL_YALIGN_TOP         ? "TOP"
+                                                  : "RIGHT"),
+      (m_yAlign == PUP_LABEL_YALIGN_TOP           ? "TOP"
             : m_yAlign == PUP_LABEL_YALIGN_CENTER ? "CENTER"
-                                                  : "BOTTOM")
-      + ", xPos=" + std::to_string(m_xPos) + ", yPos=" + std::to_string(m_yPos) + ", pagenum=" + std::to_string(m_pagenum) + ", szPath=" + m_szPath;
+                                                  : "BOTTOM"),
+      m_xPos, m_yPos, m_pagenum, m_szPath.string());
 }
 
-PUPLabel::Animation::Animation(PUPLabel* label, int lengthMs, int foregroundColor, int flashingPeriod)
-   : m_label(label)
-   , m_color(label->m_color)
+PUPLabel::Animation::Animation(PUPLabel* label, unsigned int lengthMs, int foregroundColor, int flashingPeriod)
+   : m_color(label->m_color)
+   , m_label(label)
    , m_lengthMs(lengthMs)
    , m_foregroundColor(foregroundColor)
    , m_startTimestamp(SDL_GetTicks())
@@ -625,7 +1159,7 @@ PUPLabel::Animation::Animation(PUPLabel* label, int lengthMs, int foregroundColo
 {
 }
 
-PUPLabel::Animation::Animation(PUPLabel* label, int lengthMs, int foregroundColor, int xps, int xpe, int yps, int ype, int motionLen, int motionTween, int motionColor)
+PUPLabel::Animation::Animation(PUPLabel* label, unsigned int lengthMs, int foregroundColor, int xps, int xpe, int yps, int ype, int motionLen, int motionTween, int motionColor)
    : m_label(label)
    , m_color(label->m_color)
    , m_lengthMs(lengthMs)
@@ -640,7 +1174,48 @@ PUPLabel::Animation::Animation(PUPLabel* label, int lengthMs, int foregroundColo
    , m_motionColor(motionColor)
 {
 }
-   
+
+PUPLabel::Animation::Animation(PUPLabel* label, unsigned int lengthMs, int foregroundColor, int alphaStart, int alphaEnd, int pulseSpeed, bool screenFade)
+   : m_label(label)
+   , m_color(label->m_color)
+   , m_lengthMs(lengthMs)
+   , m_foregroundColor(foregroundColor)
+   , m_startTimestamp(SDL_GetTicks())
+   , m_alphaStart(alphaStart)
+   , m_alphaEnd(alphaEnd)
+   , m_pulseSpeed(pulseSpeed)
+   , m_screenFade(screenFade)
+{
+   m_alpha = static_cast<float>(m_alphaStart) / 255.0f;
+}
+
+PUPLabel::Animation::Animation(PUPLabel* label, unsigned int lengthMs, int foregroundColor, float zoomStart, float zoomEnd, int zoomPulseSpeed)
+   : m_label(label)
+   , m_color(label->m_color)
+   , m_lengthMs(lengthMs)
+   , m_foregroundColor(foregroundColor)
+   , m_startTimestamp(SDL_GetTicks())
+   , m_zoomStart(zoomStart)
+   , m_zoomEnd(zoomEnd)
+   , m_zoomPulseSpeed(zoomPulseSpeed)
+{
+   m_zoom = m_zoomStart;
+}
+
+PUPLabel::Animation::Animation(PUPLabel* label, unsigned int lengthMs, int foregroundColor, float wiggleStart, float wiggleEnd, int wiggleSpeed, int dummy)
+   : m_label(label)
+   , m_color(label->m_color)
+   , m_lengthMs(lengthMs)
+   , m_foregroundColor(foregroundColor)
+   , m_startTimestamp(SDL_GetTicks())
+   , m_wiggleStart(wiggleStart)
+   , m_wiggleEnd(wiggleEnd)
+   , m_wiggleSpeed(wiggleSpeed)
+{
+   (void)dummy;
+   m_wiggle = m_wiggleStart;
+}
+
 bool PUPLabel::Animation::Update(const SDL_Rect& screenRect, const SDL_FRect& labelRect)
 {
    uint64_t elapsed = SDL_GetTicks() - m_startTimestamp;
@@ -650,33 +1225,165 @@ bool PUPLabel::Animation::Update(const SDL_Rect& screenRect, const SDL_FRect& la
       m_color = m_label->m_color;
       m_xOffset = 0.f;
       m_yOffset = 0.f;
-      m_visible = true;
+      m_alpha = static_cast<float>(m_alphaEnd) / 255.0f;
+      m_zoom = m_zoomEnd;
+      if (m_numStart != INT_MIN)
+      {
+         string numStr = std::to_string(m_numEnd);
+         if (m_numFormat == 1)
+         {
+            int insertPos = static_cast<int>(numStr.length()) - 3;
+            while (insertPos > 0) { numStr.insert(insertPos, ","); insertPos -= 3; }
+         }
+         PUPLabel* label = const_cast<PUPLabel*>(m_label);
+         label->m_szCaption = numStr;
+         label->m_dirty = true;
+      }
       return true;
    }
 
    if (m_flashingPeriod)
    {
-      m_visible = ((elapsed / m_flashingPeriod) & 1) != 0;
+      // See pDMDLabelFlash — toggle visibility every fq milliseconds
+      m_visible = ((elapsed / m_flashingPeriod) & 1) == 0;
       m_color = m_foregroundColor;
+   }
+
+   if (m_delayShow > 0)
+   {
+      // See pDMDLabelClone — hide until delay elapsed, then show
+      m_visible = (static_cast<int>(elapsed) >= m_delayShow);
    }
 
    if (m_motionLen)
    {
-      // TODO implement tweening
-      float pos = clamp(static_cast<float>(elapsed) / static_cast<float>(m_motionLen), 0.f, 1.f);
+      float pos = saturate(static_cast<float>(elapsed) / static_cast<float>(m_motionLen));
+      switch (m_motionTween)
+      {
+      default:
+      // Robert Penner easing functions (see https://easings.net)
+      case 0: break;
+      case 1: pos = pos * pos; break;
+      case 2: pos = pos * (2.f - pos); break;
+      case 3: pos = pos < 0.5f ? 2.f * pos * pos : -1.f + (4.f - 2.f * pos) * pos; break;
+      case 4: pos = pos * pos * pos; break;
+      case 5: { float t = pos - 1.f; pos = t * t * t + 1.f; } break;
+      case 6: pos = pos < 0.5f ? 4.f * pos * pos * pos : (pos - 1.f) * (2.f * pos - 2.f) * (2.f * pos - 2.f) + 1.f; break;
+      case 7: pos = pos * pos * pos * pos; break;
+      case 8: { float t = pos - 1.f; pos = -(t * t * t * t) + 1.f; } break;
+      case 9: pos = pos < 0.5f ? 8.f * pos * pos * pos * pos : -8.f * (pos - 1.f) * (pos - 1.f) * (pos - 1.f) * (pos - 1.f) + 1.f; break;
+      case 10: pos = pos * pos * pos * pos * pos; break;
+      }
       const float xBase = labelRect.x;
       const float xLeft = static_cast<float>(screenRect.x) - labelRect.w;
       const float xRight = static_cast<float>(screenRect.x) + static_cast<float>(screenRect.w);
       const float yBase = labelRect.y;
       const float yTop = static_cast<float>(screenRect.y) - labelRect.h;
       const float yBottom = static_cast<float>(screenRect.y) + static_cast<float>(screenRect.h);
-      const float xs = m_xps == 0 ? xBase : m_xps == 1 ? xRight : xLeft;
-      const float xe = m_xpe == 0 ? xBase : m_xpe == 1 ? xRight : xLeft;
-      const float ys = m_yps == 0 ? yBase : m_yps == 1 ? yBottom : yTop;
-      const float ye = m_ype == 0 ? yBase : m_ype == 1 ? yBottom : yTop;
+      // -1 = off-screen left/top, 0 = current position, 1 = off-screen right/bottom,
+      // other values = percentage position (see pDMDLabelMoveTO)
+      const float screenW = static_cast<float>(screenRect.w);
+      const float screenH = static_cast<float>(screenRect.h);
+      // TODO: position interpretation when only end is specified (no start) is uncertain.
+      // GOTG bumper pops use ype:150 with no yps — video shows upward movement.
+      // Current: treat as pixel offset upward from current position when start is absent.
+      const float xs = m_xps == 0 ? xBase : m_xps == 1 ? xRight : m_xps == -1 ? xLeft : static_cast<float>(screenRect.x) + screenW * (float)m_xps / 100.f;
+      const float xe = m_xpe == 0 ? xBase : m_xpe == 1 ? xRight : m_xpe == -1 ? xLeft
+         : (m_xps == 0 ? xBase - static_cast<float>(m_xpe) : static_cast<float>(screenRect.x) + screenW * (float)m_xpe / 100.f);
+      const float ys = m_yps == 0 ? yBase : m_yps == 1 ? yBottom : m_yps == -1 ? yTop : static_cast<float>(screenRect.y) + screenH * (float)m_yps / 100.f;
+      const float ye = m_ype == 0 ? yBase : m_ype == 1 ? yBottom : m_ype == -1 ? yTop
+         : (m_yps == 0 ? yBase - static_cast<float>(m_ype) : static_cast<float>(screenRect.y) + screenH * (float)m_ype / 100.f);
       m_color = pos < 1.0f ? m_motionColor : m_foregroundColor;
-      m_xOffset = lerp(pos, xs, xe) - xBase;
-      m_yOffset = lerp(pos, ys, ye) - yBase;
+      m_xOffset = lerp(xs, xe, pos) - xBase;
+      m_yOffset = lerp(ys, ye, pos) - yBase;
+
+      if (m_alphaFade > 0)
+      {
+         const int fadeStart = static_cast<int>(m_lengthMs) - m_alphaFade;
+         if (static_cast<int>(elapsed) > fadeStart)
+            m_alpha = 1.0f - saturate(static_cast<float>(elapsed - fadeStart) / static_cast<float>(m_alphaFade));
+      }
+   }
+
+   if (m_alphaStart != m_alphaEnd)
+   {
+      const float as = static_cast<float>(m_alphaStart) / 255.0f;
+      const float ae = static_cast<float>(m_alphaEnd) / 255.0f;
+      if (m_pulseSpeed > 0)
+      {
+         // See pDMDLabelFadePulse — bounce alpha between astart and aend
+         // Approximate one full cycle takes range/speed*2 ticks * 33ms
+         const float range = static_cast<float>(m_alphaEnd - m_alphaStart);
+         const float periodMs = (range / static_cast<float>(m_pulseSpeed)) * 2.0f * 33.0f;
+         const float cyclePos = fmodf(static_cast<float>(elapsed), periodMs) / periodMs;
+         const float t = cyclePos < 0.5f ? cyclePos * 2.0f : 2.0f - cyclePos * 2.0f;
+         m_alpha = as + t * (ae - as);
+      }
+      else
+      {
+         // See pDMDLabelFadeOut / pDMDLabelFadeIn / pDMDScreenFadeOut / pDMDScreenFadeIn
+         float pos = saturate(static_cast<float>(elapsed) / static_cast<float>(m_lengthMs));
+         m_alpha = as + pos * (ae - as);
+      }
+      m_color = m_foregroundColor;
+   }
+
+   if (m_zoomStart != m_zoomEnd)
+   {
+      if (m_zoomPulseSpeed != 0)
+      {
+         // See pDMDLabelPulseText / pDMDLabelPulseImage — bounce zoom between hstart and hend
+         // Approximate one full cycle (start->end->start) every 500ms
+         const float periodMs = 500.0f;
+         const float cyclePos = fmodf(static_cast<float>(elapsed), periodMs) / periodMs;
+         const float t = cyclePos < 0.5f ? cyclePos * 2.0f : 2.0f - cyclePos * 2.0f;
+         m_zoom = m_zoomStart + t * (m_zoomEnd - m_zoomStart);
+      }
+      else
+      {
+         // See pDMDZoomBig — zoom from hstart to hend over len ms
+         float pos = saturate(static_cast<float>(elapsed) / static_cast<float>(m_lengthMs));
+         m_zoom = m_zoomStart + pos * (m_zoomEnd - m_zoomStart);
+      }
+      m_color = m_foregroundColor;
+   }
+
+   if (m_wiggleStart != m_wiggleEnd)
+   {
+      // See pDMDLabelWiggleText / pDMDLabelWiggleImage — bounce rotation between rstart and rend.
+      const float periodMs = 300.0f;
+      const float cyclePos = fmodf(static_cast<float>(elapsed), periodMs) / periodMs;
+      const float t = cyclePos < 0.5f ? cyclePos * 2.0f : 2.0f - cyclePos * 2.0f;
+      m_wiggle = m_wiggleStart + t * (m_wiggleEnd - m_wiggleStart);
+      m_color = m_foregroundColor;
+   }
+
+   // See pDMDLabelPulseNumber — interpolate number and update label caption
+   if (m_numStart != INT_MIN)
+   {
+      float pos = saturate(static_cast<float>(elapsed) / static_cast<float>(m_lengthMs));
+      int num = (pos >= 1.f) ? m_numEnd : m_numStart + static_cast<int>(pos * static_cast<float>(m_numEnd - m_numStart));
+      string numStr;
+      if (m_numFormat == 1)
+      {
+         numStr = std::to_string(num);
+         int insertPos = static_cast<int>(numStr.length()) - 3;
+         while (insertPos > 0)
+         {
+            numStr.insert(insertPos, ",");
+            insertPos -= 3;
+         }
+      }
+      else
+         numStr = std::to_string(num);
+
+      if (numStr != m_numText)
+      {
+         m_numText = numStr;
+         PUPLabel* label = const_cast<PUPLabel*>(m_label);
+         label->m_szCaption = numStr;
+         label->m_dirty = true;
+      }
    }
 
    return false;

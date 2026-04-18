@@ -1,7 +1,7 @@
 #pragma once
 
 #include "AssetSrc.h"
-#include "VPXPlugin.h"
+#include "plugins/VPXPlugin.h"
 #include "bmfonts/BitmapFont.h"
 #include "SurfaceGraphics.h"
 
@@ -16,9 +16,9 @@ public:
 
    PSC_IMPLEMENT_REFCOUNT()
 
-   void DrawCharacter(Flex::SurfaceGraphics* pGraphics, char character, char previousCharacter, float& x, float& y);
+   void DrawCharacter(Flex::SurfaceGraphics* pGraphics, char character, char previousCharacter, int& x, int& y);
    SDL_Rect MeasureFont(const string& text);
-   void DrawText_(Flex::SurfaceGraphics* pGraphics, float x, float y, const string& text);
+   void DrawText_(Flex::SurfaceGraphics* pGraphics, int x, int y, const string& text);
    BitmapFont* GetBitmapFont() const { return m_pBitmapFont; }
 
 private:

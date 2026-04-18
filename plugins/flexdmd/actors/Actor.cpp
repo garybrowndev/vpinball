@@ -48,8 +48,7 @@ void Actor::Remove()
 
 void Actor::Update(float secondsElapsed)
 {
-   if (!m_onStage)
-      assert("Update was called on an actor which is not on stage.");
+   assert(m_onStage); // Update was called on an actor which is not on stage.
    AddRef();
    for (auto it = m_actions.begin(); it != m_actions.end();)
    {
@@ -62,18 +61,17 @@ void Actor::Update(float secondsElapsed)
          ++it;
    }
    if (m_fillParent && m_parent != nullptr)
-      SetBounds(0, 0, m_parent->m_width, m_parent->m_height);
+      SetBounds(0, 0, m_parent->GetWidth(), m_parent->GetHeight());
    Release();
 }
 
 void Actor::Draw(Flex::SurfaceGraphics* pGraphics)
 {
-   if (!m_onStage)
-      assert("Update was called on an actor which is not on stage.");
+   assert(m_onStage); // Update was called on an actor which is not on stage.
    if (m_visible && m_clearBackground)
    {
       pGraphics->SetColor(RGB(0, 0, 0));
-      pGraphics->FillRectangle({ (int)m_x, (int)m_y, (int)m_width, (int)m_height });
+      pGraphics->FillRectangle({ (int)m_x, (int)m_y, m_width, m_height });
    }
 }
 

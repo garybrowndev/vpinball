@@ -2,6 +2,10 @@ name: vpinball-mobile
 on:
   push:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   VERSION_START_SHA: ea558e7417f6f06fe567d34f0e33792a141b8e64
 
@@ -21,7 +25,7 @@ jobs:
       sha7: ${{ steps.version.outputs.sha7 }}
       tag: ${{ steps.version.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - id: version
@@ -55,26 +59,33 @@ jobs:
       - run: |
           brew install bison autoconf automake libtool ldid
           echo "$(brew --prefix bison)/bin" >> $GITHUB_PATH
-      - uses: actions/checkout@v4
-      - name: Calculate external cache timestamp
+      - uses: actions/checkout@v6
+      - name: Calculate external cache hash
         run: |
-          echo "TIMESTAMP=$(date +%s)" >> $GITHUB_ENV
+          echo "EXT_HASH=$(cat platforms/config.sh platforms/ios-arm64/external.sh | sha256sum | cut -c1-12)" >> $GITHUB_ENV
       - name: Restore external cache
-        uses: actions/cache/restore@v4
+        id: cache
+        uses: actions/cache/restore@v5
         with:
           path: external
-          key: BGFX-ios-arm64-${{ matrix.config }}-external-${{ env.TIMESTAMP }}
+          key: ios-arm64-${{ matrix.config }}-external-${{ env.EXT_HASH }}
           restore-keys: |
-            BGFX-ios-arm64-${{ matrix.config }}-external-
+            ios-arm64-${{ matrix.config }}-external-
       - name: Build external cache
         run: |
           BUILD_TYPE=${{ matrix.config }} ./platforms/ios-arm64/external.sh
-      - if: ${{ !cancelled() }} 
+      - if: steps.cache.outputs.cache-hit != 'true'
+        name: Clean external cache
+        run: |
+          find external -type d -name ".git" -exec rm -rf {} + 2>/dev/null || true
+          find external -name "*.tar.gz" -delete 2>/dev/null || true
+          find external \( -name "*.o" -o -name "*.obj" \) -delete 2>/dev/null || true
+      - if: steps.cache.outputs.cache-hit != 'true'
         name: Save external cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: external
-          key: BGFX-ios-arm64-${{ matrix.config }}-external-${{ env.TIMESTAMP }}
+          key: ios-arm64-${{ matrix.config }}-external-${{ env.EXT_HASH }}
       - name: Set version
         run: |
           perl -i -pe"s/9999/${{ needs.version.outputs.revision }}/g" src/core/git_version.h
@@ -90,7 +101,7 @@ jobs:
           cmake --build build/ios-arm64 -- -j$(sysctl -n hw.ncpu)
       - name: Build app
         run: |
-          sudo xcode-select -switch /Applications/Xcode_16.4.app
+          sudo xcode-select -switch /Applications/Xcode_26.2.app
           MARKETING_VERSION="${{ needs.version.outputs.version_ios }}"
           CURRENT_PROJECT_VERSION="${{ needs.version.outputs.version_full }}"
           cd standalone/ios
@@ -100,48 +111,61 @@ jobs:
       - name: Stage artifacts
         run: |
           mkdir tmp
-          cp standalone/ios/fastlane/VPinballX.ipa tmp/VPinballX_BGFX-${{ needs.version.outputs.tag }}.ipa
+          cp standalone/ios/fastlane/VPinballX.ipa tmp/VPinballX_BGFX-${{ needs.version.outputs.tag }}-ios-${{ matrix.config }}.ipa
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: VPinballX_BGFX-${{ needs.version.outputs.tag }}-${{ matrix.config }}-ios
-          path: tmp
+          name: VPinballX_BGFX-${{ needs.version.outputs.tag }}-ios-${{ matrix.config }}
+          path: tmp/*
+          archive: false
 
   build-android:
-    name: Build VPinballX_BGFX-android-${{ matrix.config }}
+    name: Build VPinballX_BGFX-android-${{ matrix.flavor }}-${{ matrix.config }}
     runs-on: ubuntu-24.04
     needs: [ version ]
     strategy:
       fail-fast: false
       matrix:
         config: [ Release ]
+        flavor: [ quest, mobile ]
+    env:
+      ANDROID_NDK: /usr/local/lib/android/sdk/ndk/28.2.13676358
+      ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/28.2.13676358
+      ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/28.2.13676358
     steps:
       - run: |
           sudo apt install bison
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
-      - uses: actions/checkout@v4
-      - name: Calculate external cache timestamp
+      - uses: actions/checkout@v6
+      - name: Calculate external cache hash
         run: |
-          echo "TIMESTAMP=$(date +%s)" >> $GITHUB_ENV
+          echo "EXT_HASH=$(cat platforms/config.sh platforms/android-arm64-v8a/external.sh | sha256sum | cut -c1-12)" >> $GITHUB_ENV
       - name: Restore external cache
-        uses: actions/cache/restore@v4
+        id: cache
+        uses: actions/cache/restore@v5
         with:
           path: external
-          key: BGFX-android-arm64-v8a-${{ matrix.config }}-external-${{ env.TIMESTAMP }}
+          key: android-arm64-v8a-${{ matrix.config }}-external-${{ env.EXT_HASH }}
           restore-keys: |
-            BGFX-android-arm64-v8a-${{ matrix.config }}-external-
+            android-arm64-v8a-${{ matrix.config }}-external-
       - name: Build external cache
         run: |
           BUILD_TYPE=${{ matrix.config }} ./platforms/android-arm64-v8a/external.sh
-      - if: ${{ !cancelled() }}
+      - if: steps.cache.outputs.cache-hit != 'true'
+        name: Clean external cache
+        run: |
+          find external -type d -name ".git" -exec rm -rf {} + 2>/dev/null || true
+          find external -name "*.tar.gz" -delete 2>/dev/null || true
+          find external \( -name "*.o" -o -name "*.obj" \) -delete 2>/dev/null || true
+      - if: steps.cache.outputs.cache-hit != 'true'
         name: Save external cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: external
-          key: BGFX-android-arm64-v8a-${{ matrix.config }}-external-${{ env.TIMESTAMP }}
+          key: android-arm64-v8a-${{ matrix.config }}-external-${{ env.EXT_HASH }}
       - name: Set version
         run: |
           perl -i -pe"s/9999/${{ needs.version.outputs.revision }}/g" src/core/git_version.h
@@ -149,11 +173,20 @@ jobs:
       - name: Build libvpinball
         run: |
           cp make/CMakeLists_bgfx_lib.txt CMakeLists.txt
-          cmake \
-                -DPLATFORM=android \
-                -DARCH=arm64-v8a \
-                -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
-                -B build/android-arm64-v8a
+          if [[ "${{ matrix.flavor }}" == "quest" ]]; then
+            cmake \
+                  -DPLATFORM=android \
+                  -DARCH=arm64-v8a \
+                  -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
+                  -DENABLE_XR=ON \
+                  -B build/android-arm64-v8a
+          else
+            cmake \
+                  -DPLATFORM=android \
+                  -DARCH=arm64-v8a \
+                  -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
+                  -B build/android-arm64-v8a
+          fi
           cmake --build build/android-arm64-v8a -- -j$(nproc)
       - if: github.repository == 'vpinball/vpinball'
         name: Build app
@@ -164,9 +197,11 @@ jobs:
         run: |
           cd standalone/android
           echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 --decode > app/vpinball.jks
+          FLAVOR="${{ matrix.flavor }}"
+          FLAVOR_CAPITALIZED="$(echo "${FLAVOR:0:1}" | tr '[:lower:]' '[:upper:]')${FLAVOR:1}"
           ./gradlew \
-            assemble${{ matrix.config }} \
-            bundle${{ matrix.config }} \
+            assemble${FLAVOR_CAPITALIZED}${{ matrix.config }} \
+            bundle${FLAVOR_CAPITALIZED}${{ matrix.config }} \
             -PversionName="${{ needs.version.outputs.version_full }}" \
             -Psha7="${{ needs.version.outputs.sha7 }}"
       - if: github.repository != 'vpinball/vpinball'
@@ -182,21 +217,33 @@ jobs:
                 -keypass "$ANDROID_KEY_PASSWORD" \
                 -alias "$ANDROID_KEY_ALIAS" \
                 -dname "CN=VPinball Android, O=VPinball, C=XX"
+          FLAVOR="${{ matrix.flavor }}"
+          FLAVOR_CAPITALIZED="$(echo "${FLAVOR:0:1}" | tr '[:lower:]' '[:upper:]')${FLAVOR:1}"
           ./gradlew \
-            assemble${{ matrix.config }} \
-            bundle${{ matrix.config }} \
+            assemble${FLAVOR_CAPITALIZED}${{ matrix.config }} \
+            bundle${FLAVOR_CAPITALIZED}${{ matrix.config }} \
             -PversionName="${{ needs.version.outputs.version_full }}" \
             -Psha7="${{ needs.version.outputs.sha7 }}"
       - name: Stage apk/aab artifacts
         run: |
           CONFIG_LC=$(echo "${{ matrix.config }}" | tr '[:upper:]' '[:lower:]')
-          mkdir tmp
-          cp standalone/android/app/build/outputs/apk/${CONFIG_LC}/*.apk tmp
+          FLAVOR_LC=$(echo "${{ matrix.flavor }}" | tr '[:upper:]' '[:lower:]')
+          mkdir tmp-apk
+          cp standalone/android/app/build/outputs/apk/${FLAVOR_LC}/${CONFIG_LC}/*.apk tmp-apk/VPinballX_BGFX-${{ needs.version.outputs.tag }}-android-${{ matrix.flavor }}-${{ matrix.config }}.apk
           if [[ "${{ github.repository }}" == "vpinball/vpinball" ]]; then
-             cp standalone/android/app/build/outputs/bundle/${CONFIG_LC}/*.aab tmp
+             mkdir tmp-aab
+             cp standalone/android/app/build/outputs/bundle/${FLAVOR_LC}${{ matrix.config }}/*.aab tmp-aab/VPinballX_BGFX-${{ needs.version.outputs.tag }}-android-${{ matrix.flavor }}-${{ matrix.config }}.aab
           fi
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - name: Upload apk
+        uses: actions/upload-artifact@v7
         with:
-          name: VPinballX_BGFX-${{ needs.version.outputs.tag }}-${{ matrix.config }}-android
-          path: tmp
+          name: VPinballX_BGFX-${{ needs.version.outputs.tag }}-android-${{ matrix.flavor }}-${{ matrix.config }}-apk
+          path: tmp-apk/*
+          archive: false
+      - if: github.repository == 'vpinball/vpinball'
+        name: Upload aab
+        uses: actions/upload-artifact@v7
+        with:
+          name: VPinballX_BGFX-${{ needs.version.outputs.tag }}-android-${{ matrix.flavor }}-${{ matrix.config }}-aab
+          path: tmp-aab/*
+          archive: false

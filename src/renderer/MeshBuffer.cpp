@@ -10,17 +10,18 @@
 #include <locale>
 #include <codecvt>
 
-MeshBuffer::MeshBuffer(VertexBuffer* vb, IndexBuffer* ib, const bool applyVertexBufferOffsetToIndexBuffer)
-   : MeshBuffer(L""s, vb, ib, applyVertexBufferOffsetToIndexBuffer)
+MeshBuffer::MeshBuffer(std::shared_ptr<VertexBuffer> vb, std::shared_ptr<IndexBuffer> ib, const bool applyVertexBufferOffsetToIndexBuffer)
+   : MeshBuffer(""s, vb, ib, applyVertexBufferOffsetToIndexBuffer)
 {
 }
 
-MeshBuffer::MeshBuffer(const wstring& name, VertexBuffer* vb, IndexBuffer* ib, const bool applyVertexBufferOffsetToIndexBuffer)
-   : m_name(MakeString(name))
+MeshBuffer::MeshBuffer(const string& name, std::shared_ptr<VertexBuffer> vb, std::shared_ptr<IndexBuffer> ib, const bool applyVertexBufferOffsetToIndexBuffer)
+   : m_name(name)
    , m_vb(vb)
    , m_ib(ib)
    , m_isVBOffsetApplied(applyVertexBufferOffsetToIndexBuffer)
 {
+   assert(m_ib == nullptr || vb->GetOffset() == 0 || applyVertexBufferOffsetToIndexBuffer);
    if (m_ib != nullptr && applyVertexBufferOffsetToIndexBuffer)
       m_ib->ApplyOffset(m_vb);
 }
@@ -43,8 +44,6 @@ MeshBuffer::~MeshBuffer()
       glDeleteVertexArrays(1, &m_vao);
    }
 #endif
-   delete m_vb;
-   delete m_ib;
 }
 
 unsigned int MeshBuffer::GetSortKey() const
@@ -58,8 +57,104 @@ unsigned int MeshBuffer::GetSortKey() const
    #elif defined(ENABLE_OPENGL)
    return m_vao;
    #elif defined(ENABLE_DX9)
-   return (unsigned int) ((reinterpret_cast<uintptr_t>(m_vb)) ^ (reinterpret_cast<uintptr_t>(m_ib)));
+   return (unsigned int)((reinterpret_cast<uintptr_t>(m_vb.get())) ^ (reinterpret_cast<uintptr_t>(m_ib.get())));
    #endif
+}
+
+std::unique_ptr<MeshBuffer> MeshBuffer::CreateEdgeMeshBuffer(const vector<unsigned int>& indices) const
+{
+   vector<unsigned int> edgeIndices(indices.size() * 2);
+   for (size_t i = 0; i < indices.size(); i += 3)
+   {
+      edgeIndices[i * 2 + 0] = indices[i + 0];
+      edgeIndices[i * 2 + 1] = indices[i + 1];
+      edgeIndices[i * 2 + 2] = indices[i + 1];
+      edgeIndices[i * 2 + 3] = indices[i + 2];
+      edgeIndices[i * 2 + 4] = indices[i + 2];
+      edgeIndices[i * 2 + 5] = indices[i + 0];
+   }
+   return std::make_unique<MeshBuffer>(m_vb, std::make_shared<IndexBuffer>(m_vb->m_rd, edgeIndices), true);
+}
+
+std::unique_ptr<MeshBuffer> MeshBuffer::CreateEdgeMeshBuffer(const vector<unsigned int>& indices, const vector<Vertex3D_NoTex2>& vertices) const
+{
+   union idStruct
+   {
+      uint64_t id;
+      struct
+      {
+         uint32_t edge1;
+         uint32_t edge2;
+      } edges;
+   };
+   struct Edge
+   {
+      int state; // 0 = one edge, 1 = multiple colinear edges, 2 multiple non colinear edges
+      vec3 normal;
+   };
+   ankerl::unordered_dense::map<uint64_t, Edge> edges;
+   auto pushEdge = [&](unsigned int i1, unsigned int i2, const vec3& normal) {
+      idStruct id;
+      if (i1 < i2)
+      {
+         id.edges.edge1 = i1;
+         id.edges.edge2 = i2;
+      }
+      else
+      {
+         id.edges.edge1 = i2;
+         id.edges.edge2 = i1;
+      }
+      if (auto it = edges.find(id.id); it != edges.end())
+      {
+         if (it->second.state < 2)
+         {
+            const float colinear = normal.Dot(it->second.normal);
+            if (colinear < 0.99f)
+               it->second.state = 2; // Edge: render
+            else
+               it->second.state = 1; // Internal colinear edge: do not render
+         }
+      }
+      else
+      {
+         edges[id.id] = { 0, normal }; // Edge: render
+      }
+   };
+   for (size_t i = 0; i < indices.size(); i += 3)
+   {
+      Vertex3D_NoTex2 a = vertices[indices[i + 0]];
+      Vertex3D_NoTex2 b = vertices[indices[i + 1]];
+      Vertex3D_NoTex2 c = vertices[indices[i + 2]];
+      vec3 pa(a.x, a.y, a.z);
+      vec3 pb(b.x, b.y, b.z);
+      vec3 pc(c.x, c.y, c.z);
+      vec3 ab = pb - pa;
+      vec3 ac = pc - pa;
+      vec3 normal = CrossProduct(ab, ac);
+      float lengthSquared = normal.LengthSquared();
+      if (lengthSquared <= FLT_MIN)
+         continue;
+      const float oneoverlength = 1.0f / sqrtf(lengthSquared);
+      normal.x *= oneoverlength;
+      normal.y *= oneoverlength;
+      normal.z *= oneoverlength;
+      pushEdge(indices[i + 0], indices[i + 1], normal);
+      pushEdge(indices[i + 1], indices[i + 2], normal);
+      pushEdge(indices[i + 2], indices[i + 0], normal);
+   }
+   vector<unsigned int> edgeIndices;
+   for (const auto& [edge, state] : edges)
+   {
+      if (state.state != 1)
+      {
+         idStruct id;
+         id.id = edge;
+         edgeIndices.push_back(id.edges.edge1);
+         edgeIndices.push_back(id.edges.edge2);
+      }
+   }
+   return std::make_unique<MeshBuffer>(m_vb, std::make_shared<IndexBuffer>(m_vb->m_rd, edgeIndices), true);
 }
 
 void MeshBuffer::bind()

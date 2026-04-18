@@ -4,14 +4,13 @@
 
 #pragma once
 
-#include "ui/resource.h"
+#include "ui/win/resource.h"
 
 class KickerData final : public BaseProperty
 {
 public:
    Vertex2D m_vCenter;
    float m_radius;
-   TimerDataRoot m_tdr;
    string m_szSurface;
    KickerType m_kickertype;
    float m_hitAccuracy; // kicker hit grabbing object height ... default ballsize*0.7
@@ -34,7 +33,8 @@ class Kicker :
    public IProvideClassInfo2Impl<&CLSID_Kicker, &DIID_IKickerEvents, &LIBID_VPinballLib>,
    public ISelect,
    public IEditable,
-   public Hitable,
+   public IHitable,
+   public IRenderable,
    public IScriptable,
    public IFireEvents,
    public IPerPropertyBrowsing // Ability to fill in dropdown in property browser
@@ -46,7 +46,7 @@ public:
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
-   Kicker();
+   Kicker() { }
    virtual ~Kicker();
 
    BEGIN_COM_MAP(Kicker)
@@ -66,7 +66,7 @@ public:
       CONNECTION_POINT_ENTRY(DIID_IKickerEvents)
    END_CONNECTION_POINT_MAP()
 
-   STANDARD_EDITABLE_DECLARES(Kicker, eItemKicker, KICKER, 1)
+   STANDARD_EDITABLE_DECLARES(Kicker, eItemKicker, KICKER, VIEW_PLAYFIELD)
 
    DECLARE_REGISTRY_RESOURCEID(IDR_KICKER)
    // ISupportsErrorInfo
@@ -94,11 +94,11 @@ public:
 private:
    void GenerateMesh(Vertex3D_NoTex2 *const buf) const;
 
-   PinTable *m_ptable = nullptr;
-
    RenderDevice* m_rd = nullptr;
-   MeshBuffer *m_plateMeshBuffer = nullptr;
-   MeshBuffer *m_meshBuffer = nullptr;
+   std::shared_ptr<MeshBuffer> m_plateMeshBuffer;
+   std::shared_ptr<MeshBuffer> m_meshBuffer;
+   std::shared_ptr<MeshBuffer> m_plateMeshEdgeBuffer;
+   std::shared_ptr<MeshBuffer> m_meshEdgeBuffer;
    unsigned int m_numVertices = 0;
    unsigned int m_numIndices = 0;
    std::unique_ptr<Texture> m_texture;

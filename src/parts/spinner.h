@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "ui/resource.h"
+#include "ui/win/resource.h"
 
 class SpinnerData final : public BaseProperty
 {
@@ -12,7 +12,6 @@ public:
    Vertex2D m_vCenter;
    float m_length;
    float m_rotation;
-   TimerDataRoot m_tdr;
    float m_height;
    float m_damping;
    float m_angleMax;
@@ -33,7 +32,8 @@ class Spinner :
    public IProvideClassInfo2Impl<&CLSID_Spinner, &DIID_ISpinnerEvents, &LIBID_VPinballLib>,
    public ISelect,
    public IEditable,
-   public Hitable,
+   public IHitable,
+   public IRenderable,
    public IScriptable,
    public IFireEvents,
    public IPerPropertyBrowsing // Ability to fill in dropdown in property browser
@@ -45,7 +45,7 @@ public:
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
-   Spinner();
+   Spinner() { }
    virtual ~Spinner();
 
    BEGIN_COM_MAP(Spinner)
@@ -65,7 +65,7 @@ public:
       CONNECTION_POINT_ENTRY(DIID_ISpinnerEvents)
    END_CONNECTION_POINT_MAP()
 
-   STANDARD_EDITABLE_DECLARES(Spinner, eItemSpinner, SPINNER, 1)
+   STANDARD_EDITABLE_DECLARES(Spinner, eItemSpinner, SPINNER, VIEW_PLAYFIELD)
 
    DECLARE_REGISTRY_RESOURCEID(IDR_SPINNER)
    // ISupportsErrorInfo
@@ -94,19 +94,17 @@ public:
 private:
    void UpdatePlate(Vertex3D_NoTex2 * const vertBuffer);
 
-   PinTable *m_ptable;
-
    RenderDevice *m_rd = nullptr;
-   MeshBuffer *m_bracketMeshBuffer = nullptr;
-   MeshBuffer *m_plateMeshBuffer = nullptr;
+   std::shared_ptr<MeshBuffer> m_bracketMeshBuffer;
+   std::shared_ptr<MeshBuffer> m_plateMeshBuffer;
    Matrix3D m_fullMatrix;
 
    float m_posZ;
 
-   HitSpinner *m_phitspinner;
+   HitSpinner *m_phitspinner = nullptr;
    float m_lastAngle;
 
-   float m_vertexBuffer_spinneranimangle;
+   float m_vertexBuffer_spinneranimangle = -FLT_MAX;
 
    // ISpinner
 public:

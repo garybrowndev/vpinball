@@ -4,16 +4,15 @@
 
 #pragma once
 
-#include "ui/resource.h"
+#include "ui/win/resource.h"
 
 class LightSeqData final
 {
 public:
-   Vertex2D      m_v;
-   Vertex2D      m_vCenter;
-   std::basic_string<WCHAR> m_wzCollection;
+   Vertex2D      m_v; // UI position
+   Vertex2D      m_vCenter; // Center position used to compute light animations
+   std::wstring  m_wzCollection;
    int           m_updateinterval;
-   TimerDataRoot m_tdr;
 };
 
 struct LightSeqQueueData
@@ -74,9 +73,9 @@ class LightSeq :
    public IEditable,
    public IScriptable,
    public IFireEvents,
-   public Hitable,
+   //public Hitable, // FIXME implement UI picking
+   public IRenderable,
    public IPerPropertyBrowsing     // Ability to fill in dropdown(s) in property browser
-   //public EditableImpl<LightSeq>
 {
 public:
 #ifdef __STANDALONE__
@@ -85,8 +84,8 @@ public:
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
-   LightSeq();
-   ~LightSeq();
+   LightSeq() { }
+   ~LightSeq() { }
 
    //HRESULT Init(PinTable * const ptable, const float x, const float y);
 
@@ -112,12 +111,11 @@ public:
    Vertex2D GetCenter() const final;
    void PutCenter(const Vertex2D& pv) final;
 
-   void RenderBlueprint(Sur *psur, const bool solid) final;
-   ItemTypeEnum HitableGetItemType() const final { return eItemLightSeq; }
+   void RenderBlueprint(Sur *psur, const bool solid) final { } // Renders the image onto the Blueprint, but we don't want light seqs on the blue print as it is non-essensial
 
    void WriteRegDefaults() final;
 
-   STANDARD_EDITABLE_DECLARES(LightSeq, eItemLightSeq, LIGHTSEQ, 3)
+   STANDARD_EDITABLE_DECLARES_NO_HITABLE(LightSeq, eItemLightSeq, LIGHTSEQ, VIEW_PLAYFIELD | VIEW_BACKGLASS)
 
    //DECLARE_NOT_AGGREGATABLE(LightSeq)
    // Remove the comment from the line above if you don't want your object to
@@ -190,8 +188,6 @@ public:
    LightSeqData m_d;
 
 private:
-   PinTable *m_ptable;
-
    void     SetupTracers(const SequencerState Animation, int TailLength, int Repeat, int Pause);
    bool     ProcessTracer(_tracer * const pTracer, const LightState State);
    void     SetAllLightsToState(const LightState State);

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../controls/Control.h"
-#include "core/ResURIResolver.h"
+#include "plugins/ResURIResolver.h"
 
 namespace B2SLegacy {
 
@@ -12,8 +12,8 @@ class DMDOverlay;
 class Form : public Control
 {
 public:
-   Form(VPXPluginAPI* vpxApi, MsgPluginAPI* msgApi, uint32_t endpointId, B2SData* pB2SData, const string& overlayType = "");
-   ~Form();
+   Form(VPXPluginAPI* vpxApi, MsgPluginAPI* msgApi, uint32_t endpointId, B2SData* pB2SData, const string& overlayType = ""s);
+   ~Form() override;
 
    void Show();
    void Hide();

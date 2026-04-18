@@ -6,8 +6,8 @@
 namespace B2SLegacy {
 
 B2SCollectData::B2SCollectData(int skipFrames)
+   : m_skipFrames(skipFrames)
 {
-   m_skipFrames = skipFrames;
 }
 
 B2SCollectData::~B2SCollectData()
@@ -22,12 +22,13 @@ bool B2SCollectData::Add(int key, CollectData* pCollectData)
 
    m_mutex.lock();
 
-   if (contains(key)) {
-      if (pCollectData->IsEarlyOffMode() && (*this)[key]->GetState() == 0 && pCollectData->GetState() == 0)
-         (*this)[key]->SetState(2);
+   const auto& it = find(key);
+   if (it != end()) {
+      if (pCollectData->IsEarlyOffMode() && it->second->GetState() == 0 && pCollectData->GetState() == 0)
+         it->second->SetState(2);
       else
-         (*this)[key]->SetState(pCollectData->GetState());
-      (*this)[key]->SetTypes((*this)[key]->GetTypes() | pCollectData->GetTypes());
+         it->second->SetState(pCollectData->GetState());
+      it->second->SetTypes(it->second->GetTypes() | pCollectData->GetTypes());
       ret = true;
 
       delete pCollectData;

@@ -4,7 +4,8 @@
 
 #pragma once
 
-#include "ui/resource.h"
+#include "dragpoint.h"
+#include "ui/win/resource.h"
 
 class FlasherData final
 {
@@ -17,15 +18,16 @@ public:
       FLASHER,    // Custom blended images
       DMD,        // Dot matrix display (Plasma, LED, ...)
       DISPLAY,    // Screen (CRT, LCD, ...)
-      ALPHASEG    // Alphanumeric segment display (VFD, Plasma, LED, ...)
+      ALPHASEG,   // Alphanumeric segment display (VFD, Plasma, LED, ...)
+      EXT_RENDER  // Render of one of the ancillary windows (backglass, topper, scoreview)
    };
    RenderMode m_renderMode = RenderMode::FLASHER;
 
-   // For DMD, Alphanum and Display rendering mode
-   int m_renderStyle = 0;                 // application defined style profile reference
+   // For DMD, Alphanum, Display and external rendering mode
+   int m_renderStyle = 0;                 // application defined style profile reference for displays, window for external render
    string m_imageSrcLink;                 // image source (default is script)
 
-   // For DMD, render the glass
+   // DMD, Alphanum and Display have a glass above the display
    // string m_szImageA;                  // glass image is store as image A
    float m_glassRoughness = 0.f;
    COLORREF m_glassAmbient = 0x000000;
@@ -34,7 +36,7 @@ public:
    float m_glassPadLeft = 0.f;
    float m_glassPadRight = 0.f;
 
-   // For flasher rendering mode
+   // 'Flasher' rendering mode
    int m_filterAmount;
    Filters m_filter;
    RampImageAlignment m_imagealignment;
@@ -52,8 +54,6 @@ public:
    Vertex2D m_vCenter;
    float m_height;
    float m_rotX, m_rotY, m_rotZ;
-
-   TimerDataRoot m_tdr;
 };
 
 class Flasher :
@@ -65,7 +65,8 @@ class Flasher :
    public IProvideClassInfo2Impl<&CLSID_Flasher, &DIID_IFlasherEvents, &LIBID_VPinballLib>,
    public ISelect,
    public IEditable,
-   public Hitable,
+   public IHitable, // only used for UI picking
+   public IRenderable,
    public IHaveDragPoints,
    public IScriptable,
    public IFireEvents,
@@ -78,10 +79,10 @@ public:
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
-   Flasher();
+   Flasher() { m_menuid = IDR_SURFACEMENU; }
    virtual ~Flasher();
 
-   STANDARD_EDITABLE_DECLARES(Flasher, eItemFlasher, FLASHER, 3)
+   STANDARD_EDITABLE_DECLARES(Flasher, eItemFlasher, FLASHER, VIEW_PLAYFIELD | VIEW_BACKGLASS)
 
    BEGIN_COM_MAP(Flasher)
       COM_INTERFACE_ENTRY(IFlasher)
@@ -120,7 +121,10 @@ public:
 
    Vertex2D GetCenter() const final { return m_d.m_vCenter; }
    void PutCenter(const Vertex2D& pv) final { m_d.m_vCenter = pv; }
+
+#ifndef __STANDALONE__
    void DoCommand(int icmd, int x, int y) final;
+#endif
 
    void AddPoint(int x, int y, const bool smooth) final;
 
@@ -167,28 +171,27 @@ public:
 
 private:
    void InitShape();
-
-   PinTable *m_ptable = nullptr;
+   void UpdateCenter();
 
    unsigned int m_numVertices = 0;
    int m_numPolys = 0;
+   bool m_centerClean = false;
    float m_minx = FLT_MAX;
    float m_maxx = -FLT_MAX;
    float m_miny = FLT_MAX;
    float m_maxy = -FLT_MAX;
-   Vertex3D_NoTex2* m_vertices = nullptr;
-   Vertex3D_NoTex2* m_transformedVertices = nullptr;
-
-   PropertyPane *m_propVisual = nullptr;
+   vector<Vertex3D_NoTex2> m_vertices;
+   vector<Vertex3D_NoTex2> m_transformedVertices;
 
    bool m_dynamicVertexBufferRegenerate = true;
-   MeshBuffer *m_meshBuffer = nullptr;
+   std::shared_ptr<MeshBuffer> m_meshBuffer;
+   std::shared_ptr<MeshBuffer> m_meshEdgeBuffer;
 
    void ResetVideoCap();
    bool m_isVideoCap = false;
    int m_videoCapWidth = 0;
    int m_videoCapHeight = 0;
-   RECT m_videoSourceRect { 0 };
+   RECT m_videoSourceRect {};
    HWND m_videoCapHwnd = nullptr;
    std::shared_ptr<BaseTexture> m_videoCapTex = nullptr;
 

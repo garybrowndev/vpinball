@@ -16,37 +16,52 @@ The version used for these libraries is defined by the SHA of the head commit in
 
 ### FreeImage
 
-- Upstream: https://freeimage.sourceforge.io/
+- Upstream: https://freeimage.sourceforge.io
 - License: FreeImage Public License or GPL
 
-### LibAltSound
+### libaltsound
 
-- Upstream: 
-- License: 
+- Upstream: https://github.com/vpinball/libaltsound
+- License: 3-Clause BSD
 
-### LibDMDUtil
+### libdmdutil
 
-- Upstream: 
-- License: 
+- Upstream: https://github.com/vpinball/libdmdutil
+- License: GPLv3+
 
-### LibDOF
+### libdof
 
-- Upstream: 
-- License: 
+- Upstream: https://github.com/jsm174/libdof
+- License: GPLv3+
+
+### libserum
+
+- Upstream: https://github.com/PPUC/libserum
+- License: GPLv2
+
+### libvni
+
+- Upstream: https://github.com/PPUC/libvni
+- License: GPLv2
+
+### libzedmd
+
+- Upstream: https://github.com/PPUC/libzedmd
+- License: GPLv3
 
 ### OpenXR
 
 - Upstream: 
 - License: 
 
-### PinMame
+### PinMAME
 
-- Upstream: 
-- License: 
+- Upstream: https://github.com/vpinball/pinmame
+- License: 3-Clause BSD and old-MAME
 
-### SDL / SDL Image / SDL Mixer / SDL TTF
+### SDL / SDL Image / SDL TTF
 
-- Upstream: 
+- Upstream: https://github.com/libsdl-org/SDL, https://github.com/libsdl-org/SDL_image, https://github.com/libsdl-org/SDL_ttf
 - License: 
 
 
@@ -82,13 +97,13 @@ Liberation Sans
 
 ### glad
 
-- Upstream: https://glad.dav1d.de/
+- Upstream: https://glad.dav1d.de
 - Version: ?
 - License: CC0-1.0 and Apache-2.0
 
 ### GPUProfiler
 
-- Upstream: Derived from https://www.reedbeta.com/blog/gpu-profiling-101/ blog post
+- Upstream: Derived from https://www.reedbeta.com/blog/gpu-profiling-101 blog post
 - Version: ?
 - License: Original code is BSD, adapted by VPX team
 
@@ -128,6 +143,18 @@ Liberation Sans
 - Version: head at ? (0.17 dev cycle)
 - License: MIT
 
+### json
+
+- Upstream: https://github.com/nlohmann/json
+- Version: ?
+- License: MIT
+
+### libzip
+
+- Upstream: https://github.com/nih-at/libzip
+- Version: 1.11.4
+- License: ?
+
 ### mINI
 
 - Upstream: https://github.com/metayeti/mINI
@@ -149,7 +176,7 @@ Liberation Sans
 ### monaco-editor
 
 - Upstream: https://github.com/microsoft/monaco-editor
-- Version: 0.52.2
+- Version: 0.55.1
 - License: MIT
 
 ### NVAPI
@@ -170,17 +197,23 @@ Liberation Sans
 - Version: ?
 - License: MIT
 
+### Pole
+
+- Upstream: ? + customizations
+- Version: ?
+- License: ?
+
 ### Progmesh
 
 - Upstream: https://github.com/andandandand/progressive-mesh-reduction-with-edge-collapse
 - Version: ?
 - License: custom permissive
 
-### robin hood
+### qoi
 
-- Upstream: https://github.com/martinus/robin-hood-hashing
+- Upstream: ?
 - Version: ?
-- License: MIT
+- License: ?
 
 ### RSJparser
 
@@ -196,7 +229,7 @@ Liberation Sans
 
 ### Scintilla
 
-- Upstream: https://www.scintilla.org/
+- Upstream: https://www.scintilla.org
 - Version: ?
 - License: Custom permissive license
 
@@ -205,6 +238,12 @@ Liberation Sans
 - Upstream: unclear if this is a lib or core code
 - Version: ?
 - License: ?
+
+### simple-uri-parser
+
+- Upstream: https://github.com/jholloc/simple-uri-parser
+- Version: ?
+- License: MIT
 
 ### sse2neon
 
@@ -230,15 +269,15 @@ Liberation Sans
 - Version: ?
 - License: ZLib
 
-### simple-uri-parser
+### unordered-dense
 
-- Upstream: https://github.com/jholloc/simple-uri-parser
+- Upstream: ?
 - Version: ?
-- License: MIT
+- License: ?
 
 ### win32xx
 
-- Upstream: https://sourceforge.net/projects/win32-framework/
+- Upstream: https://sourceforge.net/projects/win32-framework
 - Version: 9.4
 - License: custom permissive (see copyright.txt)
 

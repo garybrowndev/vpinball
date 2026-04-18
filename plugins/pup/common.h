@@ -1,3 +1,5 @@
+// license:GPLv3+
+
 #pragma once
 
 #include <cassert>
@@ -6,6 +8,7 @@
 #include <cstdint>
 #include <cstdarg>
 #include <cstdlib>
+#include <format>
 
 #include <thread>
 #include <mutex>
@@ -16,6 +19,7 @@
 #include <string>
 using std::string;
 using namespace std::string_literals;
+using namespace std::string_view_literals;
 
 #include <vector>
 using std::vector;
@@ -31,30 +35,30 @@ using std::vector;
 #include <SDL3/SDL_surface.h>
 
 // Shared logging
-#include "LoggingPlugin.h"
+#include "plugins/LoggingPlugin.h"
 
 // Scriptable API
-#include "ScriptablePlugin.h"
+#include "plugins/ScriptablePlugin.h"
 
 // Controller API
-#include "ControllerPlugin.h"
+#include "plugins/ControllerPlugin.h"
 
 // VPX main API
-#include "VPXPlugin.h"
+#include "plugins/VPXPlugin.h"
 
 namespace PUP
 {
 
-LPI_USE();
-#define LOGD PUP::LPI_LOGD
-#define LOGI PUP::LPI_LOGI
-#define LOGW PUP::LPI_LOGW
-#define LOGE PUP::LPI_LOGE
+LPI_USE_CPP();
+#define LOGD PUP::LPI_LOGD_CPP
+#define LOGI PUP::LPI_LOGI_CPP
+#define LOGW PUP::LPI_LOGW_CPP
+#define LOGE PUP::LPI_LOGE_CPP
 
 #ifdef _DEBUG
-   #define NOT_IMPLEMENTED(...) { assert(false); LOGE(__VA_ARGS__); }
+   #define NOT_IMPLEMENTED(x) { assert(false); LOGE(x); }
 #else
-   #define NOT_IMPLEMENTED(...) LOGE(__VA_ARGS__)
+   #define NOT_IMPLEMENTED(x) LOGE(x)
 #endif
 
 PSC_USE_ERROR();
@@ -73,70 +77,16 @@ PSC_USE_ERROR();
 
 template <typename T> constexpr T clamp(const T x, const T mn, const T mx) { return x < mn ? mn : x > mx ? mx : x; }
 template <typename T> constexpr T lerp(const T x1, const T x2, const float alpha) { return (1.f - alpha) * x1 + alpha * x2; }
-
+template <typename T> constexpr T saturate(const T x) { return std::max(std::min(x, T { 1 }), T { 0 }); }
 
 // Rendering provided through plugin messages
 extern VPXTexture CreateTexture(SDL_Surface* surf);
 extern VPXTextureInfo* GetTextureInfo(VPXTexture texture);
-extern void UpdateTexture(VPXTexture* texture, int width, int height, VPXTextureFormat format, const uint8_t *image);
+extern void UpdateTexture(VPXTexture* texture, int width, int height, VPXTextureFormat format, const void *image);
 extern void DeleteTexture(VPXTexture texture);
 
 extern CtlResId UpdateAudioStream(AudioUpdateMsg *msg);
 extern void StopAudioStream(const CtlResId& id);
-
-class AsyncCallback
-{
-public:
-   AsyncCallback(vector<AsyncCallback*>& pendingList, std::mutex& pendingListMutex, std::function<void()> callback)
-      : m_pendingList(pendingList)
-      , m_pendingListMutex(pendingListMutex)
-      , m_callback(callback)
-   {
-   }
-
-   void DispatchOnMainThread(const MsgPluginAPI* msgApi)
-   {
-      std::lock_guard<std::mutex> lock(m_pendingListMutex);
-      m_pendingList.push_back(this);
-      msgApi->RunOnMainThread(0, AsyncCallback::ProcessCallback, this);
-   }
-
-   void Invalidate() { m_valid = false; }
-
-   static void DispatchOnMainThread(const MsgPluginAPI* msgApi, vector<AsyncCallback*>& pendingList, std::mutex& pendingListMutex, std::function<void()> callback)
-   {
-      AsyncCallback* cb = new AsyncCallback(pendingList, pendingListMutex, callback);
-      cb->DispatchOnMainThread(msgApi);
-   }
-
-   // Invalidate pending triggers as their execution context is not valid any more
-   static void InvalidateAllPending(vector<AsyncCallback*>& pendingList, std::mutex& pendingListMutex)
-   {
-      std::lock_guard lock(pendingListMutex);
-      std::for_each(pendingList.begin(), pendingList.end(), [](AsyncCallback* cb) { cb->Invalidate(); });
-   }
-
-   static void ProcessCallback(void* userdata)
-   {
-      AsyncCallback* tcb = static_cast<AsyncCallback*>(userdata);
-      if (tcb->m_valid)
-      {
-         std::unique_lock lock(tcb->m_pendingListMutex);
-         auto it = std::ranges::find(tcb->m_pendingList, tcb);
-         if (it != tcb->m_pendingList.end())
-            tcb->m_pendingList.erase(it);
-         lock.unlock();
-         tcb->m_callback();
-      }
-      delete tcb;
-   }
-
-private:
-   bool m_valid = true;
-   vector<AsyncCallback*>& m_pendingList;
-   std::mutex& m_pendingListMutex;
-   std::function<void()> m_callback;
-};
 
 string trim_string(const string &str);
 
@@ -151,10 +101,17 @@ string string_replace_all(const string &szStr, const string &szFrom, const strin
 string string_replace_all(const string &szStr, const string &szFrom, const char szTo, const size_t offs = 0);
 string extension_from_path(const string &path);
 string normalize_path_separators(const string &szPath);
-string find_case_insensitive_file_path(const string &szPath);
-string find_case_insensitive_directory_path(const string &szPath);
+std::filesystem::path find_case_insensitive_file_path(const std::filesystem::path &searchedFile);
+std::filesystem::path find_case_insensitive_directory_path(const std::filesystem::path &searchedFile);
 bool StrCompareNoCase(const string &strA, const string &strB);
 string lowerCase(string input);
+std::filesystem::path lowerCase(std::filesystem::path input);
 void SetThreadName(const string &name);
+
+void ClipDrawImage(VPXRenderContext2D* ctx, VPXTexture texture,
+   float tintR, float tintG, float tintB, float alpha,
+   float texX, float texY, float texW, float texH,
+   float pivotX, float pivotY, float rotation,
+   const SDL_FRect& dest, const SDL_Rect& clipRect);
 
 }

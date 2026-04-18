@@ -15,8 +15,12 @@
 #else
 #include <plog/Appenders/AndroidAppender.h>
 #endif
-#include "standalone/inc/webserver/WebServer.h"
+#ifdef __LIBVPINBALL__
+#include "lib/src/WebServer.h"
 #endif
+#endif
+
+#include "ui/win/codeview.h"
 
 class DebugAppender final : public plog::IAppender
 {
@@ -28,20 +32,13 @@ public:
 
    void write(const plog::Record &record) PLOG_OVERRIDE
    {
-      if (g_pvp == nullptr || g_pplayer == nullptr)
-         return;
-      if (std::this_thread::get_id() != m_uiThreadId)
-         return;
-      auto table = g_pvp->GetActiveTable();
-      if (table == nullptr)
+      if ((std::this_thread::get_id() != m_uiThreadId) || (g_pvp == nullptr) || (g_pvp->GetActiveTableEditor() == nullptr))
          return;
       #ifdef _WIN32
       // Convert from wchar* to char* on Win32
-      auto msg = record.getMessage();
-      const string szT = MakeString(msg);
-      table->m_pcv->AddToDebugOutput(szT);
+      g_pvp->GetActiveTableEditor()->m_pcv->AddToDebugOutput(MakeString(record.getMessage()));
       #else
-      table->m_pcv->AddToDebugOutput(record.getMessage());
+      g_pvp->GetActiveTableEditor()->m_pcv->AddToDebugOutput(record.getMessage());
       #endif
    }
 
@@ -65,30 +62,23 @@ public:
 
       std::string level;
       switch (record.getSeverity()) {
-         case plog::fatal:   level = "FATAL"s; break;
-         case plog::error:   level = "ERROR"s; break;
-         case plog::warning: level = "WARN"s; break;
-         case plog::info:    level = "INFO"s; break;
-         case plog::debug:   level = "DEBUG"s; break;
-         case plog::verbose: level = "VERBOSE"s; break;
-         default:            level = "UNKNOWN"s; break;
+         case plog::fatal:   level = "FATAL"sv; break;
+         case plog::error:   level = "ERROR"sv; break;
+         case plog::warning: level = "WARN"sv; break;
+         case plog::info:    level = "INFO"sv; break;
+         case plog::debug:   level = "DEBUG"sv; break;
+         case plog::verbose: level = "VERBOSE"sv; break;
+         default:            level = "UNKNOWN"sv; break;
       }
 
-      std::string message;
       #ifdef _WIN32
-      auto msg = record.getMessage();
-      const int len = WideCharToMultiByte(CP_UTF8, 0, msg, -1, nullptr, 0, nullptr, nullptr); //(int)wcslen(msg) + 1;
-      if (len > 1)
-      {
-         message.resize(len - 1, '\0');
-         WideCharToMultiByte(CP_UTF8, 0, msg, -1, message.data(), len, nullptr, nullptr);
-      }
+      std::string message = MakeString(record.getMessage(), CP_UTF8);
       #else
-      message = std::string(record.getMessage());
+      std::string message(record.getMessage());
       #endif
 
       char timeBuffer[32];
-      snprintf(timeBuffer, sizeof(timeBuffer), "%04d-%02d-%02d %02d:%02d:%02d.%03d",
+      snprintf(timeBuffer, std::size(timeBuffer), "%04d-%02d-%02d %02d:%02d:%02d.%03d",
                timeInfo.tm_year + 1900, timeInfo.tm_mon + 1, timeInfo.tm_mday,
                timeInfo.tm_hour, timeInfo.tm_min, timeInfo.tm_sec,
                static_cast<int>(record.getTime().millitm));
@@ -170,8 +160,12 @@ void Logger::SetupLogger(const bool enable)
       if (!initialized)
       {
          initialized = true;
-         const string szLogPath = g_pvp->m_myPrefPath + "vpinball.log";
-         static plog::RollingFileAppender<ThreadAwareTxtFormatter<false>> fileAppender(szLogPath.c_str(), 1024 * 1024 * 5, 1);
+         const std::filesystem::path logPath = g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Preferences, "vpinball.log");
+#if PLOG_CHAR_IS_UTF8
+         static plog::RollingFileAppender<ThreadAwareTxtFormatter<false>> fileAppender(logPath.string().c_str(), 1024 * 1024 * 5, 1);
+#else
+         static plog::RollingFileAppender<ThreadAwareTxtFormatter<false>> fileAppender(logPath.wstring().c_str(), 1024 * 1024 * 5, 1);
+#endif
          static DebugAppender debugAppender;
          plog::Logger<PLOG_DEFAULT_INSTANCE_ID>::getInstance()->addAppender(&debugAppender);
          plog::Logger<PLOG_DEFAULT_INSTANCE_ID>::getInstance()->addAppender(&fileAppender);
@@ -212,7 +206,7 @@ void Logger::Init()
 
 void Logger::Truncate()
 {
-   std::string szLogPath = g_pvp->m_myPrefPath + "vpinball.log";
+   std::filesystem::path szLogPath = g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Preferences, "vpinball.log");
    std::ofstream ofs(szLogPath, std::ofstream::out | std::ofstream::trunc);
    ofs.close();
 }

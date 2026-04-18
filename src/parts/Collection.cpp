@@ -1,0 +1,171 @@
+#include "core/stdafx.h"
+
+#include "Collection.h"
+
+Collection::Collection()
+{
+   m_fireEvents = false;
+   m_stopSingleEvents = false;
+
+   m_groupElements = g_app->m_settings.GetEditor_GroupElementsInCollection();
+}
+
+void Collection::Save(IObjectWriter& writer, const bool saveForUndo)
+{
+   writer.WriteWideString(FID(NAME), m_wzName);
+   for (int i = 0; i < m_visel.size(); ++i)
+   {
+      const IScriptable * const piscript = m_visel[i].GetIEditable()->GetIScriptable();
+      writer.WriteWideString(FID(ITEM), piscript->m_wzName);
+   }
+   writer.WriteBool(FID(EVNT), m_fireEvents);
+   writer.WriteBool(FID(SSNG), m_stopSingleEvents);
+   writer.WriteBool(FID(GREL), m_groupElements);
+   writer.EndObject();
+}
+
+void Collection::Load(IObjectReader& reader)
+{
+   reader.AsObject(
+      [this](int tag, IObjectReader& reader)
+      {
+         switch (tag)
+         {
+         case FID(NAME):
+            //!! workaround: due to a bug in earlier versions, it can happen that the string written was one char too long
+            m_wzName = reader.AsWideString();
+            if (m_wzName.length() >= MAXNAMEBUFFER)
+               m_wzName.erase(MAXNAMEBUFFER - 1);
+            break;
+         case FID(EVNT): m_fireEvents = reader.AsBool(); break;
+         case FID(SSNG): m_stopSingleEvents = reader.AsBool(); break;
+         case FID(GREL): m_groupElements = reader.AsBool(); break;
+         case FID(ITEM): m_tmp_isel_name.push_back(reader.AsWideString()); break;
+         }
+         return true;
+      });
+}
+
+HRESULT Collection::InitPostLoad(const PinTable *const pt)
+{
+   for (const wstring& tmp_isel_name : m_tmp_isel_name)
+   {
+      for (IEditable* editable : pt->GetParts())
+      {
+         if (IScriptable *const piscript = editable->GetIScriptable(); piscript) // skip decals
+         {
+            if (piscript->m_wzName == tmp_isel_name)
+            {
+               auto iselect = editable->GetISelect();
+               iselect->GetIEditable()->m_vCollection.push_back(this);
+               iselect->GetIEditable()->m_viCollection.push_back(m_visel.size());
+               m_visel.push_back(iselect);
+               break; // found, continue to search next name/element
+            }
+         }
+      }
+   }
+   m_tmp_isel_name.clear();
+
+   return S_OK;
+}
+
+STDMETHODIMP Collection::get_Count(LONG __RPC_FAR *plCount)
+{
+   *plCount = m_visel.size();
+   return S_OK;
+}
+
+STDMETHODIMP Collection::get_Item(LONG index, IDispatch __RPC_FAR * __RPC_FAR *ppidisp)
+{
+   if (index < 0 || index >= m_visel.size())
+      return TYPE_E_OUTOFBOUNDS;
+
+   IDispatch * const pdisp = m_visel[index].GetIDispatch();
+   return pdisp->QueryInterface(IID_IDispatch, (void **)ppidisp);
+}
+
+STDMETHODIMP Collection::get__NewEnum(IUnknown** ppunk)
+{
+   CComObject<OMCollectionEnum> *pomenum;
+   HRESULT hr = CComObject<OMCollectionEnum>::CreateInstance(&pomenum);
+
+   if (SUCCEEDED(hr))
+   {
+      pomenum->Init(this);
+      hr = pomenum->QueryInterface(IID_IEnumVARIANT, (void **)ppunk);
+   }
+
+   return hr;
+}
+
+STDMETHODIMP OMCollectionEnum::Init(Collection *pcol)
+{
+   m_pcol = pcol;
+   m_index = 0;
+   return S_OK;
+}
+
+STDMETHODIMP OMCollectionEnum::Next(ULONG celt, VARIANT __RPC_FAR *rgVar, ULONG __RPC_FAR *pCeltFetched)
+{
+   int last;
+   HRESULT hr;
+   const int cwanted = celt;
+   int creturned;
+
+   if (m_index + cwanted > m_pcol->m_visel.size())
+   {
+      hr = S_FALSE;
+      last = m_pcol->m_visel.size();
+      creturned = m_pcol->m_visel.size() - m_index;
+   }
+   else
+   {
+      hr = S_OK;
+      last = m_index + cwanted;
+      creturned = cwanted;
+   }
+
+   for (int i = m_index; i < last; ++i)
+   {
+      IDispatch * const pdisp = m_pcol->m_visel[i].GetIDispatch();
+      pdisp->QueryInterface(IID_IDispatch, (void **)&pdisp);
+
+      V_VT(&rgVar[i - m_index]) = VT_DISPATCH;
+      V_DISPATCH(&rgVar[i - m_index]) = pdisp;
+   }
+
+   m_index += creturned;
+
+   if (pCeltFetched)
+      *pCeltFetched = creturned;
+
+   return hr;
+}
+
+STDMETHODIMP OMCollectionEnum::Skip(ULONG celt)
+{
+   m_index += celt;
+   return (m_index >= m_pcol->m_visel.size()) ? S_FALSE : S_OK;
+}
+
+STDMETHODIMP OMCollectionEnum::Reset()
+{
+   m_index = 0;
+   return S_OK;
+}
+
+STDMETHODIMP OMCollectionEnum::Clone(IEnumVARIANT __RPC_FAR *__RPC_FAR *ppEnum)
+{
+   IUnknown *punk;
+   HRESULT hr = m_pcol->get__NewEnum(&punk);
+
+   if (SUCCEEDED(hr))
+   {
+      hr = punk->QueryInterface(IID_IEnumVARIANT, (void **)ppEnum);
+
+      punk->Release();
+   }
+
+   return hr;
+}

@@ -1,6 +1,8 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
+#include "bumper.h"
+
 #include "utils/objloader.h"
 #include "meshes/bumperBaseMesh.h"
 #include "meshes/bumperRingMesh.h"
@@ -10,85 +12,72 @@
 #include "renderer/IndexBuffer.h"
 #include "renderer/VertexBuffer.h"
 
-Bumper::Bumper()
-{
-   m_d.m_ringDropOffset = 0.0f;
-}
-
 Bumper::~Bumper()
 {
    assert(m_rd == nullptr);
 }
 
-Bumper *Bumper::CopyForPlay(PinTable *live_table) const
+Bumper *Bumper::CopyForPlay() const
 {
-   STANDARD_EDITABLE_COPY_FOR_PLAY_IMPL(Bumper, live_table)
+   STANDARD_EDITABLE_COPY_FOR_PLAY_IMPL(Bumper)
    return dst;
 }
 
-HRESULT Bumper::Init(PinTable * const ptable, const float x, const float y, const bool fromMouseClick, const bool forPlay)
+HRESULT Bumper::Init(const float x, const float y, const bool fromMouseClick, const bool forPlay)
 {
-   m_ptable = ptable;
    SetDefaults(fromMouseClick);
    m_d.m_vCenter.x = x;
    m_d.m_vCenter.y = y;
-   return forPlay ? S_OK : InitVBA(true, nullptr);
+   return S_OK;
 }
 
+#define LinkProp(field, prop) field = fromMouseClick ? g_app->m_settings.GetDefaultPropsBumper_##prop() : Settings::GetDefaultPropsBumper_##prop##_Default()
 void Bumper::SetDefaults(const bool fromMouseClick)
 {
-#define regKey Settings::DefaultPropsBumper
-
-   m_d.m_radius = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Radius"s, 45.f) : 45.f;
-
-   SetDefaultPhysics(fromMouseClick);
-
-   m_d.m_heightScale = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "HeightScale"s, 90.0f) : 90.0f;
-   m_d.m_ringSpeed = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "RingSpeed"s, 0.5f) : 0.5f;
-   m_d.m_orientation = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Orientation"s, 0.0f) : 0.0f;
-   m_d.m_threshold = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Threshold"s, 1.f) : 1.f;
-
-   const bool hr = g_pvp->m_settings.LoadValue(regKey, "Surface"s, m_d.m_szSurface);
-   if (!hr || !fromMouseClick)
-      m_d.m_szSurface.clear();
-
-   m_d.m_tdr.m_TimerEnabled = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "TimerEnabled"s, false) : false;
-   m_d.m_tdr.m_TimerInterval = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "TimerInterval"s, 100) : 100;
-   m_d.m_capVisible = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "CapVisible"s, true) : true;
-   m_d.m_baseVisible = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "BaseVisible"s, true) : true;
-   m_d.m_ringVisible = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "RingVisible"s, true) : true;
-   m_d.m_skirtVisible = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "SkirtVisible"s, true) : true;
-   m_d.m_reflectionEnabled = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "ReflectionEnabled"s, true) : true;
-   m_d.m_hitEvent = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "HasHitEvent"s, true) : true;
-   m_d.m_collidable = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Collidable"s, true) : true;
-
+   LinkProp(m_d.m_radius, Radius);
+   LinkProp(m_d.m_heightScale, HeightScale);
+   LinkProp(m_d.m_ringSpeed, RingSpeed);
+   LinkProp(m_d.m_orientation, Orientation);
+   LinkProp(m_d.m_threshold, Threshold);
+   LinkProp(m_d.m_capVisible, CapVisible);
+   LinkProp(m_d.m_baseVisible, BaseVisible);
+   LinkProp(m_d.m_hitEvent, HasHitEvent);
+   LinkProp(m_d.m_collidable, Collidable);
+   LinkProp(m_d.m_szSurface, Surface);
+   LinkProp(m_d.m_reflectionEnabled, ReflectionEnabled);
+   LinkProp(m_timerEnabled, TimerEnabled);
+   LinkProp(m_timerInterval, TimerInterval);
    m_ringAnimate = false;
    m_d.m_ringDropOffset = 0.0f;
-
-#undef regKey
+   SetDefaultPhysics(fromMouseClick);
 }
+
+void Bumper::SetDefaultPhysics(const bool fromMouseClick)
+{
+   LinkProp(m_d.m_force, Force);
+   LinkProp(m_d.m_scatter, Scatter);
+}
+#undef LinkProp
 
 void Bumper::WriteRegDefaults()
 {
-#define regKey Settings::DefaultPropsBumper
-
-   g_pvp->m_settings.SaveValue(regKey, "Radius"s, m_d.m_radius);
-   g_pvp->m_settings.SaveValue(regKey, "Force"s, m_d.m_force);
-   g_pvp->m_settings.SaveValue(regKey, "Scatter"s, m_d.m_scatter);
-   g_pvp->m_settings.SaveValue(regKey, "HeightScale"s, m_d.m_heightScale);
-   g_pvp->m_settings.SaveValue(regKey, "RingSpeed"s, m_d.m_ringSpeed);
-   g_pvp->m_settings.SaveValue(regKey, "Orientation"s, m_d.m_orientation);
-   g_pvp->m_settings.SaveValue(regKey, "Threshold"s, m_d.m_threshold);
-   g_pvp->m_settings.SaveValue(regKey, "TimerEnabled"s, m_d.m_tdr.m_TimerEnabled);
-   g_pvp->m_settings.SaveValue(regKey, "TimerInterval"s, m_d.m_tdr.m_TimerInterval);
-   g_pvp->m_settings.SaveValue(regKey, "CapVisible"s, m_d.m_capVisible);
-   g_pvp->m_settings.SaveValue(regKey, "BaseVisible"s, m_d.m_baseVisible);
-   g_pvp->m_settings.SaveValue(regKey, "HasHitEvent"s, m_d.m_hitEvent);
-   g_pvp->m_settings.SaveValue(regKey, "Collidable"s, m_d.m_collidable);
-   g_pvp->m_settings.SaveValue(regKey, "ReflectionEnabled"s, m_d.m_reflectionEnabled);
-   g_pvp->m_settings.SaveValue(regKey, "Surface"s, m_d.m_szSurface);
-
-#undef regKey
+#define LinkProp(field, prop) g_app->m_settings.SetDefaultPropsBumper_##prop(field, false)
+   LinkProp(m_d.m_radius, Radius);
+   LinkProp(m_d.m_heightScale, HeightScale);
+   LinkProp(m_d.m_ringSpeed, RingSpeed);
+   LinkProp(m_d.m_orientation, Orientation);
+   LinkProp(m_d.m_threshold, Threshold);
+   LinkProp(m_d.m_capVisible, CapVisible);
+   LinkProp(m_d.m_baseVisible, BaseVisible);
+   LinkProp(m_d.m_hitEvent, HasHitEvent);
+   LinkProp(m_d.m_collidable, Collidable);
+   LinkProp(m_d.m_szSurface, Surface);
+   LinkProp(m_d.m_force, Force);
+   LinkProp(m_d.m_scatter, Scatter);
+   LinkProp(m_d.m_reflectionEnabled, ReflectionEnabled);
+   LinkProp(m_timerEnabled, TimerEnabled);
+   LinkProp(m_timerInterval, TimerInterval);
+#undef LinkProp
 }
 
 STDMETHODIMP Bumper::InterfaceSupportsErrorInfo(REFIID riid)
@@ -192,6 +181,9 @@ void Bumper::RenderBlueprint(Sur *psur, const bool solid)
 
 void Bumper::PhysicSetup(PhysicsEngine* physics, const bool isUI)
 {
+   if (!isUI && GetPartGroup() != nullptr && GetPartGroup()->GetReferenceSpace() != PartGroupData::SpaceReference::SR_PLAYFIELD)
+      return;
+
    const float height = m_ptable->GetSurfaceHeight(m_d.m_szSurface, m_d.m_vCenter.x, m_d.m_vCenter.y);
    if (isUI)
    {
@@ -228,68 +220,61 @@ void Bumper::RenderSetup(RenderDevice *device)
    m_baseHeight = m_ptable->GetSurfaceHeight(m_d.m_szSurface, m_d.m_vCenter.x, m_d.m_vCenter.y);
 
    m_fullMatrix = Matrix3D::MatrixRotateZ(ANGTORAD(m_d.m_orientation));
-   if (m_d.m_baseVisible)
+   // We always create all render data to support live editor
+   //if (m_d.m_baseVisible)
    {
-      m_baseTexture.reset(Texture::CreateFromFile(g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "BumperBase.webp"));
-      IndexBuffer* baseIndexBuffer = new IndexBuffer(m_rd, bumperBaseNumIndices, bumperBaseIndices);
-      VertexBuffer* baseVertexBuffer = new VertexBuffer(m_rd, bumperBaseNumVertices);
+      m_baseTexture.reset(Texture::CreateFromFile(g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, "BumperBase.webp")));
+      std::shared_ptr<IndexBuffer> baseIndexBuffer = std::make_shared<IndexBuffer>(m_rd, bumperBaseNumIndices, bumperBaseIndices);
+      std::shared_ptr<VertexBuffer> baseVertexBuffer = std::make_shared<VertexBuffer>(m_rd, bumperBaseNumVertices);
       Vertex3D_NoTex2 *buf;
       baseVertexBuffer->Lock(buf);
       GenerateBaseMesh(buf);
       baseVertexBuffer->Unlock();
-      delete m_baseMeshBuffer;
-      m_baseMeshBuffer = new MeshBuffer(m_wzName + L".Base"s, baseVertexBuffer, baseIndexBuffer, true);
+      m_baseMeshBuffer = std::make_shared<MeshBuffer>(GetName() + ".Base", baseVertexBuffer, baseIndexBuffer, true);
    }
 
-   if (m_d.m_skirtVisible)
+   //if (m_d.m_skirtVisible)
    {
-      m_skirtTexture.reset(Texture::CreateFromFile(g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "BumperSkirt.webp"));
-      IndexBuffer* socketIndexBuffer = new IndexBuffer(m_rd, bumperSocketNumIndices, bumperSocketIndices);
-      VertexBuffer* socketVertexBuffer = new VertexBuffer(m_rd, bumperSocketNumVertices, nullptr, true);
+      m_skirtTexture.reset(Texture::CreateFromFile(g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, "BumperSkirt.webp")));
+      std::shared_ptr<IndexBuffer> socketIndexBuffer = std::make_shared<IndexBuffer>(m_rd, bumperSocketNumIndices, bumperSocketIndices);
+      std::shared_ptr<VertexBuffer> socketVertexBuffer = std::make_shared<VertexBuffer>(m_rd, bumperSocketNumVertices, nullptr, true);
       Vertex3D_NoTex2 *buf;
       socketVertexBuffer->Lock(buf);
       GenerateSocketMesh(buf);
       socketVertexBuffer->Unlock();
-      delete m_socketMeshBuffer;
-      m_socketMeshBuffer = new MeshBuffer(m_wzName + L".Socket"s, socketVertexBuffer, socketIndexBuffer, true);
+      m_socketMeshBuffer = std::make_shared<MeshBuffer>(GetName() + ".Socket"s, socketVertexBuffer, socketIndexBuffer, true);
    }
 
-   if (m_d.m_ringVisible)
+   //if (m_d.m_ringVisible)
    {
-      m_ringTexture.reset(Texture::CreateFromFile(g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "BumperRing.webp"));
-      IndexBuffer* ringIndexBuffer = new IndexBuffer(m_rd, bumperRingNumIndices, bumperRingIndices);
-      VertexBuffer *ringVertexBuffer = new VertexBuffer(m_rd, bumperRingNumVertices, nullptr, true);
+      m_ringTexture.reset(Texture::CreateFromFile(g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, "BumperRing.webp")));
+      std::shared_ptr<IndexBuffer> ringIndexBuffer = std::make_shared<IndexBuffer>(m_rd, bumperRingNumIndices, bumperRingIndices);
+      std::shared_ptr<VertexBuffer> ringVertexBuffer = std::make_shared<VertexBuffer>(m_rd, bumperRingNumVertices, nullptr, true);
       m_ringVertices = new Vertex3D_NoTex2[bumperRingNumVertices];
       GenerateRingMesh(m_ringVertices);
       Vertex3D_NoTex2 *buf;
       ringVertexBuffer->Lock(buf);
       memcpy(buf, m_ringVertices, bumperRingNumVertices*sizeof(Vertex3D_NoTex2));
       ringVertexBuffer->Unlock();
-      delete m_ringMeshBuffer;
-      m_ringMeshBuffer = new MeshBuffer(m_wzName + L".Ring"s, ringVertexBuffer, ringIndexBuffer, true);
+      m_ringMeshBuffer = std::make_shared<MeshBuffer>(GetName() + ".Ring"s, ringVertexBuffer, ringIndexBuffer, true);
    }
 
-   if (m_d.m_capVisible)
+   //if (m_d.m_capVisible)
    {
-      m_capTexture.reset(Texture::CreateFromFile(g_pvp->m_myPath + "assets" + PATH_SEPARATOR_CHAR + "BumperCap.webp"));
-      IndexBuffer* capIndexBuffer = new IndexBuffer(m_rd, bumperCapNumIndices, bumperCapIndices);
-      VertexBuffer* capVertexBuffer = new VertexBuffer(m_rd, bumperCapNumVertices);
+      m_capTexture.reset(Texture::CreateFromFile(g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, "BumperCap.webp")));
+      std::shared_ptr<IndexBuffer> capIndexBuffer = std::make_shared<IndexBuffer>(m_rd, bumperCapNumIndices, bumperCapIndices);
+      std::shared_ptr<VertexBuffer> capVertexBuffer = std::make_shared<VertexBuffer>(m_rd, bumperCapNumVertices);
       Vertex3D_NoTex2 *buf;
       capVertexBuffer->Lock(buf);
       GenerateCapMesh(buf);
       capVertexBuffer->Unlock();
-      delete m_capMeshBuffer;
-      m_capMeshBuffer = new MeshBuffer(m_wzName + L".Cap"s, capVertexBuffer, capIndexBuffer, true);
+      m_capMeshBuffer = std::make_shared<MeshBuffer>(GetName() + ".Cap"s, capVertexBuffer, capIndexBuffer, true);
    }
 }
 
 void Bumper::RenderRelease()
 {
    assert(m_rd != nullptr);
-   delete m_baseMeshBuffer;
-   delete m_ringMeshBuffer;
-   delete m_capMeshBuffer;
-   delete m_socketMeshBuffer;
    m_baseMeshBuffer = nullptr;
    m_ringMeshBuffer = nullptr;
    m_capMeshBuffer = nullptr;
@@ -315,10 +300,11 @@ void Bumper::RenderRelease()
 void Bumper::Render(const unsigned int renderMask)
 {
    assert(m_rd != nullptr);
-   assert(!m_backglass);
+   assert(!m_desktopBackdrop);
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
    const bool isReflectionPass = renderMask & Renderer::REFLECTION_PASS;
+   const bool isUIPass = renderMask & Renderer::UI_EDGES || renderMask & Renderer::UI_FILL;
    TRACE_FUNCTION();
 
    if (isReflectionPass && !m_d.m_reflectionEnabled)
@@ -326,60 +312,96 @@ void Bumper::Render(const unsigned int renderMask)
 
    if (m_d.m_baseVisible)
    {
-      const Material * const mat = m_ptable->GetMaterial(m_d.m_szBaseMaterial);
-      if ((!mat->m_bOpacityActive && !isDynamicOnly) || (mat->m_bOpacityActive && !isStaticOnly))
+      Vertex3Ds pos(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight);
+      if (isUIPass)
       {
-         m_rd->ResetRenderState();
-         if (mat->m_bOpacityActive)
-            m_rd->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
-         m_rd->m_basicShader->SetBasic(mat, m_baseTexture.get());
-         Vertex3Ds pos(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight);
-         m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_baseMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperBaseNumIndices);
+         if (renderMask & Renderer::UI_FILL)
+            m_rd->DrawMesh(m_rd->m_basicShader, true, pos, 0.f, m_baseMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperBaseNumIndices);
+         // FIXME render wireframe
+      }
+      else
+      {
+         const Material *const mat = m_ptable->GetMaterial(m_d.m_szBaseMaterial);
+         if ((!mat->m_bOpacityActive && !isDynamicOnly) || (mat->m_bOpacityActive && !isStaticOnly))
+         {
+            m_rd->ResetRenderState();
+            if (mat->m_bOpacityActive)
+               m_rd->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
+            m_rd->m_basicShader->SetBasic(mat, m_baseTexture.get());
+            m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_baseMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperBaseNumIndices);
+         }
       }
    }
 
    if (m_d.m_capVisible)
    {
-      const Material * const mat = m_ptable->GetMaterial(m_d.m_szCapMaterial);
-      if ((!mat->m_bOpacityActive && !isDynamicOnly) || (mat->m_bOpacityActive && !isStaticOnly))
+      Vertex3Ds pos(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight);
+      if (isUIPass)
       {
-         m_rd->ResetRenderState();
-         if (mat->m_bOpacityActive)
-            m_rd->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
-         m_rd->m_basicShader->SetBasic(mat, m_capTexture.get());
-         Vertex3Ds pos(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight);
-         m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_capMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperCapNumIndices);
+         if (renderMask & Renderer::UI_FILL)
+            m_rd->DrawMesh(m_rd->m_basicShader, true, pos, 0.f, m_capMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperCapNumIndices);
+         // FIXME render wireframe
+      }
+      else
+      {
+         const Material *const mat = m_ptable->GetMaterial(m_d.m_szCapMaterial);
+         if ((!mat->m_bOpacityActive && !isDynamicOnly) || (mat->m_bOpacityActive && !isStaticOnly))
+         {
+            m_rd->ResetRenderState();
+            if (mat->m_bOpacityActive)
+               m_rd->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
+            m_rd->m_basicShader->SetBasic(mat, m_capTexture.get());
+            m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_capMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperCapNumIndices);
+         }
       }
    }
 
    if (m_d.m_ringVisible && !isStaticOnly)
    {
-      Material ringMaterial;
-      if (m_d.m_szRingMaterial[0] != '\0')
+      Vertex3Ds pos(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight + m_pbumperhitcircle->m_bumperanim_ringAnimOffset);
+      if (isUIPass)
       {
-         ringMaterial = *(m_ptable->GetMaterial(m_d.m_szRingMaterial));
+         if (renderMask & Renderer::UI_FILL)
+            m_rd->DrawMesh(m_rd->m_basicShader, true, pos, 0.f, m_ringMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperRingNumIndices);
+         // FIXME render wireframe
       }
       else
       {
-         ringMaterial.m_cBase = 0xFFFFFFFF; //!! set properly
-         ringMaterial.m_cGlossy = 0;
-         ringMaterial.m_type = Material::MaterialType::METAL;
+         Material ringMaterial;
+         if (m_d.m_szRingMaterial[0] != '\0')
+         {
+            ringMaterial = *(m_ptable->GetMaterial(m_d.m_szRingMaterial));
+         }
+         else
+         {
+            ringMaterial.m_cBase = 0xFFFFFFFF; //!! set properly
+            ringMaterial.m_cGlossy = 0;
+            ringMaterial.m_type = Material::MaterialType::METAL;
+         }
+         m_rd->ResetRenderState();
+         m_rd->m_basicShader->SetBasic(&ringMaterial, m_ringTexture.get());
+         m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_ringMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperRingNumIndices);
       }
-      m_rd->ResetRenderState();
-      m_rd->m_basicShader->SetBasic(&ringMaterial, m_ringTexture.get());
-      Vertex3Ds pos(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight + m_pbumperhitcircle->m_bumperanim_ringAnimOffset);
-      m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_ringMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperRingNumIndices);
    }
 
    if (m_d.m_skirtVisible && !isStaticOnly)
    {
-      const Material * const mat = m_ptable->GetMaterial(m_d.m_szSkirtMaterial);
-      m_rd->ResetRenderState();
-      if (mat->m_bOpacityActive)
-         m_rd->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
-      m_rd->m_basicShader->SetBasic(mat, m_skirtTexture.get());
       Vertex3Ds pos(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight + 5.0f);
-      m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_socketMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperSocketNumIndices);
+      if (isUIPass)
+      {
+         if (renderMask & Renderer::UI_FILL)
+            m_rd->DrawMesh(m_rd->m_basicShader, true, pos, 0.f, m_socketMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperSocketNumIndices);
+         // FIXME render wireframe
+      }
+      else
+      {
+         const Material *const mat = m_ptable->GetMaterial(m_d.m_szSkirtMaterial);
+         m_rd->ResetRenderState();
+         if (mat->m_bOpacityActive)
+            m_rd->SetRenderState(RenderState::CULLMODE, RenderState::CULL_NONE);
+         m_rd->m_basicShader->SetBasic(mat, m_skirtTexture.get());
+         m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_socketMeshBuffer, RenderDevice::TRIANGLELIST, 0, bumperSocketNumIndices);
+      }
    }
 }
 
@@ -703,111 +725,95 @@ void Bumper::PutCenter(const Vertex2D& pv)
    m_d.m_vCenter = pv;
 }
 
-HRESULT Bumper::SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool saveForUndo)
+void Bumper::Save(IObjectWriter& writer, const bool saveForUndo)
 {
-   BiffWriter bw(pstm, hcrypthash);
+   writer.WriteVector2(FID(VCEN), m_d.m_vCenter);
+   writer.WriteFloat(FID(RADI), m_d.m_radius);
+   writer.WriteBool(FID(TMON), m_timerEnabled);
+   writer.WriteInt(FID(TMIN), m_timerInterval);
+   writer.WriteFloat(FID(THRS), m_d.m_threshold);
+   writer.WriteFloat(FID(FORC), m_d.m_force);
+   writer.WriteFloat(FID(BSCT), m_d.m_scatter);
+   writer.WriteFloat(FID(HISC), m_d.m_heightScale);
+   writer.WriteFloat(FID(RISP), m_d.m_ringSpeed);
+   writer.WriteFloat(FID(ORIN), m_d.m_orientation);
+   writer.WriteFloat(FID(RDLI), m_d.m_ringDropOffset);
+   writer.WriteString(FID(MATR), m_d.m_szCapMaterial);
+   writer.WriteString(FID(BAMA), m_d.m_szBaseMaterial);
+   writer.WriteString(FID(SKMA), m_d.m_szSkirtMaterial);
+   writer.WriteString(FID(RIMA), m_d.m_szRingMaterial);
+   writer.WriteString(FID(SURF), m_d.m_szSurface);
+   writer.WriteWideString(FID(NAME), m_wzName);
 
-   bw.WriteVector2(FID(VCEN), m_d.m_vCenter);
-   bw.WriteFloat(FID(RADI), m_d.m_radius);
-   bw.WriteBool(FID(TMON), m_d.m_tdr.m_TimerEnabled);
-   bw.WriteInt(FID(TMIN), m_d.m_tdr.m_TimerInterval);
-   bw.WriteFloat(FID(THRS), m_d.m_threshold);
-   bw.WriteFloat(FID(FORC), m_d.m_force);
-   bw.WriteFloat(FID(BSCT), m_d.m_scatter);
-   bw.WriteFloat(FID(HISC), m_d.m_heightScale);
-   bw.WriteFloat(FID(RISP), m_d.m_ringSpeed);
-   bw.WriteFloat(FID(ORIN), m_d.m_orientation);
-   bw.WriteFloat(FID(RDLI), m_d.m_ringDropOffset);
-   bw.WriteString(FID(MATR), m_d.m_szCapMaterial);
-   bw.WriteString(FID(BAMA), m_d.m_szBaseMaterial);
-   bw.WriteString(FID(SKMA), m_d.m_szSkirtMaterial);
-   bw.WriteString(FID(RIMA), m_d.m_szRingMaterial);
-   bw.WriteString(FID(SURF), m_d.m_szSurface);
-   bw.WriteWideString(FID(NAME), m_wzName);
+   writer.WriteBool(FID(CAVI), m_d.m_capVisible);
+   writer.WriteBool(FID(BSVS), m_d.m_baseVisible);
+   writer.WriteBool(FID(RIVS), m_d.m_ringVisible);
+   writer.WriteBool(FID(SKVS), m_d.m_skirtVisible);
+   writer.WriteBool(FID(HAHE), m_d.m_hitEvent);
+   writer.WriteBool(FID(COLI), m_d.m_collidable);
+   writer.WriteBool(FID(REEN), m_d.m_reflectionEnabled);
 
-   bw.WriteBool(FID(CAVI), m_d.m_capVisible);
-   bw.WriteBool(FID(BSVS), m_d.m_baseVisible);
-   bw.WriteBool(FID(RIVS), m_d.m_ringVisible);
-   bw.WriteBool(FID(SKVS), m_d.m_skirtVisible);
-   bw.WriteBool(FID(HAHE), m_d.m_hitEvent);
-   bw.WriteBool(FID(COLI), m_d.m_collidable);
-   bw.WriteBool(FID(REEN), m_d.m_reflectionEnabled);
+   SaveSharedEditableFields(writer);
 
-   ISelect::SaveData(pstm, hcrypthash);
-
-   bw.WriteTag(FID(ENDB));
-
-   return S_OK;
+   writer.EndObject();
 }
 
 
-HRESULT Bumper::InitLoad(IStream *pstm, PinTable *ptable, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey)
+void Bumper::Load(IObjectReader& reader)
 {
    SetDefaults(false);
-
-   BiffReader br(pstm, this, version, hcrypthash, hcryptkey);
-
-   m_ptable = ptable;
-
-   br.Load();
-   return S_OK;
-}
-
-bool Bumper::LoadToken(const int id, BiffReader * const pbr)
-{
-   switch(id)
-   {
-   case FID(PIID): { int pid; pbr->GetInt(&pid); } break;
-   case FID(VCEN): pbr->GetVector2(m_d.m_vCenter); break;
-   case FID(RADI): pbr->GetFloat(m_d.m_radius); break;
-   case FID(MATR): pbr->GetString(m_d.m_szCapMaterial); break;
-   case FID(RIMA): pbr->GetString(m_d.m_szRingMaterial); break;
-   case FID(BAMA): pbr->GetString(m_d.m_szBaseMaterial); break;
-   case FID(SKMA): pbr->GetString(m_d.m_szSkirtMaterial); break;
-   case FID(TMON): pbr->GetBool(m_d.m_tdr.m_TimerEnabled); break;
-   case FID(TMIN): pbr->GetInt(m_d.m_tdr.m_TimerInterval); break;
-   case FID(THRS): pbr->GetFloat(m_d.m_threshold); break;
-   case FID(FORC): pbr->GetFloat(m_d.m_force); break;
-   case FID(BSCT): pbr->GetFloat(m_d.m_scatter); break;
-   case FID(HISC): pbr->GetFloat(m_d.m_heightScale); break;
-   case FID(RISP): pbr->GetFloat(m_d.m_ringSpeed); break;
-   case FID(ORIN): pbr->GetFloat(m_d.m_orientation); break;
-   case FID(RDLI): pbr->GetFloat(m_d.m_ringDropOffset); break;
-   case FID(SURF): pbr->GetString(m_d.m_szSurface); break;
-   case FID(NAME): pbr->GetWideString(m_wzName, std::size(m_wzName)); break;
-   case FID(BVIS):
-   {
-      // backwards compatibility when loading old VP9 tables
-      bool value;
-      pbr->GetBool(value);
-      m_d.m_capVisible = value;
-      m_d.m_baseVisible = value;
-      m_d.m_ringVisible = value;
-      m_d.m_skirtVisible = value;
-      break;
-   }
-   case FID(CAVI): pbr->GetBool(m_d.m_capVisible); break;
-   case FID(HAHE): pbr->GetBool(m_d.m_hitEvent); break;
-   case FID(COLI): pbr->GetBool(m_d.m_collidable); break;
-   case FID(BSVS):
-   {
-      pbr->GetBool(m_d.m_baseVisible);
-      // backwards compatibilty with pre 10.2 tables
-      m_d.m_ringVisible = m_d.m_baseVisible;
-      m_d.m_skirtVisible = m_d.m_baseVisible;
-      break;
-   }
-   case FID(RIVS): pbr->GetBool(m_d.m_ringVisible); break;
-   case FID(SKVS): pbr->GetBool(m_d.m_skirtVisible); break;
-   case FID(REEN): pbr->GetBool(m_d.m_reflectionEnabled); break;
-   default: ISelect::LoadToken(id, pbr); break;
-   }
-   return true;
-}
-
-HRESULT Bumper::InitPostLoad()
-{
-   return S_OK;
+   reader.AsObject(
+      [this](int tag, IObjectReader& reader)
+      {
+         switch (tag)
+         {
+         case FID(PIID): reader.AsInt(); break;
+         case FID(VCEN): m_d.m_vCenter = reader.AsVector2(); break;
+         case FID(RADI): m_d.m_radius = reader.AsFloat(); break;
+         case FID(MATR): m_d.m_szCapMaterial = reader.AsString(); break;
+         case FID(RIMA): m_d.m_szRingMaterial = reader.AsString(); break;
+         case FID(BAMA): m_d.m_szBaseMaterial = reader.AsString(); break;
+         case FID(SKMA): m_d.m_szSkirtMaterial = reader.AsString(); break;
+         case FID(TMON): m_timerEnabled = reader.AsBool(); break;
+         case FID(TMIN): m_timerInterval = reader.AsInt(); break;
+         case FID(THRS): m_d.m_threshold = reader.AsFloat(); break;
+         case FID(FORC): m_d.m_force = reader.AsFloat(); break;
+         case FID(BSCT): m_d.m_scatter = reader.AsFloat(); break;
+         case FID(HISC): m_d.m_heightScale = reader.AsFloat(); break;
+         case FID(RISP): m_d.m_ringSpeed = reader.AsFloat(); break;
+         case FID(ORIN): m_d.m_orientation = reader.AsFloat(); break;
+         case FID(RDLI): m_d.m_ringDropOffset = reader.AsFloat(); break;
+         case FID(SURF): m_d.m_szSurface = reader.AsString(); break;
+         case FID(NAME): m_wzName = reader.AsWideString(); break;
+         case FID(BVIS):
+         {
+            // backwards compatibility when loading old VP9 tables
+            bool value;
+            value = reader.AsBool();
+            m_d.m_capVisible = value;
+            m_d.m_baseVisible = value;
+            m_d.m_ringVisible = value;
+            m_d.m_skirtVisible = value;
+            break;
+         }
+         case FID(CAVI): m_d.m_capVisible = reader.AsBool(); break;
+         case FID(HAHE): m_d.m_hitEvent = reader.AsBool(); break;
+         case FID(COLI): m_d.m_collidable = reader.AsBool(); break;
+         case FID(BSVS):
+         {
+            m_d.m_baseVisible = reader.AsBool();
+            // backwards compatibilty with pre 10.2 tables
+            m_d.m_ringVisible = m_d.m_baseVisible;
+            m_d.m_skirtVisible = m_d.m_baseVisible;
+            break;
+         }
+         case FID(RIVS): m_d.m_ringVisible = reader.AsBool(); break;
+         case FID(SKVS): m_d.m_skirtVisible = reader.AsBool(); break;
+         case FID(REEN): m_d.m_reflectionEnabled = reader.AsBool(); break;
+         default: LoadSharedEditableField(tag, reader); break;
+         }
+         return true;
+      });
 }
 
 STDMETHODIMP Bumper::get_Radius(float *pVal)
@@ -967,7 +973,8 @@ STDMETHODIMP Bumper::put_SkirtMaterial(BSTR newVal)
 STDMETHODIMP Bumper::get_X(float *pVal)
 {
    *pVal = m_d.m_vCenter.x;
-   m_vpinball->SetStatusBarUnitInfo(string(), true);
+   if (m_vpinball)
+      m_vpinball->SetStatusBarUnitInfo(string(), true);
 
    return S_OK;
 }
@@ -1126,10 +1133,4 @@ STDMETHODIMP Bumper::get_RotY(float *pVal)
 {
    *pVal = m_roty;
    return S_OK;
-}
-
-void Bumper::SetDefaultPhysics(const bool fromMouseClick)
-{
-   m_d.m_force   = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultPropsBumper, "Force"s, 15.f) : 15.f;
-   m_d.m_scatter = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultPropsBumper, "Scatter"s, 0.f) : 0.f;
 }

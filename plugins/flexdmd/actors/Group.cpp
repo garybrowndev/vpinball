@@ -6,6 +6,7 @@
 #include "Image.h"
 
 #include <algorithm>
+#include <format>
 
 namespace Flex {
 
@@ -62,7 +63,7 @@ void Group::Draw(Flex::SurfaceGraphics* pGraphics)
    }
 }
 
-Actor* Group::Get(const string& name)
+Actor* Group::Get(const string& name, bool logMissing)
 {
    if (GetName() == name)
       return this;
@@ -78,19 +79,14 @@ Actor* Group::Get(const string& name)
          }
          if (child->GetType() == Actor::AT_Group)
          {
-            Group* group = static_cast<Group*>(child);
-            Actor* found = group->Get(name);
-            if (found)
-            {
-               found->AddRef();
+            if (Actor* found = static_cast<Group*>(child)->Get(name, false); found)
                return found;
-            }
          }
       }
    }
    else
    {
-      size_t pos = name.find('/');
+      const size_t pos = name.find('/');
       if (pos == string::npos)
       {
          // direct child node search 'xx'
@@ -109,29 +105,31 @@ Actor* Group::Get(const string& name)
          Group* root = this;
          while (root->GetParent() != nullptr)
             root = root->GetParent();
-         Actor* found = root->Get(name.substr(1));
-         return found;
+         return root->Get(name.substr(1), logMissing);
       }
       else
       {
          // relative path from current group 'xx/yy/zz'
-         string groupName = name.substr(0, pos);
+         const string groupName = name.substr(0, pos);
          for (Actor* child : m_children)
          {
             if ((child->GetType() == Actor::AT_Group) && (child->GetName() == groupName))
-               return static_cast<Group*>(child)->Get(name.substr(pos + 1));
+               return static_cast<Group*>(child)->Get(name.substr(pos + 1), logMissing);
          }
       }
    }
-   
-   // PLOGW << "Actor " << name << " not found in children of " << GetName();
 
-   return NULL;
+   if (logMissing)
+   {
+      LOGW(std::format("Actor {} not found in children of {}", name, GetName()));
+   }
+
+   return nullptr;
 }
 
 bool Group::HasChild(const string &name)
 {
-   Actor* child = Get(name);
+   const Actor* child = Get(name, false);
    if (child == nullptr)
       return false;
    child->Release();
@@ -211,7 +209,7 @@ void Group::RemoveActor(Actor* actor)
 
 void Group::RemoveAll()
 {
-   //PLOGD << "Remove all children " << GetName();
+   //LOGD("Remove all children: " + GetName());
    for (Actor* child : m_children)
    {
       child->SetParent(nullptr);

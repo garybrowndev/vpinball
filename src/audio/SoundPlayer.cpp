@@ -2,6 +2,8 @@
 
 #include "core/stdafx.h"
 #include "SoundPlayer.h"
+#include "plugins/MsgPluginManager.h"
+#include "core/VPXPluginAPIImpl.h"
 
 #define MA_ENABLE_ONLY_SPECIFIC_BACKENDS
 #define MA_ENABLE_CUSTOM
@@ -195,13 +197,13 @@ namespace VPX
 
 SoundPlayer* SoundPlayer::Create(const AudioPlayer* audioPlayer, Sound* sound)
 {
-   // Decode and resample the sound on the anciliary thread as this is fairly heavy
+   // Decode and resample the sound on the ancillary thread as this is fairly heavy
    return new SoundPlayer(audioPlayer, sound);
 }
 
 SoundPlayer* SoundPlayer::Create(const AudioPlayer* audioPlayer, const string& filename)
 {
-   // Decode and resample the sound on the anciliary thread as this is fairly heavy
+   // Decode and resample the sound on the ancillary thread as this is fairly heavy
    return new SoundPlayer(audioPlayer, filename);
 }
 
@@ -209,6 +211,7 @@ SoundPlayer::SoundPlayer(const AudioPlayer* audioPlayer, const string& filename)
    : m_audioPlayer(audioPlayer)
    , m_outputTarget(SoundOutTypes::SNDOUT_BACKGLASS)
    , m_commandQueue(1)
+   , m_callbackId(""s) // Music: no callback information as there is at most one music playing
 {
    m_commandQueue.enqueue([this, filename]()
    {
@@ -259,8 +262,10 @@ SoundPlayer::SoundPlayer(const AudioPlayer* audioPlayer, Sound* sound)
    : m_audioPlayer(audioPlayer)
    , m_outputTarget(sound->GetOutputTarget())
    , m_commandQueue(1)
+   , m_callbackId(sound->GetName())
 {
-   m_commandQueue.enqueue([this, sound]()
+   m_commandQueue.enqueue(
+      [this, sound]()
    {
       SetThreadName("VPX.SoundPlayer ["s.append(sound->GetName()).append(1, ']'));
 
@@ -350,7 +355,7 @@ void SoundPlayer::ApplyVolume()
 {
    if (m_sound)
    {
-      const float totalvolume = clamp(m_soundVolume * m_mainVolume, 0.0f, 1.0f);
+      const float totalvolume = saturate(m_soundVolume * m_mainVolume);
       // VP legacy conversion:
       // const float decibelvolume = (totalvolume == 0.0f) ? -100.f : max(logf(totalvolume) * (float)(10.0 / log(10.0)) - 20.0f, -100.f);
       // const float decibelvolume = logf(totalvolume) * (float)(10.0 / log(10.0)) - 20.0f; // as we don't need to handle silence separately with linear volume
@@ -480,7 +485,28 @@ void SoundPlayer::OnSoundEnd(void* pUserData, ma_sound* pSound)
 {
    SoundPlayer* me = static_cast<SoundPlayer*>(pUserData);
    if (me->m_loopCount == 0)
+   {
+      g_pplayer->m_pluginManager.GetMsgAPI().RunOnMainThread(
+         g_pplayer->m_pluginAPI.GetVPXEndPointId(), 0.0,
+         [](void* callbackInfo)
+         {
+            string* callbackId = static_cast<string*>(callbackInfo);
+            if (g_pplayer != nullptr)
+            {
+               if (callbackId->empty())
+                  g_pplayer->m_ptable->FireVoidEvent(DISPID_GameEvents_MusicDone);
+               else
+               {
+                  CComVariant rgvar[1] = { CComVariant(callbackId->c_str()) };
+                  DISPPARAMS dispparams = { rgvar, nullptr, 1, 0 };
+                  g_pplayer->m_ptable->FireDispID(DISPID_GameEvents_SoundDone, &dispparams);
+               }
+            }
+            delete callbackId;
+         },
+         new string(me->m_callbackId));
       return;
+   }
    if (me->m_loopCount > 0)
       me->m_loopCount--;
    // Dispatch through the command queue since we can not restart the sound from the callback as the sound is still playing and command would be discarded

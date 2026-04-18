@@ -9,34 +9,26 @@ IEditable::IEditable()
 
 IEditable::~IEditable()
 {
+   assert(m_phittimer == nullptr); // If TimerRelease was not called, then player will hold an invalid reference
    SetPartGroup(nullptr);
-}
-
-void IEditable::SetDirtyDraw()
-{
-   GetPTable()->SetDirtyDraw();
 }
 
 void IEditable::Delete()
 {
-   RemoveFromVectorSingle(GetPTable()->m_vedit, this);
    MarkForDelete();
 
-   if (GetScriptable())
-      GetPTable()->m_pcv->RemoveItem(GetScriptable());
+   GetPTable()->RemovePart(this);
 
    for (size_t i = 0; i < m_vCollection.size(); i++)
    {
-      Collection * const pcollection = m_vCollection[i];
+      Collection *const pcollection = m_vCollection[i];
       pcollection->m_visel.find_erase(GetISelect());
    }
 }
 
 void IEditable::Uncreate()
 {
-   RemoveFromVectorSingle(GetPTable()->m_vedit, this);
-   if (GetScriptable())
-      GetPTable()->m_pcv->RemoveItem(GetScriptable());
+   GetPTable()->RemovePart(this);
 }
 
 void IEditable::SetPartGroup(PartGroup* partGroup)
@@ -44,10 +36,7 @@ void IEditable::SetPartGroup(PartGroup* partGroup)
    if (m_partGroup != partGroup)
    {
       if (partGroup)
-      {
-         assert(std::ranges::find(GetPTable()->m_vedit, partGroup) != GetPTable()->m_vedit.end());
          partGroup->AddRef();
-      }
       if (m_partGroup)
          m_partGroup->Release();
       m_partGroup = partGroup;
@@ -56,8 +45,12 @@ void IEditable::SetPartGroup(PartGroup* partGroup)
 
 string IEditable::GetPathString(const bool isDirOnly) const
 {
-   vector<const PartGroup*> itemPath;
    const PartGroup* parent = GetPartGroup();
+   if (parent == nullptr)
+      return GetName();
+   if (parent->GetPartGroup() == nullptr)
+      return parent->GetName() + '/' + GetName();
+   vector<const PartGroup *> itemPath;
    while (parent != nullptr)
    {
       itemPath.insert(itemPath.begin(), parent);
@@ -79,6 +72,62 @@ bool IEditable::IsChild(const PartGroup* group) const
    return parent == group;
 }
 
+void IEditable::LoadSharedEditableField(const int tag, IObjectReader& reader)
+{
+   switch (tag)
+   {
+   case FID(LOCK): m_uiLocked = reader.AsBool(); break;
+   case FID(LVIS): m_uiVisible = reader.AsBool(); break;
+   case FID(LAYR): // Old layer style (limited number of unnamed layers)
+   {
+      int layerIndex = reader.AsInt();
+      m_onLoadExpectedPartGroup = (layerIndex < 9 ? L"Layer_0" : L"Layer_") + std::to_wstring(layerIndex + 1);
+      break;
+   }
+   case FID(LANR): // 10.7 layers (limited number of named layers)
+   {
+      string layerName = reader.AsString();
+      std::ranges::transform(
+         layerName.begin(), layerName.end(), layerName.begin(), [](char c) { return ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) ? c : '_'; });
+      m_onLoadExpectedPartGroup = MakeWString(layerName);
+      break;
+   }
+   case FID(GRUP): // 10.8.1 groups (unlimited number of hierarchical parenting with properties)
+   {
+      string layerName = reader.AsString();
+      m_onLoadExpectedPartGroup = MakeWString(layerName);
+      break;
+   }
+   default:
+   {
+      PLOGE << "Unhandled token: " << (char)(tag & 0xFF) << (char)((tag >> 8) & 0xFF) << (char)((tag >> 16) & 0xFF) << (char)((tag >> 24) & 0xFF);
+   }
+   }
+}
+
+void IEditable::SaveSharedEditableFields(IObjectWriter& writer)
+{
+   writer.WriteBool(FID(LOCK), m_uiLocked);
+   writer.WriteBool(FID(LVIS), m_uiVisible);
+   if (GetPartGroup())
+   {
+      // Implement backwards 'readability' (file will open in previous versions, with unsupported content dropped)
+      const PartGroup* layer = GetPartGroup();
+      while (layer->GetPartGroup() != nullptr)
+         layer = layer->GetPartGroup();
+      int index = 0;
+      for (const auto edit : GetPTable()->GetParts())
+      {
+         if (edit == layer)
+            break;
+         if (edit->GetItemType() == eItemPartGroup && edit->GetPartGroup() == nullptr)
+            index++;
+      }
+      writer.WriteInt(FID(LAYR), min(index, 11));
+      writer.WriteString(FID(LANR), layer->GetName());
+      writer.WriteString(FID(GRUP), GetPartGroup()->GetName());
+   }
+}
 
 HRESULT IEditable::put_TimerEnabled(VARIANT_BOOL newVal, BOOL *pte)
 {
@@ -87,7 +136,7 @@ HRESULT IEditable::put_TimerEnabled(VARIANT_BOOL newVal, BOOL *pte)
    const BOOL val = VBTOF(newVal);
 
    if (val != *pte && m_phittimer)
-      g_pplayer->DeferTimerStateChange(m_phittimer, !!val);
+      g_pplayer->TimerStateChange(m_phittimer.get(), !!val);
 
    *pte = val;
 
@@ -96,17 +145,14 @@ HRESULT IEditable::put_TimerEnabled(VARIANT_BOOL newVal, BOOL *pte)
    return S_OK;
 }
 
-HRESULT IEditable::put_TimerInterval(long newVal, int *pti)
+HRESULT IEditable::put_TimerInterval(long newVal, int *pTimerInterval)
 {
    STARTUNDO
 
-   *pti = newVal;
+   *pTimerInterval = newVal;
 
    if (m_phittimer)
-   {
-      m_phittimer->m_interval = newVal >= 0 ? max(newVal, (long)MAX_TIMER_MSEC_INTERVAL) : max(-2l, newVal);
-      m_phittimer->m_nextfire = g_pplayer->m_time_msec + m_phittimer->m_interval;
-   }
+      m_phittimer->SetInterval(newVal);
 
    STOPUNDO
 
@@ -132,24 +178,22 @@ HRESULT IEditable::put_UserValue(VARIANT *newVal)
    return hr;
 }
 
-void IEditable::RenderBlueprint(Sur *psur, const bool solid)
-{
-   UIRenderPass2(psur);
-}
-
 void IEditable::BeginUndo()
 {
-   GetPTable()->BeginUndo();
+   if (GetPTable())
+      GetPTable()->BeginUndo();
 }
 
 void IEditable::EndUndo()
 {
-   GetPTable()->EndUndo();
+   if (GetPTable())
+      GetPTable()->EndUndo();
 }
 
 void IEditable::MarkForUndo()
 {
-   GetPTable()->m_undo.MarkForUndo(this);
+   if (GetPTable())
+      GetPTable()->m_undo.MarkForUndo(this);
 }
 
 void IEditable::MarkForDelete()
@@ -161,75 +205,57 @@ void IEditable::MarkForDelete()
 
 void IEditable::Undelete()
 {
-   InitVBA(true, (WCHAR *)this);
-
    for (size_t i = 0; i < m_vCollection.size(); i++)
    {
-      Collection * const pcollection = m_vCollection[i];
+      Collection *const pcollection = m_vCollection[i];
       pcollection->m_visel.push_back(GetISelect());
    }
 }
 
 string IEditable::GetName() const
 {
-   const IScriptable *const pscript = const_cast<IEditable*>(this)->GetScriptable();
+   const IScriptable *const pscript = const_cast<IEditable*>(this)->GetIScriptable();
    if (pscript)
       return MakeString(pscript->get_Name());
    return string();
 }
 
-void IEditable::SetName(const string& name)
+const wstring& IEditable::GetWName() const
 {
-   if (name.empty())
-      return;
-   if (GetItemType() == eItemDecal)
-      return;
-   const PinTable* const pt = GetPTable();
-   if (pt == nullptr)
+   const IScriptable *const pscript = const_cast<IEditable*>(this)->GetIScriptable();
+   if (pscript)
+      return pscript->get_Name();
+   static const wstring emptyString;
+   return emptyString;
+}
+
+void IEditable::SetName(const wstring& name)
+{
+   IScriptable *const scriptable = GetIScriptable();
+   if (name.empty() || scriptable == nullptr)
       return;
 
-   const string oldName = MakeString(GetScriptable()->m_wzName);
+   wstring newName = name;
+   if (newName.length() >= MAXNAMEBUFFER)
+      newName.erase(MAXNAMEBUFFER - 1);
 
-   wstring newName = MakeWString(name);
-   newName = newName.length() >= std::size(GetScriptable()->m_wzName) ? newName.substr(0, std::size(GetScriptable()->m_wzName)-1) : newName;
-   const bool isEqual = newName == GetScriptable()->m_wzName;
-   if(!isEqual && !pt->IsNameUnique(newName))
+   if (newName == scriptable->m_wzName)
+      return;
+
+   if (PinTable* const pt = GetPTable(); pt)
    {
-      WCHAR uniqueName[std::size(GetScriptable()->m_wzName)];
-      pt->GetUniqueName(newName, uniqueName, std::size(GetScriptable()->m_wzName));
-      newName = uniqueName;
-   }
-   STARTUNDO
-   // first update name in the codeview before updating it in the element itself
-   pt->m_pcv->ReplaceName(GetScriptable(), newName);
-   wcsncpy_s(GetScriptable()->m_wzName, std::size(GetScriptable()->m_wzName), newName.c_str());
-#ifndef __STANDALONE__
-   g_pvp->SetPropSel(GetPTable()->m_vmultisel);
-   g_pvp->GetLayersListDialog()->Update();
+      if (!pt->IsNameUnique(newName))
+         newName = pt->GetUniqueName(newName);
 
-   if (GetItemType() == eItemSurface && g_pvp->MessageBox("Replace the name also in all table elements that use this surface?", "Replace", MB_ICONQUESTION | MB_YESNO) == IDYES)
-   for (size_t i = 0; i < pt->m_vedit.size(); i++)
-   {
-      IEditable *const pedit = pt->m_vedit[i];
-      if (pedit->GetItemType() == ItemTypeEnum::eItemBumper && ((Bumper *)pedit)->m_d.m_szSurface == oldName)
-         ((Bumper *)pedit)->m_d.m_szSurface = name;
-      else if (pedit->GetItemType() == ItemTypeEnum::eItemDecal && ((Decal *)pedit)->m_d.m_szSurface == oldName)
-         ((Decal *)pedit)->m_d.m_szSurface = name;
-      else if (pedit->GetItemType() == ItemTypeEnum::eItemFlipper && ((Flipper *)pedit)->m_d.m_szSurface == oldName)
-         ((Flipper *)pedit)->m_d.m_szSurface = name;
-      else if (pedit->GetItemType() == ItemTypeEnum::eItemGate && ((Gate *)pedit)->m_d.m_szSurface == oldName)
-         ((Gate *)pedit)->m_d.m_szSurface = name;
-      else if (pedit->GetItemType() == ItemTypeEnum::eItemKicker && ((Kicker *)pedit)->m_d.m_szSurface == oldName)
-         ((Kicker *)pedit)->m_d.m_szSurface = name;
-      else if (pedit->GetItemType() == ItemTypeEnum::eItemLight && ((Light *)pedit)->m_d.m_szSurface == oldName)
-         ((Light *)pedit)->m_d.m_szSurface = name;
-      else if (pedit->GetItemType() == ItemTypeEnum::eItemPlunger && ((Plunger *)pedit)->m_d.m_szSurface == oldName)
-         ((Plunger *)pedit)->m_d.m_szSurface = name;
-      else if (pedit->GetItemType() == ItemTypeEnum::eItemSpinner && ((Spinner *)pedit)->m_d.m_szSurface == oldName)
-         ((Spinner *)pedit)->m_d.m_szSurface = name;
-      else if (pedit->GetItemType() == ItemTypeEnum::eItemTrigger && ((Trigger *)pedit)->m_d.m_szSurface == oldName)
-         ((Trigger *)pedit)->m_d.m_szSurface = name;
+      STARTUNDO
+      if (pt->HasPart(this))
+         pt->RenamePart(this, newName);
+      else
+         scriptable->m_wzName = newName;
+      STOPUNDO
    }
-#endif
-   STOPUNDO
+   else
+   {
+      scriptable->m_wzName = newName;
+   }
 }

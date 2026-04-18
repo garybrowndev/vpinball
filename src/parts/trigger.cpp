@@ -1,6 +1,9 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
+#include "trigger.h"
+#include "ball.h"
+
 #include "utils/objloader.h"
 #include "meshes/triggerSimpleMesh.h"
 #include "meshes/triggerStarMesh.h"
@@ -8,30 +11,17 @@
 #include "meshes/triggerWireDMesh.h"
 #include "meshes/triggerInderMesh.h"
 #include "renderer/Shader.h"
+#include "ui/win/DragPointDialogs.h"
 
-Trigger::Trigger()
-{
-   m_ptriggerhitcircle = nullptr;
-
-   m_hitEvent = false;
-   m_unhitEvent = false;
-   m_doAnimation = false;
-   m_moveDown = false;
-   m_animHeightOffset = 0.0f;
-   m_vertexBuffer_animHeightOffset = -FLT_MAX;
-
-   m_menuid = IDR_SURFACEMENU;
-   m_propVisual = nullptr;
-}
 
 Trigger::~Trigger()
 {
    assert(m_rd == nullptr);
 }
 
-Trigger *Trigger::CopyForPlay(PinTable *live_table) const
+Trigger *Trigger::CopyForPlay() const
 {
-   STANDARD_EDITABLE_WITH_DRAGPOINT_COPY_FOR_PLAY_IMPL(Trigger, live_table, m_vdpoint)
+   STANDARD_EDITABLE_WITH_DRAGPOINT_COPY_FOR_PLAY_IMPL(Trigger, m_vdpoint)
    return dst;
 }
 
@@ -155,41 +145,54 @@ void Trigger::InitShape(float x, float y)
    }
 }
 
-HRESULT Trigger::Init(PinTable *const ptable, const float x, const float y, const bool fromMouseClick, const bool forPlay)
+HRESULT Trigger::Init(const float x, const float y, const bool fromMouseClick, const bool forPlay)
 {
-   m_ptable = ptable;
    SetDefaults(fromMouseClick);
    m_d.m_vCenter.x = x;
    m_d.m_vCenter.y = y;
    if (m_vdpoint.empty())
       InitShape(x, y);
-   return forPlay ? S_OK : InitVBA(true, nullptr);
+   return S_OK;
 }
 
 void Trigger::SetDefaults(const bool fromMouseClick)
 {
-#define regKey Settings::DefaultPropsTrigger
+#define LinkProp(field, prop) field = fromMouseClick ? g_app->m_settings.GetDefaultPropsTrigger_##prop() : Settings::GetDefaultPropsTrigger_##prop##_Default()
+   LinkProp(m_d.m_radius, Radius);
+   LinkProp(m_d.m_rotation, Rotation);
+   LinkProp(m_d.m_wireThickness, WireThickness);
+   LinkProp(m_d.m_scaleX, ScaleX);
+   LinkProp(m_d.m_scaleY, ScaleY);
+   LinkProp(m_d.m_enabled, Enabled);
+   LinkProp(m_d.m_visible, Visible);
+   LinkProp(m_d.m_hit_height, HitHeight);
+   LinkProp(m_d.m_shape, Shape);
+   LinkProp(m_d.m_szSurface, Surface);
+   LinkProp(m_d.m_animSpeed, AnimSpeed);
+   LinkProp(m_d.m_reflectionEnabled, ReflectionEnabled);
+   LinkProp(m_timerEnabled, TimerEnabled);
+   LinkProp(m_timerInterval, TimerInterval);
+#undef LinkProp
+}
 
-   m_d.m_radius = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Radius"s, 25.0f) : 25.0f;
-   m_d.m_rotation = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Rotation"s, 0.f) : 0.f;
-   m_d.m_wireThickness = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "WireThickness"s, 0.f) : 0.f;
-   m_d.m_scaleX = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "ScaleX"s, 1.f) : 1.f;
-   m_d.m_scaleY = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "ScaleY"s, 1.f) : 1.f;
-   m_d.m_tdr.m_TimerEnabled = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "TimerEnabled"s, false) : false;
-   m_d.m_tdr.m_TimerInterval = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "TimerInterval"s, 100) : 100;
-   m_d.m_enabled = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Enabled"s, true) : true;
-   m_d.m_visible = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Visible"s, true) : true;
-   m_d.m_hit_height = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "HitHeight"s, 50.f) : 50.f;
-   m_d.m_shape = fromMouseClick ? (TriggerShape)g_pvp->m_settings.LoadValueWithDefault(regKey, "Shape"s, (int)TriggerWireA) : TriggerWireA;
-
-   const bool hr = g_pvp->m_settings.LoadValue(regKey, "Surface"s, m_d.m_szSurface);
-   if (!hr || !fromMouseClick)
-      m_d.m_szSurface.clear();
-
-   m_d.m_animSpeed = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "AnimSpeed"s, 1.f) : 1.f;
-   m_d.m_reflectionEnabled = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "ReflectionEnabled"s, true) : true;
-
-#undef regKey
+void Trigger::WriteRegDefaults()
+{
+#define LinkProp(field, prop) g_app->m_settings.SetDefaultPropsTrigger_##prop(field, false)
+   LinkProp(m_d.m_radius, Radius);
+   LinkProp(m_d.m_rotation, Rotation);
+   LinkProp(m_d.m_wireThickness, WireThickness);
+   LinkProp(m_d.m_scaleX, ScaleX);
+   LinkProp(m_d.m_scaleY, ScaleY);
+   LinkProp(m_d.m_enabled, Enabled);
+   LinkProp(m_d.m_visible, Visible);
+   LinkProp(m_d.m_hit_height, HitHeight);
+   LinkProp(m_d.m_shape, Shape);
+   LinkProp(m_d.m_szSurface, Surface);
+   LinkProp(m_d.m_animSpeed, AnimSpeed);
+   LinkProp(m_d.m_reflectionEnabled, ReflectionEnabled);
+   LinkProp(m_timerEnabled, TimerEnabled);
+   LinkProp(m_timerInterval, TimerInterval);
+#undef LinkProp
 }
 
 void Trigger::UIRenderPass1(Sur * const psur)
@@ -232,7 +235,7 @@ void Trigger::UIRenderPass2(Sur * const psur)
 
       psur->Polygon(vvertex);
 
-      bool drawDragpoints = (m_selectstate != eNotSelected) || (m_vpinball->m_alwaysDrawDragPoints);
+      bool drawDragpoints = (m_selectstate != SelectState::NotSelected) || (m_vpinball->m_alwaysDrawDragPoints);
       // if the item is selected then draw the dragpoints (or if we are always to draw dragpoints)
       if (!drawDragpoints)
       {
@@ -240,7 +243,7 @@ void Trigger::UIRenderPass2(Sur * const psur)
          for (size_t i = 0; i < m_vdpoint.size(); i++)
          {
             const CComObject<DragPoint> * const pdp = m_vdpoint[i];
-            if (pdp->m_selectstate != eNotSelected)
+            if (pdp->m_selectstate != SelectState::NotSelected)
             {
                drawDragpoints = true;
                break;
@@ -269,7 +272,8 @@ void Trigger::UIRenderPass2(Sur * const psur)
       psur->Line(m_d.m_vCenter.x - m_d.m_radius, m_d.m_vCenter.y, m_d.m_vCenter.x + m_d.m_radius, m_d.m_vCenter.y);
       psur->Line(m_d.m_vCenter.x, m_d.m_vCenter.y - m_d.m_radius, m_d.m_vCenter.x, m_d.m_vCenter.y + m_d.m_radius);
 
-      const float r2 = m_d.m_radius * (float)sin(M_PI / 4.0);
+      static const/*expr*/ float sp4 = (float)sin(M_PI / 4.0);
+      const float r2 = m_d.m_radius * sp4;
 
       psur->Line(m_d.m_vCenter.x - r2, m_d.m_vCenter.y - r2, m_d.m_vCenter.x + r2, m_d.m_vCenter.y + r2);
       psur->Line(m_d.m_vCenter.x - r2, m_d.m_vCenter.y + r2, m_d.m_vCenter.x + r2, m_d.m_vCenter.y - r2);
@@ -316,6 +320,11 @@ void Trigger::RenderBlueprint(Sur *psur, const bool solid)
 
 void Trigger::PhysicSetup(PhysicsEngine* physics, const bool isUI)
 {
+   m_hitEvent = false;
+
+   if (!isUI && GetPartGroup() != nullptr && GetPartGroup()->GetReferenceSpace() != PartGroupData::SpaceReference::SR_PLAYFIELD)
+      return;
+
    const float height = m_ptable->GetSurfaceHeight(m_d.m_szSurface, m_d.m_vCenter.x, m_d.m_vCenter.y);
    if (m_d.m_shape == TriggerStar || m_d.m_shape == TriggerButton)
    {
@@ -454,18 +463,17 @@ void Trigger::RenderSetup(RenderDevice *device)
    }
 
    GenerateMesh();
-   IndexBuffer *triggerIndexBuffer = new IndexBuffer(m_rd, m_numIndices, indices);
-   VertexBuffer *vertexBuffer = new VertexBuffer(m_rd, m_numVertices, (float*) m_triggerVertices, true);
-   m_meshBuffer = new MeshBuffer(m_wzName, vertexBuffer, triggerIndexBuffer, true);
+   std::shared_ptr<IndexBuffer> triggerIndexBuffer = std::make_shared<IndexBuffer>(m_rd, m_numIndices, indices);
+   std::shared_ptr<VertexBuffer> vertexBuffer = std::make_shared<VertexBuffer>(m_rd, m_numVertices, (float *)m_triggerVertices, true);
+   m_meshBuffer = std::make_shared<MeshBuffer>(GetName(), vertexBuffer, triggerIndexBuffer, true);
 }
 
 void Trigger::RenderRelease()
 {
    assert(m_rd != nullptr);
    m_rd = nullptr;
-   delete m_meshBuffer;
-   delete[] m_triggerVertices;
    m_meshBuffer = nullptr;
+   delete[] m_triggerVertices;
    m_triggerVertices = nullptr;
 }
 
@@ -534,7 +542,7 @@ void Trigger::UpdateAnimation(const float diff_time_msec)
 void Trigger::Render(const unsigned int renderMask)
 {
    assert(m_rd != nullptr);
-   assert(!m_backglass);
+   assert(!m_desktopBackdrop);
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
    const bool isReflectionPass = renderMask & Renderer::REFLECTION_PASS;
@@ -772,15 +780,14 @@ void Trigger::PutPointCenter(const Vertex2D& pv)
    m_d.m_vCenter = pv;
 }
 
+#ifndef __STANDALONE__
 void Trigger::EditMenu(CMenu &menu)
 {
-#ifndef __STANDALONE__
    menu.EnableMenuItem(ID_WALLMENU_FLIP, MF_BYCOMMAND | MF_ENABLED);
    menu.EnableMenuItem(ID_WALLMENU_MIRROR, MF_BYCOMMAND | MF_ENABLED);
    menu.EnableMenuItem(ID_WALLMENU_ROTATE, MF_BYCOMMAND | MF_ENABLED);
    menu.EnableMenuItem(ID_WALLMENU_SCALE, MF_BYCOMMAND | MF_ENABLED);
    menu.EnableMenuItem(ID_WALLMENU_ADDPOINT, MF_BYCOMMAND | MF_ENABLED);
-#endif
 }
 
 void Trigger::DoCommand(int icmd, int x, int y)
@@ -798,15 +805,15 @@ void Trigger::DoCommand(int icmd, int x, int y)
       break;
 
    case ID_WALLMENU_ROTATE:
-      RotateDialog();
+      VPX::WinUI::RotatePointsDialog(this);
       break;
 
    case ID_WALLMENU_SCALE:
-      ScaleDialog();
+      VPX::WinUI::ScalePointsDialog(this);
       break;
 
    case ID_WALLMENU_TRANSLATE:
-      TranslateDialog();
+      VPX::WinUI::TranslatePointsDialog(this);
       break;
 
    case ID_WALLMENU_ADDPOINT:
@@ -845,6 +852,7 @@ void Trigger::DoCommand(int icmd, int x, int y)
    break;
    }
 }
+#endif
 
 void Trigger::FlipY(const Vertex2D& pvCenter)
 {
@@ -864,9 +872,9 @@ void Trigger::Rotate(const float ang, const Vertex2D& pvCenter, const bool useEl
       IHaveDragPoints::RotatePoints(ang, pvCenter, useElementCenter);
    else
    {
-      STARTUNDOSELECT
+      STARTUNDO
       m_d.m_rotation = ang;
-      STOPUNDOSELECT
+      STOPUNDO
       UpdateStatusBarInfo();
    }
 }
@@ -877,10 +885,10 @@ void Trigger::Scale(const float scalex, const float scaley, const Vertex2D& pvCe
       IHaveDragPoints::ScalePoints(scalex, scaley, pvCenter, useElementCenter);
    else
    {
-      STARTUNDOSELECT
+      STARTUNDO
       m_d.m_scaleX = scalex;
       m_d.m_scaleY = scaley;
-      STOPUNDOSELECT
+      STOPUNDO
       UpdateStatusBarInfo();
    }
 }
@@ -891,43 +899,34 @@ void Trigger::Translate(const Vertex2D &pvOffset)
       IHaveDragPoints::TranslatePoints(pvOffset);
    else
    {
-      STARTUNDOSELECT
+      STARTUNDO
       MoveOffset(pvOffset.x, pvOffset.y);
-      STOPUNDOSELECT
+      STOPUNDO
    }
 }
 
-HRESULT Trigger::SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool saveForUndo)
+void Trigger::Save(IObjectWriter& writer, const bool saveForUndo)
 {
-   BiffWriter bw(pstm, hcrypthash);
-
-   bw.WriteVector2(FID(VCEN), m_d.m_vCenter);
-   bw.WriteFloat(FID(RADI), m_d.m_radius);
-   bw.WriteFloat(FID(ROTA), m_d.m_rotation);
-   bw.WriteFloat(FID(WITI), m_d.m_wireThickness);
-   bw.WriteFloat(FID(SCAX), m_d.m_scaleX);
-   bw.WriteFloat(FID(SCAY), m_d.m_scaleY);
-   bw.WriteBool(FID(TMON), m_d.m_tdr.m_TimerEnabled);
-   bw.WriteInt(FID(TMIN), m_d.m_tdr.m_TimerInterval);
-   bw.WriteString(FID(SURF), m_d.m_szSurface);
-   bw.WriteString(FID(MATR), m_d.m_szMaterial);
-   bw.WriteBool(FID(EBLD), m_d.m_enabled);
-   bw.WriteBool(FID(VSBL), m_d.m_visible);
-   bw.WriteFloat(FID(THOT), m_d.m_hit_height);
-   bw.WriteWideString(FID(NAME), m_wzName);
-   bw.WriteInt(FID(SHAP), m_d.m_shape);
-   bw.WriteFloat(FID(ANSP), m_d.m_animSpeed);
-   bw.WriteBool(FID(REEN), m_d.m_reflectionEnabled);
-
-   ISelect::SaveData(pstm, hcrypthash);
-
-   HRESULT hr;
-   if (FAILED(hr = SavePointData(pstm, hcrypthash)))
-      return hr;
-
-   bw.WriteTag(FID(ENDB));
-
-   return S_OK;
+   writer.WriteVector2(FID(VCEN), m_d.m_vCenter);
+   writer.WriteFloat(FID(RADI), m_d.m_radius);
+   writer.WriteFloat(FID(ROTA), m_d.m_rotation);
+   writer.WriteFloat(FID(WITI), m_d.m_wireThickness);
+   writer.WriteFloat(FID(SCAX), m_d.m_scaleX);
+   writer.WriteFloat(FID(SCAY), m_d.m_scaleY);
+   writer.WriteBool(FID(TMON), m_timerEnabled);
+   writer.WriteInt(FID(TMIN), m_timerInterval);
+   writer.WriteString(FID(SURF), m_d.m_szSurface);
+   writer.WriteString(FID(MATR), m_d.m_szMaterial);
+   writer.WriteBool(FID(EBLD), m_d.m_enabled);
+   writer.WriteBool(FID(VSBL), m_d.m_visible);
+   writer.WriteFloat(FID(THOT), m_d.m_hit_height);
+   writer.WriteWideString(FID(NAME), m_wzName);
+   writer.WriteInt(FID(SHAP), m_d.m_shape);
+   writer.WriteFloat(FID(ANSP), m_d.m_animSpeed);
+   writer.WriteBool(FID(REEN), m_d.m_reflectionEnabled);
+   SaveSharedEditableFields(writer);
+   SavePoints(writer);
+   writer.EndObject();
 }
 
 void Trigger::ClearForOverwrite()
@@ -935,77 +934,37 @@ void Trigger::ClearForOverwrite()
    ClearPointsForOverwrite();
 }
 
-void Trigger::WriteRegDefaults()
-{
-#define regKey Settings::DefaultPropsTrigger
-
-   g_pvp->m_settings.SaveValue(regKey, "TimerEnabled"s, m_d.m_tdr.m_TimerEnabled);
-   g_pvp->m_settings.SaveValue(regKey, "TimerInterval"s, m_d.m_tdr.m_TimerInterval);
-   g_pvp->m_settings.SaveValue(regKey, "Enabled"s, m_d.m_enabled);
-   g_pvp->m_settings.SaveValue(regKey, "Visible"s, m_d.m_visible);
-   g_pvp->m_settings.SaveValue(regKey, "HitHeight"s, m_d.m_hit_height);
-   g_pvp->m_settings.SaveValue(regKey, "Radius"s, m_d.m_radius);
-   g_pvp->m_settings.SaveValue(regKey, "Rotation"s, m_d.m_rotation);
-   g_pvp->m_settings.SaveValue(regKey, "WireThickness"s, m_d.m_wireThickness);
-   g_pvp->m_settings.SaveValue(regKey, "ScaleX"s, m_d.m_scaleX);
-   g_pvp->m_settings.SaveValue(regKey, "ScaleY"s, m_d.m_scaleY);
-   g_pvp->m_settings.SaveValue(regKey, "Shape"s, m_d.m_shape);
-   g_pvp->m_settings.SaveValue(regKey, "Surface"s, m_d.m_szSurface);
-   g_pvp->m_settings.SaveValue(regKey, "AnimSpeed"s, m_d.m_animSpeed);
-   g_pvp->m_settings.SaveValue(regKey, "ReflectionEnabled"s, m_d.m_reflectionEnabled);
-
-#undef regKey
-}
-
-HRESULT Trigger::InitLoad(IStream *pstm, PinTable *ptable, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey)
+void Trigger::Load(IObjectReader& reader)
 {
    SetDefaults(false);
-
-   BiffReader br(pstm, this, version, hcrypthash, hcryptkey);
-
-   m_ptable = ptable;
-
-   br.Load();
-   return S_OK;
-}
-
-bool Trigger::LoadToken(const int id, BiffReader * const pbr)
-{
-   switch(id)
-   {
-   case FID(PIID): { int pid; pbr->GetInt(&pid); } break;
-   case FID(VCEN): pbr->GetVector2(m_d.m_vCenter); break;
-   case FID(RADI): pbr->GetFloat(m_d.m_radius); break;
-   case FID(ROTA): pbr->GetFloat(m_d.m_rotation); break;
-   case FID(WITI): pbr->GetFloat(m_d.m_wireThickness); break;
-   case FID(SCAX): pbr->GetFloat(m_d.m_scaleX); break;
-   case FID(SCAY): pbr->GetFloat(m_d.m_scaleY); break;
-   case FID(MATR): pbr->GetString(m_d.m_szMaterial); break;
-   case FID(TMON): pbr->GetBool(m_d.m_tdr.m_TimerEnabled); break;
-   case FID(TMIN): pbr->GetInt(m_d.m_tdr.m_TimerInterval); break;
-   case FID(SURF): pbr->GetString(m_d.m_szSurface); break;
-   case FID(EBLD): pbr->GetBool(m_d.m_enabled); break;
-   case FID(THOT): pbr->GetFloat(m_d.m_hit_height); break;
-   case FID(VSBL): pbr->GetBool(m_d.m_visible); break;
-   case FID(REEN): pbr->GetBool(m_d.m_reflectionEnabled); break;
-   case FID(SHAP): pbr->GetInt(&m_d.m_shape); break;
-   case FID(ANSP): pbr->GetFloat(m_d.m_animSpeed); break;
-   case FID(NAME): pbr->GetWideString(m_wzName, std::size(m_wzName)); break;
-   default:
-   {
-      if (id == FID(DPNT))
-         LoadPointToken(pbr);
-      ISelect::LoadToken(id, pbr);
-      break;
-   }
-   }
-   return true;
-}
-
-HRESULT Trigger::InitPostLoad()
-{
-   UpdateStatusBarInfo();
-   return S_OK;
+   reader.AsObject(
+      [this](int tag, IObjectReader& reader)
+      {
+         switch (tag)
+         {
+         case FID(PIID): reader.AsInt(); break;
+         case FID(VCEN): m_d.m_vCenter = reader.AsVector2(); break;
+         case FID(RADI): m_d.m_radius = reader.AsFloat(); break;
+         case FID(ROTA): m_d.m_rotation = reader.AsFloat(); break;
+         case FID(WITI): m_d.m_wireThickness = reader.AsFloat(); break;
+         case FID(SCAX): m_d.m_scaleX = reader.AsFloat(); break;
+         case FID(SCAY): m_d.m_scaleY = reader.AsFloat(); break;
+         case FID(MATR): m_d.m_szMaterial = reader.AsString(); break;
+         case FID(TMON): m_timerEnabled = reader.AsBool(); break;
+         case FID(TMIN): m_timerInterval = reader.AsInt(); break;
+         case FID(SURF): m_d.m_szSurface = reader.AsString(); break;
+         case FID(EBLD): m_d.m_enabled = reader.AsBool(); break;
+         case FID(THOT): m_d.m_hit_height = reader.AsFloat(); break;
+         case FID(VSBL): m_d.m_visible = reader.AsBool(); break;
+         case FID(REEN): m_d.m_reflectionEnabled = reader.AsBool(); break;
+         case FID(SHAP): m_d.m_shape = static_cast<TriggerShape>(reader.AsInt()); break;
+         case FID(ANSP): m_d.m_animSpeed = reader.AsFloat(); break;
+         case FID(NAME): m_wzName = reader.AsWideString(); break;
+         case FID(DPNT): LoadPointToken(reader); break;
+         default: LoadSharedEditableField(tag, reader); break;
+         }
+         return true;
+      });
 }
 
 STDMETHODIMP Trigger::InterfaceSupportsErrorInfo(REFIID riid)
@@ -1037,7 +996,8 @@ STDMETHODIMP Trigger::put_Radius(float newVal)
 STDMETHODIMP Trigger::get_X(float *pVal)
 {
    *pVal = m_d.m_vCenter.x;
-   m_vpinball->SetStatusBarUnitInfo(string(), true);
+   if (m_vpinball)
+      m_vpinball->SetStatusBarUnitInfo(string(), true);
 
    return S_OK;
 }
@@ -1109,9 +1069,9 @@ STDMETHODIMP Trigger::BallCntOver(int *pVal)
    {
       for (size_t i = 0; i < g_pplayer->m_vball.size(); i++)
       {
-         HitBall *const pball = g_pplayer->m_vball[i];
+         Ball *const pball = g_pplayer->m_vball[i];
 
-         if (pball->m_d.m_vpVolObjs && FindIndexOf(*(pball->m_d.m_vpVolObjs), (IFireEvents*)this) >= 0) // cast to IFireEvents necessary, as it is stored like this in HitObject.m_obj
+         if (pball->m_hitBall.m_d.m_vpVolObjs && FindIndexOf(*(pball->m_hitBall.m_d.m_vpVolObjs), (IFireEvents*)this) >= 0) // cast to IFireEvents necessary, as it is stored like this in HitObject.m_obj
          {
             g_pplayer->m_pactiveball = pball; // set active ball for scriptor
             ++cnt;
@@ -1132,16 +1092,16 @@ STDMETHODIMP Trigger::DestroyBall(int *pVal)
    if (!g_pplayer)
       return S_OK;
 
-   for (HitBall *ball : g_pplayer->m_vball)
+   for (Ball *ball : g_pplayer->m_vball)
    {
-      if (ball->m_d.m_vpVolObjs)
+      if (ball->m_hitBall.m_d.m_vpVolObjs)
       {
-         auto it = std::ranges::find(*(ball->m_d.m_vpVolObjs), (IFireEvents *)this); // cast to IFireEvents necessary, as it is stored like this in HitObject.m_obj
-         if (it != ball->m_d.m_vpVolObjs->end())
+         const auto it = std::ranges::find(*(ball->m_hitBall.m_d.m_vpVolObjs), (IFireEvents *)this); // cast to IFireEvents necessary, as it is stored like this in HitObject.m_obj
+         if (it != ball->m_hitBall.m_d.m_vpVolObjs->end())
          {
             if (pVal)
-               *pVal++;
-            ball->m_d.m_vpVolObjs->erase(it);
+               (*pVal) = (*pVal) + 1;
+            ball->m_hitBall.m_d.m_vpVolObjs->erase(it);
             g_pplayer->DestroyBall(ball); // inside trigger volume?
          }
       }

@@ -8,27 +8,31 @@
 // same local area network. The use case is to allow to play in VR on a cabinet,
 // while the cabinet computer is not powerful enough to feed the VR headset.
 
-#include "MsgPlugin.h"
-#include "VPXPlugin.h"
+#include "plugins/MsgPlugin.h"
+#include "plugins/VPXPlugin.h"
 #include <cassert>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
+using namespace std::string_literals;
+using namespace std::string_view_literals;
 #include <chrono>
 #include <thread>
 #include <semaphore>
+//#include <format>
 
 // Shared logging
-#include "LoggingPlugin.h"
+#include "plugins/LoggingPlugin.h"
 
 namespace RemoteControl {
 
-LPI_USE();
-#define LOGD RemoteControl::LPI_LOGD
-#define LOGI RemoteControl::LPI_LOGI
-#define LOGW RemoteControl::LPI_LOGW
-#define LOGE RemoteControl::LPI_LOGE
+LPI_USE_CPP();
+#define LOGD RemoteControl::LPI_LOGD_CPP
+#define LOGI RemoteControl::LPI_LOGI_CPP
+#define LOGW RemoteControl::LPI_LOGW_CPP
+#define LOGE RemoteControl::LPI_LOGE_CPP
 
 ///////////////////////////////////////////////////////////////////////////////
 // Minimal portable sockets
@@ -85,7 +89,7 @@ protected:
    void inetPton(const char* host, struct sockaddr_in& saddr_in)
    {
       #ifdef _WIN32
-         #ifdef UNICODE
+         #ifdef _UNICODE
             InetPtonA(AF_INET, host, &(saddr_in.sin_addr.s_addr));
          #else
             InetPton(AF_INET, host, &(saddr_in.sin_addr.s_addr));
@@ -123,7 +127,7 @@ public:
 class UdpSocket : public Socket
 {
 protected:
-   struct sockaddr_in _si_other { 0 };
+   struct sockaddr_in _si_other {};
    socklen_t _slen = sizeof(_si_other);
 
    void setupTimeout(uint32_t msec)
@@ -141,7 +145,7 @@ public:
    {
       return recvfrom(_sock, (char*)buf, (int)len, 0, (struct sockaddr*)&_si_other, &_slen);
    }
-   bool hasTimedOut()
+   static bool hasTimedOut()
    {
       #ifdef _WIN32
          return WSAGetLastError() == WSAETIMEDOUT;
@@ -255,8 +259,13 @@ enum class ConnectionState
 };
 ConnectionState connectionState = ConnectionState::Unconnected;
 
+const char* runModeLiterals[] = { "Controller", "Player" };
+MSGPI_ENUM_VAL_SETTING(runModeProp, "RunMode", "Mode", "Select between Controller and Player mode", true, 1, 2, runModeLiterals, 1);
+MSGPI_INT_VAL_SETTING(portProp, "Port", "Port", "", true, 0, 0xFFFF, 0);
+MSGPI_STRING_VAL_SETTING(hostProp, "Host", "Host", "", true, "", 1024);
 
-void onPrepareFrame(const unsigned int eventId, void* userData, void* eventData)
+
+static void onPrepareFrame(const unsigned int eventId, void* userData, void* eventData)
 {
    switch (connectionState)
    {
@@ -274,10 +283,11 @@ void onPrepareFrame(const unsigned int eventId, void* userData, void* eventData)
       else if (runMode == RunMode::RunModePlayer)
          vpxApi->PushNotification("Remote controller disconnected", 1000);
       break;
+   default: break;
    }
 }
 
-void onControllerActionEvent(const unsigned int eventId, void* userData, void* eventData)
+static void onControllerActionEvent(const unsigned int eventId, void* userData, void* eventData)
 {
    if (connectionState == ConnectionState::Connected)
    {
@@ -295,10 +305,11 @@ void onControllerActionEvent(const unsigned int eventId, void* userData, void* e
    }
 }
 
-void onControllerUpdatePhysics(const unsigned int eventId, void* userData, void* eventData)
+static void onControllerUpdatePhysics(const unsigned int eventId, void* userData, void* eventData)
 {
    // Gather input state and broadcast it to the server
-   uint64_t newKeyState;
+   // FIXME reimplement
+   /* uint64_t newKeyState;
    float newNudgeX, newNudgeY, newPlunger;
    vpxApi->GetInputState(&newKeyState, &newNudgeX, &newNudgeY, &newPlunger);
    if ((lastState.keyState != actionState) || (lastState.nudgeX != newNudgeX) || (lastState.nudgeY != newNudgeY) || (lastState.plunger != newPlunger))
@@ -309,45 +320,39 @@ void onControllerUpdatePhysics(const unsigned int eventId, void* userData, void*
       lastState.nudgeY = newNudgeY;
       lastState.plunger = newPlunger;
       msgReadySem.release();
-   }
+   }*/
 }
 
-void onPlayerUpdatePhysics(const unsigned int eventId, void* userData, void* eventData)
+static void onPlayerUpdatePhysics(const unsigned int eventId, void* userData, void* eventData)
 {
    // Process any pending message from the controller
    if (lastState.timestamp != lastPlayerAppliedStateTimestamp)
    {
-      // LOGI(">>> New InputState %08x", lastState.timestamp);
+      // LOGI(std::format(">>> New InputState {:08x}", lastState.timestamp));
       lastPlayerAppliedStateTimestamp = lastState.timestamp;
-      actionState = lastState.keyState & ~(1 << VPXACTION_Debugger);
-      vpxApi->SetInputState(actionState, lastState.nudgeX, lastState.nudgeY, lastState.plunger);
+      actionState = lastState.keyState;
+      // FIXME vpxApi->SetInputState(actionState, lastState.nudgeX, lastState.nudgeY, lastState.plunger);
    }
 }
 
-void onGameStart(const unsigned int eventId, void* userData, void* eventData)
+static void onGameStart(const unsigned int eventId, void* userData, void* eventData)
 {
    lastState.timestamp = 0;
-   char buf[32];
-   msgApi->GetSetting("RemoteControl", "RunMode", buf, sizeof(buf));
-   int opt = atoi(buf);
-   msgApi->GetSetting("RemoteControl", "Port", buf, sizeof(buf));
-   int port = atoi(buf);
-   msgApi->GetSetting("RemoteControl", "Host", buf, sizeof(buf));
-   if (opt == 1)
+   if (runModeProp_Val == 1)
    {
       runMode = RunMode::RunModeController;
-      LOGI("RemoteControl plugin started as controller (client mode, server ip is %s:%d)", buf, port);
-      udpThread = std::thread([buf, port]()
+      LOGI("RemoteControl plugin started as controller (client mode, server ip is "s + hostProp_Get() + ':' + std::to_string(portProp_Val) + ')');
+      udpThread = std::thread([]()
          {
             using namespace std::literals;
             StateMsg stateMsg;
-            UdpClientSocket client(buf, port, 500);
-            auto start = std::chrono::high_resolution_clock::now();
+            UdpClientSocket client(hostProp_Get(), portProp_Val, 500);
+            const auto start = std::chrono::steady_clock::now();
             while (runMode != RunMode::RunModeNone)
             {
                msgReadySem.acquire();
                stateMsg = lastState;
-               stateMsg.timestamp = static_cast<uint32_t>((std::chrono::high_resolution_clock::now() - start) / 1us);
+               stateMsg.timestamp = static_cast<uint32_t>((std::chrono::steady_clock::now() - start) / 1us);
                int sent = 0;
                while (sent < sizeof(stateMsg))
                {
@@ -356,18 +361,18 @@ void onGameStart(const unsigned int eventId, void* userData, void* eventData)
                   {
                      if (client.hasTimedOut())
                      {
-                        LOGE("RemoteControl failed to send input state over network (timed out), retrying");
+                        LOGE("RemoteControl failed to send input state over network (timed out), retrying"s);
                      }
                      else
                      {
-                        LOGE("RemoteControl failed to send input state over network, stopping");
+                        LOGE("RemoteControl failed to send input state over network, stopping"s);
                         runMode = RunMode::RunModeNone;
                      }
                      break;
                   }
                   sent += n;
                }
-               // LOGD("Sent %08x", stateMsg.timestamp);
+               // LOGD(std::format("Sent {:08x}", stateMsg.timestamp));
                int n = client.receiveData(reinterpret_cast<char*>(&stateMsg), 1);
                if (n == 1) // Acked, therefore connected
                {
@@ -386,16 +391,16 @@ void onGameStart(const unsigned int eventId, void* userData, void* eventData)
       msgApi->SubscribeMsg(endpointId, onUpdatePhysicsId, onControllerUpdatePhysics, nullptr);
       msgApi->SubscribeMsg(endpointId, onPrepareFrameId, onPrepareFrame, nullptr);
       float newNudgeX, newNudgeY, newPlunger;
-      vpxApi->GetInputState(&actionState, &newNudgeX, &newNudgeY, &newPlunger);
+      // FIXME vpxApi->GetInputState(&actionState, &newNudgeX, &newNudgeY, &newPlunger);
    }
-   else if (opt == 2)
+   else if (runModeProp_Val == 2)
    {
       runMode = RunMode::RunModePlayer;
-      LOGI("RemoteControl plugin started as player (server mode, using port: %d)", port);
-      udpThread = std::thread([port]()
+      LOGI("RemoteControl plugin started as player (server mode, using port: "s + std::to_string(portProp_Val) + ')');
+      udpThread = std::thread([]()
          {
             StateMsg stateMsg;
-            UdpServerSocket server(port, 500);
+            UdpServerSocket server(portProp_Val, 500);
             while (runMode != RunMode::RunModeNone)
             {
                int rcv = 0;
@@ -407,11 +412,11 @@ void onGameStart(const unsigned int eventId, void* userData, void* eventData)
                      // Just ignore failed request and continue to wait for messages
                      /* if (server.hasTimedOut())
                      {
-                        LOGE("RemoteControl failed to receive controller state (timed out), retrying");
+                        LOGE("RemoteControl failed to receive controller state (timed out), retrying"s);
                      }
                      else
                      {
-                        LOGE("RemoteControl failed to receive controller state, stopping");
+                        LOGE("RemoteControl failed to receive controller state, stopping"s);
                         runMode = RunMode::RunModeNone;
                      } */
                      break;
@@ -422,11 +427,11 @@ void onGameStart(const unsigned int eventId, void* userData, void* eventData)
                {
                   if (stateMsg.version != 0)
                   {
-                     LOGE("RemoteControl plugin versions do not match");
+                     LOGE("RemoteControl plugin versions do not match"s);
                      runMode = RunMode::RunModeNone;
                      break;
                   }
-                  //LOGD("Rcv ok %08x", stateMsg.timestamp);
+                  // LOGD(std::format("Rcv ok {:08x}", stateMsg.timestamp));
                   lastState = stateMsg;
                   server.sendData(&stateMsg, 1);
                }
@@ -443,18 +448,18 @@ void onGameStart(const unsigned int eventId, void* userData, void* eventData)
    }
 }
 
-void stopThread()
+static void stopThread()
 {
    if (runMode == RunMode::RunModePlayer)
    {
-      msgApi->UnsubscribeMsg(onUpdatePhysicsId, onPlayerUpdatePhysics);
-      msgApi->UnsubscribeMsg(onPrepareFrameId, onPrepareFrame);
+      msgApi->UnsubscribeMsg(onUpdatePhysicsId, onPlayerUpdatePhysics, nullptr);
+      msgApi->UnsubscribeMsg(onPrepareFrameId, onPrepareFrame, nullptr);
    }
    else if (runMode == RunMode::RunModeController)
    {
-      msgApi->UnsubscribeMsg(onUpdatePhysicsId, onControllerUpdatePhysics);
-      msgApi->UnsubscribeMsg(onPrepareFrameId, onPrepareFrame);
-      msgApi->UnsubscribeMsg(onActionEventId, onControllerActionEvent);
+      msgApi->UnsubscribeMsg(onUpdatePhysicsId, onControllerUpdatePhysics, nullptr);
+      msgApi->UnsubscribeMsg(onPrepareFrameId, onPrepareFrame, nullptr);
+      msgApi->UnsubscribeMsg(onActionEventId, onControllerActionEvent, nullptr);
    }
    runMode = RunMode::RunModeNone;
    if (udpThread.joinable())
@@ -464,12 +469,12 @@ void stopThread()
    }
 }
 
-void onGameEnd(const unsigned int eventId, void* userData, void* eventData)
+static void onGameEnd(const unsigned int eventId, void* userData, void* eventData)
 {
    stopThread();
 }
 
-LPI_IMPLEMENT // Implement shared login support
+LPI_IMPLEMENT_CPP // Implement shared log support
 
 }
 
@@ -481,6 +486,9 @@ MSGPI_EXPORT void MSGPIAPI RemoteControlPluginLoad(const uint32_t sessionId, con
    endpointId = sessionId;
    runMode = RunMode::RunModeNone;
    LPISetup(endpointId, msgApi); // Request and setup shared login API
+   msgApi->RegisterSetting(endpointId, &runModeProp);
+   msgApi->RegisterSetting(endpointId, &portProp);
+   msgApi->RegisterSetting(endpointId, &hostProp);
    msgApi->BroadcastMsg(endpointId, getVpxApiId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_API), &vpxApi);
    msgApi->SubscribeMsg(endpointId, onGameStartId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_GAME_START), onGameStart, nullptr);
    msgApi->SubscribeMsg(endpointId, onGameEndId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_ON_GAME_END), onGameEnd, nullptr);
@@ -492,8 +500,8 @@ MSGPI_EXPORT void MSGPIAPI RemoteControlPluginLoad(const uint32_t sessionId, con
 MSGPI_EXPORT void MSGPIAPI RemoteControlPluginUnload()
 {
    stopThread();
-   msgApi->UnsubscribeMsg(onGameStartId, onGameStart);
-   msgApi->UnsubscribeMsg(onGameEndId, onGameEnd);
+   msgApi->UnsubscribeMsg(onGameStartId, onGameStart, nullptr);
+   msgApi->UnsubscribeMsg(onGameEndId, onGameEnd, nullptr);
    msgApi->ReleaseMsgID(getVpxApiId);
    msgApi->ReleaseMsgID(onGameStartId);
    msgApi->ReleaseMsgID(onGameEndId);

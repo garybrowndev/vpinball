@@ -1,6 +1,8 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
+#include "spinner.h"
+
 #include "utils/objloader.h"
 #include "meshes/spinnerBracketMesh.h"
 #include "meshes/spinnerPlateMesh.h"
@@ -8,27 +10,22 @@
 #include "renderer/IndexBuffer.h"
 #include "renderer/VertexBuffer.h"
 
-Spinner::Spinner()
-{
-   m_phitspinner = nullptr;
-   m_vertexBuffer_spinneranimangle = -FLT_MAX;
-}
-
 Spinner::~Spinner()
 {
    assert(m_rd == nullptr);
 }
 
-Spinner *Spinner::CopyForPlay(PinTable *live_table) const
+Spinner *Spinner::CopyForPlay() const
 {
-   STANDARD_EDITABLE_COPY_FOR_PLAY_IMPL(Spinner, live_table)
+   STANDARD_EDITABLE_COPY_FOR_PLAY_IMPL(Spinner)
    return dst;
 }
 
 void Spinner::UpdateStatusBarInfo()
 {
-   char tbuf[128];
-   sprintf_s(tbuf, sizeof(tbuf), "Length: %.3f | Height: %.3f", m_vpinball->ConvertToUnit(m_d.m_length), m_vpinball->ConvertToUnit(m_d.m_height));
+   if (!m_vpinball)
+      return;
+   const string tbuf = std::format("Length: {:.3f} | Height: {:.3f}", m_vpinball->ConvertToUnit(m_d.m_length), m_vpinball->ConvertToUnit(m_d.m_height));
    m_vpinball->SetStatusBarUnitInfo(tbuf, true);
 }
 
@@ -87,67 +84,59 @@ void Spinner::SetAngleMin(const float angle)
         m_d.m_angleMin = newVal;
 }
 
-HRESULT Spinner::Init(PinTable *const ptable, const float x, const float y, const bool fromMouseClick, const bool forPlay)
+HRESULT Spinner::Init(const float x, const float y, const bool fromMouseClick, const bool forPlay)
 {
-   m_ptable = ptable;
    SetDefaults(fromMouseClick);
    m_d.m_vCenter.x = x;
    m_d.m_vCenter.y = y;
-   return forPlay ? S_OK : InitVBA(true, nullptr);
+   return S_OK;
 }
 
 
 void Spinner::WriteRegDefaults()
 {
-#define regKey Settings::DefaultPropsSpinner
-
-   g_pvp->m_settings.SaveValue(regKey, "Length"s, m_d.m_length);
-   g_pvp->m_settings.SaveValue(regKey, "Rotation"s, m_d.m_rotation);
-   g_pvp->m_settings.SaveValue(regKey, "ShowBracket"s, m_d.m_showBracket);
-   g_pvp->m_settings.SaveValue(regKey, "Height"s, m_d.m_height);
-   g_pvp->m_settings.SaveValue(regKey, "AngleMax"s, m_d.m_angleMax);
-   g_pvp->m_settings.SaveValue(regKey, "AngleMin"s, m_d.m_angleMin);
-   g_pvp->m_settings.SaveValue(regKey, "Elasticity"s, m_d.m_elasticity);
-   g_pvp->m_settings.SaveValue(regKey, "AntiFriction"s, m_d.m_damping);
-   g_pvp->m_settings.SaveValue(regKey, "Scatter"s, m_d.m_scatter);
-   g_pvp->m_settings.SaveValue(regKey, "Visible"s, m_d.m_visible);
-   g_pvp->m_settings.SaveValue(regKey, "TimerEnabled"s, m_d.m_tdr.m_TimerEnabled);
-   g_pvp->m_settings.SaveValue(regKey, "TimerInterval"s, m_d.m_tdr.m_TimerInterval);
-   g_pvp->m_settings.SaveValue(regKey, "Image"s, m_d.m_szImage);
-   g_pvp->m_settings.SaveValue(regKey, "Surface"s, m_d.m_szSurface);
-   g_pvp->m_settings.SaveValue(regKey, "ReflectionEnabled"s, m_d.m_reflectionEnabled);
-
-#undef regKey
+#define LinkProp(field, prop) g_app->m_settings.SetDefaultPropsSpinner_##prop(field, false)
+   LinkProp(m_d.m_length, Length);
+   LinkProp(m_d.m_rotation, Rotation);
+   LinkProp(m_d.m_showBracket, ShowBracket);
+   LinkProp(m_d.m_height, Height);
+   LinkProp(m_d.m_angleMax, AngleMax);
+   LinkProp(m_d.m_angleMin, AngleMin);
+   LinkProp(m_d.m_elasticity, Elasticity);
+   LinkProp(m_d.m_damping, AntiFriction);
+   LinkProp(m_d.m_visible, Visible);
+   LinkProp(m_d.m_szImage, Image);
+   LinkProp(m_d.m_szSurface, Surface);
+   LinkProp(m_d.m_reflectionEnabled, ReflectionEnabled);
+   LinkProp(m_timerEnabled, TimerEnabled);
+   LinkProp(m_timerInterval, TimerInterval);
+#undef LinkProp
 }
 
+#define LinkProp(field, prop) field = fromMouseClick ? g_app->m_settings.GetDefaultPropsSpinner_##prop() : Settings::GetDefaultPropsSpinner_##prop##_Default()
 void Spinner::SetDefaults(const bool fromMouseClick)
 {
-#define regKey Settings::DefaultPropsSpinner
-
-   m_d.m_length = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Length"s, 80.f) : 80.f;
-   m_d.m_rotation = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Rotation"s, 0.f) : 0.f;
-   m_d.m_showBracket = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "ShowBracket"s, true) : true;
-   m_d.m_height = (float)(fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Height"s, 60000) : 60000) / 1000.0f;
-
+   LinkProp(m_d.m_length, Length);
+   LinkProp(m_d.m_rotation, Rotation);
+   LinkProp(m_d.m_showBracket, ShowBracket);
+   LinkProp(m_d.m_height, Height);
+   LinkProp(m_d.m_angleMax, AngleMax);
+   LinkProp(m_d.m_angleMin, AngleMin);
+   LinkProp(m_d.m_visible, Visible);
+   LinkProp(m_d.m_szImage, Image);
+   LinkProp(m_d.m_szSurface, Surface);
+   LinkProp(m_d.m_reflectionEnabled, ReflectionEnabled);
+   LinkProp(m_timerEnabled, TimerEnabled);
+   LinkProp(m_timerInterval, TimerInterval);
    SetDefaultPhysics(fromMouseClick);
-
-   m_d.m_angleMax = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "AngleMax"s, 0.f) : 0.f;
-   m_d.m_angleMin = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "AngleMin"s, 0.f) : 0.f;
-   m_d.m_visible = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Visible"s, true) : true;
-   m_d.m_reflectionEnabled = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "ReflectionEnabled"s, true) : true;
-   m_d.m_tdr.m_TimerEnabled = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "TimerEnabled"s, false) : false;
-   m_d.m_tdr.m_TimerInterval = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "TimerInterval"s, 100) : 100;
-
-   bool hr = g_pvp->m_settings.LoadValue(regKey, "Image"s, m_d.m_szImage);
-   if (!hr || !fromMouseClick)
-      m_d.m_szImage.clear();
-
-   hr = g_pvp->m_settings.LoadValue(regKey, "Surface"s, m_d.m_szSurface);
-   if (!hr || !fromMouseClick)
-      m_d.m_szSurface.clear();
-
-#undef regKey
 }
+
+void Spinner::SetDefaultPhysics(const bool fromMouseClick)
+{
+   LinkProp(m_d.m_elasticity, Elasticity);
+   LinkProp(m_d.m_damping, AntiFriction);
+}
+#undef LinkProp
 
 void Spinner::UIRenderPass1(Sur * const psur)
 {
@@ -187,6 +176,9 @@ void Spinner::UIRenderPass2(Sur * const psur)
 
 void Spinner::PhysicSetup(PhysicsEngine* physics, const bool isUI)
 {
+   if (!isUI && GetPartGroup() != nullptr && GetPartGroup()->GetReferenceSpace() != PartGroupData::SpaceReference::SR_PLAYFIELD)
+      return;
+
    if (isUI)
    {
       // FIXME implement UI picking
@@ -307,9 +299,9 @@ void Spinner::RenderSetup(RenderDevice *device)
    const float height = m_ptable->GetSurfaceHeight(m_d.m_szSurface, m_d.m_vCenter.x, m_d.m_vCenter.y);
    m_posZ = height + m_d.m_height;
 
-   IndexBuffer *bracketIndexBuffer = new IndexBuffer(m_rd, spinnerBracketNumFaces, spinnerBracketIndices);
-   VertexBuffer *bracketVertexBuffer = new VertexBuffer(m_rd, spinnerBracketNumVertices);
-   m_bracketMeshBuffer = new MeshBuffer(m_wzName + L".Bracket"s, bracketVertexBuffer, bracketIndexBuffer, true);
+   std::shared_ptr<IndexBuffer> bracketIndexBuffer = std::make_shared<IndexBuffer>(m_rd, spinnerBracketNumFaces, spinnerBracketIndices);
+   std::shared_ptr<VertexBuffer> bracketVertexBuffer = std::make_shared<VertexBuffer>(m_rd, spinnerBracketNumVertices);
+   m_bracketMeshBuffer = std::make_shared<MeshBuffer>(GetName() + ".Bracket"s, bracketVertexBuffer, bracketIndexBuffer, true);
 
    m_fullMatrix = Matrix3D::MatrixRotateZ(ANGTORAD(m_d.m_rotation));
 
@@ -332,9 +324,9 @@ void Spinner::RenderSetup(RenderDevice *device)
    }
    bracketVertexBuffer->Unlock();
 
-   IndexBuffer* plateIndexBuffer = new IndexBuffer(m_rd, spinnerPlateNumFaces, spinnerPlateIndices);
-   VertexBuffer* plateVertexBuffer = new VertexBuffer(m_rd, spinnerPlateNumVertices, nullptr, true);
-   m_plateMeshBuffer = new MeshBuffer(m_wzName + L".Plate"s, plateVertexBuffer, plateIndexBuffer, true);
+   std::shared_ptr<IndexBuffer> plateIndexBuffer = std::make_shared<IndexBuffer>(m_rd, spinnerPlateNumFaces, spinnerPlateIndices);
+   std::shared_ptr<VertexBuffer> plateVertexBuffer = std::make_shared<VertexBuffer>(m_rd, spinnerPlateNumVertices, nullptr, true);
+   m_plateMeshBuffer = std::make_shared<MeshBuffer>(GetName() + ".Plate"s, plateVertexBuffer, plateIndexBuffer, true);
 
    m_vertexBuffer_spinneranimangle = -FLT_MAX;
    UpdatePlate(nullptr);
@@ -344,8 +336,6 @@ void Spinner::RenderRelease()
 {
    assert(m_rd != nullptr);
    m_rd = nullptr;
-   delete m_bracketMeshBuffer;
-   delete m_plateMeshBuffer;
    m_bracketMeshBuffer = nullptr;
    m_plateMeshBuffer = nullptr;
 }
@@ -364,7 +354,7 @@ void Spinner::UpdateAnimation(const float diff_time_msec)
 void Spinner::Render(const unsigned int renderMask)
 {
    assert(m_rd != nullptr);
-   assert(!m_backglass);
+   assert(!m_desktopBackdrop);
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
    const bool isReflectionPass = renderMask & Renderer::REFLECTION_PASS;
@@ -463,84 +453,62 @@ void Spinner::PutCenter(const Vertex2D& pv)
    m_d.m_vCenter = pv;
 }
 
-void Spinner::SetDefaultPhysics(const bool fromMouseClick)
+void Spinner::Save(IObjectWriter& writer, const bool saveForUndo)
 {
-   m_d.m_elasticity = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultPropsSpinner, "Elasticity"s, 0.3f) : 0.3f;
-   m_d.m_damping = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultPropsSpinner, "AntiFriction"s, 0.9879f) : 0.9879f;
+   writer.WriteVector2(FID(VCEN), m_d.m_vCenter);
+   writer.WriteFloat(FID(ROTA), m_d.m_rotation);
+   writer.WriteBool(FID(TMON), m_timerEnabled);
+   writer.WriteInt(FID(TMIN), m_timerInterval);
+   writer.WriteFloat(FID(HIGH), m_d.m_height);
+   writer.WriteFloat(FID(LGTH), m_d.m_length);
+   writer.WriteFloat(FID(AFRC), m_d.m_damping);
+
+   writer.WriteFloat(FID(SMAX), m_d.m_angleMax);
+   writer.WriteFloat(FID(SMIN), m_d.m_angleMin);
+   writer.WriteFloat(FID(SELA), m_d.m_elasticity);
+   writer.WriteBool(FID(SVIS), m_d.m_visible);
+   writer.WriteBool(FID(SSUP), m_d.m_showBracket);
+   writer.WriteString(FID(MATR), m_d.m_szMaterial);
+   writer.WriteString(FID(IMGF), m_d.m_szImage);
+   writer.WriteString(FID(SURF), m_d.m_szSurface);
+   writer.WriteWideString(FID(NAME), m_wzName);
+   writer.WriteBool(FID(REEN), m_d.m_reflectionEnabled);
+
+   SaveSharedEditableFields(writer);
+
+   writer.EndObject();
 }
 
-HRESULT Spinner::SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool saveForUndo)
-{
-   BiffWriter bw(pstm, hcrypthash);
-
-   bw.WriteVector2(FID(VCEN), m_d.m_vCenter);
-   bw.WriteFloat(FID(ROTA), m_d.m_rotation);
-   bw.WriteBool(FID(TMON), m_d.m_tdr.m_TimerEnabled);
-   bw.WriteInt(FID(TMIN), m_d.m_tdr.m_TimerInterval);
-   bw.WriteFloat(FID(HIGH), m_d.m_height);
-   bw.WriteFloat(FID(LGTH), m_d.m_length);
-   bw.WriteFloat(FID(AFRC), m_d.m_damping);
-
-   bw.WriteFloat(FID(SMAX), m_d.m_angleMax);
-   bw.WriteFloat(FID(SMIN), m_d.m_angleMin);
-   bw.WriteFloat(FID(SELA), m_d.m_elasticity);
-   bw.WriteBool(FID(SVIS), m_d.m_visible);
-   bw.WriteBool(FID(SSUP), m_d.m_showBracket);
-   bw.WriteString(FID(MATR), m_d.m_szMaterial);
-   bw.WriteString(FID(IMGF), m_d.m_szImage);
-   bw.WriteString(FID(SURF), m_d.m_szSurface);
-   bw.WriteWideString(FID(NAME), m_wzName);
-   bw.WriteBool(FID(REEN), m_d.m_reflectionEnabled);
-
-   ISelect::SaveData(pstm, hcrypthash);
-
-   bw.WriteTag(FID(ENDB));
-
-   return S_OK;
-}
-
-HRESULT Spinner::InitLoad(IStream *pstm, PinTable *ptable, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey)
+void Spinner::Load(IObjectReader& reader)
 {
    SetDefaults(false);
-
-   BiffReader br(pstm, this, version, hcrypthash, hcryptkey);
-
-   m_ptable = ptable;
-
-   br.Load();
-   return S_OK;
-}
-
-bool Spinner::LoadToken(const int id, BiffReader * const pbr)
-{
-   switch(id)
-   {
-   case FID(PIID): { int pid; pbr->GetInt(&pid); } break;
-   case FID(VCEN): pbr->GetVector2(m_d.m_vCenter); break;
-   case FID(ROTA): pbr->GetFloat(m_d.m_rotation); break;
-   case FID(MATR): pbr->GetString(m_d.m_szMaterial); break;
-   case FID(TMON): pbr->GetBool(m_d.m_tdr.m_TimerEnabled); break;
-   case FID(TMIN): pbr->GetInt(m_d.m_tdr.m_TimerInterval); break;
-   case FID(SSUP): pbr->GetBool(m_d.m_showBracket); break;
-   case FID(HIGH): pbr->GetFloat(m_d.m_height); break;
-   case FID(LGTH): pbr->GetFloat(m_d.m_length); break;
-   case FID(AFRC): pbr->GetFloat(m_d.m_damping); break;
-   case FID(SMAX): pbr->GetFloat(m_d.m_angleMax); break;
-   case FID(SMIN): pbr->GetFloat(m_d.m_angleMin); break;
-   case FID(SELA): pbr->GetFloat(m_d.m_elasticity); break;
-   case FID(SVIS): pbr->GetBool(m_d.m_visible); break;
-   case FID(IMGF): pbr->GetString(m_d.m_szImage); break;
-   case FID(SURF): pbr->GetString(m_d.m_szSurface); break;
-   case FID(NAME): pbr->GetWideString(m_wzName, std::size(m_wzName)); break;
-   case FID(REEN): pbr->GetBool(m_d.m_reflectionEnabled); break;
-   default: ISelect::LoadToken(id, pbr); break;
-   }
-   return true;
-}
-
-HRESULT Spinner::InitPostLoad()
-{
-   return S_OK;
+   reader.AsObject(
+      [this](int tag, IObjectReader& reader)
+      {
+         switch (tag)
+         {
+         case FID(PIID): reader.AsInt(); break;
+         case FID(VCEN): m_d.m_vCenter = reader.AsVector2(); break;
+         case FID(ROTA): m_d.m_rotation = reader.AsFloat(); break;
+         case FID(MATR): m_d.m_szMaterial = reader.AsString(); break;
+         case FID(TMON): m_timerEnabled = reader.AsBool(); break;
+         case FID(TMIN): m_timerInterval = reader.AsInt(); break;
+         case FID(SSUP): m_d.m_showBracket = reader.AsBool(); break;
+         case FID(HIGH): m_d.m_height = reader.AsFloat(); break;
+         case FID(LGTH): m_d.m_length = reader.AsFloat(); break;
+         case FID(AFRC): m_d.m_damping = reader.AsFloat(); break;
+         case FID(SMAX): m_d.m_angleMax = reader.AsFloat(); break;
+         case FID(SMIN): m_d.m_angleMin = reader.AsFloat(); break;
+         case FID(SELA): m_d.m_elasticity = reader.AsFloat(); break;
+         case FID(SVIS): m_d.m_visible = reader.AsBool(); break;
+         case FID(IMGF): m_d.m_szImage = reader.AsString(); break;
+         case FID(SURF): m_d.m_szSurface = reader.AsString(); break;
+         case FID(NAME): m_wzName = reader.AsWideString(); break;
+         case FID(REEN): m_d.m_reflectionEnabled = reader.AsBool(); break;
+         default: LoadSharedEditableField(tag, reader); break;
+         }
+         return true;
+      });
 }
 
 STDMETHODIMP Spinner::InterfaceSupportsErrorInfo(REFIID riid)
@@ -601,7 +569,7 @@ STDMETHODIMP Spinner::get_Damping(float *pVal)
 
 STDMETHODIMP Spinner::put_Damping(float newVal)
 {
-   const float tmp = clamp(newVal, 0.0f, 1.0f);
+   const float tmp = saturate(newVal);
    if (g_pplayer)
       m_phitspinner->m_spinnerMover.m_damping = powf(tmp, (float)PHYS_FACTOR);
    else
@@ -699,7 +667,7 @@ STDMETHODIMP Spinner::get_AngleMax(float *pVal)
 STDMETHODIMP Spinner::put_AngleMax(float newVal)
 {
    if (g_pplayer && (m_d.m_angleMin == m_d.m_angleMax)) // allow only if in limited angle mode
-      return S_FAIL;
+      return E_FAIL;
 
    SetAngleMax(newVal);
    return S_OK;
@@ -715,7 +683,7 @@ STDMETHODIMP Spinner::get_AngleMin(float *pVal)
 STDMETHODIMP Spinner::put_AngleMin(float newVal)
 {
    if (g_pplayer && (m_d.m_angleMin != m_d.m_angleMax))	// allow only if in limited angle mode
-      return S_FAIL;
+      return E_FAIL;
 
    SetAngleMin(newVal);
    return S_OK;

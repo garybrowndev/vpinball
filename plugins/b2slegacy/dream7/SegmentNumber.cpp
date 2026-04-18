@@ -8,15 +8,13 @@ namespace B2SLegacy {
 
 SegmentNumber::SegmentNumber(Dream7Display* pDisplay)
    : m_pDisplay(pDisplay)
+   , m_thickness(16.0f)
+   , m_pNumberMatrix(nullptr)
 {
-   m_thickness = 16.0f;
-   m_pStyle = new SegmentStyle();
-   m_pNumberMatrix = nullptr;
 }
 
 SegmentNumber::~SegmentNumber()
 {
-   delete m_pStyle;
    delete m_pNumberMatrix;
 }
 
@@ -44,7 +42,7 @@ void SegmentNumber::AssignStyle()
 void SegmentNumber::Draw(VPXGraphics* pRenderer)
 {
    int onCount = 0, offCount = 0;
-   for (auto& pSegment : m_segments) {
+   for (const auto& pSegment : m_segments) {
       if (pSegment->IsOn()) onCount++; else offCount++;
    }
 
@@ -55,7 +53,7 @@ void SegmentNumber::Draw(VPXGraphics* pRenderer)
    }
 
    // Handle glow effect for ON segments
-   if (m_pStyle->GetGlow() > 0.0f) {
+   if (m_pStyle.GetGlow() > 0.0f) {
       for (auto& pSegment : m_segments) {
          if (pSegment->IsOn())
             pSegment->DrawLight(pRenderer);
@@ -71,7 +69,7 @@ void SegmentNumber::Draw(VPXGraphics* pRenderer)
 
 GraphicsPath* SegmentNumber::GetBounds()
 {
-   SDL_FRect bounds = {-14.0f, -14.0f, 173.0f, 272.f};
+   constexpr SDL_FRect bounds = {-14.0f, -14.0f, 173.0f, 272.f};
    GraphicsPath* pRegion = new GraphicsPath();
    pRegion->AddRectangle(bounds);
    pRegion->Transform(m_pNumberMatrix);
@@ -90,9 +88,9 @@ void SegmentNumber::InitSegments(const SegmentNumberType type, const float thick
       delete pSegment;
    m_segments.clear();
 
-   float TH = thickness;
-   float T4 = TH / 4.0f;
-   float T2 = TH / 2.0f;
+   const float TH = thickness;
+   const float T4 = TH / 4.0f;
+   const float T2 = TH / 2.0f;
    m_type = type;
    m_thickness = TH;
    switch (type) {
@@ -108,14 +106,14 @@ void SegmentNumber::InitSegments(const SegmentNumberType type, const float thick
          break;
       case SegmentNumberType_FourteenSegment:
       {
-         float angleDiag = 26.5f + T4;
-         float MT = TH - T4;
-         float sinA = sinf(angleDiag * (float)(M_PI / 180.0));
-         float cosA = cosf(angleDiag * (float)(M_PI / 180.0));
-         float nTanA = tanf(angleDiag * (float)(M_PI / 180.0));
-         float diagX = cosA * MT;
-         float diagY = sinA * MT;
-         float diagHeight = (58.f - TH - MT / 2.f) / sinA + MT / nTanA;
+         const float angleDiag = 26.5f + T4;
+         const float MT = TH - T4;
+         const float sinA = sinf(angleDiag * (float)(M_PI / 180.0));
+         const float cosA = cosf(angleDiag * (float)(M_PI / 180.0));
+         const float nTanA = tanf(angleDiag * (float)(M_PI / 180.0));
+         const float diagX = cosA * MT;
+         const float diagY = sinA * MT;
+         const float diagHeight = (58.f - TH - MT / 2.f) / sinA + MT / nTanA;
          m_segments.push_back(new Segment("a"s, T4 + 2.f, TH, TH, 120.f - T2, -90, SegmentCap_MoreRight, SegmentCap_MoreRight));
          m_segments.push_back(new Segment("b"s, 124.f - TH, T4 + 2.f, TH, 110.f - T4, 0, SegmentCap_MoreRight, SegmentCap_Standard));
          m_segments.push_back(new Segment("c"s, 124.f - TH, 116, TH, 110.f - T4, 0, SegmentCap_Standard, SegmentCap_MoreRight));
@@ -146,12 +144,13 @@ void SegmentNumber::InitSegments(const SegmentNumberType type, const float thick
          m_segments.push_back(new Segment("i"s, 72.f - T2, T2 + 2.f, TH, 110.f - T2, 0, SegmentCap_Standard, SegmentCap_Standard));
          m_segments.push_back(new Segment("l"s, 72.f - T2, 116, TH, 110.f - T2, 0, SegmentCap_Standard, SegmentCap_Standard));
          break;
+      default: break;
    }
    for (auto& pSegment : m_segments)
-      pSegment->SetStyle(m_pStyle);
+      pSegment->SetStyle(&m_pStyle);
 }
 
-void SegmentNumber::InitMatrix(const SDL_FPoint& location, Matrix* pMatrix)
+void SegmentNumber::InitMatrix(const SDL_FPoint& location, const Matrix* pMatrix)
 {
    delete m_pNumberMatrix;
    m_pNumberMatrix = pMatrix->Clone();
@@ -185,122 +184,123 @@ void SegmentNumber::DisplayCharacter(const string& szCharacter)
       switch (m_type) {
          case SegmentNumberType_SevenSegment:
             switch (szCharacter[0]) {
-               case '0': szSegments = "abcdef"s; break;
-               case '1': szSegments = "bc"s; break;
-               case '2': szSegments = "abdeg"s; break;
-               case '3': szSegments = "abcdg"s; break;
-               case '4': szSegments = "bcfg"s; break;
-               case '5': szSegments = "acdfg"s; break;
-               case '6': szSegments = "acdefg"s; break;
-               case '7': szSegments = "abc"s; break;
-               case '8': szSegments = "abcdefg"s; break;
-               case '9': szSegments = "abcdfg"s; break;
+               case '0': szSegments = "abcdef"sv; break;
+               case '1': szSegments = "bc"sv; break;
+               case '2': szSegments = "abdeg"sv; break;
+               case '3': szSegments = "abcdg"sv; break;
+               case '4': szSegments = "bcfg"sv; break;
+               case '5': szSegments = "acdfg"sv; break;
+               case '6': szSegments = "acdefg"sv; break;
+               case '7': szSegments = "abc"sv; break;
+               case '8': szSegments = "abcdefg"sv; break;
+               case '9': szSegments = "abcdfg"sv; break;
                case 'A':
-               case 'a': szSegments = "abcefg"s; break;
+               case 'a': szSegments = "abcefg"sv; break;
                case 'B':
-               case 'b': szSegments = "cdefg"s; break;
+               case 'b': szSegments = "cdefg"sv; break;
                case 'C':
-               case 'c': szSegments = "adef"s; break;
+               case 'c': szSegments = "adef"sv; break;
                case 'D':
-               case 'd': szSegments = "bcdeg"s; break;
+               case 'd': szSegments = "bcdeg"sv; break;
                case 'E':
-               case 'e': szSegments = "adefg"s; break;
+               case 'e': szSegments = "adefg"sv; break;
                case 'F':
-               case 'f': szSegments = "aefg"s; break;
+               case 'f': szSegments = "aefg"sv; break;
             }
             break;
          case SegmentNumberType_TenSegment:
             switch (szCharacter[0]) {
-               case '0': szSegments = "abcdefjk"s; break;
-               case '1': szSegments = "il"s; break;
-               case '2': szSegments = "abdeg1g2"s; break;
-               case '3': szSegments = "abcdg2"s; break;
-               case '4': szSegments = "bcfg1g2"s; break;
-               case '5': szSegments = "acdfg1g2"s; break;
-               case '6': szSegments = "acdefg1g2"s; break;
-               case '7': szSegments = "abc"s; break;
-               case '8': szSegments = "abcdefg1g2"s; break;
-               case '9': szSegments = "abcdfg1g2"s; break;
+               case '0': szSegments = "abcdefjk"sv; break;
+               case '1': szSegments = "il"sv; break;
+               case '2': szSegments = "abdeg1g2"sv; break;
+               case '3': szSegments = "abcdg2"sv; break;
+               case '4': szSegments = "bcfg1g2"sv; break;
+               case '5': szSegments = "acdfg1g2"sv; break;
+               case '6': szSegments = "acdefg1g2"sv; break;
+               case '7': szSegments = "abc"sv; break;
+               case '8': szSegments = "abcdefg1g2"sv; break;
+               case '9': szSegments = "abcdfg1g2"sv; break;
                case 'A':
-               case 'a': szSegments = "abcefg"s; break;
+               case 'a': szSegments = "abcefg"sv; break;
                case 'B':
-               case 'b': szSegments = "cdefg"s; break;
+               case 'b': szSegments = "cdefg"sv; break;
                case 'C':
-               case 'c': szSegments = "adef"s; break;
+               case 'c': szSegments = "adef"sv; break;
                case 'D':
-               case 'd': szSegments = "bcdeg"s; break;
+               case 'd': szSegments = "bcdeg"sv; break;
                case 'E':
-               case 'e': szSegments = "adefg"s; break;
+               case 'e': szSegments = "adefg"sv; break;
                case 'F':
-               case 'f': szSegments = "aefg"s; break;
+               case 'f': szSegments = "aefg"sv; break;
             }
             break;
          case SegmentNumberType_FourteenSegment:
              switch (szCharacter[0]) {
-                case '0': szSegments = "abcdefjk"s; break;
-                case '1': szSegments = "bcj"s; break;
-                case '2': szSegments = "abdeg1g2"s; break;
-                case '3': szSegments = "abcdg2"s; break;
-                case '4': szSegments = "bcfg1g2"s; break;
-                case '5': szSegments = "acdfg1g2"s; break;
-                case '6': szSegments = "acdefg1g2"s; break;
-                case '7': szSegments = "abc"s; break;
-                case '8': szSegments = "abcdefg1g2"s; break;
-                case '9': szSegments = "abcdfg1g2"s; break;
+                case '0': szSegments = "abcdefjk"sv; break;
+                case '1': szSegments = "bcj"sv; break;
+                case '2': szSegments = "abdeg1g2"sv; break;
+                case '3': szSegments = "abcdg2"sv; break;
+                case '4': szSegments = "bcfg1g2"sv; break;
+                case '5': szSegments = "acdfg1g2"sv; break;
+                case '6': szSegments = "acdefg1g2"sv; break;
+                case '7': szSegments = "abc"sv; break;
+                case '8': szSegments = "abcdefg1g2"sv; break;
+                case '9': szSegments = "abcdfg1g2"sv; break;
                 case 'A':
-                case 'a': szSegments = "abcefg1g2"s; break;
+                case 'a': szSegments = "abcefg1g2"sv; break;
                 case 'B':
-                case 'b': szSegments = "abcdg2il"s; break;
+                case 'b': szSegments = "abcdg2il"sv; break;
                 case 'C':
-                case 'c': szSegments = "adef"s; break;
+                case 'c': szSegments = "adef"sv; break;
                 case 'D':
-                case 'd': szSegments = "abcdil"s; break;
+                case 'd': szSegments = "abcdil"sv; break;
                 case 'E':
-                case 'e': szSegments = "adefg1"s; break;
+                case 'e': szSegments = "adefg1"sv; break;
                 case 'F':
-                case 'f': szSegments = "aefg1"s; break;
+                case 'f': szSegments = "aefg1"sv; break;
                 case 'G':
-                case 'g': szSegments = "acdefg2"s; break;
+                case 'g': szSegments = "acdefg2"sv; break;
                 case 'H':
-                case 'h': szSegments = "bcefg1g2"s; break;
+                case 'h': szSegments = "bcefg1g2"sv; break;
                 case 'I':
-                case 'i': szSegments = "adil"s; break;
+                case 'i': szSegments = "adil"sv; break;
                 case 'J':
-                case 'j': szSegments = "bcde"s; break;
+                case 'j': szSegments = "bcde"sv; break;
                 case 'K':
-                case 'k': szSegments = "efg1jm"s; break;
+                case 'k': szSegments = "efg1jm"sv; break;
                 case 'L':
-                case 'l': szSegments = "def"s; break;
+                case 'l': szSegments = "def"sv; break;
                 case 'M':
-                case 'm': szSegments = "bcefhj"s; break;
+                case 'm': szSegments = "bcefhj"sv; break;
                 case 'N':
-                case 'n': szSegments = "bcefhm"s; break;
+                case 'n': szSegments = "bcefhm"sv; break;
                 case 'O':
-                case 'o': szSegments = "abcdef"s; break;
+                case 'o': szSegments = "abcdef"sv; break;
                 case 'P':
-                case 'p': szSegments = "abefg1g2"s; break;
+                case 'p': szSegments = "abefg1g2"sv; break;
                 case 'Q':
-                case 'q': szSegments = "abcdefm"s; break;
+                case 'q': szSegments = "abcdefm"sv; break;
                 case 'R':
-                case 'r': szSegments = "abefg1g2m"s; break;
+                case 'r': szSegments = "abefg1g2m"sv; break;
                 case 'S':
-                case 's': szSegments = "acdfg1g2"s; break;
+                case 's': szSegments = "acdfg1g2"sv; break;
                 case 'T':
-                case 't': szSegments = "ail"s; break;
+                case 't': szSegments = "ail"sv; break;
                 case 'U':
-                case 'u': szSegments = "bcdef"s; break;
+                case 'u': szSegments = "bcdef"sv; break;
                 case 'V':
-                case 'v': szSegments = "efjk"s; break;
+                case 'v': szSegments = "efjk"sv; break;
                 case 'W':
-                case 'w': szSegments = "bcefkm"s; break;
+                case 'w': szSegments = "bcefkm"sv; break;
                 case 'X':
-                case 'x': szSegments = "hjkm"s; break;
+                case 'x': szSegments = "hjkm"sv; break;
                 case 'Y':
-                case 'y': szSegments = "hjl"s; break;
+                case 'y': szSegments = "hjl"sv; break;
                 case 'Z':
-                case 'z': szSegments = "adjk"s; break;
+                case 'z': szSegments = "adjk"sv; break;
              }
              break;
+         default: break;
       }
       if (szCharacter.ends_with('.'))
          szSegments += '.';
@@ -314,9 +314,9 @@ void SegmentNumber::DisplayCharacter(const string& szCharacter)
       OnInvalidated();
 }
 
-void SegmentNumber::DisplayBitCode(long value)
+void SegmentNumber::DisplayBitCode(int value)
 {
-   long segment = 0;
+   int segment = 0;
    bool anyChange = false;
    for (auto& pSegment : m_segments) {
       if (m_type == SegmentNumberType_TenSegment && pSegment->GetName() == "g2") {

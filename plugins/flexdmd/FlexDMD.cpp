@@ -9,8 +9,7 @@
 #include "actors/Video.h"
 #include "resources/AssetManager.h"
 
-#include <sstream>
-#include <iomanip>
+#include <format>
 
 #include <SDL3/SDL_timer.h>
 
@@ -20,7 +19,7 @@ FlexDMD::FlexDMD(VPXPluginAPI* vpxApi) :
    m_vpxApi(vpxApi)
 {
    m_pStage = new Group(this, "Stage"s);
-   m_pStage->SetSize(static_cast<float>(m_width), static_cast<float>(m_height));
+   m_pStage->SetSize(m_width, m_height);
    m_pAssetManager = new AssetManager(m_vpxApi);
 }
 
@@ -64,9 +63,9 @@ void FlexDMD::Render()
    if ((m_renderLockCount == 0) && elapsedMs > 2)
    {
       m_frameId++;
-      m_lum8FrameDirty = m_lumFrameDirty = m_rgbFrameDirty = m_rgbaFrameDirty = true;
+      m_lum8FrameDirty = m_lumFP32FrameDirty = m_lumFrameDirty = m_rgbFrameDirty = m_rgbaFrameDirty = true;
       m_lastRenderTick = tick;
-      m_pStage->Update((float)(elapsedMs / 1000.0));
+      m_pStage->Update((float)((double)elapsedMs / 1000.0));
       if (m_pSurface == nullptr)
       {
          SDL_Surface* pSurface = SDL_CreateSurface(m_width, m_height, SDL_PIXELFORMAT_RGB24);
@@ -87,24 +86,42 @@ uint8_t* FlexDMD::UpdateLum8Frame()
       return m_lum8Frame;
    if (m_lum8Frame == nullptr)
       m_lum8Frame = new uint8_t[m_width * m_height];
-   if (m_pSurface == nullptr)
-      return m_lum8Frame;
-   if (m_renderLockCount > 0)
+   UpdateLumFP32Frame();
+   if (m_lumFP32Frame == nullptr)
       return m_lum8Frame;
    m_lum8FrameDirty = false;
+   const float* __restrict src = m_lumFP32Frame;
+   uint8_t* __restrict dst = m_lum8Frame;
+   for (int o = 0; o < m_height * m_width; o++)
+      *dst++ = static_cast<uint8_t>(static_cast<float>(*src++) * 255.0f);
+   return m_lum8Frame;
+}
+
+float* FlexDMD::UpdateLumFP32Frame()
+{
+   if ((m_lumFP32Frame != nullptr) && !m_lumFP32FrameDirty)
+      return m_lumFP32Frame;
+   if (m_lumFP32Frame == nullptr)
+      m_lumFP32Frame = new float[m_width * m_height];
+   if (m_pSurface == nullptr)
+      return m_lumFP32Frame;
+   if (m_renderLockCount > 0)
+      return m_lumFP32Frame;
+   m_lumFP32FrameDirty = false;
    SDL_Surface* surf = m_pSurface->GetSurface();
    SDL_LockSurface(surf);
    const uint8_t* __restrict pixels = static_cast<const uint8_t*>(surf->pixels);
-   uint8_t* __restrict dst = m_lum8Frame;
-   for (int o = 0; o < m_height*m_width; o++)
-      {
-         const float r = static_cast<float>(*pixels++);
-         const float g = static_cast<float>(*pixels++);
-         const float b = static_cast<float>(*pixels++);
-         *dst++ = static_cast<uint8_t>(0.2126f * r + 0.7152f * g + 0.0722f * b);
-      }
+   float* __restrict dst = m_lumFP32Frame;
+   constexpr float scale = static_cast<float>(1.0 / 255.0);
+   for (int o = 0; o < m_height * m_width; o++)
+   {
+      const float r = static_cast<float>(*pixels++);
+      const float g = static_cast<float>(*pixels++);
+      const float b = static_cast<float>(*pixels++);
+      *dst++ = (0.2126f * r + 0.7152f * g + 0.0722f * b) * scale;
+   }
    SDL_UnlockSurface(surf);
-   return m_lum8Frame;
+   return m_lumFP32Frame;
 }
 
 void FlexDMD::UpdateLumFrame()
@@ -123,11 +140,13 @@ void FlexDMD::UpdateLumFrame()
    uint8_t* __restrict dst = m_lumFrame.data();
    static constexpr uint8_t lum4[] = { 0, 85, 170, 255 };
    static constexpr uint8_t lum16[] = { 0, 17, 34, 51, 68, 85, 102, 119, 136, 153, 170, 187, 204, 221, 238, 255 };
-   for (int o = 0; o < m_height*m_width; o++)
-         if (m_renderMode == RenderMode_DMD_GRAY_2)
-            *dst++ = lum4[(*src++) >> 6];
-         else if (m_renderMode == RenderMode_DMD_GRAY_4)
-            *dst++ = lum16[(*src++) >> 4];
+   if (m_renderMode == RenderMode_DMD_GRAY_2)
+      for (int o = 0; o < m_height*m_width; o++)
+         *dst++ = lum4[(*src++) >> 6];
+
+   if (m_renderMode == RenderMode_DMD_GRAY_4)
+      for (int o = 0; o < m_height*m_width; o++)
+         *dst++ = lum16[(*src++) >> 4];
 }
 
 uint8_t* FlexDMD::UpdateRGBFrame()
@@ -208,10 +227,9 @@ UltraDMD* FlexDMD::NewUltraDMD() { return new UltraDMD(this); }
 
 Font* FlexDMD::NewFont(const string& font, uint32_t tint, uint32_t borderTint, int borderSize)
 {
-   std::stringstream tintHex, borderHex;
-   tintHex << std::setfill('0') << std::setw(8) << std::hex << (((tint & 0x0000FF) << 24) | ((tint & 0x00FF00) << 8) | ((tint & 0xFF0000) >> 8) | 0xFF);
-   borderHex << std::setfill('0') << std::setw(8) << std::hex << (((borderTint & 0x0000FF) << 24) | ((borderTint & 0x00FF00) << 8) | ((borderTint & 0xFF0000) >> 8) | 0xFF);
-   AssetSrc* pAssetSrc = m_pAssetManager->ResolveSrc(font + "&tint=" + tintHex.str() + "&border_size=" + std::to_string(borderSize) + "&border_tint=" + borderHex.str(), nullptr);
+   const string tintHex = std::format("{:08X}", ((tint & 0x0000FFu) << 24) | ((tint & 0x00FF00u) << 8) | ((tint & 0xFF0000u) >> 8) | 0xFFu);
+   const string borderHex = std::format("{:08X}", ((borderTint & 0x0000FFu) << 24) | ((borderTint & 0x00FF00u) << 8) | ((borderTint & 0xFF0000u) >> 8) | 0xFFu);
+   AssetSrc* pAssetSrc = m_pAssetManager->ResolveSrc(font + "&tint=" + tintHex + "&border_size=" + std::to_string(borderSize) + "&border_tint=" + borderHex, nullptr);
    Font* pFont = m_pAssetManager->GetFont(pAssetSrc);
    pAssetSrc->Release();
    return pFont;
@@ -227,7 +245,7 @@ AnimatedActor* FlexDMD::NewVideo(const string& name, const string& video)
       pAssetSrc->Release();
 
       if (assetType == AssetType_Video)
-         return (AnimatedActor*)Video::Create(this, video, name, true);
+         return (AnimatedActor*)Video::Create(this, m_pAssetManager, video, name, true);
       else if (assetType == AssetType_GIF)
          return (AnimatedActor*)GIFImage::Create(this, m_pAssetManager, video, name);
       else if (assetType == AssetType_Image)

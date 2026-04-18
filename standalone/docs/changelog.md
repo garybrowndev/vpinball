@@ -4,6 +4,21 @@ To keep up with all the changes in master, and make it easier to rebase, this br
 
 The downside of this approach is not accurately keeping track of history:
 
+* 03/26/26
+    * Bump libwinevbs with Wine 11.5
+
+* 03/24/26
+    * Decouple atl, wine, and vbscript into libwinevbs 
+
+* 11/17/25
+    * Bump Wine source to wine-fe1175af410d04f806dda770502d0476a8ccbef6 (10.19)
+
+* 11/15/25
+    * Add support for Meta Quest builds
+
+* 10/24/25
+    * Fix incomplete var_cmp to support avoid needing CInt
+
 * 07/26/25
     * Replaced standalone WMP player with new WMP Plugin (bloodm, ag)
     * Removed standalone PUP player in favor of PUP Plugin

@@ -9,7 +9,7 @@
 #include "Shader.h"
 #endif
 
-#ifndef DISABLE_FORCE_NVIDIA_OPTIMUS
+#if !defined(DISABLE_FORCE_NVIDIA_OPTIMUS) && defined(ENABLE_DX9)
 #include "nvapi/nvapi.h"
 #endif
 
@@ -29,7 +29,7 @@ RenderTarget::RenderTarget(RenderDevice* const rd, const SurfaceType type, const
    , m_width(width)
    , m_height(height)
    , m_nMSAASamples(1)
-   , m_has_depth(false)
+   , m_has_depth(true)
    , m_shared_depth(false)
 {
    assert((type == RT_DEFAULT) || (type == RT_STEREO));
@@ -37,6 +37,7 @@ RenderTarget::RenderTarget(RenderDevice* const rd, const SurfaceType type, const
    m_depth_sampler = nullptr;
 
    #if defined(ENABLE_BGFX)
+   assert(false);
    m_framebuffer = BGFX_INVALID_HANDLE; // Invalid handle is the reserved Id for BGFX's back buffer
 
    #elif defined(ENABLE_OPENGL)
@@ -57,7 +58,7 @@ RenderTarget::RenderTarget(RenderDevice* const rd, const SurfaceType type, const
    #elif defined(ENABLE_DX9)
    HRESULT hr = m_rd->GetCoreDevice()->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &m_color_surface);
    if (FAILED(hr))
-      ReportError("Fatal Error: unable to create back buffer!", hr, __FILE__, __LINE__);
+      ReportError("Fatal Error: unable to create back buffer!"s, hr, __FILE__, __LINE__);
    m_use_alternate_depth = m_rd->m_useNvidiaApi || !m_rd->m_INTZ_support;
    m_color_tex = nullptr;
    m_depth_tex = nullptr;
@@ -85,7 +86,9 @@ RenderTarget::RenderTarget(RenderDevice* const rd, const SurfaceType type, bgfx:
    , m_depth_sampler(nullptr)
    , m_framebuffer(fbh)
    , m_color_tex(colorTex)
+   , m_colorFormat(colFormat)
    , m_depth_tex(depthTex)
+   , m_depthFormat(depthFormat)
 {
    if (bgfx::isValid(colorTex))
       m_color_sampler = std::make_shared<Sampler>(rd, name + ".Color", type, colorTex, colFormat, width, height, false);
@@ -114,7 +117,6 @@ RenderTarget::RenderTarget(RenderDevice* const rd, const SurfaceType type, const
    m_depth_sampler = nullptr;
 
 #if defined(ENABLE_BGFX)
-   bgfx::TextureFormat::Enum fmt;
    uint64_t msaaFlags;
    if (nMSAASamples > 8)
       msaaFlags = BGFX_TEXTURE_RT_MSAA_X16;
@@ -131,62 +133,97 @@ RenderTarget::RenderTarget(RenderDevice* const rd, const SurfaceType type, const
    // FIXME most render target are not blit destination and are only used as write target (then GPU sampling, no readback) => BGFX_TEXTURE_READ_BACK
    const uint64_t colorFlags = BGFX_TEXTURE_BLIT_DST | msaaFlags;
    const uint64_t depthFlags = BGFX_TEXTURE_BLIT_DST | msaaFlags /* MSAA depth buffer must be write only | BGFX_TEXTURE_RT_WRITE_ONLY */;
+   bgfx::TextureFormat::Enum m_colorFormat;
    switch (format)
    {
-   case colorFormat::RED16F: fmt = bgfx::TextureFormat::R16F; break;
-   case colorFormat::RG16F: fmt = bgfx::TextureFormat::RG16F; break;
-   case colorFormat::RGB16F: fmt = bgfx::TextureFormat::RGBA16F; break;
-   case colorFormat::RGBA16F: fmt = bgfx::TextureFormat::RGBA16F; break;
-   case colorFormat::RGB5: fmt = bgfx::TextureFormat::RGB5A1; break;
-   case colorFormat::RGB8: fmt = bgfx::TextureFormat::RGB8; break;
-   case colorFormat::RGB10: fmt = bgfx::TextureFormat::RGB10A2; break;
-   case colorFormat::RGBA8: fmt = bgfx::TextureFormat::RGBA8; break;
-   case colorFormat::RGBA10: fmt = bgfx::TextureFormat::RGB10A2; break;
-   case colorFormat::GREY8: fmt = bgfx::TextureFormat::R8; break;
+   case colorFormat::RED16F: m_colorFormat = bgfx::TextureFormat::R16F; break;
+   case colorFormat::RG16F: m_colorFormat = bgfx::TextureFormat::RG16F; break;
+   case colorFormat::RGB16F: m_colorFormat = bgfx::TextureFormat::RGBA16F; break;
+   case colorFormat::RGBA16F: m_colorFormat = bgfx::TextureFormat::RGBA16F; break;
+   case colorFormat::RGB32F: m_colorFormat = bgfx::TextureFormat::RGBA32F; break;
+   case colorFormat::RGBA32F: m_colorFormat = bgfx::TextureFormat::RGBA32F; break;
+   case colorFormat::RGB5: m_colorFormat = bgfx::TextureFormat::RGB5A1; break;
+   case colorFormat::RGB8: m_colorFormat = bgfx::TextureFormat::RGB8; break;
+   case colorFormat::RGB10: m_colorFormat = bgfx::TextureFormat::RGB10A2; break;
+   case colorFormat::RGBA8: m_colorFormat = bgfx::TextureFormat::RGBA8; break;
+   case colorFormat::RGBA10: m_colorFormat = bgfx::TextureFormat::RGB10A2; break;
+   case colorFormat::GREY8: m_colorFormat = bgfx::TextureFormat::R8; break;
    default: assert(false); // Unsupported texture format 
    }
-   m_color_tex = bgfx::createTexture2D(m_width, m_height, false, m_nLayers, fmt, colorFlags);
-   m_color_sampler = std::make_shared<Sampler>(m_rd, name + ".Color", m_type, m_color_tex, fmt, m_width, m_height, false);
+   m_color_tex = bgfx::createTexture2D(m_width, m_height, false, m_nLayers, m_colorFormat, colorFlags);
+   m_color_sampler = std::make_shared<Sampler>(m_rd, name + ".Color", m_type, m_color_tex, m_colorFormat, m_width, m_height, false);
 
    if (m_shared_depth)
    {
+      m_depthFormat = sharedDepth->m_depthFormat;
       m_depth_tex = sharedDepth->m_depth_tex;
       m_depth_sampler = sharedDepth->m_depth_sampler;
    }
    else if (with_depth)
    {
-      bgfx::TextureFormat::Enum depthFormat = bgfx::TextureFormat::D24;
+      m_depthFormat = bgfx::TextureFormat::D24;
       #ifdef ENABLE_XR
       // For OpenXR, we need to be able to copy from the render depth buffer to the swapchain's depth buffer.
       // TODO we should use directly the vr's swapchain depth buffer instead of creating a compatible one to avoid the blit
       if (g_pplayer->m_vrDevice)
-         depthFormat = g_pplayer->m_vrDevice->GetDepthFormat();
+         m_depthFormat = g_pplayer->m_vrDevice->GetDepthFormat();
       #endif
-      m_depth_tex = bgfx::createTexture2D(m_width, m_height, false, m_nLayers, depthFormat, depthFlags);
-      m_depth_sampler = std::make_shared<Sampler>(m_rd, name + ".Depth", m_type, m_depth_tex, depthFormat, m_width, m_height, false);
+      m_depth_tex = bgfx::createTexture2D(m_width, m_height, false, m_nLayers, m_depthFormat, depthFlags);
+      m_depth_sampler = std::make_shared<Sampler>(m_rd, name + ".Depth", m_type, m_depth_tex, m_depthFormat, m_width, m_height, false);
    }
 
-   if (with_depth)
-   {
-      bgfx::Attachment colorAttachment, depthAttachment;
-      colorAttachment.init(m_color_tex, bgfx::Access::Write, 0, m_nLayers, 0, BGFX_RESOLVE_AUTO_GEN_MIPS);
-      depthAttachment.init(m_depth_tex, bgfx::Access::Write, 0, m_nLayers, 0, BGFX_RESOLVE_AUTO_GEN_MIPS);
-      const bgfx::Attachment attachments[] = { colorAttachment, depthAttachment };
-      m_framebuffer = bgfx::createFrameBuffer(2, attachments);
-   }
-   else
    {
       bgfx::Attachment colorAttachment;
-      colorAttachment.init(m_color_tex, bgfx::Access::Write, 0, m_nLayers, 0, BGFX_RESOLVE_AUTO_GEN_MIPS);
-      m_framebuffer = bgfx::createFrameBuffer(1, &colorAttachment);
+      if (with_depth)
+      {
+         bgfx::Attachment depthAttachment;
+         colorAttachment.init(m_color_tex, bgfx::Access::Write, 0, m_nLayers, 0, BGFX_RESOLVE_AUTO_GEN_MIPS);
+         depthAttachment.init(m_depth_tex, bgfx::Access::Write, 0, m_nLayers, 0, BGFX_RESOLVE_AUTO_GEN_MIPS);
+         const std::array<bgfx::Attachment, 2> attachments { colorAttachment, depthAttachment };
+         m_framebuffer = bgfx::createFrameBuffer(2, attachments.data());
+      }
+      else
+      {
+         colorAttachment.init(m_color_tex, bgfx::Access::Write, 0, m_nLayers, 0, BGFX_RESOLVE_AUTO_GEN_MIPS);
+         m_framebuffer = bgfx::createFrameBuffer(1, &colorAttachment);
+      }
+      if (!bgfx::isValid(m_framebuffer))
+      {
+         PLOGE << failureMessage;
+         PLOGE << "Failed to create render target";
+         exit(-1);
+      }
+      bgfx::setName(m_framebuffer, name.c_str());
    }
-   if (!bgfx::isValid(m_framebuffer))
+
+   // Create ancillary framebuffers to be able to blit & render from/to the other layers
+   if (m_nLayers > 1)
    {
-      PLOGE << failureMessage;
-      PLOGE << "Failed to create render target";
-      exit(-1);
+      for (uint16_t i = 0; i < static_cast<uint16_t>(m_nLayers); i++)
+      {
+         bgfx::Attachment colorAttachment;
+         if (with_depth)
+         {
+            bgfx::Attachment depthAttachment;
+            colorAttachment.init(m_color_tex, bgfx::Access::Write, i, 1, 0, BGFX_RESOLVE_AUTO_GEN_MIPS);
+            depthAttachment.init(m_depth_tex, bgfx::Access::Write, i, 1, 0, BGFX_RESOLVE_AUTO_GEN_MIPS);
+            const std::array<bgfx::Attachment, 2> attachments { colorAttachment, depthAttachment };
+            m_framebuffer_layers[i] = bgfx::createFrameBuffer(2, attachments.data());
+         }
+         else
+         {
+            colorAttachment.init(m_color_tex, bgfx::Access::Write, i, 1, 0, BGFX_RESOLVE_AUTO_GEN_MIPS);
+            m_framebuffer_layers[i] = bgfx::createFrameBuffer(1, &colorAttachment);
+         }
+         if (!bgfx::isValid(m_framebuffer_layers[i]))
+         {
+            PLOGE << failureMessage;
+            PLOGE << "Failed to create render target";
+            exit(-1);
+         }
+         bgfx::setName(m_framebuffer_layers[i], std::format("{}.Layer{}", name, i).c_str());
+      }
    }
-   bgfx::setName(m_framebuffer, name.c_str());
 
 #elif defined(ENABLE_OPENGL)
    const GLuint col_type = ((format == RGBA32F) || (format == RGB32F)) ? GL_FLOAT : ((format == RGB16F) || (format == RGBA16F)) ? GL_HALF_FLOAT : GL_UNSIGNED_BYTE;
@@ -338,10 +375,10 @@ RenderTarget::RenderTarget(RenderDevice* const rd, const SurfaceType type, const
       glObjectLabel(GL_FRAMEBUFFER, m_framebuffer, (GLsizei) name.length(), name.c_str());
 #endif
 
-   constexpr GLenum DrawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
+   static constexpr GLenum DrawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
    glDrawBuffers(1, DrawBuffers);
 
-   // Create anciliary FBOs to be able to blit (especially resolve MSAA) from/to the other layers
+   // Create ancillary FBOs to be able to blit (especially resolve MSAA) from/to the other layers
    if (m_nLayers > 1)
    {
       glGenFramebuffers(m_nLayers, m_framebuffer_layers);
@@ -366,7 +403,6 @@ RenderTarget::RenderTarget(RenderDevice* const rd, const SurfaceType type, const
    const int status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
    if (status != GL_FRAMEBUFFER_COMPLETE)
    {
-      char msg[256];
       const char* errorCode;
       switch (status)
       {
@@ -384,7 +420,7 @@ RenderTarget::RenderTarget(RenderDevice* const rd, const SurfaceType type, const
 #endif
       default: errorCode = "unknown"; break;
       }
-      sprintf_s(msg, sizeof(msg), "glCheckFramebufferStatus returned 0x%08X %s", glCheckFramebufferStatus(m_framebuffer), errorCode);
+      const string msg = std::format("glCheckFramebufferStatus returned {:#010X} {}", (unsigned int)glCheckFramebufferStatus(m_framebuffer), errorCode);
       ShowError(msg);
 
 #ifndef __OPENGLES__
@@ -550,16 +586,16 @@ RenderTarget* RenderTarget::Duplicate(const string& name, const bool shareDepthS
    return new RenderTarget(m_rd, m_type, name, m_width, m_height, m_format, m_has_depth, m_nMSAASamples, "Failed to duplicate render target", shareDepthSurface ? this : nullptr);
 }
 
-void RenderTarget::CopyTo(RenderTarget* dest, const bool copyColor, const bool copyDepth,
+void RenderTarget::CopyTo(RenderTarget* const dest, const bool copyColor, const bool copyDepth,
    const int x1, const int y1, const int w1, const int h1,
    const int x2, const int y2, const int w2, const int h2, 
    const int srcLayer, const int dstLayer)
 {
-   int px1 = x1 == -1 ? 0 : x1, py1 = y1 == -1 ? 0 : y1, pz1 = srcLayer == -1 ? 0 : srcLayer;
-   int pw1 = w1 == -1 ? GetWidth() : w1, ph1 = h1 == -1 ? GetHeight() : h1;
-   int px2 = x2 == -1 ? 0 : x2, py2 = y2 == -1 ? 0 : y2, pz2 = dstLayer == -1 ? 0 : dstLayer;
-   int pw2 = w2 == -1 ? dest->GetWidth() : w2, ph2 = h2 == -1 ? dest->GetHeight() : h2;
-   int nLayers = srcLayer == -1 ? m_nLayers : 1;
+   const int px1 = x1 == -1 ? 0 : x1, py1 = y1 == -1 ? 0 : y1, pz1 = srcLayer == -1 ? 0 : srcLayer;
+   const int pw1 = w1 == -1 ? GetWidth() : w1, ph1 = h1 == -1 ? GetHeight() : h1;
+   const int px2 = x2 == -1 ? 0 : x2, py2 = y2 == -1 ? 0 : y2, pz2 = dstLayer == -1 ? 0 : dstLayer;
+   const int pw2 = w2 == -1 ? dest->GetWidth() : w2, ph2 = h2 == -1 ? dest->GetHeight() : h2;
+   const int nLayers = srcLayer == -1 ? m_nLayers : 1;
    assert(srcLayer != -1 || dstLayer != -1 || m_nLayers == dest->m_nLayers); // Either we copy a single layer or the full set in which case they must match
 
 #if defined(ENABLE_BGFX)
@@ -621,8 +657,8 @@ void RenderTarget::CopyTo(RenderTarget* dest, const bool copyColor, const bool c
    else
    #endif
    {
-      // OpenGl ES or MSAA resolve => We need glBlitFramebuffer. It will perform MSAA resolution but it will only copy the first layer
-      // Therefore we need to use anciliary FBOs with only the wanted layer bound to them to perform all of the wanted blit
+      // OpenGl ES or MSAA resolve => We need glBlitFramebuffer. It will perform MSAA resolution, but it will only copy the first layer
+      // Therefore we need to use ancillary FBOs with only the wanted layer bound to them to perform all of the wanted blits
       int bitmask = (copyColor ? GL_COLOR_BUFFER_BIT : 0) | (m_has_depth && dest->m_has_depth && copyDepth ? GL_DEPTH_BUFFER_BIT : 0);
       for (int i = 0; i < nLayers; i++)
       {
@@ -656,7 +692,6 @@ void RenderTarget::Activate(const int layer)
    current_render_layer = layer;
 
    #if defined(ENABLE_BGFX)
-   assert(layer == -1 || m_nLayers == 1);
    m_rd->NextView();
    #ifdef _DEBUG
    bgfx::setViewName(m_rd->m_activeViewId, m_name.c_str());

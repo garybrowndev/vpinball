@@ -29,14 +29,14 @@ namespace B2SLegacy {
 #include <exception>
 
 FormBackglass::FormBackglass(VPXPluginAPI* vpxApi, MsgPluginAPI* msgApi,uint32_t endpointId, B2SData* pB2SData)
-   : Form(vpxApi, msgApi, endpointId, pB2SData, "Backglass"),
+   : Form(vpxApi, msgApi, endpointId, pB2SData, "Backglass"s),
      m_pB2SSettings(pB2SData->GetB2SSettings())
 {
    SetName("formBackglass"s);
 
-   m_pFormDMD = NULL;
-   m_pStartupTimer = NULL;
-   m_pRotateTimer = NULL;
+   m_pFormDMD = nullptr;
+   m_pStartupTimer = nullptr;
+   m_pRotateTimer = nullptr;
    m_rotateSlowDownSteps = 0;
    m_rotateRunTillEnd = false;
    m_rotateRunToFirstStep = false;
@@ -64,7 +64,7 @@ FormBackglass::FormBackglass(VPXPluginAPI* vpxApi, MsgPluginAPI* msgApi,uint32_t
    m_secondRomIDType4Fantasy = eRomIDType_NotDefined;
    m_secondRomInverted4Fantasy = false;
    m_pB2SAnimation = new B2SAnimation();
-   m_pB2SScreen = new B2SScreen(m_pB2SData, m_msgApi, m_vpxApi);
+   m_pB2SScreen = new B2SScreen(m_pB2SData, m_msgApi, m_vpxApi, endpointId);
 
    // load settings
    m_pB2SSettings->Load();
@@ -151,7 +151,7 @@ void FormBackglass::OnPaint(VPXRenderContext2D* const ctx)
             }
             // now draw z-ordered images
             for(const auto& [key, pIllus] : *m_pB2SData->GetZOrderImages()) {
-               for (int i = 0; i < pIllus.size(); i++)
+               for (size_t i = 0; i < pIllus.size(); i++)
                   DrawImage(ctx, pIllus[i]);
             }
          }
@@ -342,12 +342,12 @@ eLEDTypes FormBackglass::GetLEDType() const
 
 void FormBackglass::PlaySound(const string& szSoundName)
 {
-   LOGW("Not implemented");
+   LOGW("Not implemented"s);
 }
 
 void FormBackglass::StopSound(const string& szSoundName)
 {
-   LOGW("Not implemented");
+   LOGW("Not implemented"s);
 }
 
 const SDL_FRect& FormBackglass::GetScaleFactor() const
@@ -357,35 +357,35 @@ const SDL_FRect& FormBackglass::GetScaleFactor() const
 
 void FormBackglass::LoadB2SData()
 {
-   const string szFilename = find_case_insensitive_file_path(title_and_path_from_filename(m_pB2SData->GetTableFileName()) + ".directb2s");
-   if (szFilename.empty()) {
-      LOGD("No directb2s file found");
+   const std::filesystem::path tablePath(m_pB2SData->GetTableFileName());
+   const std::filesystem::path b2sFilename = find_case_insensitive_file_path(tablePath.parent_path() / tablePath.filename().replace_extension(".directb2s"));
+   if (b2sFilename.empty()) {
+      LOGD("No directb2s file found"s);
       throw std::exception();
    }
 
-   LOGI("directb2s file found at: %s", szFilename.c_str());
+   LOGI("directb2s file found at: " + b2sFilename.string());
 
-   m_pB2SData->SetBackglassFileName(szFilename);
+   m_pB2SData->SetBackglassFileName(b2sFilename.string());
 
-   std::ifstream infile(szFilename);
+   std::ifstream infile(b2sFilename);
    if (!infile.good())
       throw std::exception();
 
    tinyxml2::XMLDocument b2sTree;
    std::stringstream buffer;
-   std::ifstream myFile(szFilename.c_str());
+   std::ifstream myFile(b2sFilename);
    buffer << myFile.rdbuf();
    myFile.close();
 
    auto xml = buffer.str();
    if (b2sTree.Parse(xml.c_str(), xml.size())) {
-      LOGE("Failed to parse directb2s file: %s", szFilename.c_str());
+      LOGE("Failed to parse directb2s file: " + b2sFilename.string());
       throw std::exception();
    }
 
-   // try to get into the file and read some XML
    if (!b2sTree.FirstChildElement("DirectB2SData")) {
-      LOGE("Invalid directb2s file: %s", szFilename.c_str());
+      LOGE("Invalid directb2s file: " + b2sFilename.string());
       throw std::exception();
    }
 
@@ -393,13 +393,13 @@ void FormBackglass::LoadB2SData()
 
    // current backglass version is not allowed to be larger than server version and to be smaller minimum B2S version
    if (m_pB2SSettings->GetBackglassFileVersion() > string(B2S_VERSION_STRING)) {
-      LOGE("B2S backglass server version (%s) doesn't match directb2s file version (%s). Please update the B2S backglass server.",
-         B2S_VERSION_STRING, m_pB2SSettings->GetBackglassFileVersion().c_str());
+      LOGE(std::format("B2S backglass server version ({}) doesn't match directb2s file version ({}). Please update the B2S backglass server.",
+         B2S_VERSION_STRING, m_pB2SSettings->GetBackglassFileVersion()));
       return;
    }
    else if (m_pB2SSettings->GetBackglassFileVersion() < m_pB2SSettings->GetMinimumDirectB2SVersion()) {
-      LOGE("directb2s file version (%s) doesn't match minimum directb2s version. Please update the directb2s backglass file.",
-         m_pB2SSettings->GetBackglassFileVersion().c_str());
+      LOGE(std::format("directb2s file version ({}) doesn't match minimum directb2s version. Please update the directb2s backglass file.",
+         m_pB2SSettings->GetBackglassFileVersion()));
       return;
    }
 
@@ -592,9 +592,9 @@ void FormBackglass::LoadB2SData()
    }
 
    // get all score infos
-   int dream7index = 1;
-   int renderedandreelindex = 1;
    if (topnode->FirstChildElement("Scores")) {
+      int dream7index = 1;
+      int renderedandreelindex = 1;
       int rollinginterval = 0;
       if (topnode->FirstChildElement("Scores")->FindAttribute("ReelRollingInterval"))
          rollinginterval = topnode->FirstChildElement("Scores")->IntAttribute("ReelRollingInterval");
@@ -656,7 +656,7 @@ void FormBackglass::LoadB2SData()
 
          // maybe get default glow value
          if (m_pB2SSettings->GetDefaultGlow() == -1)
-             m_pB2SSettings->SetDefaultGlow(d7glow);
+             m_pB2SSettings->SetDefaultGlow(static_cast<int>(d7glow));
 
          // set preferred LED settings
          if (isRenderedLEDs || isDream7LEDs) {
@@ -667,7 +667,7 @@ void FormBackglass::LoadB2SData()
             else if (m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Undefined)
                m_pB2SSettings->SetUsedLEDType(isDream7LEDs ? eLEDTypes_Dream7 : eLEDTypes_Rendered);
             if (m_pB2SSettings->IsGameNameFound() && m_pB2SSettings->GetGlowIndex() > -1)
-               glow = m_pB2SSettings->GetGlowIndex() * 8;
+               glow = static_cast<float>(m_pB2SSettings->GetGlowIndex() * 8);
             if (m_pB2SSettings->IsGameNameFound() && m_pB2SSettings->IsGlowBulbOn())
                glowbulb = { 0.0f, 0.0f, 0.1f, 0.4f };
          }
@@ -687,7 +687,7 @@ void FormBackglass::LoadB2SData()
                pLed->SetType(SegmentNumberType_FourteenSegment);
             pLed->SetScaleMode(ScaleMode_Stretch);
             pLed->SetDigits(digits);
-            pLed->SetSpacing(spacing * 5);
+            pLed->SetSpacing(static_cast<float>(spacing * 5));
             pLed->SetHidden(hidden);
             // color settings
             pLed->SetLightColor(reellitcolor);
@@ -916,7 +916,7 @@ void FormBackglass::LoadB2SData()
                for (auto setnode = topnode->FirstChildElement("Reels")->FirstChildElement("IlluminatedImages")->FirstChildElement("Set"); setnode != nullptr; setnode = setnode->NextSiblingElement("Set")) {
                   int setid = setnode->IntAttribute("ID");
                   for (auto innerNode = setnode->FirstChildElement("IlluminatedImage"); innerNode != nullptr; innerNode = innerNode->NextSiblingElement("IlluminatedImage")) {
-                     string name = string(innerNode->Attribute("Name")) + '_' + std::to_string(setid);
+                     string name = innerNode->Attribute("Name") + ('_' + std::to_string(setid));
                      VPXTexture pImage = Base64ToImage(innerNode->Attribute("Image"));
                      if (!m_pB2SData->GetReelIlluImages()->contains(name))
                         (*m_pB2SData->GetReelIlluImages())[name] = pImage;
@@ -1082,29 +1082,29 @@ void FormBackglass::LoadB2SData()
       // maybe draw some light images for pretty fast image changing
       if (top4Authentic >= minSize4Image && mergeBulbs) {
          // create some light images
-         if (m_pTopLightImage4Authentic == NULL) {
-            SetTopLightImage4Authentic(CreateLightImage(m_pDarkImage4Authentic, eDualMode_Authentic, topkey4Authentic, "", m_topRomID4Authentic, m_topRomIDType4Authentic, m_topRomInverted4Authentic));
+         if (m_pTopLightImage4Authentic == nullptr) {
+            SetTopLightImage4Authentic(CreateLightImage(m_pDarkImage4Authentic, eDualMode_Authentic, topkey4Authentic, ""s, m_topRomID4Authentic, m_topRomIDType4Authentic, m_topRomInverted4Authentic));
             if (second4Authentic > minSize4Image) {
-               SetSecondLightImage4Authentic(CreateLightImage(m_pDarkImage4Authentic, eDualMode_Authentic, secondkey4Authentic, "", m_secondRomID4Authentic, m_secondRomIDType4Authentic, m_secondRomInverted4Authentic));
+               SetSecondLightImage4Authentic(CreateLightImage(m_pDarkImage4Authentic, eDualMode_Authentic, secondkey4Authentic, ""s, m_secondRomID4Authentic, m_secondRomIDType4Authentic, m_secondRomInverted4Authentic));
                SetTopAndSecondLightImage4Authentic(CreateLightImage(m_pDarkImage4Authentic, eDualMode_Authentic, topkey4Authentic, secondkey4Authentic));
             }
          }
          else {
-            SetSecondLightImage4Authentic(CreateLightImage(m_pDarkImage4Authentic, eDualMode_Authentic, topkey4Authentic, "", m_secondRomID4Authentic, m_secondRomIDType4Authentic, m_secondRomInverted4Authentic));
+            SetSecondLightImage4Authentic(CreateLightImage(m_pDarkImage4Authentic, eDualMode_Authentic, topkey4Authentic, ""s, m_secondRomID4Authentic, m_secondRomIDType4Authentic, m_secondRomInverted4Authentic));
             SetTopAndSecondLightImage4Authentic(CreateLightImage(m_pTopLightImage4Authentic, eDualMode_Authentic, topkey4Authentic));
          }
       }
       if (m_pB2SData->IsDualBackglass() && top4Fantasy >= minSize4Image && mergeBulbs) {
          // create some light images
-         if (m_pTopLightImage4Fantasy == NULL) {
-            SetTopLightImage4Fantasy(CreateLightImage(m_pDarkImage4Fantasy, eDualMode_Fantasy, topkey4Fantasy, "", m_topRomID4Fantasy, m_topRomIDType4Fantasy, m_topRomInverted4Fantasy));
+         if (m_pTopLightImage4Fantasy == nullptr) {
+            SetTopLightImage4Fantasy(CreateLightImage(m_pDarkImage4Fantasy, eDualMode_Fantasy, topkey4Fantasy, ""s, m_topRomID4Fantasy, m_topRomIDType4Fantasy, m_topRomInverted4Fantasy));
             if (second4Fantasy > minSize4Image) {
-               SetSecondLightImage4Fantasy(CreateLightImage(m_pDarkImage4Fantasy, eDualMode_Fantasy, secondkey4Fantasy, "", m_secondRomID4Fantasy, m_secondRomIDType4Fantasy, m_secondRomInverted4Fantasy));
+               SetSecondLightImage4Fantasy(CreateLightImage(m_pDarkImage4Fantasy, eDualMode_Fantasy, secondkey4Fantasy, ""s, m_secondRomID4Fantasy, m_secondRomIDType4Fantasy, m_secondRomInverted4Fantasy));
                SetTopAndSecondLightImage4Fantasy(CreateLightImage(m_pDarkImage4Fantasy, eDualMode_Fantasy, topkey4Fantasy, secondkey4Fantasy));
             }
          }
          else {
-            SetSecondLightImage4Fantasy(CreateLightImage(m_pDarkImage4Fantasy, eDualMode_Fantasy, topkey4Fantasy, "", m_secondRomID4Fantasy, m_secondRomIDType4Fantasy, m_secondRomInverted4Fantasy));
+            SetSecondLightImage4Fantasy(CreateLightImage(m_pDarkImage4Fantasy, eDualMode_Fantasy, topkey4Fantasy, ""s, m_secondRomID4Fantasy, m_secondRomIDType4Fantasy, m_secondRomInverted4Fantasy));
             SetTopAndSecondLightImage4Fantasy(CreateLightImage(m_pTopLightImage4Fantasy, eDualMode_Fantasy, topkey4Fantasy));
          }
       }
@@ -1134,10 +1134,10 @@ void FormBackglass::LoadB2SData()
          int interval = innerNode->IntAttribute("Interval");
          int loops = innerNode->IntAttribute("Loops");
          string idJoins = innerNode->Attribute("IDJoin");
-         bool startAnimationAtBackglassStartup = (string(innerNode->Attribute("StartAnimationAtBackglassStartup")) == "1");
+         bool startAnimationAtBackglassStartup = (innerNode->Attribute("StartAnimationAtBackglassStartup") == "1"sv);
          eLightsStateAtAnimationStart lightsStateAtAnimationStart = eLightsStateAtAnimationStart_NoChange;
          eLightsStateAtAnimationEnd lightsStateAtAnimationEnd = eLightsStateAtAnimationEnd_InvolvedLightsOff;
-         eAnimationStopBehaviour animationstopbehaviour = eAnimationStopBehaviour_StopImmediatelly;
+         eAnimationStopBehaviour animationstopbehaviour = eAnimationStopBehaviour_StopImmediately;
          bool lockInvolvedLamps = false;
          bool hidescoredisplays = false;
          bool bringtofront = false;
@@ -1146,22 +1146,22 @@ void FormBackglass::LoadB2SData()
          if (innerNode->FindAttribute("LightsStateAtAnimationStart"))
             lightsStateAtAnimationStart = (eLightsStateAtAnimationStart)innerNode->IntAttribute("LightsStateAtAnimationStart");
          else if (innerNode->FindAttribute("AllLightsOffAtAnimationStart"))
-            lightsStateAtAnimationStart = (string(innerNode->Attribute("AllLightsOffAtAnimationStart")) == "1") ? eLightsStateAtAnimationStart_LightsOff : eLightsStateAtAnimationStart_NoChange;
+            lightsStateAtAnimationStart = (innerNode->Attribute("AllLightsOffAtAnimationStart") == "1"sv) ? eLightsStateAtAnimationStart_LightsOff : eLightsStateAtAnimationStart_NoChange;
          if (innerNode->FindAttribute("LightsStateAtAnimationEnd"))
             lightsStateAtAnimationEnd = (eLightsStateAtAnimationEnd)innerNode->IntAttribute("LightsStateAtAnimationEnd");
          else if (innerNode->FindAttribute("ResetLightsAtAnimationEnd"))
-            lightsStateAtAnimationEnd = (string(innerNode->Attribute("ResetLightsAtAnimationEnd")) == "1") ? eLightsStateAtAnimationEnd_LightsReseted : eLightsStateAtAnimationEnd_Undefined;
+            lightsStateAtAnimationEnd = (innerNode->Attribute("ResetLightsAtAnimationEnd") == "1"sv) ? eLightsStateAtAnimationEnd_LightsReseted : eLightsStateAtAnimationEnd_Undefined;
          if (innerNode->FindAttribute("AnimationStopBehaviour"))
             animationstopbehaviour = (eAnimationStopBehaviour)innerNode->IntAttribute("AnimationStopBehaviour");
          else if (innerNode->FindAttribute("RunAnimationTilEnd"))
-            animationstopbehaviour = (string(innerNode->Attribute("RunAnimationTilEnd")) == "1") ? eAnimationStopBehaviour_RunAnimationTillEnd : eAnimationStopBehaviour_StopImmediatelly;
-         lockInvolvedLamps = (string(innerNode->Attribute("LockInvolvedLamps")) == "1");
+            animationstopbehaviour = (innerNode->Attribute("RunAnimationTilEnd") == "1"sv) ? eAnimationStopBehaviour_RunAnimationTillEnd : eAnimationStopBehaviour_StopImmediately;
+         lockInvolvedLamps = (innerNode->Attribute("LockInvolvedLamps") == "1"sv);
          if (innerNode->FindAttribute("HideScoreDisplays"))
-            hidescoredisplays = (string(innerNode->Attribute("HideScoreDisplays")) == "1");
+            hidescoredisplays = (innerNode->Attribute("HideScoreDisplays") == "1"sv);
          if (innerNode->FindAttribute("BringToFront"))
-            bringtofront = (string(innerNode->Attribute("BringToFront")) == "1");
+            bringtofront = (innerNode->Attribute("BringToFront") == "1"sv);
          if (innerNode->FindAttribute("RandomStart"))
-            randomstart = (string(innerNode->Attribute("RandomStart")) == "1");
+            randomstart = (innerNode->Attribute("RandomStart") == "1"sv);
          if (randomstart && innerNode->FindAttribute("RandomQuality"))
             randomquality = innerNode->IntAttribute("RandomQuality");
          if (lightsStateAtAnimationStart == eLightsStateAtAnimationStart_Undefined)
@@ -1169,7 +1169,7 @@ void FormBackglass::LoadB2SData()
          if (lightsStateAtAnimationEnd == eLightsStateAtAnimationEnd_Undefined)
             lightsStateAtAnimationEnd = eLightsStateAtAnimationEnd_InvolvedLightsOff;
          if (animationstopbehaviour == eAnimationStopBehaviour_Undefined)
-            animationstopbehaviour = eAnimationStopBehaviour_StopImmediatelly;
+            animationstopbehaviour = eAnimationStopBehaviour_StopImmediately;
          vector<PictureBoxAnimationEntry*> entries;
          for (auto stepnode = innerNode->FirstChildElement("AnimationStep"); stepnode != nullptr; stepnode = stepnode->NextSiblingElement("AnimationStep")) {
             //int step = stepnode->IntAttribute("Step");
@@ -1188,8 +1188,9 @@ void FormBackglass::LoadB2SData()
                lightsStateAtAnimationStart, lightsStateAtAnimationEnd, animationstopbehaviour, lockInvolvedLamps, hidescoredisplays,
                bringtofront, randomstart, randomquality, entries);
             // maybe set slowdown
-            if (m_pB2SSettings->GetAnimationSlowDowns()->contains(name))
-               m_pB2SAnimation->SetAnimationSlowDown(name, (*m_pB2SSettings->GetAnimationSlowDowns())[name]);
+            const auto& it = m_pB2SSettings->GetAnimationSlowDowns()->find(name);
+            if (it != m_pB2SSettings->GetAnimationSlowDowns()->end())
+               m_pB2SAnimation->SetAnimationSlowDown(name, it->second);
             // add join to ID
             if (!idJoins.empty()) {
                std::istringstream iss(idJoins);
@@ -1293,8 +1294,8 @@ void FormBackglass::ResizeSomeImages()
    float xResizeFactor = 1.0f;
    float yResizeFactor = 1.0f;
    if (m_pDarkImage4Authentic) {
-      int width = m_vpxApi->GetTextureInfo(m_pDarkImage4Authentic)->width;
-      int height = m_vpxApi->GetTextureInfo(m_pDarkImage4Authentic)->height;
+      unsigned int width = m_vpxApi->GetTextureInfo(m_pDarkImage4Authentic)->width;
+      unsigned int height = m_vpxApi->GetTextureInfo(m_pDarkImage4Authentic)->height;
       SetDarkImage4Authentic(ResizeTexture(m_pDarkImage4Authentic, m_pB2SScreen->GetBackglassSize().w, m_pB2SScreen->GetBackglassSize().h));
       xResizeFactor = (float)width / (float)m_vpxApi->GetTextureInfo(m_pDarkImage4Authentic)->width;
       yResizeFactor = (float)height / (float)m_vpxApi->GetTextureInfo(m_pDarkImage4Authentic)->height;
@@ -1428,18 +1429,18 @@ VPXTexture FormBackglass::CreateLightImage(VPXTexture image, eDualMode dualmode,
    int secondromid = 0;
    eRomIDType secondromidtype = eRomIDType_NotDefined;
    bool secondrominverted = false;
-   if (firstromkey.substr(0, 1) == "I") {
+   if (firstromkey.starts_with('I')) {
       rominverted = true;
       firstromkey = firstromkey.substr(1);
    }
-   romidtype = (firstromkey.substr(0, 1) == "S" ? eRomIDType_Solenoid : (firstromkey.substr(0, 2) == "GI" ? eRomIDType_GIString : eRomIDType_Lamp));
+   romidtype = (firstromkey.starts_with('S') ? eRomIDType_Solenoid : (firstromkey.starts_with("GI") ? eRomIDType_GIString : eRomIDType_Lamp));
    romid = std::stoi((romidtype == eRomIDType_GIString ? firstromkey.substr(2) : firstromkey.substr(1)));
    if (!secondromkey.empty()) {
-      if (secondromkey.substr(0, 1) == "I") {
+      if (secondromkey.starts_with('I')) {
          secondrominverted = true;
          secondromkey = secondromkey.substr(1);
       }
-      secondromidtype = (secondromkey.substr(0, 1) == "S" ? eRomIDType_Solenoid : (secondromkey.substr(0, 2) == "GI" ? eRomIDType_GIString : eRomIDType_Lamp));
+      secondromidtype = (secondromkey.starts_with('S') ? eRomIDType_Solenoid : (secondromkey.starts_with("GI") ? eRomIDType_GIString : eRomIDType_Lamp));
       secondromid = std::stoi((secondromidtype == eRomIDType_GIString ? secondromkey.substr(2) : secondromkey.substr(1)));
    }
 
@@ -1489,7 +1490,7 @@ VPXTexture FormBackglass::CreateLightImage(VPXTexture image, eDualMode dualmode,
 void FormBackglass::CheckBulbs(int romid, eRomIDType romidtype, bool rominverted, eDualMode dualmode)
 {
    if (romid > 0 && romidtype != eRomIDType_NotDefined) {
-      std::map<int, vector<B2SBaseBox*>>* pUsedRomIDs = NULL;
+      std::map<int, vector<B2SBaseBox*>>* pUsedRomIDs = nullptr;
       if (romidtype == eRomIDType_Lamp)
          pUsedRomIDs = (dualmode == eDualMode_Fantasy ? m_pB2SData->GetUsedRomLampIDs4Fantasy() : m_pB2SData->GetUsedRomLampIDs4Authentic());
       else if (romidtype == eRomIDType_Solenoid)
@@ -1571,14 +1572,19 @@ VPXTexture FormBackglass::ResizeTexture(VPXTexture original, int newWidth, int n
 
 SDL_Rect FormBackglass::GetBoundingRectangle(VPXTexture pImage)
 {
-   SDL_Surface* surface = VPXGraphics::VPXTextureToSDLSurface(m_vpxApi, pImage);
+   SDL_Surface* sourceSurface = VPXGraphics::VPXTextureToSDLSurface(m_vpxApi, pImage);
+   if (!sourceSurface)
+      return { 0, 0, 0, 0 };
+
+   SDL_Surface* surface = SDL_ConvertSurface(sourceSurface, SDL_PIXELFORMAT_RGBA32);
+   SDL_DestroySurface(sourceSurface);
    if (!surface)
       return { 0, 0, 0, 0 };
 
    SDL_LockSurface(surface);
 
    const uint32_t* const __restrict pixels = static_cast<uint32_t*>(surface->pixels);
-   const int pitch = surface->pitch / sizeof(uint32_t);
+   const int pitch = surface->pitch / (int)sizeof(uint32_t);
    const SDL_PixelFormatDetails* const pfd = SDL_GetPixelFormatDetails(surface->format);
    SDL_Palette* const pal = SDL_GetSurfacePalette(surface);
 
@@ -1679,26 +1685,29 @@ VPXTexture FormBackglass::CropImageToTransparency(VPXTexture pImage, VPXTexture 
    return result;
 }
 
-VPXTexture FormBackglass::Base64ToImage(const string& image)
+VPXTexture FormBackglass::Base64ToImage(const char* image)
 {
-   vector<unsigned char> imageData = base64_decode(image);
-   if (imageData.empty()) {
-      LOGE("Base64ToImage: Failed to decode Base64 data");
+   std::string_view imageView { image };
+   vector<uint8_t> decoded = base64_decode(imageView.data(), imageView.size());
+   if (decoded.empty()) {
+      LOGE("Base64ToImage: Failed to decode Base64 data"s);
       return nullptr;
    }
 
-   VPXTexture pImage = m_vpxApi->CreateTexture(imageData.data(), static_cast<int>(imageData.size()));
+   VPXTexture pImage = m_vpxApi->CreateTexture(decoded.data(), static_cast<int>(decoded.size()));
    if (!pImage) {
-      size_t len = std::min<size_t>(image.size(), 40);
-      LOGE("Base64ToImage: Failed to create texture from data: %s", image.substr(0, len).c_str());
+      size_t len = std::min<size_t>(imageView.size(), 40);
+      LOGE("Base64ToImage: Failed to create texture from data: " + string(image, len));
    }
 
    return pImage;
 }
 
-Sound* FormBackglass::Base64ToWav(const string& data)
+Sound* FormBackglass::Base64ToWav(const char* data)
 {
-   return new Sound(base64_decode(data));
+   std::string_view dataView { data };
+   vector<uint8_t> decoded = base64_decode(dataView.data(), dataView.size());
+   return new Sound(std::move(decoded));
 }
 
 uint32_t FormBackglass::String2Color(const string& color)

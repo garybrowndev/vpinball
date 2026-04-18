@@ -1,31 +1,35 @@
 #pragma once
 
 #include "AnimatedActor.h"
+#include "resources/AssetManager.h"
+
+#include "LibAv.h"
 
 namespace Flex {
 
-class Video final : public AnimatedActor 
+class Video final : public AnimatedActor
 {
 public:
    ~Video() override;
 
-   static Video* Create(FlexDMD* pFlexDMD, const string& path, const string& name, bool loop);
+   static Video* Create(FlexDMD* pFlexDMD, AssetManager* pAssetManager, const string& path, const string& name, bool loop);
 
-   void Seek(float posInSeconds) override;
-   void Advance(float delta) override;
+   void OnStageStateChanged() override;
    void Rewind() override;
    void ReadNextFrame() override;
    void Draw(Flex::SurfaceGraphics* pGraphics) override;
-   void OnStageStateChanged() override;
-
-   float GetLength() const override { return 0.f; }
-
-   void SetVisible(bool visible) override { AnimatedActor::SetVisible(visible); OnStageStateChanged(); }
+   float GetLength() const override { return m_length; }
 
 private:
    Video(FlexDMD* pFlexDMD, const string& name);
 
-   float m_seek = 0;
+   std::vector<SDL_Surface*> m_frames;
+   SDL_Surface* m_pActiveFrameSurface = nullptr;
+   int m_pos = 0;
+   float m_frameDuration = 0.0f;
+   float m_length;
+
+   const LibAV::LibAV& m_libAv;
 };
 
 }

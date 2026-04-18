@@ -17,7 +17,9 @@ public:
    void Set(const float a, const float b) { x = a; y = b; }
    void SetZero() { Set(0.f, 0.f); }
 
-   Vertex2D operator+ (const Vertex2D& v) const
+   bool operator==(const Vertex2D& v) const { return (x == v.x) && (y == v.y); }
+
+   Vertex2D operator+(const Vertex2D& v) const
    {
       return {x + v.x, y + v.y};
    }
@@ -363,6 +365,9 @@ public:
 
     constexpr Vertex4D() {}
     constexpr Vertex4D(const float _x, const float _y, const float _z, const float _w) : x(_x), y(_y), z(_z), w(_w) {}
+    constexpr Vertex4D(const Vertex3Ds _v, const float _w) : x(_v.x), y(_v.y), z(_v.z), w(_w) {}
+
+    Vertex3Ds xyz() const { return {x, y, z}; }
 };
 
 #define vec4 Vertex4D

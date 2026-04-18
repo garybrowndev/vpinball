@@ -4,14 +4,14 @@
 
 #pragma once
 
-#include "ui/resource.h"
+#include "dragpoint.h"
+#include "ui/win/resource.h"
 
 class TriggerData final : public BaseProperty
 {
 public:
    Vertex2D m_vCenter;
    float m_radius;
-   TimerDataRoot m_tdr;
    string m_szSurface;
    TriggerShape m_shape;
    float m_rotation;
@@ -33,7 +33,8 @@ class Trigger :
    public IProvideClassInfo2Impl<&CLSID_Trigger, &DIID_ITriggerEvents, &LIBID_VPinballLib>,
    public ISelect,
    public IEditable,
-   public Hitable,
+   public IHitable,
+   public IRenderable,
    public IScriptable,
    public IHaveDragPoints,
    public IFireEvents,
@@ -46,7 +47,7 @@ public:
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
-   Trigger();
+   Trigger() { m_menuid = IDR_SURFACEMENU; }
    virtual ~Trigger();
 
    BEGIN_COM_MAP(Trigger)
@@ -66,7 +67,7 @@ public:
       CONNECTION_POINT_ENTRY(DIID_ITriggerEvents)
    END_CONNECTION_POINT_MAP()
 
-   STANDARD_EDITABLE_DECLARES(Trigger, eItemTrigger, TRIGGER, 1)
+   STANDARD_EDITABLE_DECLARES(Trigger, eItemTrigger, TRIGGER, VIEW_PLAYFIELD)
 
    DECLARE_REGISTRY_RESOURCEID(IDR_TRIGGER)
    // ISupportsErrorInfo
@@ -77,8 +78,10 @@ public:
    void MoveOffset(const float dx, const float dy) final;
    void SetObjectPos() final;
 
+#ifndef __STANDALONE__
    void EditMenu(CMenu &hmenu) final;
    void DoCommand(int icmd, int x, int y) final;
+#endif
 
    // Multi-object manipulation
    void FlipY(const Vertex2D& pvCenter) final;
@@ -110,27 +113,23 @@ private:
    void InitShape(float x, float y);
    void GenerateMesh();
 
-   PinTable *m_ptable;
-
    TriggerHitCircle *m_ptriggerhitcircle = nullptr;
    Hit3DPoly *m_ptriggerhitpoly = nullptr;
 
    RenderDevice *m_rd = nullptr;
-   MeshBuffer *m_meshBuffer = nullptr;
+   std::shared_ptr<MeshBuffer> m_meshBuffer;
    vector<Vertex3Ds> m_vertices;
    const WORD *m_faceIndices = nullptr;
    Vertex3D_NoTex2 *m_triggerVertices = nullptr;
    int m_numVertices = 0;
    int m_numIndices = 0;
 
-   PropertyPane *m_propVisual;
-
-   float m_animHeightOffset;
-   float m_vertexBuffer_animHeightOffset;
-   bool m_hitEvent;
-   bool m_unhitEvent;
-   bool m_doAnimation;
-   bool m_moveDown;
+   float m_animHeightOffset = 0.f;
+   float m_vertexBuffer_animHeightOffset = -FLT_MAX;
+   bool m_hitEvent = false;
+   bool m_unhitEvent = false;
+   bool m_doAnimation = false;
+   bool m_moveDown = false;
 
    Vertex3Ds m_boundingSphereCenter;
 

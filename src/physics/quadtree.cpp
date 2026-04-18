@@ -4,6 +4,9 @@
 #include "quadtree.h"
 #include "ThreadPool.h"
 
+#include "parts/primitive.h"
+#include "parts/hittarget.h"
+
 #ifdef ENABLE_SSE_OPTIMIZATIONS
    #define QUADTREE_SSE_LEAFTEST
 #else
@@ -76,7 +79,7 @@ void HitQuadtree::Insert(HitObject* ho)
 
 void HitQuadtree::Remove(HitObject* ho)
 {
-   vector<HitObject*>::const_iterator it = std::find(m_vho.begin(), m_vho.end(), ho);
+   const vector<HitObject*>::const_iterator it = std::find(m_vho.begin(), m_vho.end(), ho);
    if (it != m_vho.end())
       m_vho.erase(it);
    Initialize();
@@ -373,7 +376,7 @@ void HitQuadtreeNode::CreateNextLevel(HitQuadtree* const quadTree, const FRect& 
             if (shouldDispatch)
             {
                if (quadTree->m_threadPool == nullptr)
-                  quadTree->m_threadPool = new ThreadPool(g_pvp->GetLogicalNumberOfProcessors());
+                  quadTree->m_threadPool = new ThreadPool(g_app->GetLogicalNumberOfProcessors());
                quadTree->m_threadPool->enqueue([child, quadTree, childBounds, level, level_empty] { child->CreateNextLevel(quadTree, childBounds, level + 1, level_empty); });
                continue;
             }
@@ -625,7 +628,7 @@ void HitQuadtreeNode::HitTestXRay(const HitQuadtree* const quadTree, const HitBa
          #endif
          const float newtime = pho->HitTest(pball->m_d, coll.m_hittime, coll);
          if (newtime >= 0.f)
-            pvhoHit.push_back({pho, newtime});
+            pvhoHit.emplace_back(pho, newtime);
       }
    }
 
@@ -656,8 +659,8 @@ void HitQuadtreeNode::DumpTree(const int indentLevel)
       for (int i = 0; i <= indentLevel; ++i)
          indent[i] = (i == indentLevel) ? '\0' : ' ';
       char msg[256];
-      sprintf_s(msg, sizeof(msg), "[%f %f], items=%u", m_vcenter.x, m_vcenter.y, m_vho.size());
-      strncat_s(indent, msg, sizeof(indent)-strnlen_s(indent, sizeof(indent))-1);
+      sprintf_s(msg, std::size(msg), "[%f %f], items=%u", m_vcenter.x, m_vcenter.y, m_vho.size());
+      strncat_s(indent, msg, std::size(indent)-strnlen_s(indent, std::size(indent))-1);
       OutputDebugString(indent);
       if (m_children != nullptr)
       {

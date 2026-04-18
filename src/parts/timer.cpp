@@ -1,40 +1,40 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
-
-Timer::Timer()
-{
-}
+#include "timer.h"
 
 Timer::~Timer()
 {
 }
 
-Timer *Timer::CopyForPlay(PinTable *live_table) const
+Timer *Timer::CopyForPlay() const
 {
-   STANDARD_EDITABLE_COPY_FOR_PLAY_IMPL(Timer, live_table)
+   STANDARD_EDITABLE_COPY_FOR_PLAY_IMPL(Timer)
    return dst;
 }
 
-HRESULT Timer::Init(PinTable *const ptable, const float x, const float y, const bool fromMouseClick, const bool forPlay)
+HRESULT Timer::Init(const float x, const float y, const bool fromMouseClick, const bool forPlay)
 {
-   m_ptable = ptable;
    SetDefaults(fromMouseClick);
    m_d.m_v.x = x;
    m_d.m_v.y = y;
-   return forPlay ? S_OK : InitVBA(true, nullptr);
+   return S_OK;
 }
 
 void Timer::SetDefaults(const bool fromMouseClick)
 {
-   m_d.m_tdr.m_TimerEnabled = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultPropsTimer, "TimerEnabled"s, true) : true;
-   m_d.m_tdr.m_TimerInterval = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(Settings::DefaultPropsTimer, "TimerInterval"s, 100) : 100;
+#define LinkProp(field, prop) field = fromMouseClick ? g_app->m_settings.GetDefaultPropsTimer_##prop() : Settings::GetDefaultPropsTimer_##prop##_Default()
+   LinkProp(m_timerEnabled, TimerEnabled);
+   LinkProp(m_timerInterval, TimerInterval);
+#undef LinkProp
 }
 
 void Timer::WriteRegDefaults()
 {
-   g_pvp->m_settings.SaveValue(Settings::DefaultPropsTimer, "TimerEnabled"s, m_d.m_tdr.m_TimerEnabled);
-   g_pvp->m_settings.SaveValue(Settings::DefaultPropsTimer, "TimerInterval"s, m_d.m_tdr.m_TimerInterval);
+#define LinkProp(field, prop) g_app->m_settings.SetDefaultPropsTimer_##prop(field, false)
+   LinkProp(m_timerEnabled, TimerEnabled);
+   LinkProp(m_timerInterval, TimerInterval);
+#undef LinkProp
 }
 
 void Timer::SetObjectPos()
@@ -91,45 +91,6 @@ void Timer::RenderBlueprint(Sur *psur, const bool solid)
 {
 }
 
-
-#pragma region Physics
-
-void Timer::PhysicSetup(PhysicsEngine* physics, const bool isUI)
-{
-   if (isUI)
-   {
-      // FIXME implement UI picking
-   }
-}
-
-void Timer::PhysicRelease(PhysicsEngine* physics, const bool isUI)
-{
-}
-
-#pragma endregion
-
-
-#pragma region Rendering
-
-void Timer::RenderSetup(RenderDevice *device)
-{
-}
-
-void Timer::UpdateAnimation(const float diff_time_msec)
-{
-}
-
-void Timer::Render(const unsigned int renderMask)
-{
-}
-
-void Timer::RenderRelease()
-{
-}
-
-#pragma endregion
-
-
 STDMETHODIMP Timer::InterfaceSupportsErrorInfo(REFIID riid)
 {
    static const IID* arr[] =
@@ -144,93 +105,33 @@ STDMETHODIMP Timer::InterfaceSupportsErrorInfo(REFIID riid)
    return S_FALSE;
 }
 
-STDMETHODIMP Timer::get_Enabled(VARIANT_BOOL *pVal)
+void Timer::Save(IObjectWriter& writer, const bool saveForUndo)
 {
-   *pVal = FTOVB(m_d.m_tdr.m_TimerEnabled);
-   return S_OK;
+   writer.WriteVector2(FID(VCEN), m_d.m_v);
+   writer.WriteBool(FID(TMON), m_timerEnabled);
+   writer.WriteInt(FID(TMIN), m_timerInterval);
+   writer.WriteWideString(FID(NAME), m_wzName);
+   writer.WriteBool(FID(BGLS), m_desktopBackdrop);
+   SaveSharedEditableFields(writer);
+   writer.EndObject();
 }
 
-STDMETHODIMP Timer::put_Enabled(VARIANT_BOOL newVal)
-{
-   STARTUNDO
-   const bool val = VBTOb(newVal);
-
-   if (g_pplayer && val != m_d.m_tdr.m_TimerEnabled && m_phittimer)
-      g_pplayer->DeferTimerStateChange(m_phittimer, val);
-
-   m_d.m_tdr.m_TimerEnabled = val;
-   STOPUNDO
-
-   return S_OK;
-}
-
-STDMETHODIMP Timer::get_Interval(LONG *pVal)
-{
-   *pVal = m_d.m_tdr.m_TimerInterval;
-   return S_OK;
-}
-
-STDMETHODIMP Timer::put_Interval(LONG newVal)
-{
-   STARTUNDO
-   m_d.m_tdr.m_TimerInterval = newVal;
-
-   if (g_pplayer && m_phittimer)
-   {
-      m_phittimer->m_interval = m_d.m_tdr.m_TimerInterval >= 0 ? max(m_d.m_tdr.m_TimerInterval, MAX_TIMER_MSEC_INTERVAL) : max((LONG)-2, newVal);
-      m_phittimer->m_nextfire = g_pplayer->m_time_msec + m_phittimer->m_interval;
-   }
-   STOPUNDO
-
-   return S_OK;
-}
-
-HRESULT Timer::SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool saveForUndo)
-{
-   BiffWriter bw(pstm, hcrypthash);
-
-   bw.WriteVector2(FID(VCEN), m_d.m_v);
-   bw.WriteBool(FID(TMON), m_d.m_tdr.m_TimerEnabled);
-   bw.WriteInt(FID(TMIN), m_d.m_tdr.m_TimerInterval);
-   bw.WriteWideString(FID(NAME), m_wzName);
-
-   bw.WriteBool(FID(BGLS), m_backglass);
-
-   ISelect::SaveData(pstm, hcrypthash);
-
-   bw.WriteTag(FID(ENDB));
-
-   return S_OK;
-}
-
-HRESULT Timer::InitLoad(IStream *pstm, PinTable *ptable, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey)
+void Timer::Load(IObjectReader& reader)
 {
    SetDefaults(false);
-
-   BiffReader br(pstm, this, version, hcrypthash, hcryptkey);
-
-   m_ptable = ptable;
-
-   br.Load();
-   return S_OK;
-}
-
-bool Timer::LoadToken(const int id, BiffReader * const pbr)
-{
-   switch(id)
-   {
-   case FID(PIID): { int pid; pbr->GetInt(&pid); } break;
-   case FID(VCEN): pbr->GetVector2(m_d.m_v); break;
-   case FID(TMON): pbr->GetBool(m_d.m_tdr.m_TimerEnabled); break;
-   case FID(TMIN): pbr->GetInt(m_d.m_tdr.m_TimerInterval); break;
-   case FID(NAME): pbr->GetWideString(m_wzName, std::size(m_wzName)); break;
-   case FID(BGLS): pbr->GetBool(m_backglass); break;
-   default: ISelect::LoadToken(id, pbr); break;
-   }
-   return true;
-}
-
-HRESULT Timer::InitPostLoad()
-{
-   return S_OK;
+   reader.AsObject(
+      [this](int tag, IObjectReader& reader)
+      {
+         switch (tag)
+         {
+         case FID(PIID): reader.AsInt(); break;
+         case FID(VCEN): m_d.m_v = reader.AsVector2(); break;
+         case FID(TMON): m_timerEnabled = reader.AsBool(); break;
+         case FID(TMIN): m_timerInterval = reader.AsInt(); break;
+         case FID(NAME): m_wzName = reader.AsWideString(); break;
+         case FID(BGLS): m_desktopBackdrop = reader.AsBool(); break;
+         default: LoadSharedEditableField(tag, reader); break;
+         }
+         return true;
+      });
 }

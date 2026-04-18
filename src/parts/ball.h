@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "ui/resource.h"
+#include "ui/win/resource.h"
 #include "physics/hitable.h"
 #include "physics/hitball.h"
 #include "renderer/Renderable.h"
@@ -61,7 +61,7 @@ public:
       return false;
    }
 
-   bool computeProjBounds(std::function<Vertex2D(Vertex3Ds)> project, const float x, const float y, const float z, const float radius, float &xMin, float &xMax, float &yMin, float &yMax) const
+   bool computeProjBounds(const std::function<Vertex2D(Vertex3Ds)>& project, const float x, const float y, const float z, const float radius, float &xMin, float &xMax, float &yMin, float &yMax) const
    {
       for (int i = 0; i < AntiStretchHelper::npts * 3; i += 3)
       {
@@ -81,7 +81,6 @@ public:
 class BallData final : public BaseProperty
 {
 public:
-   TimerDataRoot m_tdr;
    // Vertex3Ds m_pos; implemented in HitBall to avoid duplication
    // float m_radius; implemented in HitBall to avoid duplication
    // float m_mass; implemented in HitBall to avoid duplication
@@ -103,11 +102,12 @@ class Ball :
    public CComCoClass<Ball, &CLSID_Ball>,
    public EventProxy<Ball, &DIID_IBallEvents>,
    public IConnectionPointContainerImpl<Ball>,
-   public IProvideClassInfo2Impl<&CLSID_Ball, &DIID_IBallEvents, &LIBID_VPinballLib>,
+   public IProvideClassInfo2Impl<&IID_IBall, &DIID_IBallEvents, &LIBID_VPinballLib>,
 
    public ISelect,
    public IEditable,
-   public Hitable,
+   public IHitable,
+   public IRenderable,
    public IScriptable,
    public IFireEvents,
    public IPerPropertyBrowsing // Ability to fill in dropdown in property browser
@@ -117,7 +117,7 @@ public:
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
-   HRESULT FireDispID(const DISPID dispid, DISPPARAMS *const pdispparams) final;
+   HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
    Ball();
    ~Ball() override;
@@ -136,13 +136,15 @@ public:
       COM_INTERFACE_ENTRY(IProvideClassInfo2)
    END_COM_MAP()
 
-   STANDARD_EDITABLE_DECLARES(Ball, eItemBall, BALL, 1)
+   STANDARD_EDITABLE_DECLARES(Ball, eItemBall, BALL, VIEW_PLAYFIELD)
 
    BEGIN_CONNECTION_POINT_MAP(Ball)
       CONNECTION_POINT_ENTRY(DIID_IBallEvents)
    END_CONNECTION_POINT_MAP()
 
    DECLARE_REGISTRY_RESOURCEID(IDR_BALL)
+
+   bool PhysicUpdate(class PhysicsEngine *physics, const bool isUI) final;
 
    // ISelect implementation
    void MoveOffset(const float dx, const float dy) final;
@@ -210,17 +212,24 @@ public:
 
    static void ResetBallIDCounter() { m_nextBallID = 0; }
 
+   float GetRadius() const { return m_hitBall.m_d.m_radius; }
+   const vec3 &GetPosition() const { return m_hitBall.m_d.m_pos; }
+   const vec3 &GetVelocity() const { return m_hitBall.m_d.m_vel; }
+   void SetPosition(const vec3& pos) { m_hitBall.m_d.m_pos = pos; }
+   void SetVelocity(const vec3& vel) { m_hitBall.m_d.m_vel = vel; }
+
    BallData m_d;
    HitBall m_hitBall;
 
    static const AntiStretchHelper m_ash;
+
+   Vertex3Ds m_lastRenderedPos; // position where last render occured
 
 private:
    static unsigned int m_nextBallID; // increased for each ball created to have an unique ID for scripts for each ball
    static unsigned int GetNextBallID();
 
    const unsigned int m_id; // unique ID for each ball
-   PinTable *m_ptable = nullptr;
    RenderDevice *m_rd = nullptr;
    ITexManCacheable *m_pinballEnv = nullptr;
    ITexManCacheable *m_pinballDecal = nullptr;

@@ -2,10 +2,8 @@
 
 #pragma once
 
-extern const string PLAYFIELD_REFLECTION_RENDERPROBE_NAME;
-
 // A render probe is a render of the scene to an offscreen render target which is later used for shading scene parts, for example for reflections
-class RenderProbe final : ILoadable
+class RenderProbe final
 {
 public:
    enum ProbeType
@@ -37,8 +35,11 @@ public:
    // Reflection plane properties
    void GetReflectionPlane(vec4& plane) const;
    void SetReflectionPlane(const vec4& plane);
-   void GetReflectionPlaneNormal(vec3& normal) const;
-   ReflectionMode GetReflectionMode() const { return m_reflection_mode;  }
+   vec3 GetReflectionPlaneNormal() const;
+   float GetReflectionPlaneDistance() const;
+   void SetReflectionPlaneNormal(const vec3& normal);
+   void SetReflectionPlaneDistance(float distance);
+   ReflectionMode GetReflectionMode() const { return m_reflection_mode; }
    void SetReflectionMode(ReflectionMode mode);
    bool GetReflectionNoLightmaps() const { return m_disableLightReflection; }
    void SetReflectionNoLightmaps(const bool disableLightmaps) { m_disableLightReflection = disableLightmaps; }
@@ -46,10 +47,8 @@ public:
    void ApplyAreaOfInterest(RenderPass* pass = nullptr);
 
    // Load/Save
-   int GetSaveSize() const;
-   HRESULT SaveData(IStream* pstm, HCRYPTHASH hcrypthash, const bool saveForUndo);
-   HRESULT LoadData(IStream* pstm, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey);
-   bool LoadToken(const int id, BiffReader* const pbr) override;
+   void Save(IObjectWriter& writer, bool saveForUndo);
+   void Load(IObjectReader& reader);
 
    // Rendering
    void RenderSetup(class Renderer* renderer);
@@ -58,6 +57,8 @@ public:
    void PreRenderStatic(); // Allows to precompute static parts
    RenderTarget* Render(const unsigned int renderMask); // Lazily update render probe and returns it
    void RenderRelease();
+
+   static const string PLAYFIELD_REFLECTION_RENDERPROBE_NAME;
 
 private:
    int GetRoughnessDownscale(const int roughness) const;

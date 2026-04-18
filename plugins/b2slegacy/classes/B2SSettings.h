@@ -7,14 +7,14 @@ using std::string;
 
 namespace B2SLegacy {
 
-class B2SSettings
+class B2SSettings final
 {
 public:
-   B2SSettings(MsgPluginAPI* msgApi);
+   B2SSettings(MsgPluginAPI* msgApi, unsigned int endpointId);
    ~B2SSettings();
 
-   string GetMinimumDirectB2SVersion() const { return "1.0"; }
-   string GetBackglassFileVersion() const { return m_szBackglassFileVersion; }
+   static const string& GetMinimumDirectB2SVersion() { static const string ver = "1.0"s; return ver; }
+   const string& GetBackglassFileVersion() const { return m_szBackglassFileVersion; }
    void SetBackglassFileVersion(const string& szBackglassFileVersion) { m_szBackglassFileVersion = szBackglassFileVersion; }
    bool IsAllOut() const { return m_allOut; }
    void SetAllOut(const bool allOut) { m_allOut = allOut; }
@@ -48,20 +48,18 @@ public:
    void SetHideB2SDMD(const bool hideB2SDMD) { m_hideB2SDMD = hideB2SDMD; }
    bool IsHideB2SBackglass() const { return m_hideB2SBackglass; }
    void SetHideB2SBackglass(const bool hideB2SBackglass) { m_hideB2SBackglass = hideB2SBackglass; }
-   bool IsROMControlled() { return !m_szGameName.empty(); }
+   bool IsROMControlled() const { return !m_szGameName.empty(); }
    eDualMode GetCurrentDualMode() const { return m_currentDualMode; }
    void SetCurrentDualMode(const eDualMode currentDualMode) { m_currentDualMode = currentDualMode; }
-   string GetGameName() const { return m_szGameName; }
+   const string& GetGameName() const { return m_szGameName; }
    void SetGameName(const string& szGameName) { m_szGameName = szGameName; Load(false); }
    bool IsGameNameFound() const { return m_gameNameFound; }
-   string GetB2SName() const { return m_szB2SName; }
+   const string& GetB2SName() const { return m_szB2SName; }
    void SetB2SName(const string& szB2SName) { m_szB2SName = szB2SName; Load(false); }
    void Load(bool resetLogs = true);
    void ClearAll();
-   int GetSettingInt(const char* key, int def = 0) const;
-   bool GetSettingBool(const char* key, bool def = false) const;
-   B2SSettingsCheckedState GetHideGrill() const { return m_hideGrill; }
-   B2SSettingsCheckedState GetHideDMD() const { return m_hideDMD; }
+   bool IsHideGrill() const { return m_hideGrill; }
+   bool IsHideDMD() const { return m_hideDMD; }
    bool IsFormToFront() const { return m_formToFront; }
    std::map<string, int>* GetAnimationSlowDowns() { return &m_animationSlowDowns; }
    int GetAllAnimationSlowDown() const { return m_allAnimationSlowDown; }
@@ -84,10 +82,10 @@ private:
    bool m_glowBulbOn;
    int m_glowIndex;
    int m_defaultGlow;
-   B2SSettingsCheckedState m_hideGrill;
+   bool m_hideGrill;
    bool m_hideB2SDMD;
    bool m_hideB2SBackglass;
-   B2SSettingsCheckedState m_hideDMD;
+   bool m_hideDMD;
    eDualMode m_currentDualMode;
    string m_szGameName;
    bool m_gameNameFound;
@@ -98,6 +96,7 @@ private:
    bool m_formToBack;
    bool m_formNoFocus;
    MsgPluginAPI* m_msgApi;
+   unsigned int m_endpointId;
 };
 
 }

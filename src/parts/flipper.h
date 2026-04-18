@@ -4,7 +4,8 @@
 
 #pragma once
 
-#include "ui/resource.h"  
+#include "physics/hitflipper.h"
+#include "ui/win/resource.h"  
 
 class FlipperData final : public BaseProperty
 {
@@ -18,7 +19,6 @@ public:
    float m_EndAngle;
    float m_height;
    Vertex2D m_Center;
-   TimerDataRoot m_tdr;
 
    string m_szSurface;
    COLORREF m_color;
@@ -63,7 +63,8 @@ class Flipper :
    public EventProxy<Flipper, &DIID_IFlipperEvents>,
    public ISelect,
    public IEditable,
-   public Hitable,
+   public IHitable,
+   public IRenderable,
    public IScriptable,
    public IFireEvents,
    public IPerPropertyBrowsing // Ability to fill in dropdown in property browser
@@ -75,10 +76,10 @@ public:
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
-   Flipper();
+   Flipper() { }
    virtual ~Flipper();
 
-   STANDARD_EDITABLE_DECLARES(Flipper, eItemFlipper, FLIPPER, 1)
+   STANDARD_EDITABLE_DECLARES(Flipper, eItemFlipper, FLIPPER, VIEW_PLAYFIELD)
 
    BEGIN_COM_MAP(Flipper)
       COM_INTERFACE_ENTRY(IFlipper)
@@ -147,7 +148,7 @@ public:
       // Discard if return value is overriden
       if (m_phitflipper && (m_d.m_OverridePhysics || (m_ptable->m_overridePhysicsFlipper && m_ptable->m_overridePhysics)))
          return;
-      m_d.m_return = clamp(value, 0.0f, 1.0f);
+      m_d.m_return = saturate(value);
    }
 
    float GetFlipperRadiusMin() const { return m_d.m_FlipperRadiusMin; }
@@ -156,13 +157,15 @@ public:
        m_d.m_FlipperRadiusMin = max(value,0.0f);
    }
 
-   FlipperData m_d;
+   uint64_t GetLastRotateTime() const { return m_lastRotateTime; }
 
-   PinTable *m_ptable = nullptr;
+   FlipperData m_d;
 
 private:
    RenderDevice *m_rd = nullptr;
-   MeshBuffer *m_meshBuffer = nullptr;
+   std::shared_ptr<MeshBuffer> m_meshBuffer;
+   std::shared_ptr<MeshBuffer> m_meshEdgeBuffer;
+   std::shared_ptr<MeshBuffer> m_meshEdgeRubberBuffer;
    Vertex3Ds m_boundingSphereCenter;
    //float m_boundingSphereRadius = -1.f;
 
@@ -175,7 +178,9 @@ private:
    HitFlipper *m_phitflipper = nullptr;
    float m_lastAngle = 0.f;
 
-// IFlipper
+   uint64_t m_lastRotateTime = 0;
+
+   // IFlipper
 public:
    STDMETHOD(get_Elasticity)(/*[out, retval]*/ float *pVal);
    STDMETHOD(put_Elasticity)(/*[in]*/ float newVal);

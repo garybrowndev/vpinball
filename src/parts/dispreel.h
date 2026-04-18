@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "ui/resource.h"
+#include "ui/win/resource.h"
 
 // data in this class is persisted with the table
 class DispReelData final : public BaseProperty
@@ -23,7 +23,6 @@ public:
 
    COLORREF    m_backcolor;         // colour of the background
 
-   TimerDataRoot m_tdr;             // timer information
    bool        m_transparent;       // is the background transparent
    bool        m_useImageGrid;
 };
@@ -41,7 +40,8 @@ class DispReel :
    public IEditable,
    public IScriptable,
    public IFireEvents,
-   public Hitable,
+   //public Hitable, // FIXME implement UI picking
+   public IRenderable,
    public IPerPropertyBrowsing     // Ability to fill in dropdown(s) in property browser
 {
 public:
@@ -51,8 +51,8 @@ public:
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
-   DispReel();
-   virtual ~DispReel();
+   DispReel() { m_desktopBackdrop = true; } // DispReel is always located on backdrop
+   ~DispReel() override;
 
    BEGIN_COM_MAP(DispReel)
       COM_INTERFACE_ENTRY(IDispatch)
@@ -71,15 +71,13 @@ public:
       CONNECTION_POINT_ENTRY(DIID_IDispReelEvents)
    END_CONNECTION_POINT_MAP()
 
-   STANDARD_EDITABLE_DECLARES(DispReel, eItemDispReel, DISPREEL, 2)
+   STANDARD_EDITABLE_DECLARES_NO_HITABLE(DispReel, eItemDispReel, DISPREEL, VIEW_BACKGLASS)
 
    void MoveOffset(const float dx, const float dy) final;
    void SetObjectPos() final;
    // Multi-object manipulation
    Vertex2D GetCenter() const final;
    void PutCenter(const Vertex2D &pv) final;
-
-   ItemTypeEnum HitableGetItemType() const final { return eItemDispReel; }
 
    void WriteRegDefaults() final;
 
@@ -152,8 +150,6 @@ public:
 private:
    float   getBoxWidth() const;
    float   getBoxHeight() const;
-
-   PinTable    *m_ptable = nullptr;
 
    RenderDevice *m_rd = nullptr;
    float       m_renderwidth, m_renderheight;     // size of each reel (rendered)

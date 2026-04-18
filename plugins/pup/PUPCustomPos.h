@@ -1,3 +1,5 @@
+// license:GPLv3+
+
 #pragma once
 
 #include "PUPManager.h"
@@ -17,7 +19,7 @@ public:
 
 private:
    int m_sourceScreen = 0;
-   SDL_FRect m_frect { 0.f };
+   SDL_FRect m_frect { };
 };
 
 }

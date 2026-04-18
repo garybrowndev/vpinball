@@ -33,7 +33,12 @@ vec3 get_nonunit_normal(const float depth0, const vec2 u, const float v_eye) // 
 vec3 get_nonunit_normal(const float depth0, const vec2 u) // use neighboring pixels // quite some tex access by this
 #endif
 {
-   const float depth1 = texStereoNoLod(tex_depth, vec2(u.x, u.y + w_h_height.y)).x;
+   #if TEX_V_IS_UP
+      // OpenGL and OpenGL ES have reversed render targets
+      const float depth1 = texStereoNoLod(tex_depth, vec2(u.x, u.y - w_h_height.y)).x;
+   #else
+      const float depth1 = texStereoNoLod(tex_depth, vec2(u.x, u.y + w_h_height.y)).x;
+   #endif
    const float depth2 = texStereoNoLod(tex_depth, vec2(u.x + w_h_height.x, u.y)).x;
    return vec3(w_h_height.y * (depth2 - depth0), (depth1 - depth0) * w_h_height.x, w_h_height.y * w_h_height.x); //!!
 }
@@ -48,13 +53,25 @@ vec3 approx_bump_normal(const vec2 coords, const vec2 offs, const float scale, c
 
     const float lpx = dot(texStereoNoLod(tex_fb_filtered, vec2(coords.x+offs.x,coords.y)).xyz, lumw);
     const float lmx = dot(texStereoNoLod(tex_fb_filtered, vec2(coords.x-offs.x,coords.y)).xyz, lumw);
-    const float lpy = dot(texStereoNoLod(tex_fb_filtered, vec2(coords.x,coords.y-offs.y)).xyz, lumw);
-    const float lmy = dot(texStereoNoLod(tex_fb_filtered, vec2(coords.x,coords.y+offs.y)).xyz, lumw);
+    #if TEX_V_IS_UP
+        // OpenGL and OpenGL ES have reversed render targets
+        const float lpy = dot(texStereoNoLod(tex_fb_filtered, vec2(coords.x,coords.y-offs.y)).xyz, lumw);
+        const float lmy = dot(texStereoNoLod(tex_fb_filtered, vec2(coords.x,coords.y+offs.y)).xyz, lumw);
+    #else
+        const float lpy = dot(texStereoNoLod(tex_fb_filtered, vec2(coords.x,coords.y+offs.y)).xyz, lumw);
+        const float lmy = dot(texStereoNoLod(tex_fb_filtered, vec2(coords.x,coords.y-offs.y)).xyz, lumw);
+    #endif
 
     const float dpx = texStereoNoLod(tex_depth, vec2(coords.x + offs.x, coords.y)).x;
     const float dmx = texStereoNoLod(tex_depth, vec2(coords.x - offs.x, coords.y)).x;
-    const float dpy = texStereoNoLod(tex_depth, vec2(coords.x, coords.y + offs.y)).x;
-    const float dmy = texStereoNoLod(tex_depth, vec2(coords.x, coords.y - offs.y)).x;
+    #if TEX_V_IS_UP
+        // OpenGL and OpenGL ES have reversed render targets
+        const float dpy = texStereoNoLod(tex_depth, vec2(coords.x, coords.y - offs.y)).x;
+        const float dmy = texStereoNoLod(tex_depth, vec2(coords.x, coords.y + offs.y)).x;
+    #else
+        const float dpy = texStereoNoLod(tex_depth, vec2(coords.x, coords.y + offs.y)).x;
+        const float dmy = texStereoNoLod(tex_depth, vec2(coords.x, coords.y - offs.y)).x;
+    #endif
 
     const vec2 xymult = max(1.0 - vec2(abs(dmx - dpx), abs(dmy - dpy)) * sharpness, 0.0);
 
@@ -88,8 +105,13 @@ void main()
 	#endif
 	normal_b = normalize(vec3(normal.xy*normal_b.z + normal_b.xy*normal.z, normal.z*normal_b.z));
 	normal_b = normalize(mix(normal,normal_b, SSR_bumpHeight_fresnelRefl_scale_FS.x * normal_fade_factor(normal))); // have less impact of fake bump normals on playfield, etc
-	
-	const vec3 V = normalize(vec3(0.5 - vec2(u.x, 1.0 - u.y), -0.5)); // WTF?! cam is in 0,0,0 but why z=-0.5?
+
+	#if TEX_V_IS_UP
+		// OpenGL and OpenGL ES have reversed render targets
+		const vec3 V = normalize(vec3(0.5 - vec2(u.x, 1.0 - u.y), -0.5)); // WTF?! cam is in 0,0,0 but why z=-0.5?
+	#else
+		const vec3 V = normalize(vec3(0.5-u, -0.5)); // WTF?! cam is in 0,0,0 but why z=-0.5?
+	#endif
 
 	const float fresnel = (SSR_bumpHeight_fresnelRefl_scale_FS.y + (1.0-SSR_bumpHeight_fresnelRefl_scale_FS.y) * pow(1.0-saturate(dot(V,normal_b)),5.)) // fresnel for falloff towards silhouette
 	                     * SSR_bumpHeight_fresnelRefl_scale_FS.z // user scale
@@ -112,7 +134,11 @@ void main()
 
 	const float ushift = /*hash(v_texcoord0) + w_h_height.zw*/ // jitter samples via hash of position on screen and then jitter samples by time //!! see below for non-shifted variant
 	                     /*fract(*/texNoLod(tex_ao_dither, v_texcoord0/(64.0*w_h_height.xy)).z /*+ w_h_height.z)*/; // use dither texture instead nowadays // 64 is the hardcoded dither texture size for AOdither.bmp
-	const vec2 offsMul = normal_b.xy * (/*w_h_height.xy*/ vec2(1.0/1920.0,1.0/1080.0) * ReflBlurWidth * (32./float(samples))); //!! makes it more resolution independent?? test with 4xSSAA
+	/*const*/ vec2 offsMul = normal_b.xy * (/*w_h_height.xy*/ vec2(1.0/1920.0,1.0/1080.0) * ReflBlurWidth * (32./float(samples))); //!! makes it more resolution independent?? test with 4xSSAA
+	#if TEX_V_IS_UP
+		// OpenGL and OpenGL ES have reversed render targets
+		offsMul.y = -offsMul.y;
+	#endif
 
 	// loop in screen space, simply collect all pixels in the normal direction (not even a depth check done!)
 	vec3 refl = vec3(0.,0.,0.);
@@ -120,7 +146,7 @@ void main()
 	UNROLL for(int i=1; i</*=*/samples; i++) //!! due to jitter
 	{
 		const vec2 offs = u + (float(i)+ushift)*offsMul; //!! jitter per pixel (uses blue noise tex)
-		const vec3 col = texStereoNoLod(tex_fb_filtered, offs).xyz;
+		const vec3 col = texStereoNoLod(tex_fb_filtered, offs).rgb;
 		if (!isnan(col.r) && !isnan(col.g) && !isnan(col.b))
 		{
 			const float w = sqrt(float(i-1)/samples_float); //!! fake falloff for samples more far away

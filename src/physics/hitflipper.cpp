@@ -23,6 +23,7 @@
 //   - flipper button press to coil drive is even shorter - again suggesting a faster sample rate of the button is better
 
 #include "core/stdafx.h"
+#include "parts/flipper.h"
 
 // Ported at: VisualPinball.Engine/VPT/Flipper/FlipperMover.cs
 
@@ -248,26 +249,26 @@ void HitFlipper::CalcHitBBox()
 
 void FlipperMoverObject::SetStartAngle(const float r)
 {
-    m_angleStart = r;
-    const float angleMin = min(m_angleStart, m_angleEnd);
-    const float angleMax = max(m_angleStart, m_angleEnd);
+   m_angleStart = r;
+   const float angleMin = min(m_angleStart, m_angleEnd);
+   const float angleMax = max(m_angleStart, m_angleEnd);
 
-    if (m_angleCur > angleMax)
-        m_angleCur = angleMax;
-    if (m_angleCur < angleMin)
-        m_angleCur = angleMin;
+   if (m_angleCur > angleMax)
+      m_angleCur = angleMax;
+   if (m_angleCur < angleMin)
+      m_angleCur = angleMin;
 }
 
 void FlipperMoverObject::SetEndAngle(const float r)
 {
-    m_angleEnd = r;
-    const float angleMin = min(m_angleStart, m_angleEnd);
-    const float angleMax = max(m_angleStart, m_angleEnd);
+   m_angleEnd = r;
+   const float angleMin = min(m_angleStart, m_angleEnd);
+   const float angleMax = max(m_angleStart, m_angleEnd);
 
-    if (m_angleCur > angleMax)
-        m_angleCur = angleMax;
-    if (m_angleCur < angleMin)
-        m_angleCur = angleMin;
+   if (m_angleCur > angleMax)
+      m_angleCur = angleMax;
+   if (m_angleCur < angleMin)
+      m_angleCur = angleMin;
 }
 
 float FlipperMoverObject::GetReturnRatio() const
@@ -323,7 +324,7 @@ void FlipperMoverObject::UpdateDisplacements(const float dtime)
             m_startTime = 0;
             PLOGD << "Stroke duration: " << dur << " ms";
             PLOGD << "Ang. velocity: " << m_angleSpeed;
-            PLOGD << "Ball velocity: " << g_pplayer->m_vball[0]->vel.Length();
+            PLOGD << "Ball velocity: " << g_pplayer->m_vball[0]->GetVelocity().Length();
          }
 #endif
          handle_event = true;
@@ -340,17 +341,10 @@ void FlipperMoverObject::UpdateDisplacements(const float dtime)
       const float anglespd = fabsf(RADTOANG(m_angleSpeed));
       m_angularMomentum *= -0.3f; //!! make configurable?
       m_angleSpeed = m_angularMomentum / m_inertia;
-
       if (m_enableRotateEvent > 0)
-      {
          m_pflipper->FireVoidEventParm(DISPID_LimitEvents_EOS, anglespd); // send EOS event
-
-         g_pplayer->m_pininput.m_leftkey_down_usec_EOS = usec(); // debug only
-         g_pplayer->m_pininput.m_leftkey_down_frame_EOS = g_pplayer->m_overall_frames;
-      }
       else if (m_enableRotateEvent < 0)
          m_pflipper->FireVoidEventParm(DISPID_LimitEvents_BOS, anglespd); // send Beginning of Stroke/Park event
-
       m_enableRotateEvent = 0;
    }
 }
@@ -774,7 +768,7 @@ float HitFlipper::HitTestFlipperFace(const BallS& ball, const float dtime, Colli
       dp = bffnd;                        // remember
    } //for loop
 
-   //+++ End time interation loop found time t soultion ++++++
+   //+++ End time interation loop found time t solution ++++++
 
    if (infNaN(t) || t < 0.f || t > dtime                             // time is outside this frame ... no collision
       ||
@@ -887,7 +881,7 @@ void HitFlipper::Collide(const CollisionEvent& coll)
       else return;
 #endif
    }
-   g_pplayer->m_liveUI->m_ballControl.SetDraggedBall(pball); // Ball control most recently collided with flipper
+   g_pplayer->m_liveUI->m_ballControl.SetDraggedBall(pball->m_pBall); // Ball control most recently collided with flipper
 
 #ifdef C_DISP_GAIN 
    // correct displacements, mostly from low velocity blindness, an alternative to true acceleration processing
@@ -1122,22 +1116,21 @@ void HitFlipper::DrawUI(std::function<Vertex2D(Vertex3Ds)> project, ImDrawList* 
 {
    if (m_enabled)
    {
-      Vertex2D center = m_flipperMover.m_hitcircleBase.center;
-      float radius = m_flipperMover.m_hitcircleBase.radius;
-      float angle = m_flipperMover.m_angleCur;
+      const float angle = m_flipperMover.m_angleCur;
       const ImU32 lCol = ImGui::GetColorU32(ImGuiCol_PlotLines), fCol = ImGui::GetColorU32(ImGuiCol_PlotHistogram);
-      const Vertex2D p0 = project(Vertex3Ds(center.x, center.y, m_hitBBox.zlow));
-      const Vertex2D q0 = project(Vertex3Ds(center.x, center.y, m_hitBBox.zhigh));
+      const Vertex2D p0 = project(Vertex3Ds(m_flipperMover.m_hitcircleBase.center.x, m_flipperMover.m_hitcircleBase.center.y, m_hitBBox.zlow));
+      const Vertex2D q0 = project(Vertex3Ds(m_flipperMover.m_hitcircleBase.center.x, m_flipperMover.m_hitcircleBase.center.y, m_hitBBox.zhigh));
       Vertex2D p2, q2;
       for (int i = 0; i <= 32; i++)
       {
-         center = m_flipperMover.m_hitcircleBase.center;
+         Vertex2D center = m_flipperMover.m_hitcircleBase.center;
+         float radius;
          if ((i >= 16) && (i < 32))
          {
-            float anglerad = angle;
+            const float anglerad = angle;
             radius = m_flipperMover.m_endradius;
-            center.x += sinf(anglerad) * (m_flipperMover.m_flipperradius);
-            center.y -= cosf(anglerad) * (m_flipperMover.m_flipperradius);
+            center.x += sinf(anglerad) * m_flipperMover.m_flipperradius;
+            center.y -= cosf(anglerad) * m_flipperMover.m_flipperradius;
          }
          else
          {

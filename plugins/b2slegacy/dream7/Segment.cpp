@@ -6,57 +6,54 @@
 namespace B2SLegacy {
 
 Segment::Segment(const string& szName, float x, float y, float width, float height, float angle)
+   : m_on(false)
+   , m_glow(-1.0f)
+   , m_radius(0.0f)
+   , m_pStyle(nullptr)
+   , m_pGlassPath(nullptr)
+   , m_pLightPath(nullptr)
+   , m_pExternMatrix(nullptr)
+   , m_pOwnMatrix(nullptr)
 {
-   m_on = false;
-   m_glow = -1.0f;
-   m_radius = 0.0f;
-   m_pStyle = NULL;
-   m_pGlassPath = NULL;
-   m_pLightPath = NULL;
-   m_pExternMatrix = NULL;
-   m_pOwnMatrix = NULL;
-
    InitSegment(szName, x, y, width, height, angle, SegmentCap_Standard, SegmentCap_Standard, 45);
 }
 
 Segment::Segment(const string& szName, float x, float y, float width, float height, float angle, SegmentCap topcap, SegmentCap bottomcap)
+   : m_on(false)
+   , m_glow(-1.0f)
+   , m_radius(0.0f)
+   , m_pStyle(nullptr)
+   , m_pGlassPath(nullptr)
+   , m_pLightPath(nullptr)
+   , m_pExternMatrix(nullptr)
+   , m_pOwnMatrix(nullptr)
 {
-   m_on = false;
-   m_glow = -1.0f;
-   m_radius = 0.0f;
-   m_pStyle = NULL;
-   m_pGlassPath = NULL;
-   m_pLightPath = NULL;
-   m_pExternMatrix = NULL;
-   m_pOwnMatrix = NULL;
-
    InitSegment(szName, x, y, width, height, angle, topcap, bottomcap, 45);
 }
 
 Segment::Segment(const string& szName, float x, float y, float width, float height, float angle, SegmentCap topcap, SegmentCap bottomcap, float capangle)
+   : m_on(false)
+   , m_glow(-1.0f)
+   , m_radius(0.0f)
+   , m_pStyle(nullptr)
+   , m_pGlassPath(nullptr)
+   , m_pLightPath(nullptr)
+   , m_pExternMatrix(nullptr)
+   , m_pOwnMatrix(nullptr)
 {
-   m_on = false;
-   m_glow = -1.0f;
-   m_radius = 0.0f;
-   m_pStyle = NULL;
-   m_pGlassPath = NULL;
-   m_pLightPath = NULL;
-   m_pExternMatrix = NULL;
-   m_pOwnMatrix = NULL;
-
    InitSegment(szName, x, y, width, height, angle, topcap, bottomcap, capangle);
 }
 
 Segment::Segment(float x, float y, float radius)
+   : m_on(false)
+   , m_glow(-1.0f)
+   , m_radius(0.0f)
+   , m_pStyle(nullptr)
+   , m_pGlassPath(nullptr)
+   , m_pLightPath(nullptr)
+   , m_pExternMatrix(nullptr)
+   , m_pOwnMatrix(nullptr)
 {
-   m_on = false;
-   m_glow = -1.0f;
-   m_pStyle = NULL;
-   m_pGlassPath = NULL;
-   m_pLightPath = NULL;
-   m_pExternMatrix = NULL;
-   m_pOwnMatrix = NULL;
-
    InitSegmentDot(x, y, radius);
 }
 
@@ -118,8 +115,8 @@ void Segment::DrawLight(VPXGraphics* pRenderer)
 
 void Segment::InitSegmentDot(float x, float y, float radius)
 {
-   m_szName = ".";
-   m_points.push_back({ radius, radius });
+   m_szName = "."sv;
+   m_points.emplace_back(radius, radius);
    m_radius = radius;
 
    CreateLightData();
@@ -141,12 +138,12 @@ void Segment::InitSegment(const string& szName, float x, float y, float width, f
    LeftRightFromCap(topcap, width, capangle, topleft, topright, topdelta);
    LeftRightFromCap(bottomcap, width, capangle, bottomleft, bottomright, bottomdelta);
 
-   m_points.push_back({ nBounds.x + topdelta, nBounds.y });
-   m_points.push_back({ nBounds.x + nBounds.w, nBounds.y + (topcap == SegmentCap_Flat ? 0 : topright) });
-   m_points.push_back({ nBounds.x + nBounds.w, nBounds.y + nBounds.h - (bottomcap == SegmentCap_Flat ? 0 : bottomright) });
-   m_points.push_back({ nBounds.x + bottomdelta, nBounds.y + nBounds.h });
-   m_points.push_back({ nBounds.x, nBounds.y + nBounds.h - (bottomcap == SegmentCap_Flat ? 0 : bottomleft) });
-   m_points.push_back({ nBounds.x, nBounds.y + (topcap == SegmentCap_Flat ? 0 : topleft) });
+   m_points.emplace_back(nBounds.x + topdelta, nBounds.y);
+   m_points.emplace_back(nBounds.x + nBounds.w, nBounds.y + (topcap == SegmentCap_Flat ? 0 : topright));
+   m_points.emplace_back(nBounds.x + nBounds.w, nBounds.y + nBounds.h - (bottomcap == SegmentCap_Flat ? 0 : bottomright));
+   m_points.emplace_back(nBounds.x + bottomdelta, nBounds.y + nBounds.h);
+   m_points.emplace_back(nBounds.x, nBounds.y + nBounds.h - (bottomcap == SegmentCap_Flat ? 0 : bottomleft));
+   m_points.emplace_back(nBounds.x, nBounds.y + (topcap == SegmentCap_Flat ? 0 : topleft));
 
    m_angle = angle;
    CreateLightData();
@@ -166,12 +163,12 @@ void Segment::CreateLightData()
       m_lightDot = { m_points[0].x - m_glow, m_points[0].y - m_glow, m_radius + m_glow * 2, m_radius + m_glow * 2 };
    }
    else {
-      m_lights.push_back({ m_points[0].x, m_points[0].y - m_glow });
-      m_lights.push_back({ m_points[1].x + m_glow, m_points[1].y });
-      m_lights.push_back({ m_points[2].x + m_glow, m_points[2].y });
-      m_lights.push_back({ m_points[3].x, m_points[3].y + m_glow });
-      m_lights.push_back({ m_points[4].x - m_glow, m_points[4].y });
-      m_lights.push_back({ m_points[5].x - m_glow, m_points[5].y });
+      m_lights.emplace_back(m_points[0].x, m_points[0].y - m_glow);
+      m_lights.emplace_back(m_points[1].x + m_glow, m_points[1].y);
+      m_lights.emplace_back(m_points[2].x + m_glow, m_points[2].y);
+      m_lights.emplace_back(m_points[3].x, m_points[3].y + m_glow);
+      m_lights.emplace_back(m_points[4].x - m_glow, m_points[4].y);
+      m_lights.emplace_back(m_points[5].x - m_glow, m_points[5].y);
    }
 }
 
@@ -258,22 +255,19 @@ void Segment::GetLightData()
 void Segment::ResetCacheData()
 {
    delete m_pGlassPath;
-   m_pGlassPath = NULL;
+   m_pGlassPath = nullptr;
 
    delete m_pLightPath;
-   m_pLightPath = NULL;
+   m_pLightPath = nullptr;
 }
 
 void Segment::SetTransform(VPXGraphics* pRenderer)
 {
-   Matrix* pMatrix;
-   if (!m_pExternMatrix)
-      pMatrix = new Matrix();
-   else
-      pMatrix = m_pExternMatrix->Clone();
-   pMatrix->Multiply(*m_pOwnMatrix);
+   Matrix pMatrix;
+   if (m_pExternMatrix)
+      pMatrix = *m_pExternMatrix;
+   pMatrix.Multiply(*m_pOwnMatrix);
    pRenderer->SetTransform(pMatrix);
-   delete pMatrix;
 }
 
 void Segment::Transform(Matrix* pMatrix)

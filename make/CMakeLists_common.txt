@@ -4,6 +4,15 @@
 add_compile_definitions($<$<CONFIG:Release>:IMGUI_DISABLE_DEBUG_TOOLS>)
 
 set(VPX_SOURCES
+   plugins/plugins/MsgPlugin.h
+   plugins/plugins/MsgPluginManager.h
+   plugins/plugins/MsgPluginManager.cpp
+   plugins/plugins/VPXPlugin.h
+   plugins/plugins/ControllerPlugin.h
+   plugins/plugins/ScriptablePlugin.h
+   plugins/plugins/ResURIResolver.h
+   plugins/plugins/ResURIResolver.cpp
+
    src/audio/AudioPlayer.cpp
    src/audio/AudioPlayer.h
    src/audio/AudioStreamPlayer.cpp
@@ -11,6 +20,8 @@ set(VPX_SOURCES
    src/audio/SoundPlayer.cpp
    src/audio/SoundPlayer.h
 
+   src/core/AppCommands.cpp
+   src/core/AppCommands.h
    src/core/ballhistory.cpp
    src/core/ballhistory.h
    src/core/def.h
@@ -22,6 +33,8 @@ set(VPX_SOURCES
    src/core/editablereg.h
    src/core/extern.cpp
    src/core/extern.h
+   src/core/FileLocator.cpp
+   src/core/FileLocator.h
    src/core/ieditable.cpp
    src/core/ieditable.h
    src/core/iselect.cpp
@@ -30,24 +43,43 @@ set(VPX_SOURCES
    src/core/pinundo.h
    src/core/main.cpp
    src/core/main.h
-   src/core/vpinball.cpp
-   src/core/vpinball_h.h
    src/core/player.cpp
    src/core/player.h
-   src/core/ResURIResolver.h
-   src/core/ResURIResolver.cpp
+   src/core/PropertyDef.h
+   src/core/PropertyRegistry.h
+   src/core/PropertyStore.h
+   src/core/LayeredINIPropertyStore.h
+   src/core/LayeredINIPropertyStore.cpp
+   src/core/Scriptable.h
+   src/core/Scriptable.cpp
+   src/core/ScriptGlobalTable.h
+   src/core/ScriptGlobalTable.cpp
+   src/core/ScriptInterpreter.h
+   src/core/ScriptInterpreter.cpp
    src/core/Settings.cpp
    src/core/Settings.h
    src/core/TableDB.cpp
    src/core/TableDB.h
+   src/core/TournamentFile.cpp
+   src/core/TournamentFile.h
    src/core/VPApp.h
    src/core/VPApp.cpp
    src/core/vpversion.h
    src/core/VPXPluginAPIImpl.h
    src/core/VPXPluginAPIImpl.cpp
 
-   src/input/pininput.h
-   src/input/pininput.cpp
+   src/input/ButtonMapping.h
+   src/input/InputAction.h
+   src/input/InputAction.cpp
+   src/input/SensorFilter.h
+   src/input/SensorFilter.cpp
+   src/input/InputManager.h
+   src/input/InputManager.cpp
+   src/input/PhysicsSensor.h
+   src/input/PhysicsSensor.cpp
+   src/input/ScanCodes.h
+   src/input/SensorMapping.h
+   src/input/SensorMapping.cpp
    src/input/SDLInputHandler.h
 
    src/math/bbox.h
@@ -56,7 +88,9 @@ set(VPX_SOURCES
    src/math/matrix.cpp
    src/math/matrix.h
    src/math/vector.h
-   src/math/mesh.h
+   src/math/Mesh.h
+   src/math/Mesh.cpp
+   src/math/MeshUtils.h
    src/math/ModelViewProj.h
 
    src/meshes/ballMesh.h
@@ -92,11 +126,14 @@ set(VPX_SOURCES
 
    src/parts/dragpoint.h
    src/parts/Material.h
+   src/parts/pinbinary.cpp
    src/parts/pinbinary.h
    src/parts/ball.cpp
    src/parts/ball.h
    src/parts/bumper.cpp
    src/parts/bumper.h
+   src/parts/Collection.cpp
+   src/parts/Collection.h
    src/parts/decal.cpp
    src/parts/decal.h
    src/parts/dispreel.cpp
@@ -118,7 +155,6 @@ set(VPX_SOURCES
    src/parts/lightseq.h
    src/parts/PartGroup.cpp
    src/parts/PartGroup.h
-   src/parts/pinbinary.cpp
    src/parts/pintable.cpp
    src/parts/pintable.h
    src/parts/plunger.cpp
@@ -156,28 +192,18 @@ set(VPX_SOURCES
    src/physics/hitflipper.h
    src/physics/hitplunger.cpp
    src/physics/hitplunger.h
+   src/physics/hittimer.cpp
    src/physics/hittimer.h
    src/physics/kdtree.cpp
    src/physics/kdtree.h
-   src/physics/NudgeFilter.cpp
-   src/physics/NudgeFilter.h
    src/physics/PhysicsEngine.cpp
    src/physics/PhysicsEngine.h
    src/physics/quadtree.cpp
    src/physics/quadtree.h
 
-   src/plugins/MsgPlugin.h
-   src/plugins/MsgPluginManager.h
-   src/plugins/MsgPluginManager.cpp
-   src/plugins/VPXPlugin.h
-   src/plugins/ControllerPlugin.h
-   src/plugins/ScriptablePlugin.h
-
    src/renderer/trace.h
    src/renderer/Anaglyph.cpp
    src/renderer/Anaglyph.h
-   src/renderer/Backglass.h
-   src/renderer/Backglass.cpp
    src/renderer/IndexBuffer.cpp
    src/renderer/IndexBuffer.h
    src/renderer/MeshBuffer.cpp
@@ -216,31 +242,135 @@ set(VPX_SOURCES
    src/renderer/Window.cpp
    src/renderer/Window.h
 
-   src/ui/codeview.cpp
-   src/ui/codeview.h
-   src/ui/codeviewedit.cpp
-   src/ui/codeviewedit.h
-   src/ui/hitrectsur.cpp
-   src/ui/hitrectsur.h
-   src/ui/hitsur.cpp
-   src/ui/hitsur.h
    src/ui/VPXFileFeedback.h
 
    src/ui/live/BallControl.cpp
    src/ui/live/BallControl.h
-   src/ui/live/EscSplashModal.cpp
-   src/ui/live/EscSplashModal.h
    src/ui/live/LiveUI.cpp
    src/ui/live/LiveUI.h
    src/ui/live/EditorUI.cpp
    src/ui/live/EditorUI.h
-   src/ui/live/InGameUI.cpp
-   src/ui/live/InGameUI.h
    src/ui/live/NotificationOverlay.cpp
    src/ui/live/NotificationOverlay.h
    src/ui/live/PerfUI.cpp
    src/ui/live/PerfUI.h
+   src/ui/live/PlotData.cpp
+   src/ui/live/PlotData.h
+   src/ui/live/PlumbOverlay.cpp
+   src/ui/live/PlumbOverlay.h
+   
+   src/ui/live/editor/EditableUIPart.h
+   src/ui/live/editor/PropertyPane.h
+   src/ui/live/editor/PropertyPane.cpp
+   src/ui/live/editor/BallUIPart.h
+   src/ui/live/editor/BallUIPart.cpp
+   src/ui/live/editor/BumperUIPart.h
+   src/ui/live/editor/BumperUIPart.cpp
+   src/ui/live/editor/DecalUIPart.h
+   src/ui/live/editor/DecalUIPart.cpp
+   src/ui/live/editor/DispReelUIPart.h
+   src/ui/live/editor/DispReelUIPart.cpp
+   src/ui/live/editor/FlasherUIPart.h
+   src/ui/live/editor/FlasherUIPart.cpp
+   src/ui/live/editor/FlipperUIPart.h
+   src/ui/live/editor/FlipperUIPart.cpp
+   src/ui/live/editor/GateUIPart.h
+   src/ui/live/editor/GateUIPart.cpp
+   src/ui/live/editor/HitTargetUIPart.h
+   src/ui/live/editor/HitTargetUIPart.cpp
+   src/ui/live/editor/KickerUIPart.h
+   src/ui/live/editor/KickerUIPart.cpp
+   src/ui/live/editor/LightUIPart.h
+   src/ui/live/editor/LightUIPart.cpp
+   src/ui/live/editor/LightSeqUIPart.h
+   src/ui/live/editor/LightSeqUIPart.cpp
+   src/ui/live/editor/PartGroupUIPart.h
+   src/ui/live/editor/PartGroupUIPart.cpp
+   src/ui/live/editor/PlungerUIPart.h
+   src/ui/live/editor/PlungerUIPart.cpp
+   src/ui/live/editor/PrimitiveUIPart.h
+   src/ui/live/editor/PrimitiveUIPart.cpp
+   src/ui/live/editor/RampUIPart.h
+   src/ui/live/editor/RampUIPart.cpp
+   src/ui/live/editor/RubberUIPart.h
+   src/ui/live/editor/RubberUIPart.cpp
+   src/ui/live/editor/SpinnerUIPart.h
+   src/ui/live/editor/SpinnerUIPart.cpp
+   src/ui/live/editor/SurfaceUIPart.h
+   src/ui/live/editor/SurfaceUIPart.cpp
+   src/ui/live/editor/TextBoxUIPart.h
+   src/ui/live/editor/TextBoxUIPart.cpp
+   src/ui/live/editor/TimerUIPart.h
+   src/ui/live/editor/TimerUIPart.cpp
+   src/ui/live/editor/TriggerUIPart.h
+   src/ui/live/editor/TriggerUIPart.cpp
+   
+   src/ui/live/ingameui/InGameUI.cpp
+   src/ui/live/ingameui/InGameUI.h
+   src/ui/live/ingameui/AudioSettingsPage.h
+   src/ui/live/ingameui/AudioSettingsPage.cpp
+   src/ui/live/ingameui/CabinetRender.h
+   src/ui/live/ingameui/CabinetRender.cpp
+   src/ui/live/ingameui/CabinetSettingsPage.h
+   src/ui/live/ingameui/CabinetSettingsPage.cpp
+   src/ui/live/ingameui/DisplayProfileSettingsPage.h
+   src/ui/live/ingameui/DisplayProfileSettingsPage.cpp
+   src/ui/live/ingameui/DisplaySettingsPage.h
+   src/ui/live/ingameui/DisplaySettingsPage.cpp
+   src/ui/live/ingameui/GraphicSettingsPage.h
+   src/ui/live/ingameui/GraphicSettingsPage.cpp
+   src/ui/live/ingameui/HomePage.h
+   src/ui/live/ingameui/HomePage.cpp
+   src/ui/live/ingameui/InGameUIItem.h
+   src/ui/live/ingameui/InGameUIItem.cpp
+   src/ui/live/ingameui/InGameUIPage.h
+   src/ui/live/ingameui/InGameUIPage.cpp
+   src/ui/live/ingameui/InputSettingsPage.h
+   src/ui/live/ingameui/InputSettingsPage.cpp
+   src/ui/live/ingameui/MiscSettingsPage.h
+   src/ui/live/ingameui/MiscSettingsPage.cpp
+   src/ui/live/ingameui/NudgeSettingsPage.h
+   src/ui/live/ingameui/NudgeSettingsPage.cpp
+   src/ui/live/ingameui/PlungerSettingsPage.h
+   src/ui/live/ingameui/PlungerSettingsPage.cpp
+   src/ui/live/ingameui/PluginSettingsPage.h
+   src/ui/live/ingameui/PluginSettingsPage.cpp
+   src/ui/live/ingameui/PointOfViewSettingsPage.h
+   src/ui/live/ingameui/PointOfViewSettingsPage.cpp
+   src/ui/live/ingameui/SensorSetupPage.h
+   src/ui/live/ingameui/SensorSetupPage.cpp
+   src/ui/live/ingameui/StereoSettingsPage.h
+   src/ui/live/ingameui/StereoSettingsPage.cpp
+   src/ui/live/ingameui/TableMiscPage.h
+   src/ui/live/ingameui/TableMiscPage.cpp
+   src/ui/live/ingameui/TableOptionsPage.h
+   src/ui/live/ingameui/TableOptionsPage.cpp
+   src/ui/live/ingameui/TableRulesPage.h
+   src/ui/live/ingameui/TableRulesPage.cpp
+   src/ui/live/ingameui/VRSettingsPage.h
+   src/ui/live/ingameui/VRSettingsPage.cpp
+   src/ui/live/ingameui/SystemInfoPage.h
+   src/ui/live/ingameui/SystemInfoPage.cpp
 
+   src/ui/win/codeview.cpp
+   src/ui/win/codeview.h
+   src/ui/win/codeviewedit.cpp
+   src/ui/win/codeviewedit.h
+   src/ui/win/hitrectsur.cpp
+   src/ui/win/hitrectsur.h
+   src/ui/win/hitsur.cpp
+   src/ui/win/hitsur.h
+   src/ui/win/PinTableMDI.cpp
+   src/ui/win/PinTableMDI.h
+   src/ui/win/PinTableWnd.cpp
+   src/ui/win/PinTableWnd.h
+   src/ui/win/WinEditor.cpp
+   src/ui/win/WinEditor.h
+
+   src/utils/BiffReader.cpp
+   src/utils/BiffReader.h
+   src/utils/BiffWriter.cpp
+   src/utils/BiffWriter.h
    src/utils/bulb.cpp
    src/utils/bulb.h
    src/utils/eventproxy.h
@@ -248,17 +378,12 @@ set(VPX_SOURCES
    src/utils/wintimer.h
    src/utils/ushock_output.cpp
    src/utils/ushock_output.h
-   src/utils/variant.cpp
-   src/utils/variant.h
    src/utils/vector.h
    src/utils/vectorsort.h
    src/utils/fileio.cpp
    src/utils/fileio.h
    src/utils/lzwreader.cpp
    src/utils/lzwreader.h
-   src/utils/lzwwriter.cpp
-   src/utils/lzwwriter.h
-   src/utils/hash.cpp
    src/utils/hash.h
    src/utils/objloader.cpp
    src/utils/objloader.h
@@ -288,6 +413,7 @@ set(VPX_SOURCES
    third-party/include/implot/implot_items.cpp
    third-party/include/implot/implot_internal.h
    third-party/include/mINI/ini.h
+   third-party/include/qoi/qoi.h
    third-party/include/progmesh.cpp
    third-party/include/progmesh.h
    third-party/include/progmesh_vecmatquat_minimal.h

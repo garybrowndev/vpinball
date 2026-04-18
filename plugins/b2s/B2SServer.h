@@ -1,16 +1,25 @@
+// license:GPLv3+
+
 #pragma once
 
 #include "common.h"
 
 #include <cstdint>
 #include <climits>
+#include <future>
+#include <cstdint>
+
+#include <unordered_dense.h>
+
+#include "B2SDataModel.h"
+#include "B2SRenderer.h"
 
 namespace B2S {
 
-class B2SServer final
+class B2SServer final : public ScriptablePlugin::IScriptProxy
 {
 public:
-   B2SServer();
+   B2SServer(const MsgPluginAPI* const msgApi, unsigned int endpointId, const VPXPluginAPI* const vpxApi, ScriptClassDef* serverClassDef);
    ~B2SServer();
 
    PSC_IMPLEMENT_REFCOUNT()
@@ -20,8 +29,8 @@ public:
    double GetB2SBuildVersion() const { return 0.0; }
    string GetB2SServerDirectory() const { return ""s; }
    string GetVPMBuildVersion() const { return ""s; }
-   string GetB2SName() const { return ""s; }
-   void SetB2SName(const std::string& b2sName) { }
+   string GetB2SName() const;
+   void SetB2SName(const std::string& b2sName);
    string GetTableName() const { return ""s; }
    void SetTableName(const std::string& tableName) { }
    void SetWorkingDir(const std::string& workingDir) { }
@@ -41,14 +50,14 @@ public:
    void B2SSetLEDDisplay(int, string) { } // FIXME
    void B2SSetReel(int, int) { } // FIXME
    void B2SSetScore(int, int) { } // FIXME
-   void B2SSetScorePlayer(int playerno, int score) { } // FIXME
+   void B2SSetScorePlayer(int playerno, int score);
    void B2SSetScorePlayer1(int score) { B2SSetScorePlayer(1, score); }
    void B2SSetScorePlayer2(int score) { B2SSetScorePlayer(2, score); }
    void B2SSetScorePlayer3(int score) { B2SSetScorePlayer(3, score); }
    void B2SSetScorePlayer4(int score) { B2SSetScorePlayer(4, score); }
    void B2SSetScorePlayer5(int score) { B2SSetScorePlayer(5, score); }
    void B2SSetScorePlayer6(int score) { B2SSetScorePlayer(6, score); }
-   void B2SSetScoreDigit(int, int) { } // FIXME
+   void B2SSetScoreDigit(int digit, int value);
 
    void B2SSetData(int id, int value);
    void B2SSetData(const std::string& group, int value);
@@ -91,6 +100,59 @@ public:
    void B2SPlaySound(const string& soundName) { } // FIXME
    void B2SStopSound(const string& soundName) { } // FIXME
    void B2SMapSound(int digit, const string& soundName) { } // FIXME
+
+   void SetOnDestroyHandler(std::function<void(B2SServer*)> handler) { m_onDestroyHandler = handler; }
+   float GetState(int b2sId) const;
+   int GetScoreDigit(int digit) const;
+   int GetPlayerScore(int player) const;
+
+   void ForwardCall(void* me, int memberIndex, ScriptVariant* pArgs, ScriptVariant* pRet) override { m_controllerProxy.ForwardCall(me, memberIndex, pArgs, pRet); }
+
+private:
+   ScriptablePlugin::ScriptClassProxy m_controllerClassProxy;
+   ScriptablePlugin::ScriptObjectProxy m_controllerProxy;
+
+   const MsgPluginAPI* const m_msgApi;
+   const unsigned int m_endpointId;
+   const VPXPluginAPI* const m_vpxApi;
+
+   std::future<std::shared_ptr<B2STable>> m_loadedB2S;
+   std::function<void(B2SServer*)> m_onDestroyHandler;
+
+   static B2SServer* m_singleton;
+
+   // Renderer
+   std::unique_ptr<B2SRenderer> m_renderer = nullptr;
+   const unsigned int m_onGetAuxRendererId;
+   const unsigned int m_onAuxRendererChgId;
+   const AncillaryRendererDef m_ancillaryRendererDef;
+   static int OnRender(VPXRenderContext2D* ctx, void*);
+   static void OnGetRenderer(const unsigned int, void*, void* msgData);
+
+   // Controller state
+   string m_b2sName;
+   const unsigned int m_onGameStartId;
+   const unsigned int m_onGameEndId;
+   bool m_gameRunning = false;
+   ankerl::unordered_dense::map<int, float> m_states;
+   ankerl::unordered_dense::map<int, int> m_playerScores;
+   ankerl::unordered_dense::map<int, int> m_scoreDigits;
+   const unsigned int m_onGetDevSrcId;
+   const unsigned int m_onDevSrcChgId;
+   DevSrcId m_devSrc {};
+   vector<string> m_devSrcNames;
+   void UpdateDevSrc();
+   struct ChgCallback
+   {
+      ctlpi_chg_callback m_callback;
+      unsigned int m_index;
+      void* m_context;
+   };
+   ankerl::unordered_dense::map<int, vector<ChgCallback>> m_stateChgCallbacks;
+   static void OnGetDevSrc(const unsigned int, void*, void* msgData);
+   static uint8_t MSGPIAPI GetByteState(const unsigned int deviceIndex);
+   static float MSGPIAPI GetFloatState(const unsigned int deviceIndex);
+   static void MSGPIAPI RegisterStateChangeCallback(unsigned int deviceIndex, int isRegister, ctlpi_chg_callback cb, void* ctx);
 };
 
 }

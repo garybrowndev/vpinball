@@ -78,7 +78,7 @@ void RenderFrame::SortPasses(RenderPass* finalPass, vector<RenderPass*>& sortedP
       std::vector<RenderPass*>::iterator itPass = sortedPasses.begin();
       while (FindIndexOf((*itPass)->m_dependencies, pass) == -1)
          ++itPass;
-      std::vector<RenderPass*>::iterator itPassFirstConsumer = itPass;
+      const std::vector<RenderPass*>::iterator itPassFirstConsumer = itPass;
       // Select insertion position, moving back from first consumer while dependencies & render target constraints are still satisfied, trying to reach a pass using the same RT to optimize merging
       while (true)
       {
@@ -119,7 +119,7 @@ void RenderFrame::SortPasses(RenderPass* finalPass, vector<RenderPass*>& sortedP
    // Merge consecutive passes using the same RT [Warning, dependencies are not updated (not needed) making the log after sort incorrect]
    for (std::vector<RenderPass*>::iterator itPass = sortedPasses.begin(); itPass != sortedPasses.end();)
    {
-      std::vector<RenderPass*>::iterator nextPass = itPass + 1;
+      const std::vector<RenderPass*>::iterator nextPass = itPass + 1;
       if (nextPass != sortedPasses.end() && (*nextPass)->m_mergeable && (*itPass)->m_rt == (*nextPass)->m_rt)
       {
          (*nextPass)->m_depthReadback |= (*itPass)->m_depthReadback;
@@ -147,7 +147,7 @@ bool RenderFrame::Execute(const bool log)
    if (!m_passes.empty())
    {
       // Save render/shader states
-      m_rd->CopyRenderStates(true, *m_rdState);
+      m_rd->CopyRenderAndShaderStates(true, *m_rdState);
 
       // Clear last render pass to avoid cross frame references
       for (RenderPass* pass : m_passes)
@@ -260,7 +260,7 @@ bool RenderFrame::Execute(const bool log)
       m_passes.clear();
 
       // Restore render/shader states
-      m_rd->CopyRenderStates(false, *m_rdState);
+      m_rd->CopyRenderAndShaderStates(false, *m_rdState);
    }
 
    if (!m_endOfFrameCmds.empty())

@@ -6,58 +6,43 @@
 #include "Shader.h"
 #include "math/bluenoise.h"
 
-const string PLAYFIELD_REFLECTION_RENDERPROBE_NAME = "Playfield Reflections"s;
+const string RenderProbe::PLAYFIELD_REFLECTION_RENDERPROBE_NAME = "Playfield Reflections"s;
 
 RenderProbe::~RenderProbe()
 {
    assert(m_prerenderRT == nullptr && m_dynamicRT == nullptr); // RenderRelease must be call before destructor
 }
 
-int RenderProbe::GetSaveSize() const
+void RenderProbe::Save(IObjectWriter& writer, const bool saveForUndo)
 {
-   size_t size = 0;
-   size += 2 * sizeof(int) + sizeof(int); // TYPE
-   size += 2 * sizeof(int) + sizeof(int) + m_name.length(); // NAME
-   size += 2 * sizeof(int) + sizeof(int); // RBAS
-   size += 2 * sizeof(int) + sizeof(vec4); // RPLA
-   size += 2 * sizeof(int) + sizeof(int); // RMOD
-   size += 2 * sizeof(int) + sizeof(int); // RLMP
-   size += 2 * sizeof(int); // ENDB
-   return (int)size;
+   // Save as a data blob inside the main gamedata. This allows backward compatibility since the block will be blindly discarded on older versions, still hashing it.
+   writer.BeginObject(FID(RPRB), true, true);
+   writer.WriteInt(FID(TYPE), (int)m_type);
+   writer.WriteString(FID(NAME), m_name);
+   writer.WriteInt(FID(RBAS), m_roughness);
+   writer.WriteRaw(FID(RPLA), (void*)&m_reflection_plane, sizeof(vec4));
+   writer.WriteInt(FID(RMOD), (int)m_reflection_mode);
+   writer.WriteBool(FID(RLMP), m_disableLightReflection);
+   writer.EndObject();
 }
 
-HRESULT RenderProbe::SaveData(IStream* pstm, HCRYPTHASH hcrypthash, const bool saveForUndo)
+void RenderProbe::Load(IObjectReader& reader)
 {
-   BiffWriter bw(pstm, hcrypthash);
-   bw.WriteInt(FID(TYPE), (int)m_type);
-   bw.WriteString(FID(NAME), m_name);
-   bw.WriteInt(FID(RBAS), m_roughness);
-   bw.WriteStruct(FID(RPLA), (void*)&m_reflection_plane, sizeof(vec4));
-   bw.WriteInt(FID(RMOD), (int)m_reflection_mode);
-   bw.WriteBool(FID(RLMP), m_disableLightReflection);
-   bw.WriteTag(FID(ENDB));
-   return S_OK;
-}
-
-HRESULT RenderProbe::LoadData(IStream* pstm, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey)
-{
-   BiffReader br(pstm, this, version, hcrypthash, hcryptkey);
-   br.Load();
-   return S_OK;
-}
-
-bool RenderProbe::LoadToken(const int id, BiffReader* const pbr)
-{
-   switch (id)
-   {
-   case FID(TYPE): pbr->GetInt(&m_type); break;
-   case FID(NAME): pbr->GetString(m_name); break;
-   case FID(RBAS): pbr->GetInt(m_roughness); break;
-   case FID(RPLA): pbr->GetStruct(&m_reflection_plane, sizeof(vec4)); break;
-   case FID(RMOD): pbr->GetInt(&m_reflection_mode); break;
-   case FID(RLMP): pbr->GetBool(m_disableLightReflection); break;
-   }
-   return true;
+   reader.AsObject(
+      [this](int tag, IObjectReader& reader)
+      {
+         switch (tag)
+         {
+         case FID(TYPE): m_type = static_cast<ProbeType>(reader.AsInt()); break;
+         case FID(NAME): m_name = reader.AsString(); break;
+         case FID(RBAS): m_roughness = reader.AsInt(); break;
+         case FID(RPLA): reader.AsRaw(&m_reflection_plane, sizeof(vec4)); break;
+         case FID(RMOD): m_reflection_mode = static_cast<ReflectionMode>(reader.AsInt()); break;
+         case FID(RLMP): m_disableLightReflection = reader.AsBool(); break;
+         }
+         return true;
+      },
+      true);
 }
 
 void RenderProbe::SetName(const string& name)
@@ -216,12 +201,12 @@ void RenderProbe::ApplyRoughness(RenderTarget* probe, const int roughness)
       if (m_type == SCREEN_SPACE_TRANSPARENCY)
       {
          // FIXME adjust the kernels to have as many as there are roughness levels
-         constexpr float kernel[] = { 0.f, 7.f, 9.f, 11.f, 13.f, 15.f, 19.f, 23.f, 27.f, 39.f, 39.f, 39.f, 39.f };
+         static constexpr float kernel[] = { 0.f, 7.f, 9.f, 11.f, 13.f, 15.f, 19.f, 23.f, 27.f, 39.f, 39.f, 39.f, 39.f };
          m_rd->DrawGaussianBlur(probe, m_blurRT, probe, kernel[roughness]);
       }
       else
       {
-         constexpr float kernel[] = { 0.f, 7.f, 9.f, 13.f, 15.f, 19.f, 23.f, 13.f, 15.f, 19.f, 23.f, 27.f, 39.f };
+         static constexpr float kernel[] = { 0.f, 7.f, 9.f, 13.f, 15.f, 19.f, 23.f, 13.f, 15.f, 19.f, 23.f, 27.f, 39.f };
          m_rd->DrawGaussianBlur(probe, m_blurRT, probe, kernel[roughness]);
       }
    }
@@ -267,12 +252,18 @@ void RenderProbe::SetReflectionPlane(const vec4& plane) {
    m_reflection_plane = plane;
 }
 
-void RenderProbe::GetReflectionPlaneNormal(vec3& normal) const
+vec3 RenderProbe::GetReflectionPlaneNormal() const { return vec3(m_reflection_plane.x, m_reflection_plane.y, m_reflection_plane.z); }
+
+float RenderProbe::GetReflectionPlaneDistance() const { return m_reflection_plane.w; }
+
+void RenderProbe::SetReflectionPlaneNormal(const vec3& normal)
 {
-   normal.x = m_reflection_plane.x;
-   normal.y = m_reflection_plane.y;
-   normal.z = m_reflection_plane.z;
+   m_reflection_plane.x = normal.x;
+   m_reflection_plane.y = normal.y;
+   m_reflection_plane.z = normal.z;
 }
+
+void RenderProbe::SetReflectionPlaneDistance(float distance) { m_reflection_plane.w = distance; }
 
 void RenderProbe::SetReflectionMode(ReflectionMode mode) 
 {
@@ -303,8 +294,8 @@ void RenderProbe::PreRenderStaticReflectionProbe()
    //#define STATIC_PRERENDER_ITERATIONS_KOROBOV 7.0 // for the (commented out) lattice-based QMC oversampling, 'magic factor', depending on the the number of iterations!
    // loop for X times and accumulate/average these renderings
    // NOTE: iter == 0 MUST ALWAYS PRODUCE an offset of 0,0!
-   unsigned int nTris = m_rd->m_curDrawnTriangles;
-   int n_iter = STATIC_PRERENDER_ITERATIONS - 1;
+   const unsigned int nTris = m_rd->m_curDrawnTriangles;
+   const int n_iter = STATIC_PRERENDER_ITERATIONS - 1;
    for (int iter = n_iter; iter >= 0; --iter) // just do one iteration if in dynamic camera/light/material tweaking mode
    {
       m_rd->m_curDrawnTriangles = 0;
@@ -408,7 +399,7 @@ void RenderProbe::RenderReflectionProbe(const unsigned int renderMask)
 void RenderProbe::DoRenderReflectionProbe(const bool render_static, const bool render_balls, const bool render_dynamic)
 {
    m_rd->ResetRenderState();
-   m_rd->CopyRenderStates(true, *m_rdState);
+   m_rd->CopyRenderAndShaderStates(true, *m_rdState);
 
    const unsigned int prevRenderMask = g_pplayer->m_renderer->m_render_mask;
    g_pplayer->m_renderer->m_render_mask |= Renderer::REFLECTION_PASS;
@@ -418,7 +409,7 @@ void RenderProbe::DoRenderReflectionProbe(const bool render_static, const bool r
    // Set the clip plane to only render objects above the reflection plane (do not reflect what is under or the plane itself)
    Vertex3Ds n(m_reflection_plane.x, m_reflection_plane.y, m_reflection_plane.z);
    n.Normalize();
-   vec4 clip_plane(n.x, n.y, n.z, m_reflection_plane.w);
+   const vec4 clip_plane(n.x, n.y, n.z, m_reflection_plane.w);
    m_rd->SetClipPlane(clip_plane);
    m_rd->SetRenderState(RenderState::CLIPPLANEENABLE, RenderState::RS_TRUE);
    // Reverse cull mode since we multiply by a reversing matrix (mirror also has a reversing matrix)
@@ -427,8 +418,8 @@ void RenderProbe::DoRenderReflectionProbe(const bool render_static, const bool r
    m_rd->m_basicShader->SetTextureNull(SHADER_tex_reflection);
 
    // Flip camera
-   Matrix3D viewMat, initialViewMat;
-   viewMat = g_pplayer->m_renderer->GetMVP().GetView();
+   Matrix3D viewMat = g_pplayer->m_renderer->GetMVP().GetView();
+   Matrix3D initialViewMat;
    memcpy(&initialViewMat.m[0][0], &viewMat.m[0][0], 4 * 4 * sizeof(float));
    viewMat = Matrix3D::MatrixPlaneReflection(n, m_reflection_plane.w) * viewMat;
    g_pplayer->m_renderer->GetMVP().SetView(viewMat);
@@ -447,7 +438,7 @@ void RenderProbe::DoRenderReflectionProbe(const bool render_static, const bool r
 
    // Restore initial render states and camera
    g_pplayer->m_renderer->m_render_mask = prevRenderMask;
-   m_rd->CopyRenderStates(false, *m_rdState);
+   m_rd->CopyRenderAndShaderStates(false, *m_rdState);
    m_rd->SetDefaultRenderState();
    g_pplayer->m_renderer->GetMVP().SetView(initialViewMat);
 }

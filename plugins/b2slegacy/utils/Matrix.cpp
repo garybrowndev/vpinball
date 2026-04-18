@@ -20,7 +20,7 @@ namespace B2SLegacy {
 
 AffineTransform AffineTransformMakeIdentity()
 {
-   AffineTransform tRet = {1,0,0,1,0,0};
+   static constexpr AffineTransform tRet = {1,0,0,1,0,0};
    return tRet;
 }
 
@@ -61,16 +61,6 @@ AffineTransform AffineTransformMakeMultiply(const AffineTransform& a, const Affi
 Matrix::Matrix()
 {
    m_transform = AffineTransformMakeIdentity();
-}
-
-Matrix::Matrix(const Matrix& matrix)
-{
-   m_transform = matrix.m_transform;
-}
-
-Matrix::Matrix(float m11, float m12, float m21, float m22, float dx, float dy)
-{
-   m_transform = {m11, m12, m21, m22, dx, dy};
 }
 
 void Matrix::Translate(float offsetX, float offsetY)

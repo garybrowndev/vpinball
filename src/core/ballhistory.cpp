@@ -14,10 +14,20 @@ bool BallHistory::DrawMenu = false;
 #include "freeimage.h"
 
 #include "player.h"
+#include "parts/ball.h"
+#include "parts/kicker.h"
+#include "parts/flipper.h"
+#include "parts/light.h"
+#include "parts/rubber.h"
 #include "renderer/Shader.h"
 #include "meshes/ballMesh.h"
 #include "fonts/DroidSans.h"
 #include "fonts/DroidSansBold.h"
+
+#if defined(_DEBUG) && defined(__BALLHISTORY_WIN32__)
+std::mutex BHLog::s_mutex;
+std::string BHLog::s_logFolder;
+#endif
 
 // ================================================================================================================================================================================================================================================
 
@@ -54,7 +64,6 @@ void BallHistoryRecord::Set(const HitBall* controlVBall, BallHistoryState& bhr)
    bhr.m_LastEventPos = controlVBall->m_lastEventPos;
    bhr.m_Orientation = controlVBall->m_orientation;
    memcpy(bhr.m_OldPos, controlVBall->m_oldpos, sizeof(bhr.m_OldPos));
-   bhr.m_RingCounter_OldPos = controlVBall->m_ringcounter_oldpos;
 }
 
 void BallHistoryRecord::Set(std::vector<HitBall*>& controlVBalls, int timeMs)
@@ -197,6 +206,7 @@ TrainerOptions::RunRecord::RunRecord()
 
 const int TrainerOptions::CountdownSoundSeconds = 3;
 const float TrainerOptions::TimeLowSoundSeconds = 4.0f;
+const int TrainerOptions::ResultDisplayDurationMs = 1500;
 
 TrainerOptions::TrainerOptions()
    : m_ModeState(ModeStateType::ModeStateType_Start)
@@ -236,6 +246,7 @@ TrainerOptions::TrainerOptions()
    , m_BallStartOptionsRecordsSize(0)
    , m_CurrentRunRecord(0)
    , m_RunStartTimeMs(0)
+   , m_ResultDisplayEndTimeMs(0)
    , m_CountdownSoundPlayed(0)
    , m_TimeLowSoundPlaying(false)
    , m_SetupBallStarts(true)
@@ -362,43 +373,23 @@ ImFont* BallHistory::PrintScreenRecord::BoldLargeFont = nullptr;
 
 void BallHistory::PrintScreenRecord::Init()
 {
-   ImGuiIO& io = ImGui::GetIO();
-
-   int scalingValue = std::min(g_pplayer->m_playfieldWnd->GetWidth(), g_pplayer->m_playfieldWnd->GetHeight());
-
-   if (NormalSmallFont == nullptr)
-   {
-      NormalSmallFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, scalingValue / 50.0f);
-   }
-
-   if (NormalMediumFont == nullptr)
-   {
-      NormalMediumFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsans_compressed_data, droidsans_compressed_size, scalingValue / 40.0f);
-   }
-
-   if (BoldSmallFont == nullptr)
-   {
-      BoldSmallFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, scalingValue / 50.0f);
-   }
-
-   if (BoldMediumFont == nullptr)
-   {
-      BoldMediumFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, scalingValue / 40.0f);
-   }
-
-   if (BoldLargeFont == nullptr)
-   {
-      BoldLargeFont = io.Fonts->AddFontFromMemoryCompressedTTF(droidsansbold_compressed_data, droidsansbold_compressed_size, scalingValue / 30.0f);
-   }
+   // In ImGui 1.92+, fonts added after atlas build are invalidated on rebuild.
+   // Use the default ImGui font (from LiveUI) instead of adding custom ones.
+   // All font pointers point to the default font; size differences are handled
+   // by PushFont's font_size_base_unscaled parameter in the future.
+   ImFont* defaultFont = ImGui::GetIO().FontDefault ? ImGui::GetIO().FontDefault : ImGui::GetFont();
+   NormalSmallFont = defaultFont;
+   NormalMediumFont = defaultFont;
+   BoldSmallFont = defaultFont;
+   BoldMediumFont = defaultFont;
+   BoldLargeFont = defaultFont;
 }
 
 void BallHistory::PrintScreenRecord::UnInit()
 {
-   NormalSmallFont = nullptr;
-   NormalMediumFont = nullptr;
-   BoldSmallFont = nullptr;
-   BoldMediumFont = nullptr;
-   BoldLargeFont = nullptr;
+   // Do NOT null out font pointers — they are owned by ImGui's font atlas.
+   // In ImGui 1.92+, adding fonts to an already-built atlas crashes.
+   // The fonts persist for the lifetime of the ImGui context.
 }
 
 void BallHistory::PrintScreenRecord::Text(const char *name, float positionX, float positionY, const std::string &message)
@@ -675,7 +666,7 @@ void BallHistory::PrintScreenRecord::TransformAspectRatio(float& positionX, floa
 {
    int width = g_pplayer->m_playfieldWnd->GetWidth();
    int height = g_pplayer->m_playfieldWnd->GetHeight();
-   float rotationDegrees = g_pplayer->m_ptable->mViewSetups[g_pplayer->m_ptable->m_BG_current_set].GetRotation(width, height);
+   float rotationDegrees = g_pplayer->m_ptable->GetViewSetup().GetRotation(width, height);
 
    if (rotationDegrees < 90.0f)
    {
@@ -846,7 +837,7 @@ const char* BallHistory::TrainerModeBallCorridorOpeningPositionLeft3DKeyName = "
 const char* BallHistory::TrainerModeBallCorridorOpeningPositionRight3DKeyName = "BallCorridorOpeningPositionRight3D";
 
 BallHistory::BallHistory(PinTable& pinTable)
-   : m_PreviousProcessKeysAction(EnumAssignKeys::eCKeys)
+   : m_PreviousProcessKeysAction(EnumAssignKeys::eNone)
    , m_PreviousProcessKeyIsPressed(false)
    , m_ShowStatus(false)
    , m_Control(false)
@@ -880,6 +871,7 @@ BallHistory::BallHistory(PinTable& pinTable)
 
 void BallHistory::Init(Player& player, int currentTimeMs, bool loadSettings)
 {
+   BHLOG("currentTimeMs=%d loadSettings=%d", currentTimeMs, loadSettings);
    SetControl(false);
    m_WasControlled = false;
    m_WasRecalled = false;
@@ -903,7 +895,9 @@ void BallHistory::Init(Player& player, int currentTimeMs, bool loadSettings)
       std::string settingsFolderPath;
       if (GetSettingsFolderPath(settingsFolderPath) == true)
       {
-         BOOL createDir = CreateDirectory(settingsFolderPath.c_str(), NULL);
+         BHLog::SetLogFolder(settingsFolderPath);
+         BHLOG("settingsFolderPath=%s", settingsFolderPath.c_str());
+            BOOL createDir = CreateDirectory(settingsFolderPath.c_str(), NULL);
          if (createDir == TRUE || GetLastError() == ERROR_ALREADY_EXISTS)
          {
             std::string settingsFileName;
@@ -927,30 +921,14 @@ void BallHistory::Init(Player& player, int currentTimeMs, bool loadSettings)
 
 void BallHistory::UnInit(Player& player)
 {
+   BHLOG("start");
    SaveSettings(player);
    PrintScreenRecord::UnInit();
    m_ActiveBallKickers.clear();
    m_Flippers.clear();
 
    ClearDraws(player);
-
-   for (auto drawnBall : m_DrawnBalls)
-   {
-      drawnBall.second->RenderRelease();
-      drawnBall.second->Release();
-   }
-
-   for (auto drawnIntersectionCircle : m_DrawnIntersectionCircles)
-   {
-      drawnIntersectionCircle.second->RenderRelease();
-      drawnIntersectionCircle.second->Release();
-   }
-
-   for (auto drawnLine : m_DrawnLines)
-   {
-      drawnLine.second->RenderRelease();
-      drawnLine.second->Release();
-   }
+   BHLOG("done");
 }
 
 void BallHistory::Process(Player& player, int currentTimeMs)
@@ -983,8 +961,13 @@ void BallHistory::Process(Player& player, int currentTimeMs)
       }
       else if (BallChanged())
       {
-         m_WasControlled = false;
-         Init(player, currentTimeMs, false);
+         // Only reset for non-Trainer modes during active runs to avoid
+         // resetting m_RunStartTimeMs which restarts the countdown
+         if (m_MenuOptions.m_MenuState != MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results)
+         {
+            m_WasControlled = false;
+            Init(player, currentTimeMs, false);
+         }
       }
 
       ProcessMode(player, currentTimeMs);
@@ -1069,6 +1052,11 @@ void BallHistory::Process(Player& player, int currentTimeMs)
 
 bool BallHistory::ProcessKeys(Player& player, EnumAssignKeys action, bool isPressed, int currentTimeMs, bool process)
 {
+   if (action != EnumAssignKeys::eNone)
+   {
+      BHLOG("action=%d isPressed=%d timeMs=%d process=%d", action, isPressed, currentTimeMs, process);
+   }
+
    if (!ImGui::IsKeyDown(ImGuiKey_LeftShift))
    {
       m_MenuOptions.m_SkipKeyLeftPressed = false;
@@ -1079,7 +1067,7 @@ bool BallHistory::ProcessKeys(Player& player, EnumAssignKeys action, bool isPres
       m_MenuOptions.m_SkipKeyRightPressed = false;
    }
 
-   if (action != EnumAssignKeys::eCKeys)
+   if (action != EnumAssignKeys::eNone)
    {
       m_PreviousProcessKeysAction = action;
       m_PreviousProcessKeyIsPressed = isPressed;
@@ -1090,7 +1078,7 @@ bool BallHistory::ProcessKeys(Player& player, EnumAssignKeys action, bool isPres
 
    if (process)
    {
-      m_PreviousProcessKeysAction = EnumAssignKeys::eCKeys;
+      m_PreviousProcessKeysAction = EnumAssignKeys::eNone;
       m_PreviousProcessKeyIsPressed = false;
    }
 
@@ -1210,6 +1198,7 @@ bool BallHistory::Control()
 
 void BallHistory::SetControl(bool control)
 {
+   BHLOG("control=%d (was %d)", control, m_Control);
    ClearDraws(*g_pplayer);
 
    if (m_Control != control)
@@ -1217,9 +1206,15 @@ void BallHistory::SetControl(bool control)
       m_Control = control;
       if (m_Control)
       {
+         // Menu opened mid-result-hold: cancel the hold and unlock any balls we locked,
+         // otherwise they'd stay stuck-in-kicker after the user exits trainer mode.
+         for (HitBall* ball : m_MenuOptions.m_TrainerOptions.m_TrainerLockedBalls)
+            ball->m_d.m_lockedInKicker = false;
+         m_MenuOptions.m_TrainerOptions.m_TrainerLockedBalls.clear();
+         m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs = 0;
+
          StopAllSounds();
          g_pplayer->SetPlayState(!g_pplayer->IsPlaying());
-         g_pplayer->m_noTimeCorrect = true;
          m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
          m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
          m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
@@ -1247,6 +1242,11 @@ void BallHistory::ToggleRecall()
 
 void BallHistory::ResetTrainerRunStartTime()
 {
+   // Don't reset during an active trainer run — ApplyPlayingState calls this on
+   // pause/focus-change, which would restart the countdown mid-run
+   if (m_MenuOptions.m_MenuState == MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results)
+      return;
+
    m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
    m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
    m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
@@ -1264,7 +1264,7 @@ bool BallHistory::GetSettingsFileName(Player& player, std::string& fileName)
       HCRYPTHASH hMd5Hash = NULL;
       if (CryptCreateHash(hCryptProv, CALG_MD5, 0, 0, &hMd5Hash) != FALSE)
       {
-         HANDLE hTableFile = CreateFile(player.m_ptable->m_filename.c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
+         HANDLE hTableFile = CreateFile(player.m_ptable->m_filename.string().c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
          if (hTableFile != INVALID_HANDLE_VALUE)
          {
             static const int readBufferSize = 1024 * 1024;
@@ -1614,7 +1614,7 @@ void BallHistory::SaveSettings(Player& player)
 
    CSimpleIni iniFile;
    {
-      iniFile.SetValue(TableInfoSectionName, FilePathKeyName, player.m_ptable->m_filename.c_str());
+      iniFile.SetValue(TableInfoSectionName, FilePathKeyName, player.m_ptable->m_filename.string().c_str());
       iniFile.SetValue(TableInfoSectionName, TableNameKeyName, player.m_ptable->m_tableName.c_str());
       iniFile.SetValue(TableInfoSectionName, AuthorKeyName, player.m_ptable->m_author.c_str());
       iniFile.SetValue(TableInfoSectionName, VersionKeyName, player.m_ptable->m_version.c_str());
@@ -1958,11 +1958,11 @@ void BallHistory::InitControlVBalls(Player& player)
    m_ControlVBallsPrevious.resize(m_ControlVBalls.size());
    std::copy(m_ControlVBalls.begin(), m_ControlVBalls.end(), m_ControlVBallsPrevious.begin());
    m_ControlVBalls.clear();
-   for (HitBall* controlVBall : player.m_vball)
+   for (Ball* ball : player.m_vball)
    {
-      if (!controlVBall->m_d.m_lockedInKicker)
+      if (!ball->m_hitBall.m_d.m_lockedInKicker)
       {
-         m_ControlVBalls.push_back(controlVBall);
+         m_ControlVBalls.push_back(&ball->m_hitBall);
       }
    }
    std::sort(m_ControlVBalls.begin(), m_ControlVBalls.end());
@@ -1976,7 +1976,7 @@ void BallHistory::InitControlVBalls(Player& player)
 void BallHistory::InitActiveBallKickers(PinTable& pinTable)
 {
    m_ActiveBallKickers.clear();
-   for (auto vedit : pinTable.m_vedit)
+   for (auto vedit : pinTable.GetParts())
    {
       if (vedit && vedit->GetItemType() == ItemTypeEnum::eItemKicker)
       {
@@ -2006,7 +2006,7 @@ void BallHistory::InitActiveBallKickers(PinTable& pinTable)
 void BallHistory::InitFlippers(PinTable& pinTable)
 {
    m_Flippers.clear();
-   for (auto vedit : pinTable.m_vedit)
+   for (auto vedit : pinTable.GetParts())
    {
       if (vedit && vedit->GetItemType() == ItemTypeEnum::eItemFlipper)
       {
@@ -2279,7 +2279,9 @@ void BallHistory::DrawFakeBall(Player& player, const std::string& name, const Ve
    {
       CComObject<Ball>::CreateInstance(&drawnBall);
       drawnBall->AddRef();
-      drawnBall->Init(player.m_ptable, 0.0f, 0.0f, false, false);
+      drawnBall->Init(0.0f, 0.0f, false, true);
+      drawnBall->m_wzName = std::wstring(name.begin(), name.end());
+      player.m_ptable->AddPart(drawnBall);
       drawnBall->RenderSetup(player.m_renderer->m_renderDevice);
       m_DrawnBalls[name] = drawnBall;
    }
@@ -2294,7 +2296,6 @@ void BallHistory::DrawFakeBall(Player& player, const std::string& name, const Ve
    drawnBall->m_hitBall.m_d.m_vel.SetZero();
    drawnBall->m_d.m_useTableRenderSettings = true;
    drawnBall->put_Color(color);
-   player.m_vhitables.push_back(drawnBall);
 }
 
 void BallHistory::DrawFakeBall(Player& player, const std::string& name, Vertex3Ds& position, float radius, DWORD ballColor, const Vertex3Ds* lineEndPosition, DWORD lineColor, int lineThickness)
@@ -2393,7 +2394,7 @@ void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex
    }
 
    // Common setup/update
-   pLine->Init(player.m_ptable, 0.0f, 0.0f, false, true);
+   pLine->Init(0.0f, 0.0f, false, true);
    pLine->ClearForOverwrite();
    pLine->AddDragPoint(start);
    pLine->AddDragPoint(end);
@@ -2406,19 +2407,27 @@ void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex
 
    if (isNew)
    {
+      // Add to table first (sets m_ptable which RenderSetup needs)
+      pLine->m_wzName = std::wstring(name.begin(), name.end());
+      player.m_ptable->AddPart(pLine);
       // First-time GPU setup
       pLine->RenderSetup(player.m_renderer->m_renderDevice);
    }
    else
    {
-      // Re-create GPU resources safely at end of frame (avoid mid-frame release/setup)
-      g_pplayer->m_renderer->m_renderDevice->AddEndOfFrameCmd([pLine]() {
+      std::string nameCopy = name;
+      // Re-create GPU resources safely at end of frame (avoid mid-frame release/setup).
+      // Guard against ClearDraws firing between schedule and end-of-frame: look up by name
+      // and compare pointer identity. If the object was cleared (or replaced), skip — calling
+      // RenderRelease on a torn-down Rubber whose m_rd is null trips an assert in light.cpp.
+      g_pplayer->m_renderer->m_renderDevice->AddEndOfFrameCmd([pLine, nameCopy, this]() {
+         auto it = m_DrawnLines.find(nameCopy);
+         if (it == m_DrawnLines.end() || it->second != pLine)
+            return;
          pLine->RenderRelease();
          pLine->RenderSetup(g_pplayer->m_renderer->m_renderDevice);
       });
    }
-
-   player.m_vhitables.push_back(pLine);
 }
 
 void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name, Vertex3Ds& position, float intersectionRadiusPercent, DWORD color)
@@ -2446,7 +2455,7 @@ void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name
    }
 
    // Common setup/update
-   pIntersectionCircle->Init(g_pplayer->m_ptable, position.x, position.y, false, true);
+   pIntersectionCircle->Init(position.x, position.y, false, true);
    pIntersectionCircle->ClearForOverwrite();
    float defaultBallRadius = GetDefaultBallRadius();
    pIntersectionCircle->m_d.m_falloff = defaultBallRadius * (intersectionRadiusPercent / 100.0f);
@@ -2456,19 +2465,24 @@ void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name
 
    if (isNew)
    {
+      // Add to table first (sets m_ptable which RenderSetup needs)
+      pIntersectionCircle->m_wzName = std::wstring(name.begin(), name.end());
+      g_pplayer->m_ptable->AddPart(pIntersectionCircle);
       // First-time GPU setup
       pIntersectionCircle->RenderSetup(g_pplayer->m_renderer->m_renderDevice);
    }
    else
    {
-      // Re-create GPU resources safely at end of frame
-      g_pplayer->m_renderer->m_renderDevice->AddEndOfFrameCmd([pIntersectionCircle]() {
+      std::string nameCopy = name;
+      // Re-create GPU resources safely at end of frame. Same guard as DrawLine.
+      g_pplayer->m_renderer->m_renderDevice->AddEndOfFrameCmd([pIntersectionCircle, nameCopy, this]() {
+         auto it = m_DrawnIntersectionCircles.find(nameCopy);
+         if (it == m_DrawnIntersectionCircles.end() || it->second != pIntersectionCircle)
+            return;
          pIntersectionCircle->RenderRelease();
          pIntersectionCircle->RenderSetup(g_pplayer->m_renderer->m_renderDevice);
       });
    }
-
-   g_pplayer->m_vhitables.push_back(pIntersectionCircle);
 }
 
 void BallHistory::DrawControlVBalls(Player &player)
@@ -2530,53 +2544,37 @@ void BallHistory::DrawNormalModeVisuals(Player& player, int currentTimeMs)
 
 void BallHistory::ClearDraws(Player& player)
 {
-   for (auto drawnBall : m_DrawnBalls)
+   BHLOG("balls=%zu circles=%zu lines=%zu", m_DrawnBalls.size(), m_DrawnIntersectionCircles.size(), m_DrawnLines.size());
+   // Each draw-slot object has TWO refs: one from the explicit AddRef() right after
+   // CreateInstance (keeps object alive in our map), and one from AddPart (owned by
+   // the table). We need a matching Release for each: RemovePart covers the table's
+   // ref, and an explicit Release covers the map's ref.
+   for (auto& drawnBall : m_DrawnBalls)
    {
-      for (std::size_t hitableIndex = 0; hitableIndex < player.m_vhitables.size();)
-      {
-         Hitable* hitable = player.m_vhitables[hitableIndex]->GetIHitable();
-         if (hitable == drawnBall.second)
-         {
-            player.m_vhitables.erase(player.m_vhitables.begin() + hitableIndex);
-         }
-         else
-         {
-            hitableIndex++;
-         }
-      }
+      drawnBall.second->RenderRelease();
+      if (player.m_ptable->HasPart(drawnBall.second))
+         player.m_ptable->RemovePart(drawnBall.second);
+      drawnBall.second->Release();
    }
+   m_DrawnBalls.clear();
 
-   for (auto drawnIntersectionCircle : m_DrawnIntersectionCircles)
+   for (auto& drawnIntersectionCircle : m_DrawnIntersectionCircles)
    {
-      for (std::size_t hitableIndex = 0; hitableIndex < player.m_vhitables.size();)
-      {
-         Hitable* hitable = player.m_vhitables[hitableIndex]->GetIHitable();
-         if (hitable == drawnIntersectionCircle.second)
-         {
-            player.m_vhitables.erase(player.m_vhitables.begin() + hitableIndex);
-         }
-         else
-         {
-            hitableIndex++;
-         }
-      }
+      drawnIntersectionCircle.second->RenderRelease();
+      if (player.m_ptable->HasPart(drawnIntersectionCircle.second))
+         player.m_ptable->RemovePart(drawnIntersectionCircle.second);
+      drawnIntersectionCircle.second->Release();
    }
+   m_DrawnIntersectionCircles.clear();
 
-   for (auto drawnLines : m_DrawnLines)
+   for (auto& drawnLines : m_DrawnLines)
    {
-      for (std::size_t hitableIndex = 0; hitableIndex < player.m_vhitables.size();)
-      {
-         Hitable* hitable = player.m_vhitables[hitableIndex]->GetIHitable();
-         if (hitable == drawnLines.second)
-         {
-            player.m_vhitables.erase(player.m_vhitables.begin() + hitableIndex);
-         }
-         else
-         {
-            hitableIndex++;
-         }
-      }
+      drawnLines.second->RenderRelease();
+      if (player.m_ptable->HasPart(drawnLines.second))
+         player.m_ptable->RemovePart(drawnLines.second);
+      drawnLines.second->Release();
    }
+   m_DrawnLines.clear();
 }
 
 bool BallHistory::ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs)
@@ -3066,7 +3064,6 @@ void BallHistory::UpdateBallState(BallHistoryRecord& ballHistoryRecord)
          m_ControlVBalls[controlVBallIndex]->m_lastEventPos = ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_LastEventPos;
          m_ControlVBalls[controlVBallIndex]->m_orientation = ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_Orientation;
          memcpy(m_ControlVBalls[controlVBallIndex]->m_oldpos, ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_OldPos, sizeof(m_ControlVBalls[controlVBallIndex]->m_oldpos));
-         m_ControlVBalls[controlVBallIndex]->m_ringcounter_oldpos = ballHistoryRecord.m_BallHistoryStates[controlVBallIndex].m_RingCounter_OldPos;
       }
    }
 }
@@ -4149,6 +4146,7 @@ std::size_t BallHistory::GetTotalPermutations()
 // in my defense, this is menu/ui handling and a huge switch statement, which is kinda like many functions
 void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType menuAction, int currentTimeMs)
 {
+   BHLOG("menuAction=%d menuState=%d modeType=%d timeMs=%d", menuAction, m_MenuOptions.m_MenuState, m_MenuOptions.m_ModeType, currentTimeMs);
    ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_ProcessMenuUsec);
 
    ClearDraws(player);
@@ -4165,14 +4163,21 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
    switch (m_MenuOptions.m_MenuState)
    {
    case MenuOptionsRecord::MenuStateType::MenuStateType_Root_SelectMode:
+      BHLOG("Root_SelectMode: about to call MenuTitleText");
       PrintScreenRecord::MenuTitleText("Ball History Mode");
+      BHLOG("Root_SelectMode: MenuTitleText done");
+      BHLOG("Root_SelectMode: calling MenuText Normal (selected=%d)", m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Normal);
       PrintScreenRecord::MenuText(m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Normal, "Normal");
+      BHLOG("Root_SelectMode: MenuText Normal done");
       PrintScreenRecord::MenuText(m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Trainer, "Trainer");
+      BHLOG("Root_SelectMode: MenuText Trainer done");
       PrintScreenRecord::MenuText(m_MenuOptions.m_ModeType == MenuOptionsRecord::ModeType::ModeType_Disabled, "Disabled");
+      BHLOG("Root_SelectMode: MenuText Disabled done");
 
       switch (m_MenuOptions.m_ModeType)
       {
       case MenuOptionsRecord::ModeType::ModeType_Normal:
+         BHLOG("Root_SelectMode: calling ShowSection Normal");
          ShowSection(DescriptionSectionTitle,
          {
             "Use plunger to configure 'Normal' options",
@@ -4736,6 +4741,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results;
 
                ToggleControl();
+               m_WasControlled = false; // Trainer manages ball state itself, don't let one-time restore overwrite it
 
                m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord = 0;
                m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
@@ -4750,6 +4756,7 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
                m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_Results;
 
                ToggleControl();
+               m_WasControlled = false; // Trainer manages ball state itself
 
                m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
                m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
@@ -8660,6 +8667,35 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
       return;
    }
 
+   // Result display period: pass/fail fired, we're holding to let sound play and visuals show.
+   // Ball stays at current position, phase logic is skipped. After the hold expires, fall
+   // through to normal flow which will initialize the next run (m_RunStartTimeMs == 0 path).
+   if (m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs != 0)
+   {
+      if (currentTimeMs < m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs)
+      {
+         // First frame of result display: lock the trainer ball(s) and remember them so
+         // we can unlock if the user interrupts (e.g., opens menu). After this, m_ControlVBalls
+         // filters out locked balls so the tracked vector is the only reliable reference.
+         if (m_MenuOptions.m_TrainerOptions.m_TrainerLockedBalls.empty())
+         {
+            for (HitBall* ball : m_ControlVBalls)
+            {
+               ball->m_d.m_lockedInKicker = true;
+               m_MenuOptions.m_TrainerOptions.m_TrainerLockedBalls.push_back(ball);
+            }
+         }
+         DrawTrainerModeVisuals(player, currentTimeMs);
+         return;
+      }
+      // Hold expired — unlock balls and proceed to next run setup.
+      for (HitBall* ball : m_MenuOptions.m_TrainerOptions.m_TrainerLockedBalls)
+         ball->m_d.m_lockedInKicker = false;
+      m_MenuOptions.m_TrainerOptions.m_TrainerLockedBalls.clear();
+      m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs = 0;
+      m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+   }
+
    std::string errorMessage;
    bool cancelRun = false;
 
@@ -8849,9 +8885,17 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
       
       for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
       {
-         m_ControlVBalls[controlVBallIndex]->m_d.m_pos = currentRunRecord.m_StartPositions[controlVBallIndex];
-         m_ControlVBalls[controlVBallIndex]->m_d.m_vel.SetZero();
-         m_ControlVBalls[controlVBallIndex]->m_angularmomentum.SetZero();
+         // Lock ball so physics skips it entirely — position is safe to set from render thread.
+         // Track the ball in m_TrainerLockedBalls so we can unlock if the user interrupts
+         // the countdown (e.g., opens menu). m_ControlVBalls is filtered to non-locked balls,
+         // so once we set lockedInKicker the ball drops out of it on the next frame — only
+         // the tracking vector keeps a reliable reference.
+         HitBall* ball = m_ControlVBalls[controlVBallIndex];
+         ball->m_d.m_lockedInKicker = true;
+         ball->m_d.m_pos = currentRunRecord.m_StartPositions[controlVBallIndex];
+         ball->m_d.m_vel.SetZero();
+         ball->m_angularmomentum.SetZero();
+         m_MenuOptions.m_TrainerOptions.m_TrainerLockedBalls.push_back(ball);
       }
 
       if (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun > 0)
@@ -8891,29 +8935,43 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
       m_MenuOptions.m_MenuError.clear();
       if (m_MenuOptions.m_TrainerOptions.m_SetupBallStarts)
       {
-         Init(player, currentTimeMs, false);
+         // Transition from countdown to active run: hide trainer visuals (start/end/corridor markers).
+         // The ResetTrainerRunStartTime guard for MenuStateType_Trainer_Results ensures this block
+         // fires only once per run, so there's no flicker from repeated clear/redraw.
+         ClearDraws(player);
 
+         // Countdown locked the balls via m_TrainerLockedBalls; the ball-setup loop below will
+         // unlock them via m_d.m_lockedInKicker = false, so drop our tracking entries here.
+         m_MenuOptions.m_TrainerOptions.m_TrainerLockedBalls.clear();
+
+         // Note: Do NOT call Init() here — it resets m_RunStartTimeMs which restarts
+         // the countdown, creating an infinite loop for drop-mode (zero velocity) runs.
+         m_BallHistoryRecords.resize(BallHistorySizeDefault);
+         m_BallHistoryRecordsSize = 0;
+         m_BallHistoryRecordsHeadIndex = 0;
+
+         // Use player.m_vball (not m_ControlVBalls which filters locked balls)
          bool anyVelocityAngularMomentumSet = false;
-         for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
+         for (std::size_t ballIndex = 0; ballIndex < player.m_vball.size(); ++ballIndex)
          {
-            m_ControlVBalls[controlVBallIndex]->m_d.m_pos = currentRunRecord.m_StartPositions[controlVBallIndex];
-            m_ControlVBalls[controlVBallIndex]->m_d.m_vel = currentRunRecord.m_StartVelocities[controlVBallIndex];
-            m_ControlVBalls[controlVBallIndex]->m_angularmomentum = currentRunRecord.m_StartAngularMomentums[controlVBallIndex];
-
-            if (m_ControlVBalls[controlVBallIndex]->m_d.m_vel.IsZero() == false || m_ControlVBalls[controlVBallIndex]->m_angularmomentum.IsZero() == false)
+            HitBall& ball = player.m_vball[ballIndex]->m_hitBall;
+            if (ballIndex < currentRunRecord.m_StartPositions.size())
             {
-               m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = false;
-            }
+               ball.m_d.m_pos = currentRunRecord.m_StartPositions[ballIndex];
+               ball.m_d.m_vel = currentRunRecord.m_StartVelocities[ballIndex];
+               ball.m_angularmomentum = currentRunRecord.m_StartAngularMomentums[ballIndex];
+               ball.m_d.m_lockedInKicker = false; // unlock so physics moves it after countdown
 
-            if (currentRunRecord.m_StartVelocities[controlVBallIndex].IsZero() == false || currentRunRecord.m_StartAngularMomentums[controlVBallIndex].IsZero() == false)
-            {
-               anyVelocityAngularMomentumSet = true;
+               if (currentRunRecord.m_StartVelocities[ballIndex].IsZero() == false || currentRunRecord.m_StartAngularMomentums[ballIndex].IsZero() == false)
+               {
+                  anyVelocityAngularMomentumSet = true;
+               }
             }
          }
 
+         m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = false;
          if (anyVelocityAngularMomentumSet == false)
          {
-            m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = false;
             player.m_renderer->m_trailForBalls = m_UseTrailsForBallsInitialValue;
          }
       }
@@ -8989,6 +9047,10 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
          m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = false;
       }
 
+      // Wait for physics thread to unlock the ball and repopulate m_ControlVBalls
+      if (m_ControlVBalls.empty())
+         return;
+
       float remainingRunTime
          = ((m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * OneSecondMs) - runElapsedTimeMs + (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs)) / 1000.0f;
       if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsTimeLowEnabled && remainingRunTime < TrainerOptions::TimeLowSoundSeconds && !m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying)
@@ -8996,6 +9058,11 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
          PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_TIME_LOW, true);
          m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = true;
       }
+
+      // Guard so only one detection block resolves the run per frame. Without this,
+      // two blocks (e.g. corridor-pass + kicker-fail) can both increment m_CurrentRunRecord,
+      // leaving the next record default-constructed with m_Result = ResultType_Unknown.
+      bool resultSetThisFrame = false;
 
       if (m_MenuOptions.m_TrainerOptions.m_BallPassOptionsRecords.size() > 0)
       {
@@ -9069,13 +9136,14 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
             currentRunRecord.m_StartToPassLocationIndexes = startToPassLocationIndexes;
             m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
             m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
-            m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+            m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs = currentTimeMs + TrainerOptions::ResultDisplayDurationMs;
             m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
             m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
             m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+            resultSetThisFrame = true;
             if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled)
             {
-               PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_PASS);
+               PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_PASS, true);
             }
          }
       }
@@ -9137,24 +9205,25 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
             break;
          }
       }
-      if (anyFail == true)
+      if (anyFail == true && !resultSetThisFrame)
       {
          currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_FailedLocation;
          currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
          currentRunRecord.m_StartToFailLocationIndexes = startToFailLocationIndexes;
          m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
          m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
-         m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+         m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs = currentTimeMs + TrainerOptions::ResultDisplayDurationMs;
          m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
          m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
          m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+         resultSetThisFrame = true;
          if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
          {
-            PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL);
+            PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL, true);
          }
       }
 
-      if (BallCorridorReadyForTrainer())
+      if (BallCorridorReadyForTrainer() && !resultSetThisFrame)
       {
          TrainerOptions::BallCorridorOptionsRecord& bcor = m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord;
          float passWidth = GetDefaultBallRadius() * (bcor.m_PassRadiusPercent / 100.0f);
@@ -9175,20 +9244,21 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
                }
             }
 
-            if (resultType != TrainerOptions::RunRecord::ResultType::ResultType_Unknown)
+            if (resultType != TrainerOptions::RunRecord::ResultType::ResultType_Unknown && !resultSetThisFrame)
             {
                currentRunRecord.m_Result = TrainerOptions::RunRecord::ResultType::ResultType_PassedCorridor;
                currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
                currentRunRecord.m_StartToPassCorridorIndex = startToPassCorridorIndex;
                m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
                m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
-               m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+               m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs = currentTimeMs + TrainerOptions::ResultDisplayDurationMs;
                m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
                m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
                m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+               resultSetThisFrame = true;
                if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsPassEnabled)
                {
-                  PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_PASS);
+                  PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_PASS, true);
                }
             }
          }
@@ -9228,20 +9298,21 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
                }
             }
 
-            if (resultType != TrainerOptions::RunRecord::ResultType::ResultType_Unknown)
+            if (resultType != TrainerOptions::RunRecord::ResultType::ResultType_Unknown && !resultSetThisFrame)
             {
                currentRunRecord.m_Result = resultType;
                currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
                currentRunRecord.m_StartToFailCorridorIndex = startToFailCorridorIndex;
                m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
                m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
-               m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+               m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs = currentTimeMs + TrainerOptions::ResultDisplayDurationMs;
                m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
                m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
                m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+               resultSetThisFrame = true;
                if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
                {
-                  PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL);
+                  PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL, true);
                }
             }
          }
@@ -9271,7 +9342,7 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
             break;
          }
       }
-      if (oneKicker == true)
+      if (oneKicker == true && !resultSetThisFrame)
       {
          switch (m_MenuOptions.m_TrainerOptions.m_BallKickerBehaviorMode)
          {
@@ -9288,13 +9359,14 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
             currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
             m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
             m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
-            m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+            m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs = currentTimeMs + TrainerOptions::ResultDisplayDurationMs;
             m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
             m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
             m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
+            resultSetThisFrame = true;
             if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
             {
-               PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL);
+               PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL, true);
             }
             break;
          default:
@@ -9309,15 +9381,16 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
       currentRunRecord.m_TotalTimeMs = runElapsedTimeMs - (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * OneSecondMs);
       m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = true;
       m_MenuOptions.m_TrainerOptions.m_SetupDifficulty = true;
-      m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs = 0;
+      m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs = currentTimeMs + TrainerOptions::ResultDisplayDurationMs;
       m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed = TrainerOptions::CountdownSoundSeconds;
       m_MenuOptions.m_TrainerOptions.m_TimeLowSoundPlaying = false;
       m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord++;
       if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsFailEnabled)
       {
-         PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL);
+         PlaySound(ID_BALL_HISTORY_SOUND_EFFECT_FAIL, true);
       }
    }
+
 }
 
 int32_t BallHistory::ProcessMenuChangeValue(int32_t value, int32_t delta, int32_t min, int32_t max, bool skip)
@@ -9606,7 +9679,16 @@ float BallHistory::DistanceToLineSegment(const Vertex3Ds& lineA, const Vertex3Ds
 
 float BallHistory::VelocityPixels(const Vertex3Ds& vel) { return sqrtf(powf(vel.x, 2) + powf(vel.y, 2) + powf(vel.z, 2)); }
 
-char BallHistory::GetBallHistoryKey(Player& player, EnumAssignKeys enumAssignKey) { return get_vk(player.m_rgKeys[enumAssignKey]); }
+char BallHistory::GetBallHistoryKey(Player& player, EnumAssignKeys enumAssignKey)
+{
+   // Old input system (m_rgKeys/get_vk) was removed. Return default key labels.
+   switch (enumAssignKey)
+   {
+   case eBallHistoryMenu: return 'C';
+   case eBallHistoryRecall: return 'V';
+   default: return '?';
+   }
+}
 
 bool BallHistory::BallsReadyForTrainer()
 {
@@ -9644,7 +9726,13 @@ bool BallHistory::BallCorridorReadyForTrainer()
 
 POINT BallHistory::Get2DPointFrom3D(Player& player, const Vertex3Ds& vertex)
 {
-   return player.m_renderer->Get2DPointFrom3D(player.m_playfieldWnd->GetWidth(), player.m_playfieldWnd->GetHeight(), vertex);
+   const int width = player.m_playfieldWnd->GetWidth();
+   const int height = player.m_playfieldWnd->GetHeight();
+   const Matrix3D& mvp = player.m_renderer->GetMVP().GetModelViewProj(0);
+   const Vertex3Ds projPoint = mvp * vertex;
+   const float screenX = (projPoint.x + 1.0f) * 0.5f * static_cast<float>(width);
+   const float screenY = (1.0f - projPoint.y) * 0.5f * static_cast<float>(height);
+   return POINT(static_cast<int>(screenX), static_cast<int>(screenY));
 }
 
 Vertex3Ds BallHistory::Get3DPointFrom2D(const POINT& p, float heightZ)
@@ -9668,9 +9756,9 @@ Vertex3Ds BallHistory::Get3DPointFromMousePosition(Player& player, float heightZ
 bool BallHistory::Get2DMousePosition(Player& player, POINT& mousePosition2D, bool correct)
 {
    bool retVal = false;
-   if (GetCursorPos(&mousePosition2D) == TRUE && ScreenToClient(player.m_pininput.GetFocusHWnd(), &mousePosition2D) == TRUE)
+   if (GetCursorPos(&mousePosition2D) == TRUE && ScreenToClient(player.m_playfieldWnd->GetNativeHWND(), &mousePosition2D) == TRUE)
    {
-      if (correct && player.m_ptable->mViewSetups[player.m_ptable->m_BG_current_set].mViewportRotation == 180.0f)
+      if (correct && player.m_ptable->GetViewSetup().mViewportRotation == 180.0f)
       {
          mousePosition2D.x = g_pplayer->m_playfieldWnd->GetWidth() - mousePosition2D.x;
          mousePosition2D.y = g_pplayer->m_playfieldWnd->GetHeight() - mousePosition2D.y;
@@ -9845,7 +9933,7 @@ std::vector<std::string> BallHistory::Split(const char* str, char delimeter)
 void BallHistory::CenterMouse(Player& player)
 {
    POINT p = { g_pplayer->m_playfieldWnd->GetWidth() / 2, g_pplayer->m_playfieldWnd->GetHeight() / 2 };
-   ClientToScreen(player.m_pininput.GetFocusHWnd(), &p);
+   ClientToScreen(player.m_playfieldWnd->GetNativeHWND(), &p);
    SetCursorPos(p.x, p.y);
 }
 
@@ -9897,4 +9985,4 @@ std::string BallHistory::FormatFloat(float val)
 }
 // ================================================================================================================================================================================================================================================
 
-#endif
+#endif

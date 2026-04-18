@@ -1,21 +1,51 @@
 VP 10.8.1 Changelog
 ------------------------
 
+Main highlighted features, detailed below:
+- VPX is now available as part of a standalone player for a large variety of platforms: Linux, Mac, iPhone, Android, RaspBerry,... The standalone player package includes all components needed to play tables.
+- Major internal technical update: The BGFX variant is now the default flavor, the DX9 and OpenGL versions are deprecated and should not be used anymore, as these do not feature all of the new improvements.
+- Deep work on gameplay stability and latency has been performed, leading to much improved overall game stability, less latency, better framerates, and nudging.
+- A new plugin system allows to hook all kinds of 3rdparty extensions, apps and tools into VPX
+
+Note that these changes need explicit configuration updates when upgrading to 10.8.1, at least for input, display and nudging.
+
 FEATURES:
 
 - add -v command line option to just output the version and quit
+- add -CaptureAttract command line option to automatically capture an attract video
+
+- Folder layout has been redesigned:
+  . Folder layout now conforms to platform requirements, with the application stored in its read-only application folder (for example 'C:\Program Files' under Windows),
+    its preferences (VPinballX.ini, ...) in the system preference folder (e.g. 'C:\Users\...\AppData\Roaming\VPinballX') and the data (tables, music, user folder, ...)
+    inside the user data folder hierarchy (e.g. 'C:\Users\...\Documents'). For preferences, a subfolder per minor version is created (10.8, 10.9, ...) to allow for having
+    multiple versions of VPX on the same computer, each using its own settings without conflicts.
+  . On its first run, the application will automatically create its setup, importing all settings from a previous installation, if any.
+  . The new file layout supports creating one folder per table, to group the table file with all its support folders & files (cache, music, flexdmd, ...), avoiding
+    to mix files between tables, also allowing for a common install procedure of other virtual pinball components (Frontend, B2S, PinUp videos, ...).
+  . Custom settings 'ini's or script 'vbs's are searched along the table file, matching the table filename as before, but now, if not found, these are also searched alongside 
+    the table, named after the folder name. This allows to share files for different versions of a table by placing these together inside the table folder.
+  . To ease transition, when a file is searched for reading (for example, a table requesting a music file), it is first searched alongside the table as per the new
+    file layout, and if not found, it is also searched for according to the legacy layout.
+  . The legacy behavior (everything in the application folder, so mixing all music, user, cache, scripts, ... -files between all tables) is still available by checking
+    the corresponding option in the 'INI->Editor->UI Options' dialog. It requires the application to be installed in a folder with read/write access. It breaks
+    the ability to have multiple versions of VPX installed on a single computer without their settings conflicting.
 
 - add "Surface" to the "Select Element" list
+- add overall GPU memory used, and overall file size to the image dialog
 
 - add additional tonemappers (the part of the rendering which handles how overly bright parts are displayed on non-HDR displays) 'Neutral' that keeps sRGB colors as authentic as possible,
   and 'AgX Punchy' which is a variation of AgX with more contrast/saturation
 - also add a new 'exposure' property that adjusts the overall scene exposure (like the corresponding camera control in Blender)
 
+- add new FAAA postprocessing anti-aliasing mode (its mostly subtle, but also rather fast and less blurry)
+
 - balls can now be created and edited directly from the editor like all other parts, and not only from the script
 
-- improved physics model for the emulated plumb tilt. Its settings will need to be adjusted either through the main editor, or using the LiveUI which has a dedicated UI for it with live feedback.
-  For the time being, there are 3 models available for nudge simulation (from keyboard or the cabinet sensor)
-   1. Legacy nudge
+- move the plumb simulation to VPX's physics engine with an improved physics model. NudgePlugIn_xxx.vbs files that were used depending on each user setup are not needed anymore and were removed.
+  Emulation of the plumb must be enabled in the settings, and adjusted to user setup. The LiveUI offers a dedicated UI with live feedback to ease this process.
+  When plumb emulation is enabled, in the lower left corner, a little overlay with the live plumb position will fade in/out when the plumb is approaching the Tilt threshold.
+  For reference, there are 3 models available for nudge simulation (from keyboard or the cabinet sensor) with increasing quality:
+   1. 'Legacy' nudge
       - Perform a keyboard nudge by applying a force directly to the balls, first in the forward direction, then, after a little while, in the opposite direction
       - No hardware nudging support
    2. Acceleration based nudge
@@ -25,16 +55,34 @@ FEATURES:
       - Perform a keyboard nudge by applying an impulse to a physics model of the cabinet (spring-mass model)
       - Acquire cabinet velocity from sensor and apply it to the physics model of the cabinet (same spring-mass model as for the keyboard nudge)
 
+- add support to visual screen nudge to sensor based nudge (strength/disabling is available in the 'Nudge/Tilt Settings' page).
+
 - add a new flavor of VPX named 'BGFX'. This flavor uses the BGFX library to interface with all the latest rendering backends (Vulkan, Metal, DirectX11/12, OpenGL,...) with some unique benefits:
   . it supports Variable Refresh Rate display (when VSync is switched off)
-  . it uses multiple CPU cores to separately process the rendering from the game simulation, allowing for lower input/physics/controller latency, more stable gameplay emulation, as well as a performance boost
+  . it uses multiple CPU cores to separately process the rendering from the game simulation, allowing for lower input/physics/controller latency, better nudging, more stable gameplay emulation, as well as a performance boost
   . it supports rendering to multiple outputs (windows)
 
-- add a new 'ScoreView' which renders the segment displays or DMD to a dedicated window (BGFX variant only). The scoreview uses a layout defined in a 'scv' file placed along the table file
-  matching its name, or by automatically selecting one of the default layouts matching the available displays at runtime. Default layout files in the asset folder show the syntax used to
-  define the layout.
-
-- add 'raytraced' ball motion blur (BGFX only)
+- input system was rewritten with the following changes:
+  . selecting between different input APIs is not needed anymore, as SDL is now used on all platforms (on Windows it supports simultaneously all XInput & DirectInput devices),
+  . the user interface to define inputs has been moved to the in-game user interface
+  . it is now possible to use a combination of multiple inputs for an action (for example pressing 2 buttons simultaneously)
+  . it is now possible to define multiple bindings per action, for example a keyboard key as well as 2 different joystick buttons
+  . staged flippers are now implemented with the binding defaulting to map both lower and upper flippers to the same button
+  . using joystick stick/triggers for buttons is supported, for example to allow mapping staged flippers at different trigger thresholds
+  . joystick 'hats' can be used as buttons, each direction being considered as an independent button
+  . nudge now also supports position sensors, allowing to use a joystick to nudge
+  . more keyboard layouts are now supported (japanese keyboards, ...)
+  . new actions have been added, for example to adjust the VR scene position
+  . the option to disable the 'Escape' key has been removed and replaced by a mapping like all other actions (it is used to open interactive exit)
+  . all key events are now broadcasted to the table's script, separately from the named action event (left flipper, right magna save, ...)
+  . on the Windows platform, the presence of xinput.dll is not needed anymore, allowing to run VPX on Windows installs without the XBox Gaming Subsystem
+  . on the Windows platform, the accessibility shortcuts are now fully disabled when playing
+  . on the Windows platform, the Windows keys can now be used as a normal key input
+  . a few hardware devices and generic layouts are automatically detected, when this happens, the user is supposed to apply the corresponding default mapping.
+    Support for some very old hardware has been removed (Microsoft's Sidewinder, UltraCade's UltraPin,...)
+  . the hardware acceleration filter may not be enabled anymore for keyboard nudge (as it is not supposed to be used for keyboard nudge)
+  The new input setup is stored along the old one to allow to use older versions of VPX together with newers.
+  This change requires users to redefine their input settings in the new UI.
 
 - add Wide Color Gamut output (a.k.a. HDR display) support (BGFX using DirectX output only):
   this comes with an additional video preference option to ignore all tonemappers in order to fully exploit the high dynamic range
@@ -48,20 +96,27 @@ FEATURES:
    One can select any row of the listview and click a button on the dialog labeled 'Edit Control' and it will place
    that table object into the 'Properties' editor dialog for you.
 
-- VR was rewritten to use OpenXR instead of OpenVR (OpenVR is still available when using the VPX OpenGL variant, but is deprecated and will be removed in future
-  versions, as it relies on deprecated components and has a few known bugs that won't be solved, like in game UI, invalid colorspace,...). OpenXR is automatically used
-  in the BGFX variant. It comes with the following improvements:
-  . it should work with any OpenXR backend (Virtual Desktop, SteamVR, Meta Quest Link, ...),
-  . correct colorspace for all headsets (no more washed out colors that needed hacks),
-  . support for color keyed passthrough mode (for example using Virtual Desktop),
-  . implement OpenXR latency reduction framework:
+- VR/XR was rewritten and is now fully supported by VPX, using OpenXR in its BGFX variant.
+  Note that the previous OpenVR variant (using OpenGL) is deprecated and is unlikely to work well, as it does not include any of the improvements listed below and will be removed in upcoming VPX updates.
+  . All OpenXR backend are supported (Virtual Desktop, SteamVR, Meta Quest Link, ...),
+  . Layers (see below) now have properties to automatically show/hide parts depending on the player mode
+  . Layers (see below) now have properties to perform adequate positioning & stretching, depending on player situation, allowing to keep room elements sized to the real world, while adjusting the pinball machine to user choice, eventually matching a real world cabinet or controller
+  . All scaling is now done using the OpenXR framework, based on target lockbar width, which can be adjusted in the tweak UI, for example to match the width of a cab, a keyboard or any controller.
+  . Table files now include cabinet size informations (glass heights as well as playfield position inside cabinet, which must correspond to the cabinet model included in the VR scene)
+  . Support for color keyed passthrough mode has been added allowing to play in mixed reality (for example using Virtual Desktop),
+  . OpenXR latency reduction framework is fully implemented:
     - by taking into account the headset latency when rendering,
-    - by providing the headset with information for live reprojection (depth data),
-  . integrate VR with VPX's TweakUI, which allows to adjust all settings in-game using the usual pinball controls, also supporting continuous recentering by
-    keeping the 'reset' button pressed.
+    - by providing the headset with information for live reprojection (depth data).
+  . Correct colorspace for all headsets (no more washed out colors that needed hacks in the previous version),
+  . VPX's TweakUI is now fully supported in VR, which allows to adjust all settings in-game using the usual pinball controls, also supporting continuous recentering.
+  . (hacky) external window capture has been removed and replaced by the ability to use external plugin renderers in the 3D scene, using flashers. Tables using the
+    legacy feature are automatically updated. This allows to use all plugins in 3D at full resolution (backglass, scoreview, PinUp player, dimmed segment, toppers,...).
+  . New option to add a plugin rendered backglass flasher to handle non VR tables (there used to be a limited hacky fixed backglass image added on all tables with some hacks to allow VR tables to overwrite it)
+  . OpenXR controllers can be used as input, including thumbstick nudging and plunger.
+  . OpenXR controllers can be used to position the virtual table in the room.
 
 - number of layers is not limited anymore. Layers can also be nested and they now feature properties:
-  . a visibility mask, that allows to filter on which output, or VR mode layers are active (playfield, virtual reality, mixed reality, ...)
+  . a visibility mask, that allows to filter on which player mode layers are active (desktop, cabinet, virtual reality, mixed reality, ...)
   . a space reference, to ease virtual/mixed reality support:
     - 'playfield' is the default space reference, and is the only one where parts contribute to physics simulation, it corresponds to the usual playfield.
     - 'room' is tied to the real world room, it is not scaled or inclined like playfield, and should be used for the VR room.
@@ -77,7 +132,53 @@ FEATURES:
     beneath it. Segment display flashers are 'max blended' to support overlapping without graphical glitches.
   . flashers may now be placed on the desktop backdrop, deprecating the use of a textbox for DMD rendering on the desktop backdrop.
 
+- a new preliminary plugin architecture has been added to support adding functionality to VPX in a cross platform and reusable (across other applications of the pinball simulation ecosystem) way.
+  This feature is still in early stage and should be considered as a 'feature preview' as it will most likely evolve more, and the programming interface is not yet fully stabilized, so breaking changes may still happen!
+  The following plugins are included with VPX:
+  . AlphaDMD: render alpahanumeric segment displays inside any DMD (physical or virtual)
+  . B2S legacy: render the backglass and fullDMD of B2S files to VPX anciliary windows
+  . B2S: a newer B2S renderer which supports light fading, better mech animation, but is still far from feature complete, expect more changes!
+  . DMDUtil: supports rendering to physical DMDs (ZeDMD,...)
+  . DOF: a preliminary port of the Direct Output Framework which allows to drive all kinds of physical feedback hardware (lights, shaker, fan,...)
+  . FlexDMD: a port of FlexDMD & UltraDMD, which are tools to render and animate DMDs for original/homebrew tables
+  . PinMAME: a direct interface to PinMAME with some exclusive bonus features like full alphanumeric segment fading
+  . PinUp: a preliminary port of PinUp Player that renders and animates video backglass, topper and fullDMD display
+  . Remote Control: a plugin that allows to control an instance of VPX from another running instance. For example running VPX on a little controller PC that communicates with a more powerful computer that runs VPX driving a VR headset
+  . Score View: a tool to provide default score rendering (for example DMD, but also supporting alphanumeric segment displays, including dimmed segments)
+  . Serum: a DMD colorizer
+  . UpscaleDMD: upscale or anti-alias DMD content (modes: xBRZ 2x/3x/4x/5x/6x, ScaleFX AA 1x, ScaleFX 3x and Super-XBR 2x)
+  . WMP: the window media player, but as a portable plugin, running on any of the supported platforms
+
+- LiveEditor (used to be called LiveUI, now split between LiveEditor for editing and InGameUI for all settings):
+  . Fix picking, now supporting precise picking of most elements
+  . Change mouse & keyboard interaction to mostly match Blender UX (no more view cube, use mouse drag to orient view, keypad to focus or use predefined views)
+  . Support adjusting table at runtime for most elements (update physics, support picking after moving, handle resuming gameplay)
+  . Add selection and display filters
+  . Allow to display physics collider as a red overlay
+  . Fix invalid overlays (missing parts, incorrect position)
+  . 3 render modes are available, switchable using the 'Z' key: render, wireframe, passthrough wireframe
+
+- InGameUI (used to be called LiveUI or TweakUI):
+  . Supports all player modes (VR, XR, cabinet, desktop) and all screen orientations
+  . Add mouse interaction support
+  . Add setting pages, moving lots of settings inside these pages
+  . Navigation using flipper input has been unified: magna buttons allow to move, while flipper buttons allow to select
+
+- for cabinet users, a new option in the graphic settings allows to enable an automatic window camera fitting at table startup, based on table or screen fitting
+
+- performance overlay has been improved with better insights and its display state is now persistent
+
+- table settings override will only save actual overrides, so only those settings that are different from application settings and default values
+
+- after many years of great service, 'Fake' 3D stereo mode has been removed, replaced by real stereo. Note that the 'Reshade' app could be used to get approximate 3D stereo if still wanted.
+
 FIXES:
+
+- fix SMAA looking worse compared to 10.7.X, and slightly improve its quality in general
+
+- fix wrong primitive animation when using the endless-loop function (removing the need for NFozzy's workaround via script)
+
+- allow for larger inclination value range
 
 - fix 0-scaled rubber crash (like it can happen if invalid UI-inputs like 'Scale' are mapped to 0)
 
@@ -91,6 +192,8 @@ FIXES:
 
 - remove some of the limits (like maximum line length) of the code view/script editor
 
+- LiveUI: fix delayed mipmap generation (happens when starting with static rendering, then opening LiveUI)
+
 - note that the support for ancient windows versions (e.g. Windows XP) for the DX9 build has been removed in order to be able to use newer compilers
 - due to this, VPX now allows to use the C++20 language feature set, which means that the windows build system requires Visual Studio 2019 or newer
 
@@ -102,12 +205,11 @@ FIXES:
   As a consequence 'ogg' files should now be favored over legacy 'wav'.
   In general, multiple issues/regressions (e.g. too low volume) found in 10.8 were fixed due to this.
 
-- DirectX 8 port for input handling (currently disabled)
-
 - see Changelog_Scripts.txt for the respective core script changes (version 3.62)
 - see CommandReference.txt for the changelog of all the scripting properties/interface changes
 - see Scripts.txt for the actual usage and "documentation" of the scripts that come with VPX
 
+- note that the vast majority of the code base is now available under GPLv3+ (see license.txt for all details)
 
 VP 10.8.0 Changelog
 ------------------------

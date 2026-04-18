@@ -8,6 +8,8 @@ if [ -z "${MSYS2_PATH}" ]; then
    MSYS2_PATH="/c/msys64"
 fi
 
+export MSYSTEM=UCRT64
+
 echo "MSYS2_PATH: ${MSYS2_PATH}"
 echo ""
 
@@ -21,6 +23,7 @@ echo "  BGFX_PATCH_SHA: ${BGFX_PATCH_SHA}"
 echo "  PINMAME_SHA: ${PINMAME_SHA}"
 echo "  OPENXR_SHA: ${OPENXR_SHA}"
 echo "  LIBDMDUTIL_SHA: ${LIBDMDUTIL_SHA}"
+echo "  LIBALTSOUND_SHA: ${LIBALTSOUND_SHA}"
 echo "  LIBDOF_SHA: ${LIBDOF_SHA}"
 echo "  FFMPEG_SHA: ${FFMPEG_SHA}"
 echo "  LIBZIP_SHA: ${LIBZIP_SHA}"
@@ -134,7 +137,7 @@ fi
 # build bgfx
 #
 
-BGFX_EXPECTED_SHA="${BGFX_CMAKE_VERSION}-${BGFX_PATCH_SHA}"
+BGFX_EXPECTED_SHA="${BGFX_CMAKE_VERSION}-${BGFX_PATCH_SHA}-002"
 BGFX_FOUND_SHA="$([ -f bgfx/cache.txt ] && cat bgfx/cache.txt || echo "")"
 
 if [ "${BGFX_EXPECTED_SHA}" != "${BGFX_FOUND_SHA}" ]; then
@@ -163,11 +166,7 @@ if [ "${BGFX_EXPECTED_SHA}" != "${BGFX_FOUND_SHA}" ]; then
       -DBGFX_BUILD_EXAMPLES=OFF \
       -DBGFX_CONFIG_MULTITHREADED=ON \
       -DBGFX_CONFIG_MAX_FRAME_BUFFERS=256 \
-      -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded \
-      -DCMAKE_CXX_FLAGS_RELEASE="//MT" \
-      -DCMAKE_C_FLAGS_RELEASE="//MT" \
-      -DCMAKE_CXX_FLAGS_DEBUG="//MTd" \
-      -DCMAKE_C_FLAGS_DEBUG="//MTd" \
+      -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded\$<\$<CONFIG:Debug>:Debug>" \
       -B build
    cmake --build build --config ${BUILD_TYPE}
    cd ..
@@ -275,6 +274,39 @@ if [ "${LIBDMDUTIL_EXPECTED_SHA}" != "${LIBDMDUTIL_FOUND_SHA}" ]; then
    cd ..
 
    echo "$LIBDMDUTIL_EXPECTED_SHA" > cache.txt
+
+   cd ..
+fi
+
+#
+# build libaltsound
+#
+
+LIBALTSOUND_EXPECTED_SHA="${LIBALTSOUND_SHA}"
+LIBALTSOUND_FOUND_SHA="$([ -f libaltsound/cache.txt ] && cat libaltsound/cache.txt || echo "")"
+
+if [ "${LIBALTSOUND_EXPECTED_SHA}" != "${LIBALTSOUND_FOUND_SHA}" ]; then
+   echo "Building libaltsound. Expected: ${LIBALTSOUND_EXPECTED_SHA}, Found: ${LIBALTSOUND_FOUND_SHA}"
+
+   rm -rf libaltsound
+   mkdir libaltsound
+   cd libaltsound
+
+   curl -sL https://github.com/vpinball/libaltsound/archive/${LIBALTSOUND_SHA}.tar.gz -o libaltsound-${LIBALTSOUND_SHA}.tar.gz
+   tar xzf libaltsound-${LIBALTSOUND_SHA}.tar.gz
+   mv libaltsound-${LIBALTSOUND_SHA} libaltsound
+   cd libaltsound
+   cmake \
+      -G "Visual Studio 17 2022" \
+      -DPLATFORM=win \
+      -DARCH=x64 \
+      -DBUILD_SHARED=ON \
+      -DBUILD_STATIC=OFF \
+      -B build
+   cmake --build build --config ${BUILD_TYPE}
+   cd ..
+
+   echo "$LIBALTSOUND_EXPECTED_SHA" > cache.txt
 
    cd ..
 fi
@@ -410,14 +442,13 @@ cp freeimage/freeimage/build/${BUILD_TYPE}/freeimage64.lib ../../../third-party/
 cp freeimage/freeimage/build/${BUILD_TYPE}/freeimage64.dll ../../../third-party/runtime-libs/windows-x64
 cp freeimage/freeimage/Source/FreeImage.h ../../../third-party/include
 
-cp bgfx/bgfx.cmake/build/cmake/bgfx/${BUILD_TYPE}/bgfx64.lib ../../../third-party/build-libs/windows-x64
 cp -r bgfx/bgfx.cmake/bgfx/include/bgfx ../../../third-party/include/
+cp -r bgfx/bgfx.cmake/bimg/include/bimg ../../../third-party/include/
+cp -r bgfx/bgfx.cmake/bx/include/bx ../../../third-party/include/
+cp bgfx/bgfx.cmake/build/cmake/bgfx/${BUILD_TYPE}/bgfx64.lib ../../../third-party/build-libs/windows-x64
 cp bgfx/bgfx.cmake/build/cmake/bimg/${BUILD_TYPE}/bimg64.lib ../../../third-party/build-libs/windows-x64
 cp bgfx/bgfx.cmake/build/cmake/bimg/${BUILD_TYPE}/bimg_decode64.lib ../../../third-party/build-libs/windows-x64
-cp bgfx/bgfx.cmake/build/cmake/bimg/${BUILD_TYPE}/bimg_encode64.lib ../../../third-party/build-libs/windows-x64
-cp -r bgfx/bgfx.cmake/bimg/include/bimg ../../../third-party/include/
 cp bgfx/bgfx.cmake/build/cmake/bx/${BUILD_TYPE}/bx64.lib ../../../third-party/build-libs/windows-x64
-cp -r bgfx/bgfx.cmake/bx/include/bx ../../../third-party/include/
 
 cp pinmame/pinmame/build/${BUILD_TYPE}/pinmame64.lib ../../../third-party/build-libs/windows-x64
 cp pinmame/pinmame/build/${BUILD_TYPE}/pinmame64.dll ../../../third-party/runtime-libs/windows-x64
@@ -446,6 +477,13 @@ cp libdmdutil/libdmdutil/third-party/build-libs/win/x64/sockpp64.lib ../../../th
 cp libdmdutil/libdmdutil/third-party/runtime-libs/win/x64/sockpp64.dll ../../../third-party/runtime-libs/windows-x64
 cp libdmdutil/libdmdutil/third-party/build-libs/win/x64/cargs64.lib ../../../third-party/build-libs/windows-x64
 cp libdmdutil/libdmdutil/third-party/runtime-libs/win/x64/cargs64.dll ../../../third-party/runtime-libs/windows-x64
+cp libdmdutil/libdmdutil/third-party/build-libs/win/x64/vni64.lib ../../../third-party/build-libs/windows-x64
+cp libdmdutil/libdmdutil/third-party/runtime-libs/win/x64/vni64.dll ../../../third-party/runtime-libs/windows-x64
+cp libdmdutil/libdmdutil/third-party/include/vni.h ../../../third-party/include
+
+cp libaltsound/libaltsound/build/${BUILD_TYPE}/altsound64.lib ../../../third-party/build-libs/windows-x64
+cp libaltsound/libaltsound/build/${BUILD_TYPE}/altsound64.dll ../../../third-party/runtime-libs/windows-x64
+cp libaltsound/libaltsound/src/altsound.h ../../../third-party/include
 
 cp libdof/libdof/build/${BUILD_TYPE}/dof64.lib ../../../third-party/build-libs/windows-x64
 cp libdof/libdof/build/${BUILD_TYPE}/dof64.dll ../../../third-party/runtime-libs/windows-x64
@@ -465,11 +503,13 @@ for LIB in avcodec avdevice avfilter avformat avutil swresample swscale; do
    cp ffmpeg/ffmpeg/${DIR}/*.h ../../../third-party/include/${DIR}
 done
 
-cp "${MSYS2_PATH}/mingw64/bin/zlib1.dll" ../../../third-party/runtime-libs/windows-x64
-cp "${MSYS2_PATH}/mingw64/bin/libiconv-2.dll" ../../../third-party/runtime-libs/windows-x64
-cp "${MSYS2_PATH}/mingw64/bin/libwinpthread-1.dll" ../../../third-party/runtime-libs/windows-x64
-cp "${MSYS2_PATH}/mingw64/bin/liblzma-5.dll" ../../../third-party/runtime-libs/windows-x64
-cp "${MSYS2_PATH}/mingw64/bin/libbz2-1.dll" ../../../third-party/runtime-libs/windows-x64
+cp "${MSYS2_PATH}/ucrt64/bin/zlib1.dll" ../../../third-party/runtime-libs/windows-x64
+cp "${MSYS2_PATH}/ucrt64/bin/libiconv-2.dll" ../../../third-party/runtime-libs/windows-x64
+cp "${MSYS2_PATH}/ucrt64/bin/libwinpthread-1.dll" ../../../third-party/runtime-libs/windows-x64
+cp "${MSYS2_PATH}/ucrt64/bin/liblzma-5.dll" ../../../third-party/runtime-libs/windows-x64
+cp "${MSYS2_PATH}/ucrt64/bin/libbz2-1.dll" ../../../third-party/runtime-libs/windows-x64
+cp "${MSYS2_PATH}/ucrt64/bin/libgcc_s_seh-1.dll" ../../../third-party/runtime-libs/windows-x64
+cp "${MSYS2_PATH}/ucrt64/bin/libstdc++-6.dll" ../../../third-party/runtime-libs/windows-x64
 
 cp libzip/libzip/build/lib/libzip64.dll ../../../third-party/runtime-libs/windows-x64
 cp libzip/libzip/build/zipconf.h ../../../third-party/include

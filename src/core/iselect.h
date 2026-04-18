@@ -2,8 +2,15 @@
 
 #pragma once
 
-// these are used for file I/O and must not be changed/reordered!
-enum ItemTypeEnum : unsigned int
+class Sur;
+class PinTable;
+class IEditable;
+struct PropertyPane;
+class WinEditor;
+
+// Warning: these are Win32 ui part id, but also used to identify table parts (see IEditable)
+// These are used for file I/O and must not be changed/reordered!
+enum ItemTypeEnum : uint32_t
 {
    eItemSurface,
    eItemFlipper,
@@ -28,83 +35,47 @@ enum ItemTypeEnum : unsigned int
    eItemFlasher,
    eItemRubber,
    eItemHitTarget,
-   //eItemLightSeqCenter,
    eItemBall,
    eItemPartGroup,
    eItemTypeCount,
-   eItemInvalid = 0xffffffff // Force enum to be 32 bits
+   eItemInvalid = 0xFFFFFFFFu
 };
 
-
-class Sur;
-class PinTable;
-class IEditable;
-class TimerDataRoot;
-struct PropertyPane;
-class VPinball;
-
-
-enum SelectState
-{
-   eNotSelected,
-   eSelected,
-   eMultiSelected
-};
-
-INT_PTR CALLBACK RotateProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-INT_PTR CALLBACK ScaleProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-INT_PTR CALLBACK TranslateProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-
-class BaseProperty // not everything in here is used in all of the derived classes, but it simplifies the UI code!
-{
-public:
-    string m_szImage;
-    string m_szMaterial;
-    string m_szPhysicsMaterial;
-    float m_elasticity;
-    float m_friction;
-    float m_scatter;
-    float m_threshold;
-    bool  m_collidable;
-    bool  m_hitEvent = false;
-    bool  m_overwritePhysics = true;
-    bool  m_reflectionEnabled = true;
-    bool  m_visible = true;
-};
-
-// ISelect is the subclass for anything that can be manipulated with the mouse.
-// and that has a property sheet.
-
-class ISelect : public ILoadable
+// ISelect is the interface for parts contributing to the Win32 editor (mouse, property sheet, ...)
+class ISelect
 {
 public:
    ISelect();
 
+   // Report a change that would need the Win32 UI to be redrawn
+   virtual void SetDirtyDraw();
+
+   // Win32 editor rendering and picking
+   virtual void SetSelectFormat(Sur *psur);
+   virtual void SetMultiSelectFormat(Sur *psur);
+   virtual void SetLockedFormat(Sur *psur);
+   // This function draws the shape of the object with a solid fill, called before the grid lines are drawn on the map
+   virtual void UIRenderPass1(Sur *const psur) = 0;
+   // This function draws the shape of the object with a black outline (no solid fill), called after the grid lines have been drawn on the map.
+   virtual void UIRenderPass2(Sur *const psur) = 0;
+   virtual void RenderBlueprint(Sur *psur, const bool solid);
+
    virtual void OnLButtonDown(int x, int y);
    virtual void OnLButtonUp(int x, int y);
-   virtual void OnRButtonDown(int x, int y, HWND hwnd) { }
-   virtual void OnRButtonUp(int x, int y) { }
-   virtual void OnMouseMove(int x, int y);
 
-   // Things to override
    virtual void MoveOffset(const float dx, const float dy) { } // Implement in child class to enable dragging
    virtual void EditMenu(CMenu &menu) { }
    virtual void DoCommand(int icmd, int x, int y);
    virtual void SetObjectPos();
 
-   virtual void SetSelectFormat(Sur *psur);
-   virtual void SetMultiSelectFormat(Sur *psur);
-   virtual void SetLockedFormat(Sur *psur);
-
    virtual PinTable *GetPTable() = 0;
    virtual const PinTable *GetPTable() const = 0;
 
    virtual HRESULT GetTypeName(BSTR *pVal) const;
-   // buf must be at least 256 characters long
-   void GetTypeNameForType(const ItemTypeEnum type, WCHAR * const buf) const;
+   wstring GetTypeNameForType(const ItemTypeEnum type) const;
 
-   virtual IDispatch *GetDispatch() = 0;
-   virtual const IDispatch *GetDispatch() const = 0;
+   virtual IDispatch *GetIDispatch() = 0;
+   virtual const IDispatch *GetIDispatch() const = 0;
    virtual ItemTypeEnum GetItemType() const = 0;
 
    virtual void Delete() = 0;
@@ -134,25 +105,32 @@ public:
    virtual IEditable *GetIEditable() = 0;
    virtual const IEditable *GetIEditable() const = 0;
 
-   bool LoadToken(const int id, BiffReader * const pbr) override;
-   HRESULT SaveData(IStream *pstm, HCRYPTHASH hcrypthash);
-
    virtual int GetSelectLevel() const { return 1; }
    virtual bool LoadMeshDialog() { return false; }
    virtual void ExportMeshDialog() {}
    virtual void AddPoint(int x, int y, const bool smooth) {}
    virtual void UpdateStatusBarInfo();
 
-   SelectState m_selectstate = eNotSelected;
+   virtual bool IsUILocked() const = 0;
+   virtual void SetUILock(bool lock) = 0;
+   virtual bool IsUIVisible() const = 0;
+   virtual void SetUIVisible(bool visible) = 0;
+   bool IsVisible(IEditable *editable) const; // UI visibility, applying PartGroup visibility (i.e. a part is visible if it is flagged as such, and its parents are also visibles)
+
+   enum class SelectState
+   {
+      NotSelected,
+      Selected,
+      MultiSelected
+   };
+   SelectState m_selectstate = SelectState::NotSelected;
+
    int m_menuid = -1; // context menu to use
+
    bool m_dragging = false;
-   bool m_locked = false; // Can not be dragged in the editor
-   bool m_isVisible = true; // UI visibility (not the same as rendering visibility which is a member of part data)
+
+   bool m_markedForUndo = false; // Flag set when dragged to enable undo
 
 protected:
-   VPinball *m_vpinball = nullptr;
-
-private:
-   bool m_markedForUndo = false; // Flag set when dragged to enable undo
-   POINT m_ptLast {}; // Last point when dragging
+   WinEditor *m_vpinball = nullptr;
 };

@@ -16,6 +16,13 @@ RenderCommand::~RenderCommand()
    delete m_shaderState;
 }
 
+void RenderCommand::Clear()
+{
+   if (GetShaderState())
+      GetShaderState()->m_samplers.clear();
+   m_mb = nullptr;
+}
+
 bool RenderCommand::IsFullClear(const bool hasDepth) const
 {
    if (m_command == RC_CLEAR)
@@ -37,7 +44,7 @@ void RenderCommand::Execute(const int nInstances, const bool log)
       }
       m_renderState.Apply(m_rd);
       constexpr float z = 1.0f;
-      constexpr DWORD stencil = 0L;
+      constexpr DWORD stencil = 0;
 
       #if defined(ENABLE_BGFX)
       const uint32_t r = (m_clearARGB & 0x000000ff);
@@ -125,9 +132,8 @@ void RenderCommand::Execute(const int nInstances, const bool log)
    case RC_DRAW_MESH:
    {
       m_renderState.Apply(m_rd);
-      m_shader->SetTechnique(m_shaderTechnique);
       m_shaderState->SetInt(SHADER_layer, RenderTarget::GetCurrentRenderLayer() < 0 ? 0 : RenderTarget::GetCurrentRenderLayer());
-      m_shader->m_state->CopyTo(false, m_shaderState, m_shaderTechnique);
+      m_shader->m_state->CopyTo(false, m_shaderState);
       m_shader->Begin();
       m_rd->m_curDrawCalls++;
       switch (m_command)
@@ -143,7 +149,7 @@ void RenderCommand::Execute(const int nInstances, const bool log)
          bgfx::setVertexBuffer(0, &tvb);
          bgfx::setInstanceCount(nInstances);
          bgfx::setState(m_rd->m_bgfxState | BGFX_STATE_PT_TRISTRIP);
-         bgfx::submit(m_rd->m_activeViewId, m_shader->GetCore());         
+         bgfx::submit(m_rd->m_activeViewId, m_shader->GetCore());
 
          #elif defined(ENABLE_OPENGL)
          void* bufvb;
@@ -217,8 +223,7 @@ void RenderCommand::Execute(const int nInstances, const bool log)
          case RenderDevice::LINELIST: np = m_indicesCount / 2; break;
          case RenderDevice::LINESTRIP: np = std::max(0u, m_indicesCount - 1); break;
          case RenderDevice::TRIANGLELIST: np = m_indicesCount / 3; break;
-         case RenderDevice::TRIANGLESTRIP:
-         case RenderDevice::TRIANGLEFAN: np = std::max(0u, m_indicesCount - 2); break;
+         case RenderDevice::TRIANGLESTRIP: np = std::max(0u, m_indicesCount - 2); break;
          default: assert(false);
          }
          m_rd->m_curDrawnTriangles += np;
@@ -269,12 +274,15 @@ void RenderCommand::Execute(const int nInstances, const bool log)
             else
                bgfx::setIndexBuffer(m_mb->m_ib->GetDynamicBuffer(), m_mb->m_ib->GetIndexOffset() + m_startIndex, m_indicesCount);
             bgfx::setInstanceCount(nInstances);
-            if (m_primitiveType == RenderDevice::TRIANGLELIST)
-               bgfx::setState(m_rd->m_bgfxState);
-            else if (m_primitiveType == RenderDevice::TRIANGLESTRIP)
-               bgfx::setState(m_rd->m_bgfxState | BGFX_STATE_PT_TRISTRIP);
-            else
-               assert(false); // Unsupported primitive type
+            switch (m_primitiveType)
+            {
+            case RenderDevice::TRIANGLELIST: bgfx::setState(m_rd->m_bgfxState); break;
+            case RenderDevice::TRIANGLESTRIP: bgfx::setState(m_rd->m_bgfxState | BGFX_STATE_PT_TRISTRIP); break;
+            case RenderDevice::LINELIST: bgfx::setState(m_rd->m_bgfxState | BGFX_STATE_LINEAA | BGFX_STATE_PT_LINES); break;
+            case RenderDevice::LINESTRIP: bgfx::setState(m_rd->m_bgfxState | BGFX_STATE_LINEAA | BGFX_STATE_PT_LINESTRIP); break;
+            case RenderDevice::POINTLIST: bgfx::setState(m_rd->m_bgfxState | BGFX_STATE_PT_POINTS); break;
+            default: assert(false); break; // Unsupported primitive type
+            }
             bgfx::submit(m_rd->m_activeViewId, m_shader->GetCore());
 
             #elif defined(ENABLE_OPENGL)
@@ -338,7 +346,7 @@ void RenderCommand::Execute(const int nInstances, const bool log)
          else if (m_command == RC_DRAW_MESH)
             ss << "> Draw Mesh     ";
          ss << (m_isTransparent ? "T "s : "O "s);
-         ss << std::setw(40) << Shader::GetTechniqueName(m_shaderTechnique) << std::setw(0) << ' ' << m_renderState.GetLog();
+         ss << std::setw(40) << Shader::GetTechniqueName(m_shaderState->GetTechnique()) << std::setw(0) << ' ' << m_renderState.GetLog();
          ss << " Depth: " << std::fixed << std::setw(8) << std::setprecision(2) << m_depth;
          if (m_command == RC_DRAW_MESH)
          {
@@ -394,7 +402,7 @@ void RenderCommand::SetSubmitVR(RenderTarget* from)
 }
 
 void RenderCommand::SetDrawMesh(
-   Shader* shader, MeshBuffer* mb, const RenderDevice::PrimitiveTypes type, 
+   Shader* shader, std::shared_ptr<MeshBuffer> mb, const RenderDevice::PrimitiveTypes type, 
    const uint32_t startIndex, const uint32_t indexCount, const bool isTransparent, const float depth)
 {
    assert(mb != nullptr);
@@ -407,13 +415,11 @@ void RenderCommand::SetDrawMesh(
    m_depth = depth;
    m_isTransparent = isTransparent;
    m_shader = shader;
-   m_shaderTechnique = m_shader->GetCurrentTechnique();
-   assert(m_shaderTechnique < SHADER_TECHNIQUE_INVALID);
    if (m_shaderState)
       m_shaderState->SetShader(m_shader);
    else
       m_shaderState = new ShaderState(m_shader, m_rd->UseLowPrecision());
-   m_shader->m_state->CopyTo(true, m_shaderState, m_shaderTechnique);
+   m_shader->m_state->CopyTo(true, m_shaderState);
 }
 
 void RenderCommand::SetDrawTexturedQuad(Shader* shader, const Vertex3D_TexelOnly* vertices, const bool isTransparent, const float depth)
@@ -424,12 +430,11 @@ void RenderCommand::SetDrawTexturedQuad(Shader* shader, const Vertex3D_TexelOnly
    m_depth = depth;
    m_isTransparent = isTransparent;
    m_shader = shader;
-   m_shaderTechnique = m_shader->GetCurrentTechnique();
    if (m_shaderState)
       m_shaderState->SetShader(m_shader);
    else
       m_shaderState = new ShaderState(m_shader, m_rd->UseLowPrecision());
-   m_shader->m_state->CopyTo(true, m_shaderState, m_shaderTechnique);
+   m_shader->m_state->CopyTo(true, m_shaderState);
 }
 
 void RenderCommand::SetDrawTexturedQuad(Shader* shader, const Vertex3D_NoTex2* vertices, const bool isTransparent, const float depth)
@@ -440,10 +445,9 @@ void RenderCommand::SetDrawTexturedQuad(Shader* shader, const Vertex3D_NoTex2* v
    m_depth = depth;
    m_isTransparent = isTransparent;
    m_shader = shader;
-   m_shaderTechnique = m_shader->GetCurrentTechnique();
    if (m_shaderState)
       m_shaderState->SetShader(m_shader);
    else
       m_shaderState = new ShaderState(m_shader, m_rd->UseLowPrecision());
-   m_shader->m_state->CopyTo(true, m_shaderState, m_shaderTechnique);
+   m_shader->m_state->CopyTo(true, m_shaderState);
 }

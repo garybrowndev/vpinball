@@ -51,12 +51,12 @@ static ma_result ma_context_get_device_info__sdl(ma_context* pContext, ma_device
    if (pDeviceID == nullptr)
    {
       pDeviceInfo->id.custom.i = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
-      ma_strncpy_s(pDeviceInfo->name, sizeof(pDeviceInfo->name), MA_DEFAULT_PLAYBACK_DEVICE_NAME, (size_t)-1);
+      ma_strncpy_s(pDeviceInfo->name, std::size(pDeviceInfo->name), MA_DEFAULT_PLAYBACK_DEVICE_NAME, (size_t)-1);
    }
    else
    {
       pDeviceInfo->id.custom.i = pDeviceID->custom.i;
-      ma_strncpy_s(pDeviceInfo->name, sizeof(pDeviceInfo->name), SDL_GetAudioDeviceName(pDeviceID->custom.i), (size_t)-1);
+      ma_strncpy_s(pDeviceInfo->name, std::size(pDeviceInfo->name), SDL_GetAudioDeviceName(pDeviceID->custom.i), (size_t)-1);
    }
    if (pDeviceInfo->id.custom.i == SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK)
       pDeviceInfo->isDefault = MA_TRUE;
@@ -112,7 +112,7 @@ static ma_result ma_device_init__sdl(ma_device* pDevice, const ma_device_config*
    pDeviceEx->stream = SDL_OpenAudioDeviceStream(requestedDeviceId, nullptr, ma_audio_callback_playback__sdl, pDeviceEx);
    if (pDeviceEx->stream == nullptr)
    {
-      PLOGE << "Failed to open SDL audio device (Error: " << SDL_GetError() << ")";
+      PLOGE << "Failed to open SDL audio device (Error: " << SDL_GetError() << ')';
       return MA_FAILED_TO_OPEN_BACKEND_DEVICE;
    }
    pDeviceEx->deviceID = SDL_GetAudioStreamDevice(pDeviceEx->stream);
@@ -150,7 +150,7 @@ static ma_result ma_device_init__sdl(ma_device* pDevice, const ma_device_config*
 
    // TODO check that the default channel map matches SDL channel map
    ma_channel_map_init_standard(ma_standard_channel_map_default, pDescriptorPlayback->channelMap, std::size(pDescriptorPlayback->channelMap), pDescriptorPlayback->channels);
-   
+
    PLOGI << "Audio device initialized. Device: '" << SDL_GetAudioDeviceName(pDeviceEx->deviceID) << "', Freq : " << specs.freq << ", Format: " << SDL_GetAudioFormatName(specs.format) << ", Channels: " << specs.channels << ", Driver: " << SDL_GetCurrentAudioDriver();
    return MA_SUCCESS;
 }
@@ -203,40 +203,33 @@ static ma_result ma_context_init__sdl(ma_context* pContext, const ma_context_con
 namespace VPX
 {
 
-AudioPlayer::AudioPlayer(const Settings& settings)
-   : m_music(nullptr)
+AudioPlayer::AudioPlayer(const string& backglassDevice, const string& playfieldDevice, SoundConfigTypes playfieldSoundMode)
+   : m_soundMode3D(playfieldSoundMode)
 {
    if (!SDL_InitSubSystem(SDL_INIT_AUDIO))
       return;
 
-   string soundDeviceName, soundDeviceBGName;
-   const bool hasTableSoundDevice = settings.LoadValue(Settings::Player, "SoundDevice"s, soundDeviceName);
-   const bool hasBackglassSOundDevice = settings.LoadValue(Settings::Player, "SoundDeviceBG"s, soundDeviceBGName);
    {
       int count;
-      const SDL_AudioDeviceID* const pAudioList = SDL_GetAudioPlaybackDevices(&count);
+      SDL_AudioDeviceID* pAudioList = SDL_GetAudioPlaybackDevices(&count);
       for (int i = 0; i < count; ++i)
       { // We identify by name as this is the only stable property (see https://github.com/libsdl-org/SDL/issues/12278)
          string name = SDL_GetAudioDeviceName(pAudioList[i]);
-         if (hasTableSoundDevice && name == soundDeviceName)
+         if (!playfieldDevice.empty() && name == playfieldDevice)
             m_playfieldAudioDevice = pAudioList[i];
-         if (hasBackglassSOundDevice && name == soundDeviceBGName)
+         if (!backglassDevice.empty() && name == backglassDevice)
             m_backglassAudioDevice = pAudioList[i];
       }
+      SDL_free(pAudioList);
       if (m_playfieldAudioDevice == SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK)
       {
-         PLOGE << "Table sound device was not found (" << soundDeviceName << "), using default.";
-         m_playfieldAudioDevice = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
+         PLOGI << "Table sound device was not found (" << playfieldDevice << "), using default: " << GetPlayfieldDeviceName();
       }
       if (m_backglassAudioDevice == SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK)
       {
-         PLOGE << "Backglass sound device was not found (" << soundDeviceBGName << "), using default.";
-         m_backglassAudioDevice = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
+         PLOGI << "Backglass sound device was not found (" << backglassDevice << "), using default: " << GetBackglassDeviceName();
       }
-      SDL_free(const_cast<SDL_AudioDeviceID*>(pAudioList));
    }
-
-   m_soundMode3D = static_cast<SoundConfigTypes>(settings.LoadValueUInt(Settings::Player, "Sound3D"s));
 
    ma_result result;
    ma_context_config contextConfig;
@@ -244,7 +237,7 @@ AudioPlayer::AudioPlayer(const Settings& settings)
    contextConfig.custom.onContextInit = ma_context_init__sdl;
 
    m_maContext = std::make_unique<ma_context>();
-   constexpr ma_backend backends[] = { ma_backend_custom };
+   static constexpr ma_backend backends[] = { ma_backend_custom };
    ma_context_init(backends, std::size(backends), &contextConfig, m_maContext.get());
    m_maContext->pUserData = this;
 
@@ -263,7 +256,7 @@ AudioPlayer::AudioPlayer(const Settings& settings)
    };
 
    {
-      SDLDeviceInfo deviceInfo { m_backglassAudioDevice, { 0 } };
+      SDLDeviceInfo deviceInfo { m_backglassAudioDevice, {} };
       ma_context_get_device_info(m_maContext.get(), ma_device_type_playback, nullptr, &deviceInfo.dev);
       ma_context_enumerate_devices(m_maContext.get(), selectDevice, &deviceInfo);
 
@@ -297,7 +290,7 @@ AudioPlayer::AudioPlayer(const Settings& settings)
    }
 
    {
-      SDLDeviceInfo deviceInfo { m_playfieldAudioDevice, { 0 } };
+      SDLDeviceInfo deviceInfo { m_playfieldAudioDevice, {} };
       ma_context_get_device_info(m_maContext.get(), ma_device_type_playback, nullptr, &deviceInfo.dev);
       ma_context_enumerate_devices(m_maContext.get(), selectDevice, &deviceInfo);
 
@@ -383,17 +376,23 @@ AudioPlayer::AudioStreamID AudioPlayer::OpenAudioStream(const string& name, int 
    return stream;
 }
 
-void AudioPlayer::EnqueueStream(AudioStreamID stream, uint8_t* buffer, int length) const {
+bool AudioPlayer::IsOpened(const AudioStreamID& stream) const
+{
+   auto item = std::ranges::find_if(m_audioStreams, [stream](const std::shared_ptr<AudioStreamPlayer>& player) { return player == stream; });
+   return item != m_audioStreams.end();
+}
+
+void AudioPlayer::EnqueueStream(const AudioStreamID& stream, uint8_t* buffer, int length) const {
    stream->Enqueue(buffer, length);
 }
 
-void AudioPlayer::SetStreamVolume(AudioStreamID stream, const float volume) const {
+void AudioPlayer::SetStreamVolume(const AudioStreamID& stream, const float volume) const {
    stream->SetStreamVolume(volume);
 }
 
-void AudioPlayer::CloseAudioStream(AudioStreamID stream, bool afterEndOfStream)
+void AudioPlayer::CloseAudioStream(const AudioStreamID& stream, bool afterEndOfStream)
 {
-   auto item = std::ranges::find_if(m_audioStreams, [stream](std::shared_ptr<AudioStreamPlayer> player) { return player == stream; });
+   auto item = std::ranges::find_if(m_audioStreams, [stream](const std::shared_ptr<AudioStreamPlayer>& player) { return player == stream; });
    if (item != m_audioStreams.end())
    {
       // Keep a reference until enqueued data has been played
@@ -502,7 +501,7 @@ void AudioPlayer::StopSound(Sound* sound)
 
 SoundSpec AudioPlayer::GetSoundInformations(const Sound* const sound) const
 {
-   SoundSpec specs { 0 };
+   SoundSpec specs {};
    ma_decoder decoder;
    if (ma_decoder_config decoderConfig = ma_decoder_config_init(ma_format_unknown, 0, 0);
       ma_decoder_init_memory(sound->GetFileRaw(), sound->GetFileSize(), &decoderConfig, &decoder) != MA_SUCCESS)

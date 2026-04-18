@@ -1,6 +1,8 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
+#include "gate.h"
+
 #include "utils/objloader.h"
 #include "meshes/gateBracketMesh.h"
 #include "meshes/gateWireMesh.h"
@@ -11,18 +13,14 @@
 #include "renderer/IndexBuffer.h"
 #include "renderer/VertexBuffer.h"
 
-Gate::Gate()
-{
-}
-
 Gate::~Gate()
 {
    assert(m_rd == nullptr);
 }
 
-Gate *Gate::CopyForPlay(PinTable *live_table) const
+Gate *Gate::CopyForPlay() const
 {
-   STANDARD_EDITABLE_COPY_FOR_PLAY_IMPL(Gate, live_table)
+   STANDARD_EDITABLE_COPY_FOR_PLAY_IMPL(Gate)
    return dst;
 }
 
@@ -70,73 +68,72 @@ void Gate::SetGateType(GateType type)
 
 void Gate::UpdateStatusBarInfo()
 {
-   char tbuf[128];
-   sprintf_s(tbuf, sizeof(tbuf), "Length: %.3f | Height: %.3f", m_vpinball->ConvertToUnit(m_d.m_length), m_vpinball->ConvertToUnit(m_d.m_height));
+   if (!m_vpinball)
+      return;
+   const string tbuf = std::format("Length: {:.3f} | Height: {:.3f}", m_vpinball->ConvertToUnit(m_d.m_length), m_vpinball->ConvertToUnit(m_d.m_height));
    m_vpinball->SetStatusBarUnitInfo(tbuf, true);
 }
 
-HRESULT Gate::Init(PinTable *const ptable, const float x, const float y, const bool fromMouseClick, const bool forPlay)
+HRESULT Gate::Init(const float x, const float y, const bool fromMouseClick, const bool forPlay)
 {
-   m_ptable = ptable;
    SetDefaults(fromMouseClick);
    m_d.m_vCenter.x = x;
    m_d.m_vCenter.y = y;
-   return forPlay ? S_OK : InitVBA(true, nullptr);
+   return S_OK;
 }
 
+#define LinkProp(field, prop) field = fromMouseClick ? g_app->m_settings.GetDefaultPropsGate_##prop() : Settings::GetDefaultPropsGate_##prop##_Default()
 void Gate::SetDefaults(const bool fromMouseClick)
 {
-#define regKey Settings::DefaultPropsGate
-
-   m_d.m_length = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Length"s, 100.f) : 100.f;
-   m_d.m_height = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Height"s, 50.f) : 50.f;
-   m_d.m_rotation = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Rotation"s, -90.f) : -90.f;
-   m_d.m_showBracket = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "ShowBracket"s, true) : true;
-   m_d.m_type = fromMouseClick ? (GateType)g_pvp->m_settings.LoadValueWithDefault(regKey, "GateType"s, (int)GateWireW) : GateWireW;
-   m_d.m_collidable = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Collidable"s, true) : true;
-   m_d.m_angleMin = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "AngleMin"s, 0.f) : 0.f;
-   m_d.m_angleMax = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "AngleMax"s, (float)(M_PI / 2.0)) : (float)(M_PI / 2.0);
-   m_d.m_visible = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Visible"s, true) : true;
-   m_d.m_tdr.m_TimerEnabled = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "TimerEnabled"s, false) : false;
-   m_d.m_tdr.m_TimerInterval = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "TimerInterval"s, 100) : 100;
-
-   const bool hr = g_pvp->m_settings.LoadValue(regKey, "Surface"s, m_d.m_szSurface);
-   if (!hr || !fromMouseClick)
-      m_d.m_szSurface.clear();
-
+   LinkProp(m_d.m_length, Length);
+   LinkProp(m_d.m_height, Height);
+   LinkProp(m_d.m_rotation, Rotation);
+   LinkProp(m_d.m_showBracket, ShowBracket);
+   LinkProp(m_d.m_collidable, Collidable);
+   LinkProp(m_d.m_angleMin, AngleMin);
+   LinkProp(m_d.m_angleMax, AngleMax);
+   LinkProp(m_d.m_visible, Visible);
+   LinkProp(m_d.m_szSurface, Surface);
+   LinkProp(m_d.m_twoWay, TwoWay);
+   LinkProp(m_d.m_type, GateType);
+   LinkProp(m_d.m_reflectionEnabled, ReflectionEnabled);
+   LinkProp(m_timerEnabled, TimerEnabled);
+   LinkProp(m_timerInterval, TimerInterval);
    SetDefaultPhysics(fromMouseClick);
-
-   m_d.m_twoWay = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "TwoWay"s, true) : true;
-   m_d.m_reflectionEnabled = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "ReflectionEnabled"s, true) : true;
-
-#undef regKey
 }
 
+void Gate::SetDefaultPhysics(const bool fromMouseClick)
+{
+   LinkProp(m_d.m_elasticity, Elasticity);
+   LinkProp(m_d.m_friction, Friction);
+   LinkProp(m_d.m_damping, AntiFriction);
+   LinkProp(m_d.m_scatter, Scatter);
+   LinkProp(m_d.m_gravityfactor, GravityFactor);
+}
+#undef LinkProp
 
 void Gate::WriteRegDefaults()
 {
-#define regKey Settings::DefaultPropsGate
-
-   g_pvp->m_settings.SaveValue(regKey, "Length"s, m_d.m_length);
-   g_pvp->m_settings.SaveValue(regKey, "Height"s, m_d.m_height);
-   g_pvp->m_settings.SaveValue(regKey, "Rotation"s, m_d.m_rotation);
-   g_pvp->m_settings.SaveValue(regKey, "ShowBracket"s, m_d.m_showBracket);
-   g_pvp->m_settings.SaveValue(regKey, "Collidable"s, m_d.m_collidable);
-   g_pvp->m_settings.SaveValue(regKey, "AngleMin"s, m_d.m_angleMin);
-   g_pvp->m_settings.SaveValue(regKey, "AngleMax"s, m_d.m_angleMax);
-   g_pvp->m_settings.SaveValue(regKey, "Visible"s, m_d.m_visible);
-   g_pvp->m_settings.SaveValue(regKey, "TimerEnabled"s, m_d.m_tdr.m_TimerEnabled);
-   g_pvp->m_settings.SaveValue(regKey, "TimerInterval"s, m_d.m_tdr.m_TimerInterval);
-   g_pvp->m_settings.SaveValue(regKey, "Surface"s, m_d.m_szSurface);
-   g_pvp->m_settings.SaveValue(regKey, "Elasticity"s, m_d.m_elasticity);
-   g_pvp->m_settings.SaveValue(regKey, "Friction"s, m_d.m_friction);
-   g_pvp->m_settings.SaveValue(regKey, "Scatter"s, m_d.m_scatter);
-   g_pvp->m_settings.SaveValue(regKey, "GravityFactor"s, m_d.m_gravityfactor);
-   g_pvp->m_settings.SaveValue(regKey, "TwoWay"s, m_d.m_twoWay);
-   g_pvp->m_settings.SaveValue(regKey, "ReflectionEnabled"s, m_d.m_reflectionEnabled);
-   g_pvp->m_settings.SaveValue(regKey, "GateType"s, m_d.m_type);
-
-#undef regKey
+#define LinkProp(field, prop) g_app->m_settings.SetDefaultPropsGate_##prop(field, false)
+   LinkProp(m_d.m_length, Length);
+   LinkProp(m_d.m_height, Height);
+   LinkProp(m_d.m_rotation, Rotation);
+   LinkProp(m_d.m_showBracket, ShowBracket);
+   LinkProp(m_d.m_collidable, Collidable);
+   LinkProp(m_d.m_angleMin, AngleMin);
+   LinkProp(m_d.m_angleMax, AngleMax);
+   LinkProp(m_d.m_visible, Visible);
+   LinkProp(m_d.m_szSurface, Surface);
+   LinkProp(m_d.m_twoWay, TwoWay);
+   LinkProp(m_d.m_type, GateType);
+   LinkProp(m_d.m_friction, Friction);
+   LinkProp(m_d.m_damping, AntiFriction);
+   LinkProp(m_d.m_scatter, Scatter);
+   LinkProp(m_d.m_gravityfactor, GravityFactor);
+   LinkProp(m_d.m_reflectionEnabled, ReflectionEnabled);
+   LinkProp(m_timerEnabled, TimerEnabled);
+   LinkProp(m_timerInterval, TimerInterval);
+#undef LinkProp
 }
 
 float Gate::GetOpenAngle() const
@@ -272,19 +269,6 @@ void Gate::UIRenderPass2(Sur * const psur)
    }
 }
 
-void Gate::SetDefaultPhysics(const bool fromMouseClick)
-{
-#define regKey Settings::DefaultPropsGate
-
-   m_d.m_elasticity = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Elasticity"s, 0.3f) : 0.3f;
-   m_d.m_friction = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Friction"s, 0.02f) : 0.02f;
-   m_d.m_damping = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "AntiFriction"s, 0.985f) : 0.985f;
-   m_d.m_scatter = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "Scatter"s, 0.f) : 0.f;
-   m_d.m_gravityfactor = fromMouseClick ? g_pvp->m_settings.LoadValueWithDefault(regKey, "GravityFactor"s, 0.25f) : 0.25f;
-
-#undef regKey
-}
-
 void Gate::RenderBlueprint(Sur *psur, const bool solid)
 {
 }
@@ -296,11 +280,14 @@ void Gate::RenderBlueprint(Sur *psur, const bool solid)
 
 void Gate::PhysicSetup(PhysicsEngine* physics, const bool isUI)
 {
-   if (isUI)
+   if (!isUI && GetPartGroup() != nullptr && GetPartGroup()->GetReferenceSpace() != PartGroupData::SpaceReference::SR_PLAYFIELD)
+      return;
+
+   /* if (isUI)
    {
       // FIXME implement UI picking
    }
-   else
+   else*/
    {
       const float height = m_ptable->GetSurfaceHeight(m_d.m_szSurface, m_d.m_vCenter.x, m_d.m_vCenter.y);
       const float h = m_d.m_height; // relative height of the gate
@@ -370,29 +357,29 @@ void Gate::RenderSetup(RenderDevice *device)
    SetGateType(m_d.m_type);
    m_baseHeight = m_ptable->GetSurfaceHeight(m_d.m_szSurface, m_d.m_vCenter.x, m_d.m_vCenter.y);
 
-   IndexBuffer *bracketIndexBuffer = new IndexBuffer(m_rd, gateBracketNumIndices, gateBracketIndices);
-   VertexBuffer *bracketVertexBuffer = new VertexBuffer(m_rd, gateBracketNumVertices);
+   std::shared_ptr<IndexBuffer> bracketIndexBuffer = std::make_shared<IndexBuffer>(m_rd, gateBracketNumIndices, gateBracketIndices);
+   std::shared_ptr<VertexBuffer> bracketVertexBuffer = std::make_shared<VertexBuffer>(m_rd, gateBracketNumVertices);
    Vertex3D_NoTex2 *buf;
    bracketVertexBuffer->Lock(buf);
    GenerateBracketMesh(buf);
    bracketVertexBuffer->Unlock();
-   m_bracketMeshBuffer = new MeshBuffer(m_wzName + L".Bracket"s, bracketVertexBuffer, bracketIndexBuffer, true);
+   m_bracketMeshBuffer = std::make_shared<MeshBuffer>(GetName() + ".Bracket"s, bracketVertexBuffer, bracketIndexBuffer, true);
 
-   IndexBuffer *wireIndexBuffer = new IndexBuffer(m_rd, m_numIndices, m_indices);
-   VertexBuffer *wireVertexBuffer = new VertexBuffer(m_rd, m_numVertices, nullptr, true);
+   std::shared_ptr<IndexBuffer> wireIndexBuffer = std::make_shared<IndexBuffer>(m_rd, m_numIndices, m_indices);
+   std::shared_ptr<VertexBuffer> wireVertexBuffer = std::make_shared<VertexBuffer>(m_rd, m_numVertices, nullptr, true);
    wireVertexBuffer->Lock(buf);
    GenerateWireMesh(buf);
    wireVertexBuffer->Unlock();
-   m_wireMeshBuffer = new MeshBuffer(m_wzName + L".Wire"s, wireVertexBuffer, wireIndexBuffer, true);
+   m_wireMeshBuffer = std::make_shared<MeshBuffer>(GetName() + ".Wire"s, wireVertexBuffer, wireIndexBuffer, true);
 }
 
 void Gate::RenderRelease()
 {
    assert(m_rd != nullptr);
-   delete m_wireMeshBuffer;
    m_wireMeshBuffer = nullptr;
-   delete m_bracketMeshBuffer;
    m_bracketMeshBuffer = nullptr;
+   m_wireEdgeMeshBuffer = nullptr;
+   m_bracketEdgeMeshBuffer = nullptr;
    m_vertexbuffer_angle = FLT_MAX;
    m_rd = nullptr;
 }
@@ -412,10 +399,11 @@ void Gate::UpdateAnimation(const float diff_time_msec)
 void Gate::Render(const unsigned int renderMask)
 {
    assert(m_rd != nullptr);
-   assert(!m_backglass);
+   assert(!m_desktopBackdrop);
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
    const bool isReflectionPass = renderMask & Renderer::REFLECTION_PASS;
+   const bool isUIPass = renderMask & Renderer::UI_EDGES || renderMask & Renderer::UI_FILL;
    TRACE_FUNCTION();
 
    if (isStaticOnly 
@@ -439,12 +427,53 @@ void Gate::Render(const unsigned int renderMask)
       m_wireMeshBuffer->m_vb->Unlock();
    }
 
-   m_rd->ResetRenderState();
-   m_rd->m_basicShader->SetBasic(m_ptable->GetMaterial(m_d.m_szMaterial), nullptr);
    Vertex3Ds pos(m_d.m_vCenter.x, m_d.m_vCenter.y, m_baseHeight);
-   if (m_d.m_showBracket)
-      m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_bracketMeshBuffer, RenderDevice::TRIANGLELIST, 0, gateBracketNumIndices);
-   m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_wireMeshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
+
+   if (isUIPass)
+   {
+      if (renderMask & Renderer::UI_FILL)
+      {
+         if (m_d.m_showBracket)
+            m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_bracketMeshBuffer, RenderDevice::TRIANGLELIST, 0, gateBracketNumIndices);
+         m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_wireMeshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
+      }
+      if (renderMask & Renderer::UI_EDGES)
+      {
+         if (m_wireEdgeMeshBuffer == nullptr)
+         {
+            vector<unsigned int> indices;
+            vector<Vertex3D_NoTex2> vertices;
+            for (unsigned int i = 0; i < m_numIndices; i++)
+               indices.push_back(m_indices[i]);
+            for (unsigned int i = 0; i < m_numVertices; i++)
+               vertices.push_back(m_vertices[i]);
+            m_wireEdgeMeshBuffer = m_wireMeshBuffer->CreateEdgeMeshBuffer(indices, vertices);
+         }
+         m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_wireEdgeMeshBuffer, RenderDevice::LINELIST, 0, m_wireEdgeMeshBuffer->m_ib->m_count);
+         if (m_d.m_showBracket)
+         {
+            if (m_bracketEdgeMeshBuffer == nullptr)
+            {
+               vector<unsigned int> indices;
+               vector<Vertex3D_NoTex2> vertices;
+               for (unsigned int i = 0; i < gateBracketNumIndices; i++)
+                  indices.push_back(gateBracketIndices[i]);
+               for (unsigned int i = 0; i < gateBracketNumVertices; i++)
+                  vertices.push_back(gateBracket[i]);
+               m_bracketEdgeMeshBuffer = m_bracketMeshBuffer->CreateEdgeMeshBuffer(indices, vertices);
+            }
+            m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_bracketEdgeMeshBuffer, RenderDevice::LINELIST, 0, m_bracketEdgeMeshBuffer->m_ib->m_count);
+         }
+      }
+   }
+   else
+   {
+      m_rd->ResetRenderState();
+      m_rd->m_basicShader->SetBasic(m_ptable->GetMaterial(m_d.m_szMaterial), nullptr);
+      if (m_d.m_showBracket)
+         m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_bracketMeshBuffer, RenderDevice::TRIANGLELIST, 0, gateBracketNumIndices);
+      m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_wireMeshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
+   }
 }
 
 #pragma endregion
@@ -486,8 +515,8 @@ void Gate::ExportMesh(ObjLoader& loader)
 
 void Gate::GenerateBracketMesh(Vertex3D_NoTex2 *buf) const
 {
-   Matrix3D rotMatrix = Matrix3D::MatrixRotateZ(ANGTORAD(m_d.m_rotation));
-   Matrix3D vertMatrix = rotMatrix * Matrix3D::MatrixScale(m_d.m_length) * Matrix3D::MatrixTranslate(m_d.m_vCenter.x, m_d.m_vCenter.y, m_d.m_height + m_baseHeight);
+   const Matrix3D rotMatrix = Matrix3D::MatrixRotateZ(ANGTORAD(m_d.m_rotation));
+   const Matrix3D vertMatrix = rotMatrix * Matrix3D::MatrixScale(m_d.m_length) * Matrix3D::MatrixTranslate(m_d.m_vCenter.x, m_d.m_vCenter.y, m_d.m_height + m_baseHeight);
    vertMatrix.TransformPositions(gateBracket, buf, gateBracketNumVertices);
    rotMatrix.TransformNormals(gateBracket, buf, gateBracketNumVertices);
 }
@@ -519,93 +548,74 @@ void Gate::PutCenter(const Vertex2D& pv)
    m_d.m_vCenter = pv;
 }
 
-HRESULT Gate::SaveData(IStream *pstm, HCRYPTHASH hcrypthash, const bool saveForUndo)
+void Gate::Save(IObjectWriter& writer, const bool saveForUndo)
 {
-   BiffWriter bw(pstm, hcrypthash);
-
-   bw.WriteVector2(FID(VCEN), m_d.m_vCenter);
-   bw.WriteFloat(FID(LGTH), m_d.m_length);
-   bw.WriteFloat(FID(HGTH), m_d.m_height);
-   bw.WriteFloat(FID(ROTA), m_d.m_rotation);
-   bw.WriteString(FID(MATR), m_d.m_szMaterial);
-   bw.WriteBool(FID(TMON), m_d.m_tdr.m_TimerEnabled);
-   bw.WriteBool(FID(GSUP), m_d.m_showBracket);
-   bw.WriteBool(FID(GCOL), m_d.m_collidable);
-   bw.WriteInt(FID(TMIN), m_d.m_tdr.m_TimerInterval);
-   bw.WriteString(FID(SURF), m_d.m_szSurface);
-   bw.WriteFloat(FID(ELAS), m_d.m_elasticity);
-   bw.WriteFloat(FID(GAMA), m_d.m_angleMax);
-   bw.WriteFloat(FID(GAMI), m_d.m_angleMin);
-   bw.WriteFloat(FID(GFRC), m_d.m_friction);
-   bw.WriteFloat(FID(AFRC), m_d.m_damping);
-   bw.WriteFloat(FID(GGFC), m_d.m_gravityfactor);
-   bw.WriteBool(FID(GVSB), m_d.m_visible);
-   bw.WriteWideString(FID(NAME), m_wzName);
-   bw.WriteBool(FID(TWWA), m_d.m_twoWay);
-   bw.WriteBool(FID(REEN), m_d.m_reflectionEnabled);
-   bw.WriteInt(FID(GATY), m_d.m_type);
-
-   ISelect::SaveData(pstm, hcrypthash);
-
-   bw.WriteTag(FID(ENDB));
-
-   return S_OK;
+   writer.WriteVector2(FID(VCEN), m_d.m_vCenter);
+   writer.WriteFloat(FID(LGTH), m_d.m_length);
+   writer.WriteFloat(FID(HGTH), m_d.m_height);
+   writer.WriteFloat(FID(ROTA), m_d.m_rotation);
+   writer.WriteString(FID(MATR), m_d.m_szMaterial);
+   writer.WriteBool(FID(TMON), m_timerEnabled);
+   writer.WriteBool(FID(GSUP), m_d.m_showBracket);
+   writer.WriteBool(FID(GCOL), m_d.m_collidable);
+   writer.WriteInt(FID(TMIN), m_timerInterval);
+   writer.WriteString(FID(SURF), m_d.m_szSurface);
+   writer.WriteFloat(FID(ELAS), m_d.m_elasticity);
+   writer.WriteFloat(FID(GAMA), m_d.m_angleMax);
+   writer.WriteFloat(FID(GAMI), m_d.m_angleMin);
+   writer.WriteFloat(FID(GFRC), m_d.m_friction);
+   writer.WriteFloat(FID(AFRC), m_d.m_damping);
+   writer.WriteFloat(FID(GGFC), m_d.m_gravityfactor);
+   writer.WriteBool(FID(GVSB), m_d.m_visible);
+   writer.WriteWideString(FID(NAME), m_wzName);
+   writer.WriteBool(FID(TWWA), m_d.m_twoWay);
+   writer.WriteBool(FID(REEN), m_d.m_reflectionEnabled);
+   writer.WriteInt(FID(GATY), m_d.m_type);
+   SaveSharedEditableFields(writer);
+   writer.EndObject();
 }
 
-HRESULT Gate::InitLoad(IStream *pstm, PinTable *ptable, int version, HCRYPTHASH hcrypthash, HCRYPTKEY hcryptkey)
+void Gate::Load(IObjectReader& reader)
 {
    SetDefaults(false);
-
    m_d.m_twoWay = false; // to keep old VP8/9 behavior when loading .vpt files
-
-   BiffReader br(pstm, this, version, hcrypthash, hcryptkey);
-
-   m_ptable = ptable;
-
-   br.Load();
-   return S_OK;
-}
-
-bool Gate::LoadToken(const int id, BiffReader * const pbr)
-{
-   switch(id)
-   {
-   case FID(PIID): { int pid; pbr->GetInt(&pid); } break;
-   case FID(GATY):
-   {
-      pbr->GetInt(&m_d.m_type);
-      if (m_d.m_type < GateWireW || m_d.m_type > GateLongPlate) // for tables that were saved in the phase where m_type could've been undefined
-         m_d.m_type = GateWireW;
-      break;
-   }
-   case FID(VCEN): pbr->GetVector2(m_d.m_vCenter); break;
-   case FID(LGTH): pbr->GetFloat(m_d.m_length); break;
-   case FID(HGTH): pbr->GetFloat(m_d.m_height); break;
-   case FID(ROTA): pbr->GetFloat(m_d.m_rotation); break;
-   case FID(MATR): pbr->GetString(m_d.m_szMaterial); break;
-   case FID(TMON): pbr->GetBool(m_d.m_tdr.m_TimerEnabled); break;
-   case FID(GSUP): pbr->GetBool(m_d.m_showBracket); break;
-   case FID(GCOL): pbr->GetBool(m_d.m_collidable); break;
-   case FID(TWWA): pbr->GetBool(m_d.m_twoWay); break;
-   case FID(GVSB): pbr->GetBool(m_d.m_visible); break;
-   case FID(REEN): pbr->GetBool(m_d.m_reflectionEnabled); break;
-   case FID(TMIN): pbr->GetInt(m_d.m_tdr.m_TimerInterval); break;
-   case FID(SURF): pbr->GetString(m_d.m_szSurface); break;
-   case FID(NAME): pbr->GetWideString(m_wzName, std::size(m_wzName)); break;
-   case FID(ELAS): pbr->GetFloat(m_d.m_elasticity); break;
-   case FID(GAMA): pbr->GetFloat(m_d.m_angleMax); break;
-   case FID(GAMI): pbr->GetFloat(m_d.m_angleMin); break;
-   case FID(GFRC): pbr->GetFloat(m_d.m_friction); break;
-   case FID(AFRC): pbr->GetFloat(m_d.m_damping); break;
-   case FID(GGFC): pbr->GetFloat(m_d.m_gravityfactor); break;
-   default: ISelect::LoadToken(id, pbr); break;
-   }
-   return true;
-}
-
-HRESULT Gate::InitPostLoad()
-{
-   return S_OK;
+   reader.AsObject(
+      [this](int tag, IObjectReader& reader)
+      {
+         switch (tag)
+         {
+         case FID(PIID): reader.AsInt(); break;
+         case FID(GATY):
+         {
+            m_d.m_type = static_cast<GateType>(reader.AsInt());
+            if (m_d.m_type < GateWireW || m_d.m_type > GateLongPlate) // for tables that were saved in the phase where m_type could've been undefined
+               m_d.m_type = GateWireW;
+            break;
+         }
+         case FID(VCEN): m_d.m_vCenter = reader.AsVector2(); break;
+         case FID(LGTH): m_d.m_length = reader.AsFloat(); break;
+         case FID(HGTH): m_d.m_height = reader.AsFloat(); break;
+         case FID(ROTA): m_d.m_rotation = reader.AsFloat(); break;
+         case FID(MATR): m_d.m_szMaterial = reader.AsString(); break;
+         case FID(TMON): m_timerEnabled = reader.AsBool(); break;
+         case FID(TMIN): m_timerInterval = reader.AsInt(); break;
+         case FID(GSUP): m_d.m_showBracket = reader.AsBool(); break;
+         case FID(GCOL): m_d.m_collidable = reader.AsBool(); break;
+         case FID(TWWA): m_d.m_twoWay = reader.AsBool(); break;
+         case FID(GVSB): m_d.m_visible = reader.AsBool(); break;
+         case FID(REEN): m_d.m_reflectionEnabled = reader.AsBool(); break;
+         case FID(SURF): m_d.m_szSurface = reader.AsString(); break;
+         case FID(NAME): m_wzName = reader.AsWideString(); break;
+         case FID(ELAS): m_d.m_elasticity = reader.AsFloat(); break;
+         case FID(GAMA): m_d.m_angleMax = reader.AsFloat(); break;
+         case FID(GAMI): m_d.m_angleMin = reader.AsFloat(); break;
+         case FID(GFRC): m_d.m_friction = reader.AsFloat(); break;
+         case FID(AFRC): m_d.m_damping = reader.AsFloat(); break;
+         case FID(GGFC): m_d.m_gravityfactor = reader.AsFloat(); break;
+         default: LoadSharedEditableField(tag, reader); break;
+         }
+         return true;
+      });
 }
 
 STDMETHODIMP Gate::InterfaceSupportsErrorInfo(REFIID riid)
@@ -904,7 +914,7 @@ STDMETHODIMP Gate::get_Friction(float *pVal)
 
 STDMETHODIMP Gate::put_Friction(float newVal)
 {
-   m_d.m_friction = clamp(newVal, 0.f, 1.f);
+   m_d.m_friction = saturate(newVal);
    return S_OK;
 }
 
@@ -916,7 +926,7 @@ STDMETHODIMP Gate::get_Damping(float *pVal)
 
 STDMETHODIMP Gate::put_Damping(float newVal)
 {
-   const float tmp = clamp(newVal, 0.0f, 1.0f);
+   const float tmp = saturate(newVal);
    if (g_pplayer)
       m_phitgate->m_gateMover.m_damping = powf(tmp, (float)PHYS_FACTOR); //0.996f;
    else

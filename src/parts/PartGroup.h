@@ -2,30 +2,26 @@
 
 #pragma once
 
-#include "ui/resource.h"
+#include "ui/win/resource.h"
 #include "timer.h"
 
 class PartGroupData final
 {
 public:
    // Standard properties
-   TimerDataRoot m_tdr;
    Vertex2D m_v;
 
    // PartGroup properties
-   enum VisibilityMask
+   enum PlayerModeVisibilityMask
    {
-      VM_PLAYFIELD       = 0x0001,
-      VM_MIXED_REALITY   = 0x0002,
-      VM_VIRTUAL_REALITY = 0x0004,
-      VM_SCOREVIEW       = 0x0008, // Reserved (Not yet used)
-      VM_BACKGLASS       = 0x0010, // Reserved (Not yet used)
-      VM_TOPPER          = 0x0020, // Reserved (Not yet used)
-      VM_APRON_LEFT      = 0x0040, // Reserved (Not yet used)
-      VM_APRON_RIGHT     = 0x0080, // Reserved (Not yet used)
-      VM_ALL             = 0xFFFF,
+      PMVM_DESKTOP         = 0x0001, // Enable if player is in desktop mode (not VR/AR, played on a landscape device, showing desktop backdrop)
+      PMVM_FSS             = 0x0002, // Enable if player is in full single screen mode (not VR/AR, played on a portrait device showing cab & backglass)
+      PMVM_CABINET         = 0x0004, // Enable if player is in cabinet mode (not VR/AR, played on a pincab device)
+      PMVM_MIXED_REALITY   = 0x0008, // Enable if player is in AR mode
+      PMVM_VIRTUAL_REALITY = 0x0010, // Enable if player is in VR mode
+      PMVM_ALL             = 0xFFFF,
    };
-   unsigned int m_visibilityMask = VM_ALL;
+   unsigned int m_playerModeVisibilityMask = PMVM_ALL;
    enum class SpaceReference : int
    {
       SR_PLAYFIELD, // Relative to cabinet with playfield inclination and local coordinate system applied (usual local playfield coordinate system tailored for table design)
@@ -41,7 +37,6 @@ class PartGroup :
    public CComObjectRootEx<CComSingleThreadModel>,
    public IDispatchImpl<IPartGroup, &IID_IPartGroup, &LIBID_VPinballLib>,
    //public ISupportErrorInfo,
-   //public CComObjectRoot,
    public CComCoClass<PartGroup, &CLSID_PartGroup>,
    public EventProxy<PartGroup, &DIID_IPartGroupEvents>,
    public IConnectionPointContainerImpl<PartGroup>,
@@ -50,7 +45,6 @@ class PartGroup :
    public IEditable,
    public IScriptable,
    public IFireEvents,
-   public Hitable,
    public IPerPropertyBrowsing     // Ability to fill in dropdown(s) in property browser
 {
 public:
@@ -60,8 +54,8 @@ public:
    STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
-   PartGroup();
-   virtual ~PartGroup();
+   PartGroup() { }
+   virtual ~PartGroup() { }
 
    BEGIN_COM_MAP(PartGroup)
       COM_INTERFACE_ENTRY(IDispatch)
@@ -76,7 +70,7 @@ public:
       CONNECTION_POINT_ENTRY(DIID_IPartGroupEvents)
    END_CONNECTION_POINT_MAP()
 
-   STANDARD_EDITABLE_DECLARES(PartGroup, eItemPartGroup, PARTGROUP, 3)
+   STANDARD_EDITABLE_DECLARES_NO_RENDERABLE_NO_HITABLE(PartGroup, eItemPartGroup, PARTGROUP, VIEW_PLAYFIELD | VIEW_BACKGLASS)
 
    void MoveOffset(const float dx, const float dy) final;
    void SetObjectPos() final;
@@ -84,8 +78,6 @@ public:
    void PutCenter(const Vertex2D& pv) final;
 
    void RenderBlueprint(Sur *psur, const bool solid) final;
-
-   ItemTypeEnum HitableGetItemType() const final { return eItemPartGroup; }
 
    void WriteRegDefaults() final;
 
@@ -96,11 +88,8 @@ public:
 
    // IPartGroup
 
-   unsigned int GetVisibilityMask() const;
+   unsigned int GetPlayerModeVisibilityMask() const;
    PartGroupData::SpaceReference GetReferenceSpace() const;
 
    PartGroupData m_d;
-
-private:
-   PinTable *m_ptable = nullptr;
 };

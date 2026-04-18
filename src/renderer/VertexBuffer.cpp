@@ -72,7 +72,7 @@ void SharedVertexBuffer::Upload()
 {
    if (!IsCreated())
    {
-      unsigned int size = m_count * m_bytePerElement;
+      const unsigned int size = m_count * m_bytePerElement;
 
       // Create data block
       #if defined(ENABLE_BGFX)
@@ -80,7 +80,7 @@ void SharedVertexBuffer::Upload()
       uint8_t* data = mem->data;
 
       #elif defined(ENABLE_OPENGL)
-      uint8_t* data = (uint8_t*)malloc(size);
+      uint8_t* const data = new uint8_t[size];
 
       #elif defined(ENABLE_DX9)
       // We always specify WRITEONLY since MSDN states,
@@ -129,7 +129,7 @@ void SharedVertexBuffer::Upload()
          Bind();
          glBufferData(GL_ARRAY_BUFFER, size, data, m_isStatic ? GL_STATIC_DRAW : GL_DYNAMIC_DRAW);
       }
-      free(data);
+      delete [] data;
 
       #elif defined(ENABLE_DX9)
       CHECKD3D(m_vb->Unlock());
@@ -182,7 +182,7 @@ VertexBuffer::VertexBuffer(RenderDevice* rd, const unsigned int vertexCount, con
 {
    assert(m_count > 0);
    // Disabled since OpenGL ES does not support glDrawElementsBaseVertex, but now that we remap the indices when creating the index buffer it should be good
-   for (SharedVertexBuffer* block : m_rd->m_pendingSharedVertexBuffers)
+   for (std::shared_ptr<SharedVertexBuffer> block : m_rd->m_pendingSharedVertexBuffers)
    {
       if (block->m_format == fmt && block->m_isStatic == m_isStatic && block->GetCount() + vertexCount <= 65535)
       {
@@ -193,7 +193,7 @@ VertexBuffer::VertexBuffer(RenderDevice* rd, const unsigned int vertexCount, con
    // Also create a new buffer when using dynamic buffers as all backends do not support vertex offsets
    if (!m_isStatic || m_sharedBuffer == nullptr)
    {
-      m_sharedBuffer = new SharedVertexBuffer(rd, fmt, m_isStatic);
+      m_sharedBuffer = std::make_shared<SharedVertexBuffer>(rd, fmt, m_isStatic);
       m_rd->m_pendingSharedVertexBuffers.push_back(m_sharedBuffer);
    }
    m_vertexOffset = m_sharedBuffer->Add(this);
@@ -210,10 +210,7 @@ VertexBuffer::VertexBuffer(RenderDevice* rd, const unsigned int vertexCount, con
 VertexBuffer::~VertexBuffer()
 {
    if (m_sharedBuffer->Remove(this))
-   {
       RemoveFromVectorSingle(m_rd->m_pendingSharedVertexBuffers, m_sharedBuffer);
-      delete m_sharedBuffer;
-   }
 }
 
 bool VertexBuffer::IsSharedBuffer() const { return m_sharedBuffer->IsShared(); }

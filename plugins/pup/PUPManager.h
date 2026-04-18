@@ -1,8 +1,13 @@
+// license:GPLv3+
+
 #pragma once
+
+#include "DOFStreamEvent.h"
 
 #include "common.h"
 
-#include "ControllerPlugin.h"
+#include "plugins/ControllerPlugin.h"
+#include "plugins/VPXPlugin.h"
 
 #pragma warning(push)
 #pragma warning(disable : 4251) // In PupDMD: std::map<uint16_t,PUPDMD::Hash,std::less<uint16_t>,std::allocator<std::pair<const uint16_t,PUPDMD::Hash>>> needs dll-interface
@@ -55,12 +60,6 @@
 
 namespace PUP {
 
-typedef struct {
-   char type;
-   int number;
-   int value;
-} PUPTriggerData;
-
 class PUPScreen;
 class PUPPlaylist;
 class PUPTrigger;
@@ -68,83 +67,68 @@ class PUPTrigger;
 class PUPManager final
 {
 public:
-   PUPManager(const MsgPluginAPI* msgApi, uint32_t endpointId, const string& rootPath);
+   PUPManager(const MsgPluginAPI* msgApi, uint32_t endpointId, const std::filesystem::path& rootPath);
    ~PUPManager();
 
    const MsgPluginAPI* GetMsgAPI() const { return m_msgApi; }
-   const string& GetRootPath() const { return m_szRootPath; }
+   const std::filesystem::path& GetRootPath() const { return m_szRootPath; }
 
    void SetGameDir(const string& szRomName);
    void LoadConfig(const string& szRomName);
    void Unload();
-   const string& GetPath() const { return m_szPath; }
+   const std::filesystem::path& GetPath() const { return m_szPath; }
    bool AddScreen(std::shared_ptr<PUPScreen> pScreen);
    bool AddScreen(int screenNum);
    std::shared_ptr<PUPScreen> GetScreen(int screenNum, bool logMissing = false) const;
+   void SendScreenToBack(const PUPScreen* screen);
+   void SendScreenToFront(const PUPScreen* screen);
    bool AddFont(TTF_Font* pFont, const string& szFilename);
    TTF_Font* GetFont(const string& szFont);
 
-   void QueueTriggerData(PUPTriggerData data);
+   void QueueDOFEvent(char c, int id, int value);
+
+   void DuckAllExcept(int masterScreenNum, float duckLevel);
+   void Unduck();
 
 private:
-   void ProcessQueue();
    void UnloadFonts();
    void LoadFonts();
    void LoadPlaylists();
+
    void Start();
+   bool IsRunning() const { return m_dofEventStream != nullptr; }
    void Stop();
 
-   string m_szRootPath;
-   string m_szPath;
+   float m_mainVolume = 1.f;
+   std::filesystem::path m_szRootPath;
+   std::filesystem::path m_szPath;
+   string m_szRomName;
+   vector<std::shared_ptr<PUPScreen>> m_screenOrder;
    ankerl::unordered_dense::map<int, std::shared_ptr<PUPScreen>> m_screenMap;
    vector<TTF_Font*> m_fonts;
    ankerl::unordered_dense::map<string, TTF_Font*> m_fontMap;
    ankerl::unordered_dense::map<string, TTF_Font*> m_fontFilenameMap;
-   vector<PUPTriggerData> m_triggerDataQueue;
-   std::mutex m_queueMutex;
-   std::condition_variable m_queueCondVar;
-   bool m_isRunning = false;
-   std::thread m_thread;
    vector<PUPPlaylist*> m_playlists;
 
-   const MsgPluginAPI* const m_msgApi;
    const uint32_t m_endpointId;
-   unsigned int m_getAuxRendererId = 0, m_onAuxRendererChgId = 0;
-   unsigned int m_onDmdSrcChangedId = 0, m_getDmdSrcId = 0;
-   unsigned int m_onDevSrcChangedId = 0, m_getDevSrcId = 0;
-   unsigned int m_onInputSrcChangedId = 0, m_getInputSrcId = 0;
-   unsigned int m_onSerumTriggerId = 0, m_onDmdTriggerId = 0;
-   DevSrcId m_pinmameDevSrc { 0 };
-   unsigned int m_nPMSolenoids = 0;
-   int m_PMGIIndex = -1;
-   unsigned int m_nPMGIs = 0;
-   int m_PMLampIndex = -1;
-   unsigned int m_nPMLamps = 0;
-   InputSrcId m_pinmameInputSrc { 0 };
-   InputSrcId m_b2sInputSrc { 0 };
+   const MsgPluginAPI* const m_msgApi;
+   const VPXPluginAPI* m_vpxApi = nullptr;
 
-   struct PollDmdContext
-   {
-      PollDmdContext(PUPManager* mng) { manager = mng; }
-      bool valid = true;
-      PUPManager* manager;
-   };
-   PollDmdContext* m_pollDmdContext = nullptr;
-   unsigned int m_lastFrameId = 0;
-   DisplaySrcId m_dmdId { 0 };
    std::unique_ptr<PUPDMD::DMD> m_dmd;
-   std::queue<uint8_t*> m_triggerDmdQueue;
-   uint8_t m_rgbFrame[128 * 32 * 3] { 0 };
-   uint8_t m_palette4[4 * 3] { 0 };
-   uint8_t m_palette16[16 * 3] { 0 };
+   std::array<uint8_t, 128 * 32> m_idFrame;
+   int ProcessDmdFrame(const DisplaySrcId& src, const uint8_t* frame);
    
+   unsigned int m_getAuxRendererId = 0;
+   unsigned int m_onAuxRendererChgId = 0;
+   unsigned int m_getVpxApiId = 0;
    static int Render(VPXRenderContext2D* const renderCtx, void* context);
-   static void OnGetRenderer(const unsigned int eventId, void* userData, void* eventData);
-   static void OnSerumTrigger(const unsigned int eventId, void* userData, void* eventData);
-   static void OnDMDSrcChanged(const unsigned int eventId, void* userData, void* eventData);
-   static void OnDevSrcChanged(const unsigned int eventId, void* userData, void* eventData);
-   static void OnInputSrcChanged(const unsigned int eventId, void* userData, void* eventData);
-   static void OnPollDmd(void* userData);
+   static void OnGetRenderer(const unsigned int eventId, void* context, void* msgData);
+
+   std::mutex m_eventMutex;
+   std::unique_ptr<DOFEventStream> m_dofEventStream;
+
+   int m_duckMasterScreen = -1;
+   ankerl::unordered_dense::map<int, float> m_preDuckVolumes;
 };
 
 }

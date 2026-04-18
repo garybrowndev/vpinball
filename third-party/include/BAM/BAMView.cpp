@@ -114,7 +114,7 @@ static void _createProjectionAndViewMatrix(float* const __restrict P, float* con
    const PinTable* const t = g_pplayer->m_ptable;
    int resolutionWidth = g_pplayer->m_playfieldWnd->GetWidth();
    int resolutionHeight = g_pplayer->m_playfieldWnd->GetHeight();
-   int rotation = static_cast<int>(g_pplayer->m_ptable->mViewSetups[g_pplayer->m_ptable->m_BG_current_set].GetRotation(resolutionWidth, resolutionHeight) / 90.0f);
+   int rotation = static_cast<int>(g_pplayer->m_ptable->GetViewSetup().GetRotation(resolutionWidth, resolutionHeight) / 90.0f);
    const float tableLength = t->m_bottom;
    const float tableWidth = t->m_right;
    const float tableGlass = t->m_glassTopHeight;
@@ -133,7 +133,7 @@ static void _createProjectionAndViewMatrix(float* const __restrict P, float* con
    // Get data from BAM Tracker
    if (BAM.IsBAMTrackerPresent())
    {
-      // we use Screen Width & Height as Native Resolution. Only aspect ration is important
+      // we use Screen Width & Height as Native Resolution. Only aspect ratio is important
       DisplayNativeWidth = BAM.GetScreenWidth(); // [mm]
       DisplayNativeHeight = BAM.GetScreenHeight(); // [mm]
    }
@@ -207,17 +207,12 @@ static void _createProjectionAndViewMatrix(float* const __restrict P, float* con
 
 std::wstring GetFileNameForSettingsXML()
 {
-   const string path = g_pvp->m_myPrefPath + "BAMViewSettings.xml";
-   return MakeWString(path);
+   return g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Preferences, "BAMViewSettings.xml").wstring();
 }
 
 std::string GetTableName()
 {
-   const PinTable* const t = g_pplayer->m_ptable;
-   auto backslash = strrchr(t->m_filename.c_str(), '\\');
-   auto slash = strrchr(t->m_filename.c_str(), '/');
-   auto dst = std::max(backslash, slash);
-   return dst ? dst + 1 : "Unknown"s;
+   return g_pplayer->m_ptable->m_filename.filename().string();
 }
 
 bool SaveFile(const std::wstring& path, const void* data, SIZE_T size)
@@ -242,10 +237,9 @@ bool SaveFile(const std::wstring& path, const void* data, SIZE_T size)
 
 std::string LoadFile(const std::wstring& path)
 {
-   HANDLE hFile;
-   OVERLAPPED ol = { 0 };
+   OVERLAPPED ol = {};
 
-   hFile = CreateFileW(path.c_str(), GENERIC_READ,
+   HANDLE hFile = CreateFileW(path.c_str(), GENERIC_READ,
       FILE_SHARE_READ, //FILE_SHARE_READ | FILE_FLAG_OVERLAPPED,
       NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
@@ -396,7 +390,7 @@ void LoadXML()
 {
    XMLDocument& doc = g_settings;
 
-   auto fn = GetFileNameForSettingsXML();
+   const auto fn = GetFileNameForSettingsXML();
    auto xml = LoadFile(fn);
 
    if (xml.empty())
@@ -423,7 +417,7 @@ void LoadXML()
          g_TableSettings = LoadXML(ts);
          return;
       }
-      if (szName && std::string("Default") == szName)
+      if (szName && "Default"sv == szName)
       {
          g_DefaultSettings = LoadXML(ts);
       }

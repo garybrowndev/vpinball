@@ -1,7 +1,9 @@
+// license:GPLv3+
+
 #pragma once
 
 #include "common.h"
-#include "ScriptablePlugin.h"
+#include "plugins/ScriptablePlugin.h"
 #include "Controller.h"
 #include "GameSettings.h"
 #include "Roms.h"
