@@ -319,6 +319,9 @@ void LiveUI::NewFrame()
    }
 
    // Late mouse position update to latest (async) global state (needed when dragging main windows)
+   // Skip on non-desktop platforms: touch input has no system cursor, SDL_GetGlobalMouseState returns
+   // garbage on Android/iOS, which stomps finger-tap positions and breaks in-game UI interactions.
+#ifndef __STANDALONE__
    {
       SDL_Point windowPos;
       SDL_FPoint globalMouse;
@@ -326,6 +329,7 @@ void LiveUI::NewFrame()
       SDL_GetWindowPosition(m_player->m_playfieldWnd->GetCore(), &windowPos.x, &windowPos.y);
       AddMousePosEvent(false, globalMouse.x - static_cast<float>(windowPos.x), globalMouse.y - static_cast<float>(windowPos.y));
    }
+#endif
 
    // We implement our own keyboard navigation using flipper keys
    io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard;
