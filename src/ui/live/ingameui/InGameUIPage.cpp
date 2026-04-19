@@ -600,8 +600,17 @@ void InGameUIPage::Render(float elapsedS)
       if (item->IsAdjustable())
          maxLabelWidth = max(maxLabelWidth, ImGui::CalcTextSize(item->m_label.c_str()).x);
    maxLabelWidth = min(maxLabelWidth, ImGui::CalcTextSize("Maximum label length before ellipsis").x);
-   const float labelEndScreenX = ImGui::GetCursorScreenPos().x + maxLabelWidth + style.ItemSpacing.x * 2.0f + 30.f;
-   const float itemEndScreenX = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("*", nullptr, true).x - itemPadding.x;
+   // Ensure the widget column has a usable minimum width on narrow viewports (e.g. portrait phones).
+   // Without this, long labels monopolize the row and combo popups / long values render off-screen.
+   // Widget gets max(40% of content, 12em of text) on narrow screens; label takes the rest.
+   const float contentWidth = ImGui::GetContentRegionAvail().x;
+   const float minWidgetWidth = max(contentWidth * 0.4f, ImGui::CalcTextSize("M").x * 12.f);
+   const float labelSpacing = style.ItemSpacing.x * 2.0f + 30.f; // constants used just below
+   const float maxLabelByMinWidget = max(0.f, contentWidth - minWidgetWidth - labelSpacing
+      - ImGui::CalcTextSize("*", nullptr, true).x - itemPadding.x);
+   maxLabelWidth = min(maxLabelWidth, maxLabelByMinWidget);
+   const float labelEndScreenX = ImGui::GetCursorScreenPos().x + maxLabelWidth + labelSpacing;
+   const float itemEndScreenX = ImGui::GetCursorScreenPos().x + contentWidth - ImGui::CalcTextSize("*", nullptr, true).x - itemPadding.x;
    const float closeButtonWidth = ImGui::CalcTextSize(ICON_FK_TIMES, nullptr, true).x + style.FramePadding.x * 2.0f;
    const float circleTextWidth = ImGui::CalcTextSize(ICON_FK_CIRCLE, nullptr, true).x + style.FramePadding.x * 2.0f;
    for (int i = 0; i < (int)m_items.size(); i++)
