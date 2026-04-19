@@ -181,6 +181,36 @@ After `UnInit`, call `m_renderer->m_renderDevice->SubmitRenderFrame()` to flush 
 - **Log folder auto-create**: `BHLog::SetLogFolder()` creates the `logs/` subfolder. Called from `BallHistory::Init` after `GetSettingsFolderPath()`.
 - **Direct file writes for transient diagnostics** should also use `<exe-folder>/BallHistory/logs/` via `BHLog::GetLogPath("name.log")` — do NOT hardcode paths.
 
+### Interactive debugging with Visual Studio (preferred when `crash.txt` is missing or stack is unresolved)
+
+`crash.txt` comes from our SEH-based crash handler, which **does not catch** `_purecall` (pure-virtual call), `abort()`, CRT assertion dialogs, or any native dialog that doesn't go through an unhandled SEH exception. Release builds also ship without PDBs, so even when we DO get a stack, symbols may be raw hex. Attach Visual Studio in those cases — the payoff on today's ClearDraws UAF was huge.
+
+**Attach the pre-built exe under VS (no sln needed):**
+
+```bash
+# From Git Bash. The DOUBLE slash on //DebugExe is REQUIRED — Git Bash MSYS
+# rewrites single-slash args starting with `/` to Unix paths (the crash we
+# hit: VS tried to open "C:/Program Files/Git/DebugExe"). The double slash
+# escapes the rewrite.
+cmd //c start "" "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\devenv.exe" //DebugExe "C:\path\to\VPinballX_GL64.exe"
+```
+
+VS opens with the exe as a solution-less debug target. Press **F5** to run; VS breaks on any access violation or assert with a full resolved stack.
+
+**Set conditional breakpoints for teardown-only bugs.** A breakpoint in `ClearDraws` hits every frame during gameplay. But `BallHistory::UnInit` is called **only** from `Player::~Player()` (`player.cpp:980`) — breakpoint at `ballhistory.cpp:930` (the `ClearDraws(player)` inside UnInit) fires exclusively during teardown. Apply the same pattern for any function reachable from both normal path and teardown: find a caller that's teardown-exclusive and put the breakpoint there, then **F11** (Step Into).
+
+**Inspect refcount and pointer identity at the breakpoint.**
+- Watch `drawnBall.second->m_dwRef` to see COM refcount each step
+- `0xDDDDDDDD` (= signed -572662307) is MSVC Debug CRT's **dead-land** fill — confirms object was deleted
+- `0xFD`, `0xFE`, `0xCD`, `0xFEEEFEEE` are other MSVC poison patterns; know the list
+- Expanding `this->m_DrawnBalls` in Locals shows all entries — lets you compare the crashing entry against its siblings
+
+**Debug vs Release PDBs.** Only Debug configs currently emit PDBs (confirmed: `.build/bin/vpx/{Debug,Debug_BGFX,Debug_GL}-x64/*.pdb` exist; Release_GL/Release_BGFX don't). To get a resolved stack on a Release-only bug, either reproduce in the matching Debug config (bug class is often shared — today's I3 and I4 had the same root cause) or add `GenerateDebugInformation` to the Release linker settings and rebuild.
+
+### TODO: WinDBG-driven debugging for fully automated captures
+
+Better than VS when the agent (not the user) drives the debugger: user launches the app + reproduces the crash, agent scripts breakpoints and logs stacks to a file. Requires installing Debugging Tools for Windows (cdb.exe/windbg.exe) — NOT currently installed on Gary's machine (only `vsjitdebugger.exe` is present). Set up before the next teardown-bug session.
+
 ## Debugging Lessons Learned (expensive mistakes to not repeat)
 
 ### 1. Specific numeric values in a symptom point at VBScript, not physics
