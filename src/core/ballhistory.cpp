@@ -2545,16 +2545,16 @@ void BallHistory::DrawNormalModeVisuals(Player& player, int currentTimeMs)
 void BallHistory::ClearDraws(Player& player)
 {
    BHLOG("balls=%zu circles=%zu lines=%zu", m_DrawnBalls.size(), m_DrawnIntersectionCircles.size(), m_DrawnLines.size());
-   // Each draw-slot object has TWO refs: one from the explicit AddRef() right after
-   // CreateInstance (keeps object alive in our map), and one from AddPart (owned by
-   // the table). We need a matching Release for each: RemovePart covers the table's
-   // ref, and an explicit Release covers the map's ref.
+   // Draw-slot objects hold a single effective ref at teardown time (empirically verified
+   // via m_dwRef=1 at iteration entry). RemovePart internally calls Release; if the part
+   // is not in the table we Release explicitly. Doing both would be an over-release.
    for (auto& drawnBall : m_DrawnBalls)
    {
       drawnBall.second->RenderRelease();
       if (player.m_ptable->HasPart(drawnBall.second))
          player.m_ptable->RemovePart(drawnBall.second);
-      drawnBall.second->Release();
+      else
+         drawnBall.second->Release();
    }
    m_DrawnBalls.clear();
 
@@ -2563,7 +2563,8 @@ void BallHistory::ClearDraws(Player& player)
       drawnIntersectionCircle.second->RenderRelease();
       if (player.m_ptable->HasPart(drawnIntersectionCircle.second))
          player.m_ptable->RemovePart(drawnIntersectionCircle.second);
-      drawnIntersectionCircle.second->Release();
+      else
+         drawnIntersectionCircle.second->Release();
    }
    m_DrawnIntersectionCircles.clear();
 
@@ -2572,7 +2573,8 @@ void BallHistory::ClearDraws(Player& player)
       drawnLines.second->RenderRelease();
       if (player.m_ptable->HasPart(drawnLines.second))
          player.m_ptable->RemovePart(drawnLines.second);
-      drawnLines.second->Release();
+      else
+         drawnLines.second->Release();
    }
    m_DrawnLines.clear();
 }

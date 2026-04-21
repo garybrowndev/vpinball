@@ -978,7 +978,18 @@ Player::~Player()
    ushock_output_shutdown();
 
    m_BallHistory.UnInit(*this);
+#ifdef ENABLE_BGFX
+   // Wait for the game loop's last-submitted frame to finish before requesting a final flush.
+   // Without this, assert(!m_framePending) at RenderDevice.cpp:2337 can fire if the game loop
+   // posted a frame right before close and the render thread hasn't yet drained the semaphore.
+   // Matches the pattern used at line 671 for texture-preload / UploadTexture at RenderDevice.cpp:2132.
+   while (m_renderer->m_renderDevice->m_framePending || !m_renderer->m_renderDevice->m_frameMutex.try_lock())
+      Sleep(0);
+#endif
    m_renderer->m_renderDevice->SubmitRenderFrame(); // Flush pending GPU resources from Ball History cleanup
+#ifdef ENABLE_BGFX
+   m_renderer->m_renderDevice->m_frameMutex.unlock(); // SubmitRenderFrame leaves the mutex held in the non-render-thread path
+#endif
 
    delete m_physics;
    m_physics = nullptr;
@@ -1461,7 +1472,17 @@ void Player::LockForegroundWindow(const bool enable)
 
 void Player::ProcessOSMessages(const bool isInitialized)
 {
-   assert(std::this_thread::get_id() == m_osThreadId);
+   // SDL_PollEvent is main-thread only. SubmitRenderFrame (BGFX) intentionally calls
+   // this from its non-render-thread wait loop -- including from ThreadPool workers
+   // doing parallel texture uploads in Player's ctor. The wait loop doesn't need OS
+   // message pumping from those workers; silently bail instead of asserting.
+   if (std::this_thread::get_id() != m_osThreadId)
+      return;
+   // During teardown, Player::~Player sets m_closing = CS_CLOSED first thing, then deletes
+   // m_liveUI (destroying the global ImGui context). SubmitRenderFrame's wait loop can still
+   // re-enter here after that. Drain events but don't dispatch -- any UI/input dispatch would
+   // deref a null ImGui context or dangling m_liveUI. Matches the isInitialized=false path.
+   const bool dispatch = isInitialized && (m_closing != CS_CLOSED);
    const uint64_t startTick = usec();
    SDL_Event e;
    bool isPFWnd = true;
@@ -1567,7 +1588,7 @@ void Player::ProcessOSMessages(const bool isInitialized)
          break;
       }
 
-      if (!isInitialized)
+      if (!dispatch)
          continue;
 
       // Forward events to ImGui, including touch/pen events which are forwarded as mouse events

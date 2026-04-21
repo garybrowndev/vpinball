@@ -116,6 +116,14 @@ private:
 
 #define BHLOG(fmt, ...) BHLog::Log(__FUNCTION__, fmt, ##__VA_ARGS__)
 #else
+// Release stub: keep the API callable so non-log code paths compile unchanged.
+class BHLog
+{
+public:
+   static constexpr const char* LogFile_Debug = "ballhistory_debug.log";
+   static void SetLogFolder(const std::string&) { }
+   static std::string GetLogPath(const char*) { return std::string(); }
+};
 #define BHLOG(fmt, ...) ((void)0)
 #endif
 #include "renderer/typedefs3D.h"

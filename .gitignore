@@ -30,6 +30,9 @@ refcount_trace.log
 crash.txt
 crash.dmp
 
+# local research notes (not for upstream)
+_research/
+
 # local Microsoft Visual Studio files
 VisualPinball.sln
 /*.vcxproj
