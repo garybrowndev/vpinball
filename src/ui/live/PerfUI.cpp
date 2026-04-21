@@ -243,7 +243,9 @@ void PerfUI::RenderStats() const
       }
 
       // Full scale is expected frame length + 1 display frame (to show when we miss)
-      const float elapse = static_cast<float>(m_player->m_renderer->m_renderDevice->GetTargetFrameLength()) + static_cast<float>(1000000. / (double)m_player->m_playfieldWnd->GetRefreshRate());
+      const float elapse = m_player->IsVR()
+         ? 1.5f * static_cast<float>(m_player->m_renderProfiler->GetAvg(FrameProfiler::PROFILE_FRAME))
+         : static_cast<float>(m_player->m_renderer->m_renderDevice->GetTargetFrameLength()) + static_cast<float>(1000000. / (double)m_player->m_playfieldWnd->GetRefreshRate());
       const float width = inner_bb.Max.x - inner_bb.Min.x;
       for (int i = 0; i < std::size(sections); i++)
       {
@@ -266,10 +268,9 @@ void PerfUI::RenderStats() const
       }
       #ifdef ENABLE_BGFX
       {
-         const bgfx::Stats *stats = bgfx::getStats();
          const float height = blockHeight * 2.f - style.FramePadding.y;
          const uint64_t gpuStart = m_player->m_renderProfiler->GetPrevStart(FrameProfiler::PROFILE_RENDER_FLIP);
-         const uint64_t gpuEnd = gpuStart + (stats->gpuTimeEnd - stats->gpuTimeBegin) * 1000000ULL / stats->gpuTimerFreq;
+         const uint64_t gpuEnd = gpuStart + m_player->m_renderer->m_renderDevice->m_lastGPUFrameLength;
          {
             const float start = static_cast<float>(gpuStart - minTS) / elapse;
             const float end = static_cast<float>(min(gpuEnd, maxTS) - minTS) / elapse;

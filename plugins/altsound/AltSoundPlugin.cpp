@@ -178,6 +178,12 @@ static void StopAltSound()
 
 static void OnControllerGameStart(const unsigned int eventId, void* userData, void* msgData)
 {
+    // FIXME: Temp fix for issues 3298, 3309, and maybe 3322?
+    if (isRunning)
+    {
+        LOGW("AltSound: Ignoring game start, already running"s);
+        return;
+    }
     const CtlOnGameStartMsg* msg = static_cast<const CtlOnGameStartMsg*>(msgData);
     assert(msg != nullptr && msg->gameId != nullptr);
 
@@ -257,8 +263,6 @@ MSGPI_EXPORT void MSGPIAPI AltSoundPluginLoad(const uint32_t sessionId, const Ms
     msgApi->SubscribeMsg(endpointId, onControllerGameStartId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_EVT_ON_GAME_START), OnControllerGameStart, nullptr);
     msgApi->SubscribeMsg(endpointId, onControllerGameEndId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_EVT_ON_GAME_END), OnControllerGameEnd, nullptr);
     msgApi->SubscribeMsg(endpointId, onSoundCommandId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_EVT_ON_SOUND_COMMAND), OnSoundCommand, nullptr);
-
-    LOGI("AltSound Plugin loaded successfully"s);
 }
 
 MSGPI_EXPORT void MSGPIAPI AltSoundPluginUnload()
