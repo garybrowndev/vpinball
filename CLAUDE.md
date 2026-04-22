@@ -56,17 +56,38 @@ When debugging Ball History, always launch with a table loaded — starting empt
 
 ## Branch Strategy & Update Workflow
 
-- `master` — tracks upstream `vpinball/vpinball`. Pull upstream changes here first.
+- `master` — tracks upstream `vpinball/vpinball` **plus one cherry-picked patch** (see "Master is not pure upstream" below).
 - `integration` — `master` + Ball History changes merged together. This is the build/test branch.
 - `development` — active Ball History development work.
 - Remotes: `origin` = `garybrowndev/vpinball`, `upstream` = `vpinball/vpinball`
 
+### ⚠️ Master is not pure upstream — carries one patch
+
+`origin/master` intentionally carries the **B2S compat stub** commit (`3ea227d80` — "Restore B2SBackglassServer discovery under modern -Play path") cherry-picked on top of upstream. This is the single patch required for any stock (non-Ball-History) build to work with PinUp-Popper + B2SBackglassServer on the cabinet, since upstream rejected the fix (PR vpinball/vpinball#2529) but we still need the cabinet to boot tables.
+
+Consequence: `git merge --ff-only upstream/master` will fail on master after a fetch. Use one of:
+
+```bash
+# Rebase (preferred — clean single-patch history)
+git fetch upstream
+git checkout master
+git rebase upstream/master       # replays the B2S patch on top of new upstream tip
+git push --force-with-lease origin master
+
+# Or merge-commit (preserves history, accumulates merge commits)
+git checkout master
+git merge upstream/master
+git push origin master
+```
+
+If the B2S patch ever lands upstream or a replacement solution arrives, drop the cherry-pick and restore `git merge --ff-only` flow.
+
 ### Sync workflow (upstream -> development)
 1. `git fetch upstream`
-2. Checkout `master`, merge `upstream/master` (fast-forward), push to origin
+2. Checkout `master`, **rebase** onto `upstream/master` (not ff-only — see above), force-push to origin
 3. Checkout `integration`, merge `master` — resolve conflicts here (upstream vs Ball History)
 4. **Download fresh third-party deps** if upstream added new plugins/libraries
-5. **Re-run `make/create_vs_solution.bat`** to regenerate VS project files
+5. **Re-run `make/create_vs_solution.bat`** to regenerate VS project files (required after every branch switch between master and integration — different `make/vpx-core.vcxitems` templates)
 6. Build and test integration
 7. Merge `integration` into `development`
 
