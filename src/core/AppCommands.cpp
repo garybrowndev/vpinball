@@ -145,12 +145,61 @@ PlayTableCommand::PlayTableCommand(const std::filesystem::path& tableFilename)
 {
 }
 
+#ifndef __STANDALONE__
+// B2SBackglassServer legacy discovery compat. B2S's Processes.vb enumerates top-level
+// windows via IsWindowVisible+GetParent==0 and matches titles starting with
+// "Visual Pinball - <tablename>" to extract the table name. The modern -Play path
+// creates no Win32 editor window, so we provide a hidden 1x1 off-screen transparent
+// stub window with the expected title for the duration of the play session.
+// See plan at ~/.claude/plans/the-problem-is-that-validated-aho.md and the spirit of
+// rejected upstream PR vpinball/vpinball#2529.
+static HWND CreateB2SCompatWindow(const std::string& tableBaseName)
+{
+   static bool classRegistered = false;
+   constexpr LPCTSTR kClassName = _T("VPinballB2SDiscovery");
+   if (!classRegistered)
+   {
+      WNDCLASSEX wc{};
+      wc.cbSize = sizeof(wc);
+      wc.lpfnWndProc = DefWindowProc;
+      wc.hInstance = g_app->GetInstanceHandle();
+      wc.lpszClassName = kClassName;
+      if (!RegisterClassEx(&wc))
+         return nullptr;
+      classRegistered = true;
+   }
+   const std::string title = "Visual Pinball - " + tableBaseName;
+   HWND hwnd = CreateWindowEx(
+      WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
+      kClassName, title.c_str(),
+      WS_POPUP | WS_VISIBLE,
+      -32000, -32000, 1, 1,
+      nullptr, nullptr, g_app->GetInstanceHandle(), nullptr);
+   if (hwnd)
+      SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA);
+   return hwnd;
+}
+#endif
+
 void PlayTableCommand::Execute()
 {
    CComObject<PinTable>* table = LoadTable();
+
+#ifndef __STANDALONE__
+   // B2S uses the .directb2s filename to match the table, and those files are
+   // conventionally named after the .vpx file itself, so use the filename stem.
+   HWND b2sStubWnd = CreateB2SCompatWindow(m_tableFilename.stem().string());
+#endif
+
    auto player = std::make_unique<Player>(table, Player::PlayMode::Play);
    player->GameLoop();
    player = nullptr;
+
+#ifndef __STANDALONE__
+   if (b2sStubWnd)
+      DestroyWindow(b2sStubWnd);
+#endif
+
    table->Release();
 }
 
