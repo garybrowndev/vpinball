@@ -159,7 +159,18 @@ uint16_t InputManager::RegisterDevice(const string& settingsId, InputManager::De
 {
    PLOGD << "Input device '" << name << "' using settings id '" << settingsId << "' is connected";
    uint16_t deviceId = GetDeviceId(settingsId);
-   assert(!m_inputDevices[deviceId].m_connected);
+   // Multiple physical devices can share a settingsId when their HID info does not include a serial
+   // number (e.g. two identical flipper-button boards). GetJoySettingId already warns about this.
+   // Instead of asserting (which crashes Debug and silently corrupts Release), log and re-use the
+   // existing slot so both devices route to the same bindings. A future enhancement could ref-count
+   // connections if per-instance tracking is needed.
+   if (m_inputDevices[deviceId].m_connected)
+   {
+      PLOGW << "Input device '" << name << "' with settings id '" << settingsId
+            << "' collides with already-connected device '" << m_inputDevices[deviceId].m_name
+            << "'. Both devices will share the same settings and bindings.";
+      return deviceId;
+   }
    m_inputDevices[deviceId].m_name = name;
    m_inputDevices[deviceId].m_type = type;
    m_inputDevices[deviceId].m_connected = true;
@@ -174,7 +185,14 @@ uint16_t InputManager::RegisterDevice(const string& settingsId, InputManager::De
 void InputManager::UnregisterDevice(uint16_t deviceId)
 {
    assert(deviceId < m_inputDevices.size());
-   assert(m_inputDevices[deviceId].m_connected);
+   // Tolerate a second unregister for the same deviceId: when two physical devices share a
+   // settingsId (see RegisterDevice), both map to the same slot and generate independent
+   // SDL removal callbacks. First call disconnects; second call is a no-op.
+   if (!m_inputDevices[deviceId].m_connected)
+   {
+      PLOGD << "Input device at slot " << deviceId << " is already disconnected (duplicate removal for shared settings id '" << m_inputDevices[deviceId].m_settingsId << "')";
+      return;
+   }
    m_inputDevices[deviceId].m_connected = false;
    PLOGD << "Input device '" << m_inputDevices[deviceId].m_name << "' using settings id '" << m_inputDevices[deviceId].m_settingsId << "' is disconnected";
 }
