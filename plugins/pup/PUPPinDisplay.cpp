@@ -306,13 +306,27 @@ void PUPPinDisplay::SendMSG(const string& szMsg)
                         pScreen->m_hudVisible = (json["OT"s].as<int>(0) != 0);
                         break;
                      case 4:
+                     {
                         // set StayOnTop { "mt":301, "SN": XX, "FN":4, "FS":1/0 }
-                        LOGD(std::format("Stay on top requested: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
-                        pScreen->SetMode((json["FS"s].exists() && json["FS"s].as<int>() == 1) ? PUPScreen::Mode::ForceOn : PUPScreen::Mode::ForceBack);
+                        // FS=1 pins the screen above its siblings (ForceOn mode + topmost flag);
+                        // FS=0 releases it to render under other screens (ForceBack).
+                        const bool topmost = (json["FS"s].exists() && json["FS"s].as<int>() == 1);
+                        LOGD(std::format("Stay on top requested: screen={{{}}}, fn={}, topmost={}, szMsg={}", pScreen->ToString(false), fn, topmost, szMsg));
+                        pScreen->SetTopmost(topmost);
+                        pScreen->SetMode(topmost ? PUPScreen::Mode::ForceOn : PUPScreen::Mode::ForceBack);
+                        break;
+                     }
+                     case 5:
+                        // Bring this screen to the front of its siblings.
+                        // { "mt":301, "SN": XX, "FN":5 }
+                        LOGD(std::format("Bring screen to front requested: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
+                        m_pupManager.SendScreenToFront(pScreen.get());
                         break;
                      case 6:
-                        // Bring screen to the front
-                        LOGD(std::format("Bring screen to front requested: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
+                        // Enforce topmost — flip the screen's topmost flag on and raise it to front.
+                        // { "mt":301, "SN": XX, "FN":6 }
+                        LOGD(std::format("Enforce screen topmost requested: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
+                        pScreen->SetTopmost(true);
                         m_pupManager.SendScreenToFront(pScreen.get());
                         break;
                      case 10:
@@ -416,6 +430,21 @@ void PUPPinDisplay::SendMSG(const string& szMsg)
                         // Experimental frame rescale, FORCE higher frame size to autosize and rescale nicer,  like AA and auto-fit.
                         // "{ ""mt"":301, ""SN"": "&PuPID& ", ""FN"": 53, ""XW"": "&fWidth&", ""YH"": "&fHeight&", ""FR"":1 }"
                         NOT_IMPLEMENTED(std::format("Experimental frame rescale is not implemented: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
+                        break;
+                     case 55:
+                        // Set media transition fade step, read from "FS" field.
+                        // { "mt":301, "SN": XX, "FN":55, "FS":<0..255> }
+                        //
+                        // Exposed in the Matrix tables via two helpers:
+                        //   Sub pTransitionFadeOff(PupID)  ' disable transition fade
+                        //       PuPlayer.SendMSG "{...""FN"":55,""FS"":255}"
+                        //   Sub pTransitionFadeON(PupID)   ' re-enable transition fade
+                        //       PuPlayer.SendMSG "{...""FN"":55,""FS"":10}"
+                        if (json["FS"s].exists()) {
+                           const int fs = json["FS"s].as<int>();
+                           if (fs >= 0)
+                              pScreen->SetFadeStep(fs);
+                        }
                         break;
                      default:
                         NOT_IMPLEMENTED(std::format("Unknown function not implemented: screen={{{}}}, fn={}, szMsg={}", pScreen->ToString(false), fn, szMsg));
@@ -535,8 +564,24 @@ void PUPPinDisplay::LabelSetEx()
 void PUPPinDisplay::LabelShowPage(int screenNum, int PageNum, int Seconds, const string& Special)
 {
    std::shared_ptr<PUPScreen> pScreen = m_pupManager.GetScreen(screenNum, true);
-   if (pScreen)
-      pScreen->SetPage(PageNum, Seconds);
+   if (!pScreen)
+      return;
+   // Special values "hidehudplay" and "returnplay" are PuPDMD framework behaviors exposed via
+   // these helper subs (appear in Diehard/Matrix):
+   //   Sub PDMDSplashPagePlaying    'will hide HUD and show labelpage while current media is
+   //                                 playing and then autoreturn
+   //   Sub PDMDSplashPagePlayingHUD 'will show labelpage and auto return to def after current
+   //                                 video stopped
+   if (StrCompareNoCase(Special, "hidehudplay"s))
+   {
+      pScreen->m_hudReturn = PUPScreen::HudReturn::RestoreHud;
+      pScreen->m_hudVisible = false;
+   }
+   else if (StrCompareNoCase(Special, "returnplay"s))
+      pScreen->m_hudReturn = PUPScreen::HudReturn::ReplayTrigger;
+   else
+      pScreen->m_hudReturn = PUPScreen::HudReturn::None;
+   pScreen->SetPage(PageNum, Seconds);
 }
 
 void PUPPinDisplay::LabelInit(int screenNum)

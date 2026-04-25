@@ -30,6 +30,7 @@ PUPScreen::PUPScreen(PUPManager* manager, PUPScreen::Mode mode, int screenNum, c
    : m_pManager(manager)
    , m_screenNum(screenNum)
    , m_mode(mode)
+   , m_topmost(mode == Mode::ForceOn || mode == Mode::ForcePop)
    , m_screenDes(szScreenDes)
    , m_transparent(transparent)
    , m_volume(volume)
@@ -49,11 +50,6 @@ PUPScreen::PUPScreen(PUPManager* manager, PUPScreen::Mode mode, int screenNum, c
 
 PUPScreen::~PUPScreen()
 {
-   if (m_pageTimer)
-      SDL_RemoveTimer(m_pageTimer);
-   if (m_imageTimer)
-      SDL_RemoveTimer(m_imageTimer);
-
    for (auto& [key, pPlaylist] : m_playlistMap)
       delete pPlaylist;
 
@@ -165,6 +161,19 @@ void PUPScreen::SetVolume(float volume)
    m_pMediaPlayerManager->SetVolume(m_mainVolume * m_volume);
 }
 
+void PUPScreen::OnMainMediaEnd()
+{
+   assert(std::this_thread::get_id() == m_apiThread);
+   // Resolve whatever LabelShowPage queued when a splash page started.
+   // Clear state before any replay so a re-entrant trigger doesn't loop here.
+   const HudReturn action = m_hudReturn;
+   m_hudReturn = HudReturn::None;
+   if (action == HudReturn::RestoreHud)
+      m_hudVisible = true;
+   else if (action == HudReturn::ReplayTrigger && m_lastPlayedTrigger)
+      m_lastPlayedTrigger->Invoke();
+}
+
 void PUPScreen::SetOnMainEndCallback(const std::function<void()>& callback)
 {
    m_pMediaPlayerManager->SetOnMainEndCallback(callback);
@@ -265,39 +274,34 @@ void PUPScreen::SendLabelToFront(PUPLabel* pLabel)
 void PUPScreen::SetPage(int pagenum, int seconds)
 {
    assert(std::this_thread::get_id() == m_apiThread);
-   std::lock_guard lock(m_screenMutex);
-   if (m_pageTimer)
-      SDL_RemoveTimer(m_pageTimer);
-   m_pageTimer = 0;
    m_pagenum = pagenum;
 
    for (const auto& label : m_labels)
       label->SetVisible(label->GetOnShowVisible());
 
    if (seconds == 0)
+   {
       m_defaultPagenum = pagenum;
+      m_pageExpiry = 0;
+   }
    else
-      m_pageTimer = SDL_AddTimer(seconds * 1000, PageTimerElapsed, this);
+      m_pageExpiry = SDL_GetTicks() + static_cast<uint64_t>(seconds) * 1000;
 }
 
-uint32_t PUPScreen::PageTimerElapsed(void* param, SDL_TimerID timerID, uint32_t interval)
+void PUPScreen::UpdateTimers()
 {
-   PUPScreen* me = static_cast<PUPScreen*>(param);
-   std::lock_guard lock(me->m_screenMutex);
-   SDL_RemoveTimer(me->m_pageTimer);
-   me->m_pageTimer = 0;
-   me->m_pagenum = me->m_defaultPagenum;
-   return interval;
-}
-
-uint32_t PUPScreen::ImageTimerElapsed(void* param, SDL_TimerID timerID, uint32_t interval)
-{
-   PUPScreen* me = static_cast<PUPScreen*>(param);
-   std::lock_guard lock(me->m_screenMutex);
-   SDL_RemoveTimer(me->m_imageTimer);
-   me->m_imageTimer = 0;
-   me->m_staticImage.Clear();
-   return interval;
+   assert(std::this_thread::get_id() == m_apiThread);
+   const uint64_t now = SDL_GetTicks();
+   if (m_pageExpiry && now >= m_pageExpiry)
+   {
+      m_pageExpiry = 0;
+      m_pagenum = m_defaultPagenum;
+   }
+   if (m_imageExpiry && now >= m_imageExpiry)
+   {
+      m_imageExpiry = 0;
+      m_staticImage.Clear();
+   }
 }
 
 void PUPScreen::SetBounds(int x, int y, int w, int h)
@@ -355,8 +359,7 @@ void PUPScreen::Play(PUPPlaylist* pPlaylist, const std::filesystem::path& szPlay
          {
             Stop();
             m_staticImage.Load(pPlaylist->GetPlayFilePath(szPlayFile));
-            if (length > 0)
-               m_imageTimer = SDL_AddTimer(length * 1000, ImageTimerElapsed, this);
+            m_imageExpiry = (length > 0) ? (SDL_GetTicks() + static_cast<uint64_t>(length) * 1000) : 0;
          }
          break;
       }
@@ -422,9 +425,7 @@ void PUPScreen::Stop()
 {
    assert(std::this_thread::get_id() == m_apiThread);
    m_pMediaPlayerManager->Stop();
-   if (m_imageTimer)
-      SDL_RemoveTimer(m_imageTimer);
-   m_imageTimer = 0;
+   m_imageExpiry = 0;
 }
 
 void PUPScreen::Stop(int priority)
@@ -462,17 +463,19 @@ void PUPScreen::SetLength(int length)
    assert(std::this_thread::get_id() == m_apiThread);
    m_pMediaPlayerManager->SetMaxLength(length);
    if (length > 0 && !m_staticImage.GetFile().empty())
-   {
-      if (m_imageTimer)
-         SDL_RemoveTimer(m_imageTimer);
-      m_imageTimer = SDL_AddTimer(length * 1000, ImageTimerElapsed, this);
-   }
+      m_imageExpiry = SDL_GetTicks() + static_cast<uint64_t>(length) * 1000;
 }
 
 void PUPScreen::SetAsBackGround(int mode)
 {
    assert(std::this_thread::get_id() == m_apiThread);
    m_pMediaPlayerManager->SetAsBackGround(mode != 0);
+}
+
+void PUPScreen::SetFadeStep(int step)
+{
+   assert(std::this_thread::get_id() == m_apiThread);
+   m_pMediaPlayerManager->SetFadeStep(step);
 }
 
 bool PUPScreen::IsMainPlaying() const {
@@ -488,6 +491,8 @@ bool PUPScreen::IsBackgroundPlaying() const
 
 void PUPScreen::Render(VPXRenderContext2D* const ctx, int pass) {
    assert(std::this_thread::get_id() == m_apiThread);
+
+   UpdateTimers();
 
    // Pop screen window are dynamically created/destroyed when playing starts/ends
    if (IsPop() && !IsMainPlaying())

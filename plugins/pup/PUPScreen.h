@@ -48,10 +48,23 @@ public:
 
    bool IsPop() const { return m_mode == PUPScreen::Mode::ForcePopBack || m_mode == PUPScreen::Mode::ForcePop; }
 
+   bool IsTopmost() const { return m_topmost; }
+   void SetTopmost(bool topmost) { m_topmost = topmost; }
+
    bool IsTransparent() const { return m_transparent; }
 
    float m_screenAlpha = 1.0f;
    bool m_hudVisible = true;
+   // Action queued by LabelShowPage, applied when the main media ends.
+   enum class HudReturn
+   {
+      None,
+      RestoreHud,    // "hidehudplay": re-show the HUD overlay
+      ReplayTrigger, // "returnplay":  re-fire m_lastPlayedTrigger
+   };
+   HudReturn m_hudReturn = HudReturn::None;
+   PUPTrigger* m_lastPlayedTrigger = nullptr;
+   void OnMainMediaEnd();
 
    float GetVolume() const { return m_volume; }
    void SetMainVolume(float volume); // Set user defined global volume (allow to mute)
@@ -96,6 +109,7 @@ public:
    void SetLoop(int state);
    void SetLength(int length);
    void SetAsBackGround(int mode);
+   void SetFadeStep(int step);
 
    bool HasUnderlay() const { return !m_background.GetFile().empty(); }
    bool IsBackgroundPlaying() const;
@@ -109,14 +123,14 @@ public:
 
 private:
    void LoadTriggers();
-
-   static uint32_t PageTimerElapsed(void* param, SDL_TimerID timerID, uint32_t interval);
+   void UpdateTimers();
 
    PUPManager* const m_pManager = nullptr;
    const int m_screenNum;
    const string m_screenDes;
 
    Mode m_mode;
+   bool m_topmost = false;
    bool m_transparent;
    float m_mainVolume = 1.f;
    float m_volume;
@@ -133,13 +147,11 @@ private:
    bool m_labelInit = false;
    int m_pagenum = 0;
    int m_defaultPagenum = 0;
-   SDL_TimerID m_pageTimer = 0;
-   SDL_TimerID m_imageTimer = 0;
-   static uint32_t ImageTimerElapsed(void* param, SDL_TimerID timerID, uint32_t interval);
+   uint64_t m_pageExpiry = 0;
+   uint64_t m_imageExpiry = 0;
    PUPScreen* m_pParent = nullptr;
    vector<std::shared_ptr<PUPScreen>> m_children;
    const std::thread::id m_apiThread;
-   std::mutex m_screenMutex;
 };
 
 }
