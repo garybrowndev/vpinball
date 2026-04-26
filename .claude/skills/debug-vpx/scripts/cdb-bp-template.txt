@@ -1,0 +1,23 @@
+.echo === BP_SCRIPT_LOADED ===
+REM ----------------------------------------------------------------------
+REM Template cdb breakpoint script. Copy/edit per investigation.
+REM Used as: cdb ... -c "$<C:\Dumps\my-bp.txt" ... <exe>
+REM CRITICAL: drop the -g flag from cdb when using this -- -g skips the
+REM initial breakpoint where -c (and $<) execute.
+REM ----------------------------------------------------------------------
+
+REM Example: break on every fire of a CLR threadpool init function,
+REM dump tid + stack, continue. Use 'gc' (go conditional) so the bp
+REM survives multiple hits without manual stepping.
+bu clr!ThreadpoolMgr::EnsureInitialized ".echo === REQ_ENSURE_INIT ===; ? @$tid; kbn 50; gc"
+bu clr!ThreadNative::Start ".echo === REQ_THREAD_START ===; ? @$tid; kbn 40; gc"
+bu clr!ThreadpoolMgr::EnsureGateThreadRunning ".echo === REQ_GATE ===; ? @$tid; kbn 40; gc"
+
+REM Other useful patterns:
+REM   bu MyDLL!MyClass::MyMethod ".echo HIT_X; kbn 20; dv; gc"  ; dump locals
+REM   bu Foo::Bar+0x42 ".if (poi(@rcx) == 0) {.echo NULL; kbn 30; .break} else {gc}"
+REM   ba w8 0x12345678 "kbn 20; gc"  ; data breakpoint on 8-byte write
+
+.echo === BREAKPOINTS_SET ===
+bl
+g
