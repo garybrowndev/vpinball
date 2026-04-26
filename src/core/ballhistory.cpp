@@ -850,6 +850,7 @@ BallHistory::BallHistory(PinTable& pinTable)
    , m_BallHistoryRecordsHeadIndex(0)
    , m_BallHistoryRecordsSize(0)
    , m_MaxBallVelocityPixels(0.0f)
+   , m_LastDrawBallHistoryInputsHash(0)
    , m_AutoControlBallColor(Color::Black)
    , m_RecallBallColor(Color::Blue)
    , m_TrainerBallStartColor(Color::Blue)
@@ -2140,6 +2141,23 @@ void BallHistory::DrawBallHistory(Player& player)
 {
    ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_DrawBallHistoryUsec);
 
+   // Early-out: if all inputs are unchanged AND we already have drawn parts from the previous
+   // frame, the visual output is identical — those parts are still attached to the table and
+   // will re-render. Skipping the 3-pass walk over the ring buffer (1500-8000 iterations × pass)
+   // is the bulk of the per-frame cost when the user is just sitting on the menu.
+   {
+      uint64_t h = 1469598103934665603ULL; // FNV-1a basis
+      auto mix = [&](uint64_t v) { h ^= v; h *= 1099511628211ULL; };
+      mix((uint64_t)m_CurrentControlIndex);
+      mix((uint64_t)m_BallHistoryRecordsHeadIndex);
+      mix((uint64_t)m_BallHistoryRecordsSize);
+      mix((uint64_t)m_BallHistoryRecords.size());
+      union { float f; uint32_t u; } v; v.f = m_MaxBallVelocityPixels; mix((uint64_t)v.u);
+      if (h == m_LastDrawBallHistoryInputsHash && (!m_DrawnLines.empty() || !m_DrawnBalls.empty()))
+         return;
+      m_LastDrawBallHistoryInputsHash = h;
+   }
+
    struct DrawBallHistoryRecord
    {
       float TotalDistancePixelsTraveled;
@@ -2345,6 +2363,23 @@ void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex
    if (lineLength == 0.0f)
       return;
 
+   // Fast path: if a line by this name already exists with identical geometry/color/thickness,
+   // its GPU buffers are still valid — skip the entire mutate + RenderRelease + RenderSetup path.
+   {
+      auto cacheIt = m_DrawnLinesGeomCache.find(name);
+      auto lineIt = m_DrawnLines.find(name);
+      if (cacheIt != m_DrawnLinesGeomCache.end() && lineIt != m_DrawnLines.end())
+      {
+         const DrawnLineGeom& prev = cacheIt->second;
+         if (prev.m_PosA.x == posA.x && prev.m_PosA.y == posA.y && prev.m_PosA.z == posA.z
+          && prev.m_PosB.x == posB.x && prev.m_PosB.y == posB.y && prev.m_PosB.z == posB.z
+          && prev.m_Color == color && prev.m_Thickness == thickness)
+         {
+            return;
+         }
+      }
+   }
+
    // Ensure a 1x1 texture exists for this color (reused by name)
    const std::string imageColorName = "BallHistoryDrawLine" + std::to_string(color);
    if (player.m_ptable->GetImage(imageColorName) == nullptr)
@@ -2428,6 +2463,8 @@ void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex
          pLine->RenderSetup(g_pplayer->m_renderer->m_renderDevice);
       });
    }
+
+   m_DrawnLinesGeomCache[name] = { posA, posB, color, thickness };
 }
 
 void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name, Vertex3Ds& position, float intersectionRadiusPercent, DWORD color)
@@ -2436,6 +2473,21 @@ void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name
    if (position2D.x < 0.0f || position2D.y < 0.0f || position2D.x > player.m_playfieldWnd->GetWidth() || position2D.y > player.m_playfieldWnd->GetHeight())
    {
       return;
+   }
+
+   // Fast path: same params as last frame → existing GPU resources are still valid, skip everything.
+   {
+      auto cacheIt = m_DrawnIntersectionCirclesGeomCache.find(name);
+      auto circleIt = m_DrawnIntersectionCircles.find(name);
+      if (cacheIt != m_DrawnIntersectionCirclesGeomCache.end() && circleIt != m_DrawnIntersectionCircles.end())
+      {
+         const DrawnCircleGeom& prev = cacheIt->second;
+         if (prev.m_Position.x == position.x && prev.m_Position.y == position.y && prev.m_Position.z == position.z
+          && prev.m_IntersectionRadiusPercent == intersectionRadiusPercent && prev.m_Color == color)
+         {
+            return;
+         }
+      }
    }
 
    CComObject<Light>* pIntersectionCircle = nullptr;
@@ -2483,6 +2535,8 @@ void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name
          pIntersectionCircle->RenderSetup(g_pplayer->m_renderer->m_renderDevice);
       });
    }
+
+   m_DrawnIntersectionCirclesGeomCache[name] = { position, intersectionRadiusPercent, color };
 }
 
 void BallHistory::DrawControlVBalls(Player &player)
@@ -2577,6 +2631,10 @@ void BallHistory::ClearDraws(Player& player)
          drawnLines.second->Release();
    }
    m_DrawnLines.clear();
+
+   m_DrawnLinesGeomCache.clear();
+   m_DrawnIntersectionCirclesGeomCache.clear();
+   m_LastDrawBallHistoryInputsHash = 0;
 }
 
 bool BallHistory::ShouldDrawTrainerBallStarts(std::size_t index, int currentTimeMs)
@@ -4151,7 +4209,16 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
    BHLOG("menuAction=%d menuState=%d modeType=%d timeMs=%d", menuAction, m_MenuOptions.m_MenuState, m_MenuOptions.m_ModeType, currentTimeMs);
    ProfilerRecord::ProfilerScope profilerScope(m_ProfilerRecord.m_ProcessMenuUsec);
 
-   ClearDraws(player);
+   // ClearDraws tears down every cached Rubber/Light/Ball part (RenderRelease + RemovePart),
+   // and DrawBallHistory then re-creates them from scratch (CreateInstance + AddPart +
+   // RenderSetup) — full GPU resource churn per part. That's ~150 ms/frame with 25 trail lines
+   // in a Debug build. The DrawLine/DrawIntersectionCircle fast-path can only kick in if the
+   // parts SURVIVE between frames, so we only clear when the user actually does something
+   // (navigation, enter, toggle) — not on the every-frame "no input, just running" call.
+   if (menuAction != MenuOptionsRecord::MenuActionType::MenuActionType_None)
+   {
+      ClearDraws(player);
+   }
 
    if (!m_MenuOptions.m_MenuError.empty())
    {

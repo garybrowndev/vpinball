@@ -899,6 +899,33 @@ private:
    std::map<std::string, CComObject<Light>*> m_DrawnIntersectionCircles;
    std::map<std::string, CComObject<Rubber>*> m_DrawnLines;
 
+   // Per-frame geometry caches — when a DrawLine/DrawIntersectionCircle call comes in with
+   // the same parameters as last frame, we skip the expensive RenderRelease+RenderSetup that
+   // tears down + rebuilds GPU buffers. Without this, every cached line/circle thrashes its
+   // mesh buffer at end-of-frame, which alone consumes ~280-440ms/frame in normal-mode trail
+   // draw with ~25 line segments. With this, a stationary trail pays zero per-frame cost.
+   struct DrawnLineGeom
+   {
+      Vertex3Ds m_PosA;
+      Vertex3Ds m_PosB;
+      DWORD m_Color;
+      int m_Thickness;
+   };
+   struct DrawnCircleGeom
+   {
+      Vertex3Ds m_Position;
+      float m_IntersectionRadiusPercent;
+      DWORD m_Color;
+   };
+   std::map<std::string, DrawnLineGeom> m_DrawnLinesGeomCache;
+   std::map<std::string, DrawnCircleGeom> m_DrawnIntersectionCirclesGeomCache;
+
+   // Hash of the inputs to DrawBallHistory's last successful run. If the next call has the
+   // same inputs and the previous frame's drawn parts are still alive in m_DrawnLines/
+   // m_DrawnBalls, we skip the entire 3-pass walk over the ring buffer — those parts are
+   // still attached to the table and will re-render unchanged. Reset to 0 on ClearDraws.
+   uint64_t m_LastDrawBallHistoryInputsHash;
+
    DWORD m_AutoControlBallColor;
    DWORD m_RecallBallColor;
    DWORD m_TrainerBallStartColor;
