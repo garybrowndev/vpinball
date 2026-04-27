@@ -475,6 +475,13 @@ public:
    static const int32_t CountdownSecondsBeforeRunMaximum = 5;
    int32_t m_CountdownSecondsBeforeRun;
 
+   // When the user exits the BH menu (control→non-control) and CountdownSecondsBeforeRun is 0,
+   // a one-time 1-second delay is forced before the run starts so the user has a moment to
+   // settle in. Set in SetControl(false), cleared when the run transitions from countdown to
+   // active. Run-to-run transitions (no menu involvement) do NOT trigger the delay.
+   bool m_ForceInitialDelayOnControlExit;
+   static const int32_t ForcedInitialDelayMs = 1000;
+
    std::vector<BallStartOptionsRecord> m_BallStartOptionsRecords;
    std::size_t m_BallStartOptionsRecordsSize;
    std::vector<BallEndOptionsRecord> m_BallPassOptionsRecords;

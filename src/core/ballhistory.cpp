@@ -243,6 +243,7 @@ TrainerOptions::TrainerOptions()
    , m_TotalRuns(5)
    , m_MaxSecondsPerRun(15)
    , m_CountdownSecondsBeforeRun(3)
+   , m_ForceInitialDelayOnControlExit(false)
    , m_BallStartOptionsRecordsSize(0)
    , m_CurrentRunRecord(0)
    , m_RunStartTimeMs(0)
@@ -1225,6 +1226,11 @@ void BallHistory::SetControl(bool control)
       {
          SaveSettings(*g_pplayer);
          g_pplayer->SetPlayState(!g_pplayer->IsPlaying());
+         // Coming out of control (menu closed). When the trainer's configured countdown is 0,
+         // ProcessModeTrainer would otherwise launch the run on the very next frame — too
+         // abrupt right after closing the menu. Mark this transition so the trainer applies a
+         // one-time forced ~1s delay. Cleared when the run transitions from countdown to active.
+         m_MenuOptions.m_TrainerOptions.m_ForceInitialDelayOnControlExit = true;
       }
    }
 }
@@ -8945,7 +8951,15 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
 
    TrainerOptions::RunRecord& currentRunRecord = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord];
    int32_t runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
-   if (runElapsedTimeMs == 0 || runElapsedTimeMs < (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * int32_t(OneSecondMs)))
+   // Effective countdown: the user-configured value, with a one-time silent ~1s delay added
+   // when the user just exited the menu and the configured countdown is 0. Run-to-run
+   // transitions (no menu involvement) leave this equal to the user value.
+   const int32_t userCountdownMs = m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * int32_t(OneSecondMs);
+   const int32_t effectiveCountdownMs
+      = (userCountdownMs == 0 && m_MenuOptions.m_TrainerOptions.m_ForceInitialDelayOnControlExit)
+         ? TrainerOptions::ForcedInitialDelayMs
+         : userCountdownMs;
+   if (runElapsedTimeMs == 0 || runElapsedTimeMs < effectiveCountdownMs)
    {
       ShowRemainingRunInfo();
       ShowPreviousRunRecord();
@@ -8989,8 +9003,7 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
 
       player.m_renderer->m_trailForBalls = 0;
    }
-   else if (runElapsedTimeMs
-      < ((m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * int32_t(OneSecondMs)) + (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * int32_t(OneSecondMs))))
+   else if (runElapsedTimeMs < (effectiveCountdownMs + (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * int32_t(OneSecondMs))))
    {
       if (m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed != -1)
       {
@@ -9039,6 +9052,9 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
          }
 
          m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = false;
+         // The forced-initial-delay was consumed once, when this run transitioned from
+         // countdown to active. Subsequent run-to-run transitions (no menu involvement) skip it.
+         m_MenuOptions.m_TrainerOptions.m_ForceInitialDelayOnControlExit = false;
          if (anyVelocityAngularMomentumSet == false)
          {
             player.m_renderer->m_trailForBalls = m_UseTrailsForBallsInitialValue;
