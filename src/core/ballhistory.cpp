@@ -8754,6 +8754,9 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
                m_MenuOptions.m_TrainerOptions.m_TrainerLockedBalls.push_back(ball);
             }
          }
+         ShowRemainingRunInfo();
+         ShowPreviousRunRecord();
+         ShowCurrentRunRecord(currentTimeMs);
          DrawTrainerModeVisuals(player, currentTimeMs);
          return;
       }
@@ -8940,16 +8943,13 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
       return;
    }
 
-   ShowRemainingRunInfo();
-
-   ShowPreviousRunRecord();
-
-   ShowCurrentRunRecord(currentTimeMs);
-
    TrainerOptions::RunRecord& currentRunRecord = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord];
    int32_t runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
    if (runElapsedTimeMs == 0 || runElapsedTimeMs < (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * int32_t(OneSecondMs)))
    {
+      ShowRemainingRunInfo();
+      ShowPreviousRunRecord();
+      ShowCurrentRunRecord(currentTimeMs);
       DrawTrainerModeVisuals(player, currentTimeMs);
       
       for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
