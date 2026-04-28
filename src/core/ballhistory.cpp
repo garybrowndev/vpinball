@@ -19,6 +19,7 @@ bool BallHistory::DrawMenu = false;
 #include "parts/flipper.h"
 #include "parts/light.h"
 #include "parts/rubber.h"
+#include "parts/Material.h"
 #include "renderer/Shader.h"
 #include "meshes/ballMesh.h"
 #include "fonts/DroidSans.h"
@@ -2389,43 +2390,31 @@ void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex
       }
    }
 
-   // Ensure a 1x1 texture exists for this color (reused by name)
-   const std::string imageColorName = "BallHistoryDrawLine" + std::to_string(color);
-   if (player.m_ptable->GetImage(imageColorName) == nullptr)
+   // Get-or-create a single-color Material for this RGB. Reused across every BH line that
+   // draws in the same color (one Material per distinct color per session). This is the
+   // idiomatic way to color a Rubber in VPX — Flipper rubbers (m_szRubberMaterial), Surface
+   // walls (m_szTopMaterial / m_szSideMaterial), Bumpers, Ramps all colorize via Material.
+   // Rubber has no put_Color by design; Shader::SetBasic's no-texture branch
+   // (Shader.cpp:998-1002) routes Material::m_cBase straight to the basic shader's
+   // cBase_Alpha uniform.
+   const std::string materialColorName = "BallHistoryDrawLine" + std::to_string(color);
+   // Note: GetMaterial NEVER returns nullptr for an unknown name — it returns m_dummyMaterial
+   // (which has the user's editor-default color baked in, often pink). Use IsMaterialNameUnique
+   // instead: it returns true exactly when the name is not yet in m_materials.
+   if (player.m_ptable->IsMaterialNameUnique(materialColorName))
    {
-      FIBITMAP* dib = FreeImage_Allocate(1, 1, 24);
-      if (dib)
-      {
-         RGBQUAD singleColor = {};
-         singleColor.rgbBlue = (color >> 16) & 0xFF;
-         singleColor.rgbGreen = (color >> 8) & 0xFF;
-         singleColor.rgbRed = color & 0xFF;
-         FreeImage_SetPixelColor(dib, 0, 0, &singleColor);
-
-         std::string settingsFolderPath;
-         if (GetSettingsFolderPath(settingsFolderPath))
-         {
-            const std::string tmpPath = settingsFolderPath + "\\" + imageColorName + ".png";
-            if (FreeImage_Save(FIF_PNG, dib, tmpPath.c_str(), PNG_DEFAULT))
-            {
-               player.m_ptable->ImportImage(tmpPath, imageColorName);
-               ::DeleteFile(tmpPath.c_str());
-               // ImportImage adds the new texture to m_vimage but only updates the
-               // m_textureMap lookup hash when m_liveBaseTable is set (i.e., when this
-               // table is a live shallow copy). g_pplayer->m_ptable here is the base
-               // table during play (m_liveBaseTable == null, verified via cdb), so the
-               // new texture would never become findable by PinTable::GetImage during
-               // playback — which uses m_textureMap exclusively. Result: every Rubber
-               // line we create renders with a missing texture (the dummy material's
-               // pink fallback). RemoveInvalidReferences rebuilds m_textureMap from
-               // m_vimage, so calling it here makes our newly-imported color findable.
-               // Only fires once per distinct color (the GetImage(name) == nullptr
-               // guard above prevents repeat imports), so the cost is bounded.
-               player.m_ptable->RemoveInvalidReferences();
-            }
-         }
-         FreeImage_Unload(dib);
-      }
+      Material* pMat = new Material();
+      pMat->m_name = materialColorName;
+      pMat->m_cBase = color;
+      pMat->m_fOpacity = 1.0f;
+      pMat->m_bOpacityActive = false;
+      pMat->m_fRoughness = 0.5f;
+      player.m_ptable->AddMaterial(pMat); // takes ownership; pushes to m_materials
+      // m_materialMap is built once at table load from m_materials. New materials added at
+      // runtime are NOT in m_materialMap, so GetMaterial during playback would miss and fall
+      // back to m_dummyMaterial. RemoveInvalidReferences rebuilds m_materialMap from
+      // m_materials, so our newly-added entry becomes findable on the next render frame.
+      player.m_ptable->RemoveInvalidReferences();
    }
 
    // Geometry
@@ -2457,7 +2446,8 @@ void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex
    pLine->m_d.m_height = midpoint.z;
    pLine->m_d.m_thickness = thickness;
    pLine->m_d.m_staticRendering = false;
-   pLine->m_d.m_szImage = imageColorName;
+   pLine->m_d.m_szMaterial = materialColorName; // material drives the color
+   pLine->m_d.m_szImage = "";                   // explicit empty → SetBasic takes no-texture branch
 
    DrawLineRotate(*pLine, midpoint, start, posA);
 
