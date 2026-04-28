@@ -445,7 +445,10 @@ void BallHistory::PrintScreenRecord::Status(const std::vector<std::pair<std::str
 
 void BallHistory::PrintScreenRecord::ActiveMenu(const std::vector<std::pair<std::string, std::string>>& nameValuePairs)
 {
-   ShowNameValueTable(ImGuiActiveMenuLabel, NormalSmallFont, Color::White, BoldSmallFont, Color::White, 0.80f, 1.00f, nameValuePairs, false, true, nullptr);
+   // positionX=1.00 + center=false → SetWindowPosClamped anchors the window's right edge to the
+   // display edge (clamps to displayWidth - windowWidth). Flush right, matching the FPS overlay
+   // on the bottom-left.
+   ShowNameValueTable(ImGuiActiveMenuLabel, NormalSmallFont, Color::White, BoldSmallFont, Color::White, 1.00f, 1.00f, nameValuePairs, false, false, nullptr);
 }
 
 void BallHistory::PrintScreenRecord::ShowText(const char* name, ImFont* font, const ImU32& fontColor, float positionX, float positionY, bool center, const std::string& message)
@@ -9005,6 +9008,11 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
    }
    else if (runElapsedTimeMs < (effectiveCountdownMs + (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * int32_t(OneSecondMs))))
    {
+      // Show "Current" panel during the active run so the player can see which run number
+      // they're on and the time remaining. Remaining/Previous stay hidden — they show only
+      // in the countdown and result-hold phases (above and at the top of this function).
+      ShowCurrentRunRecord(currentTimeMs);
+
       if (m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed != -1)
       {
          if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsCountdownEnabled)
