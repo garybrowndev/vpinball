@@ -2410,6 +2410,18 @@ void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex
             {
                player.m_ptable->ImportImage(tmpPath, imageColorName);
                ::DeleteFile(tmpPath.c_str());
+               // ImportImage adds the new texture to m_vimage but only updates the
+               // m_textureMap lookup hash when m_liveBaseTable is set (i.e., when this
+               // table is a live shallow copy). g_pplayer->m_ptable here is the base
+               // table during play (m_liveBaseTable == null, verified via cdb), so the
+               // new texture would never become findable by PinTable::GetImage during
+               // playback — which uses m_textureMap exclusively. Result: every Rubber
+               // line we create renders with a missing texture (the dummy material's
+               // pink fallback). RemoveInvalidReferences rebuilds m_textureMap from
+               // m_vimage, so calling it here makes our newly-imported color findable.
+               // Only fires once per distinct color (the GetImage(name) == nullptr
+               // guard above prevents repeat imports), so the cost is bounded.
+               player.m_ptable->RemoveInvalidReferences();
             }
          }
          FreeImage_Unload(dib);
