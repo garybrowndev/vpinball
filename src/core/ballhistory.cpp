@@ -3703,8 +3703,20 @@ void BallHistory::ShowCurrentRunRecord(int currentTimeMs)
    {
       printScreenTexts.push_back({ "Run #", std::format("{} of {}", std::to_string(m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1), m_MenuOptions.m_TrainerOptions.m_RunRecords.size()) });
 
+      // During the result-hold (pass/fail sound playing) the Time field would otherwise keep
+      // ticking down even though the run has ended. Freeze it at the value it had the moment
+      // the run ended by using runEndedAtMs as the reference time instead of currentTimeMs.
+      // m_ResultDisplayEndTimeMs is set to (currentTimeMs + ResultDisplayDurationMs) at the
+      // pass/fail/timeout site, so subtracting recovers the run-end timestamp.
+      const bool inResultHold
+         = m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs != 0
+         && currentTimeMs < m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs;
+      const int referenceTimeMs = inResultHold
+         ? (m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs - TrainerOptions::ResultDisplayDurationMs)
+         : currentTimeMs;
+
       DWORD totalMsPerRun = (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun + m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun) * OneSecondMs;
-      DWORD runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
+      DWORD runElapsedTimeMs = referenceTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
       printScreenTexts.push_back({ "Time", std::format("{:.2f}s", std::min(float(m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun), (totalMsPerRun - runElapsedTimeMs) / float(OneSecondMs))) });
    }
    else
