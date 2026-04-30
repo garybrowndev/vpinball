@@ -30,6 +30,16 @@ refcount_trace.log
 crash.txt
 crash.dmp
 
+# build logs left in repo root by helper scripts
+/build_*.log
+
+# Android signing keystores — secrets, never check in
+*.jks
+*.keystore
+
+# Claude Code local state (scheduled tasks lockfile, etc.)
+.claude/*.lock
+
 # local research notes (not for upstream)
 _research/
 
