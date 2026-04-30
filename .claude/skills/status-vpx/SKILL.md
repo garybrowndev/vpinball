@@ -1,28 +1,96 @@
 ---
 name: status-vpx
-description: Print a structured status of Gary's vpinball_ballhistory repo — branch positions (master vs upstream, integration vs master, development vs integration), the extra patches master carries on top of upstream, working-tree state, open PRs on garybrowndev/vpinball, and a one-line reminder of his fork-development workflow. Use this whenever Gary asks "what's the state of my branches", "what's going on in my repo", "where am I", "where's master / integration / development", "what fixes do I have on top of upstream", "what PRs do I have open", "give me a status", "/status-vpx", or any variant where he wants the current shape of his vpinball fork at a glance. Read-only — runs `git fetch --prune` against origin and upstream and prints; never modifies branches or pushes.
+description: Print a compact status of Gary's vpinball_ballhistory fork. Centerpiece is four flow rows showing what each branch is missing from its neighbor — `upstream → master`, `master → integration`, `integration → development`, and the flipped `integration ← development` (the PR-back direction). Each non-zero row gets a 2-line LLM-synthesized digest. Plus master local-patches side note, compact origin sync block, working-tree changes, CI status, and any open PRs. Use this whenever Gary asks "where am I", "what's the state of my fork", "show me my branches", "what's going on in my repo", "what's not pushed", "what should I pull", "did the last build pass", "what's CI doing", "give me a status", or runs `/status-vpx`. Read-only — fetches origin and upstream non-destructively.
 ---
 
-# status-vpx — vpinball_ballhistory repo status reporter
+# status-vpx — fork status reporter
 
-Gary works in this repo across three long-lived branches with a specific topology:
+Gary maintains a 3-branch fork on top of upstream:
 
 ```
-upstream/master   ──► master   ──► integration   ──► development
-   (vpinball)      (+B2S patch)   (+ Ball History)    (+ WIP)
+upstream/master ─► master (+B2S patch) ─► integration (+Ball History) ─► development (+WIP)
 ```
 
-When he asks "what's the state of things" he wants a quick read of:
+This skill produces a single status report. Section order:
 
-1. Where each branch is relative to the next layer up/down
-2. What patches `master` carries on top of `upstream/master` (today: the B2S compat stub `3ea227d80`)
-3. Ball History commits riding on `integration` over `master`
-4. WIP commits on `development` over `integration`
-5. Working tree dirty? Open PRs?
+1. **Header** — repo name, current HEAD branch, timestamp
+2. **`## CI status`** — latest commit per canonical branch with PASS/FAIL rollup (omitted when no runs)
+3. **`## Branch stack`** — four flow rows + master local-patches side note + compact origin sync block
+4. **`## Working tree`** — `git status` as a table (omitted when clean)
+5. **`## Open PRs`** — only when there are open PRs
 
-This skill runs the bundled status script and presents the output to Gary unmodified — it's a status reporter, not an interpreter. If something looks off (e.g. master has unexpected extra patches, or integration is way behind master), call it out briefly *after* the report.
+## The Branch stack section
 
-## Run the script
+Four flow rows. The first three read parent → child (top of stack down). The last is **flipped** — `integration ← development` — so integration stays anchored on the left across the rows that involve it. No leading bullet/marker — the arrow inside the row carries the direction.
+
+Raw script output (what the script emits before Claude polishes it):
+
+```
+upstream → master               29 commit(s) to bring in (upstream has stuff master hasn't pulled in yet)   [range: master..upstream/master]
+master → integration            no new commits
+integration → development       no new commits
+integration ← development       11 commit(s) to bring in (development has WIP integration hasn't pulled back via PR)   [range: integration..development]
+```
+
+Each non-zero row carries a **parenthesized plain-English hint** explaining what the count means in that direction (e.g. "upstream has stuff master hasn't pulled in yet"). These hints are hardcoded in the script orchestration — don't change them at presentation time.
+
+After the fenced code block, a **single-line side note** for the local patches `master` carries on top of `upstream`, then a **3-column `Origin sync` table** (`Branch` | `Origin status (garybrowndev/vpinball)` | `What to do`) where the `What to do` column gives plain-English next-step guidance ("pull 2 from origin", "push 1 to origin", "nothing to do"). All emitted by the script verbatim — no Claude polish needed.
+
+### Synthesizing the 2 rich summary lines (Claude's job, every run)
+
+The script does **not** emit commit subjects. For each row that says `N commit(s) to bring in`, Claude must:
+
+1. Run `git log <range> --format='%s' -n 30` using the `[range: ...]` shown on that row.
+2. Read the subjects, group them by theme (rendering fixes, build infra, perf, new feature stack, etc.), and write **2 concise rich summary lines** describing the substance of those commits.
+3. Insert those 2 lines as indented bullets directly under the row inside the fenced code block.
+4. **Strip the `[range: ...]` suffix from the row** in the polished output — it's a hint for Claude, not for Gary. Keep the parenthesized hint (e.g. "(upstream has stuff master hasn't pulled in yet)") — it's part of what Gary sees.
+
+Polished output:
+
+```
+upstream → master               29 commit(s) to bring in (upstream has stuff master hasn't pulled in yet)
+       BGFX render-loop overhaul — per-frame VSync, tonemapper exposure, latency/stability fixes
+       UI & build hygiene — InGameUI display-size handling, joystick naming, dmdutil/dof bumps
+master → integration            no new commits
+integration → development       no new commits
+integration ← development       11 commit(s) to bring in (development has WIP integration hasn't pulled back via PR)
+       Trainer polish — result-hold Time freeze, status panel layout, async pass/fail sounds
+       Rendering & infra — runtime Material for DrawLine, corridor XY rotation, perf cuts
+```
+
+Rules for the summary lines:
+- **Two lines, no more.** If there are 50 commits, distill them into 2 themed buckets.
+- **Each line max 120 characters.** Hard cap. If you can't fit it, tighten the wording — don't wrap, don't truncate mid-word, don't drop the cap. Why: keeps the fenced block from soft-wrapping in narrow terminals and keeps the digest scannable at a glance.
+- **No raw subjects, no truncation marks, no `_(+N more)_` tags.** This is a digest, not a sample.
+- **Concrete and specific.** "Bug fixes and improvements" is useless — name the subsystems and the kinds of changes.
+- **Skip noise.** Merge commits, version bumps, whitespace cleanups — fold into the theme or drop.
+- **Don't touch the master local-patches side note.** It comes from `get_stack_bullets()` as a single line emitted by the script — leave it verbatim.
+
+### Working-tree "What changed" column (Claude's job, every run)
+
+The Working tree table emits 3 columns: `Status | File | What changed`, where the third column is a `_[describe]_` placeholder. For each row, Claude must replace the placeholder with **one short sentence** describing what changed in that file.
+
+How to do this efficiently:
+- Untracked files (`??`): just describe what the file is for based on path/extension (e.g. ".jks signing keystore for Android release builds"). Don't read the file.
+- Modified files: run `git diff <file>` (or `git diff --cached <file>` for staged) and write a 1-sentence summary of the actual diff. Keep it concrete — name the function, section, or behavior touched.
+- For tiny edits (renamed var, comment fix), say so: "Renamed X → Y" / "Updated comment near Z".
+- For bigger edits, summarize the most substantive change in one phrase. Don't list everything — pick the headline.
+
+The column should make Gary glance at his working tree and instantly remember what he was doing in each file without opening it.
+
+### Arrow rules (one each, no exceptions)
+
+- **Stack flows use `→` for downward (parent→child), `←` only on the last row** so `integration` stays the left column. Arrow points from source toward target.
+- **Origin sync uses `▲ unpushed` / `▼ unpulled` / `✓ in sync`.** Push goes up to origin, pull comes down — both real.
+
+### What fills each line
+
+- **Flow row count** — `git rev-list --count <target>..<source>`.
+- **Flow row summary (2 lines)** — synthesized by Claude from `git log <range>` at presentation time. See above.
+- **Side-note bullets** — hardcoded labels from `get_stack_bullets()` for the `master/upstream` key. Edit those when the master patch set shifts.
+- **Origin sync** — short one-liner from `origin_state()` per branch.
+
+## Run it
 
 ```bash
 bash .claude/skills/status-vpx/scripts/status.sh
@@ -30,27 +98,20 @@ bash .claude/skills/status-vpx/scripts/status.sh
 
 The script:
 
-- `git fetch --prune` against `origin` and `upstream` so the report isn't stale (non-destructive)
-- Prints sections in this order: header → working-tree → remotes → key-branch ahead/behind → patches master carries on upstream → patches integration carries on master → patches development carries on integration → other local branches → open PRs (via `gh`) → workflow reminder
+- runs `git fetch --quiet --prune` against `origin` and `upstream` (non-destructive)
+- needs `gh` CLI for the CI and PR sections (skipped gracefully if missing) and `python3` for JSON parsing
+- omits any section that has nothing to report
 
-If the script fails (e.g. `upstream` remote not configured on this clone), surface the error to Gary rather than silently working around it — his repos always have both remotes.
+## How to present the output
 
-## After running
+The script emits markdown directly. **Paste it into your reply unfenced** — don't wrap the whole thing in a ``` fence or the tables become raw `|` text. The Branch stack rows are *internally* fenced by the script (so column alignment renders correctly in monospace); leave that fence alone.
 
-1. Pipe the script output verbatim to Gary as a fenced block
-2. If anything jumps out as anomalous, add 1-3 lines after the block flagging it. Examples:
-   - `master` has more than 1 patch on top of `upstream/master` and the extras don't look like the B2S stub → ask what they are
-   - `integration` is *behind* `master` → he probably hasn't done the post-upstream-sync merge yet
-   - `development` has many commits behind `integration` → maybe stale
-   - Working tree is dirty with files that look like accidental edits (e.g. `.build/` artifacts, `third-party/` overwrites)
-3. Don't propose actions unless he asks. He uses this command to *see* state, not to be told what to do.
-
-## Why the script and not inline git commands
-
-The git ahead/behind math is fiddly (have to verify each remote-tracking ref exists before counting, handle the missing-upstream case, format the `gh pr list` JSON). A bundled script is faster, deterministic, and the same script can be wired into a status-line or polled by a separate agent later if Gary wants.
+Synthesize the 2-line digests per the rules above, then emit the rest verbatim.
 
 ## Editing tips
 
-- The "Workflow reminder" tail block at the end of the script is a memory aid for new Claude sessions that have just started in this repo. Keep it terse.
-- The patches-on-master section is the most important diagnostic — if Gary ever ends up with surprise commits there it's a sign of a botched upstream rebase. Don't trim it.
-- `gh pr list --repo garybrowndev/vpinball` is hardcoded; if the fork ever moves, update both places.
+- **Master local-patch labels** live in `get_stack_bullets()` near the top of the script (the `master/upstream` case — 2 lines). Edit when the master patch set shifts.
+- **Flow-row column width** is the `w=32` default in `emit_flow`; bump if branch names get longer.
+- **CI section** lists only the canonical 3 branches (+ current HEAD if non-canonical). Old feature branches won't appear.
+- All `gh` invocations go through the `$GH` resolver at the top of the script, which tries `gh`, `gh.exe`, and a couple of WinGet paths so this works from WSL bash.
+- If the fork ever moves off `garybrowndev/vpinball`, both `gh pr list` and `gh run list` reference it.
