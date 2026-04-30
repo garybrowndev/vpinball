@@ -19,6 +19,7 @@ bool BallHistory::DrawMenu = false;
 #include "parts/flipper.h"
 #include "parts/light.h"
 #include "parts/rubber.h"
+#include "parts/Material.h"
 #include "renderer/Shader.h"
 #include "meshes/ballMesh.h"
 #include "fonts/DroidSans.h"
@@ -180,13 +181,14 @@ const char* TrainerOptions::BallCorridorOptionsRecord::ImGuiDrawTrainerBallCorri
 const char* TrainerOptions::BallCorridorOptionsRecord::ImGuiDrawTrainerBallCorridorOpeningRightLabel = "DrawTrainerBallCorridorOpeningRight";
 
 TrainerOptions::BallCorridorOptionsRecord::BallCorridorOptionsRecord()
-   : BallCorridorOptionsRecord(Vertex3Ds(0.0f, 0.0f, 0.0f), RadiusPercentMaximum, Vertex3Ds(0.0f, 0.0f, 0.0f), Vertex3Ds(0.0f, 0.0f, 0.0f))
+   : BallCorridorOptionsRecord(Vertex3Ds(0.0f, 0.0f, 0.0f), RadiusPercentMaximum, 0.0f, Vertex3Ds(0.0f, 0.0f, 0.0f), Vertex3Ds(0.0f, 0.0f, 0.0f))
 {
 }
 
-TrainerOptions::BallCorridorOptionsRecord::BallCorridorOptionsRecord(const Vertex3Ds& passPosition, float passRadiusPercent, const Vertex3Ds& openingLeft, const Vertex3Ds& openingRight)
+TrainerOptions::BallCorridorOptionsRecord::BallCorridorOptionsRecord(const Vertex3Ds& passPosition, float passRadiusPercent, float passRotationDegrees, const Vertex3Ds& openingLeft, const Vertex3Ds& openingRight)
    : m_PassPosition(passPosition)
    , m_PassRadiusPercent(passRadiusPercent)
+   , m_PassRotationDegrees(passRotationDegrees)
    , m_OpeningPositionLeft(openingLeft)
    , m_OpeningPositionRight(openingRight)
 {
@@ -243,6 +245,7 @@ TrainerOptions::TrainerOptions()
    , m_TotalRuns(5)
    , m_MaxSecondsPerRun(15)
    , m_CountdownSecondsBeforeRun(3)
+   , m_ForceInitialDelayOnControlExit(false)
    , m_BallStartOptionsRecordsSize(0)
    , m_CurrentRunRecord(0)
    , m_RunStartTimeMs(0)
@@ -444,7 +447,10 @@ void BallHistory::PrintScreenRecord::Status(const std::vector<std::pair<std::str
 
 void BallHistory::PrintScreenRecord::ActiveMenu(const std::vector<std::pair<std::string, std::string>>& nameValuePairs)
 {
-   ShowNameValueTable(ImGuiActiveMenuLabel, NormalSmallFont, Color::White, BoldSmallFont, Color::White, 0.80f, 1.00f, nameValuePairs, false, true, nullptr);
+   // positionX=1.00 + center=false → SetWindowPosClamped anchors the window's right edge to the
+   // display edge (clamps to displayWidth - windowWidth). Flush right, matching the FPS overlay
+   // on the bottom-left.
+   ShowNameValueTable(ImGuiActiveMenuLabel, NormalSmallFont, Color::White, BoldSmallFont, Color::White, 1.00f, 1.00f, nameValuePairs, false, false, nullptr);
 }
 
 void BallHistory::PrintScreenRecord::ShowText(const char* name, ImFont* font, const ImU32& fontColor, float positionX, float positionY, bool center, const std::string& message)
@@ -833,6 +839,7 @@ const char* BallHistory::TrainerModeBallFailRadiusPercentKeyName = "FailRadiusPe
 const char* BallHistory::TrainerModeBallFailAssociationsKeyName = "FailAssociations";
 const char* BallHistory::TrainerModeBallCorridorPassPosition3DKeyName = "BallCorridorPassPosition3D";
 const char* BallHistory::TrainerModeBallCorridorPassRadiusPercentKeyName = "BallCorridorPassRadiusPercent";
+const char* BallHistory::TrainerModeBallCorridorPassRotationDegreesKeyName = "BallCorridorPassRotationDegrees";
 const char* BallHistory::TrainerModeBallCorridorOpeningPositionLeft3DKeyName = "BallCorridorOpeningPositionLeft3D";
 const char* BallHistory::TrainerModeBallCorridorOpeningPositionRight3DKeyName = "BallCorridorOpeningPositionRight3D";
 
@@ -1225,6 +1232,11 @@ void BallHistory::SetControl(bool control)
       {
          SaveSettings(*g_pplayer);
          g_pplayer->SetPlayState(!g_pplayer->IsPlaying());
+         // Coming out of control (menu closed). When the trainer's configured countdown is 0,
+         // ProcessModeTrainer would otherwise launch the run on the very next frame — too
+         // abrupt right after closing the menu. Mark this transition so the trainer applies a
+         // one-time forced ~1s delay. Cleared when the run transitions from countdown to active.
+         m_MenuOptions.m_TrainerOptions.m_ForceInitialDelayOnControlExit = true;
       }
    }
 }
@@ -1554,6 +1566,12 @@ void BallHistory::LoadSettings(Player& player)
          && LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallCorridorOpeningPositionLeft3DKeyName, ballCorridorOpeningPositionLeft3D) == true
          && LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallCorridorOpeningPositionRight3DKeyName, ballCorridorOpeningPositionRight3D) == true)
       {
+         // PassRotationDegrees was added later; tolerate its absence so configs saved by
+         // older builds load cleanly with rotation defaulting to 0 (= original horizontal
+         // behavior). Loaded outside the && chain so a missing key doesn't fail the rest.
+         std::istringstream ballCorridorPassRotationDegrees;
+         const bool hasPassRotation = LoadSettingsGetValue(iniFile, TrainerModeSettingsSectionName, TrainerModeBallCorridorPassRotationDegreesKeyName, ballCorridorPassRotationDegrees);
+
          while (ballCorridorPassPosition3D.peek() != EOF && ballCorridorPassRadiusPercent.peek() != EOF && ballCorridorOpeningPositionLeft3D.peek() != EOF
             && ballCorridorOpeningPositionRight3D.peek() != EOF)
          {
@@ -1561,6 +1579,11 @@ void BallHistory::LoadSettings(Player& player)
             new (&bcor) TrainerOptions::BallCorridorOptionsRecord();
             ballCorridorPassPosition3D >> bcor.m_PassPosition.x >> delimeter >> bcor.m_PassPosition.y >> delimeter >> bcor.m_PassPosition.z >> delimeter;
             ballCorridorPassRadiusPercent >> bcor.m_PassRadiusPercent >> delimeter;
+            if (hasPassRotation && ballCorridorPassRotationDegrees.peek() != EOF)
+            {
+               ballCorridorPassRotationDegrees >> bcor.m_PassRotationDegrees >> delimeter;
+            }
+            // else m_PassRotationDegrees stays at the constructor default (0.0f)
             ballCorridorOpeningPositionLeft3D >> bcor.m_OpeningPositionLeft.x >> delimeter >> bcor.m_OpeningPositionLeft.y >> delimeter >> bcor.m_OpeningPositionLeft.z >> delimeter;
             ballCorridorOpeningPositionRight3D >> bcor.m_OpeningPositionRight.x >> delimeter >> bcor.m_OpeningPositionRight.y >> delimeter >> bcor.m_OpeningPositionRight.z >> delimeter;
          }
@@ -1804,17 +1827,21 @@ void BallHistory::SaveSettings(Player& player)
 
       std::ostringstream ballBallCorridorPassPosition3D;
       std::ostringstream ballBallCorridorPassRadiusPercent;
+      std::ostringstream ballBallCorridorPassRotationDegrees;
       std::ostringstream ballBallCorridorOpeningPositionLeft3D;
       std::ostringstream ballBallCorridorOpeningPositionRight3D;
       TrainerOptions::BallCorridorOptionsRecord& bcor = m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord;
       ballBallCorridorPassPosition3D << bcor.m_PassPosition.x << SettingsValueDelimeter << bcor.m_PassPosition.y << SettingsValueDelimeter << bcor.m_PassPosition.z << SettingsValueDelimeter;
       ballBallCorridorPassRadiusPercent << bcor.m_PassRadiusPercent << SettingsValueDelimeter;
+      ballBallCorridorPassRotationDegrees << bcor.m_PassRotationDegrees << SettingsValueDelimeter;
       ballBallCorridorOpeningPositionLeft3D << bcor.m_OpeningPositionLeft.x << SettingsValueDelimeter << bcor.m_OpeningPositionLeft.y << SettingsValueDelimeter << bcor.m_OpeningPositionLeft.z << SettingsValueDelimeter;
       ballBallCorridorOpeningPositionRight3D << bcor.m_OpeningPositionRight.x << SettingsValueDelimeter << bcor.m_OpeningPositionRight.y << SettingsValueDelimeter << bcor.m_OpeningPositionRight.z << SettingsValueDelimeter;
       tempStr = ballBallCorridorPassPosition3D.str();
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallCorridorPassPosition3DKeyName, tempStr.c_str());
       tempStr = ballBallCorridorPassRadiusPercent.str();
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallCorridorPassRadiusPercentKeyName, tempStr.c_str());
+      tempStr = ballBallCorridorPassRotationDegrees.str();
+      iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallCorridorPassRotationDegreesKeyName, tempStr.c_str());
       tempStr = ballBallCorridorOpeningPositionLeft3D.str();
       iniFile.SetValue(TrainerModeSettingsSectionName, TrainerModeBallCorridorOpeningPositionLeft3DKeyName, tempStr.c_str());
       tempStr = ballBallCorridorOpeningPositionRight3D.str();
@@ -2380,31 +2407,31 @@ void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex
       }
    }
 
-   // Ensure a 1x1 texture exists for this color (reused by name)
-   const std::string imageColorName = "BallHistoryDrawLine" + std::to_string(color);
-   if (player.m_ptable->GetImage(imageColorName) == nullptr)
+   // Get-or-create a single-color Material for this RGB. Reused across every BH line that
+   // draws in the same color (one Material per distinct color per session). This is the
+   // idiomatic way to color a Rubber in VPX — Flipper rubbers (m_szRubberMaterial), Surface
+   // walls (m_szTopMaterial / m_szSideMaterial), Bumpers, Ramps all colorize via Material.
+   // Rubber has no put_Color by design; Shader::SetBasic's no-texture branch
+   // (Shader.cpp:998-1002) routes Material::m_cBase straight to the basic shader's
+   // cBase_Alpha uniform.
+   const std::string materialColorName = "BallHistoryDrawLine" + std::to_string(color);
+   // Note: GetMaterial NEVER returns nullptr for an unknown name — it returns m_dummyMaterial
+   // (which has the user's editor-default color baked in, often pink). Use IsMaterialNameUnique
+   // instead: it returns true exactly when the name is not yet in m_materials.
+   if (player.m_ptable->IsMaterialNameUnique(materialColorName))
    {
-      FIBITMAP* dib = FreeImage_Allocate(1, 1, 24);
-      if (dib)
-      {
-         RGBQUAD singleColor = {};
-         singleColor.rgbBlue = (color >> 16) & 0xFF;
-         singleColor.rgbGreen = (color >> 8) & 0xFF;
-         singleColor.rgbRed = color & 0xFF;
-         FreeImage_SetPixelColor(dib, 0, 0, &singleColor);
-
-         std::string settingsFolderPath;
-         if (GetSettingsFolderPath(settingsFolderPath))
-         {
-            const std::string tmpPath = settingsFolderPath + "\\" + imageColorName + ".png";
-            if (FreeImage_Save(FIF_PNG, dib, tmpPath.c_str(), PNG_DEFAULT))
-            {
-               player.m_ptable->ImportImage(tmpPath, imageColorName);
-               ::DeleteFile(tmpPath.c_str());
-            }
-         }
-         FreeImage_Unload(dib);
-      }
+      Material* pMat = new Material();
+      pMat->m_name = materialColorName;
+      pMat->m_cBase = color;
+      pMat->m_fOpacity = 1.0f;
+      pMat->m_bOpacityActive = false;
+      pMat->m_fRoughness = 0.5f;
+      player.m_ptable->AddMaterial(pMat); // takes ownership; pushes to m_materials
+      // m_materialMap is built once at table load from m_materials. New materials added at
+      // runtime are NOT in m_materialMap, so GetMaterial during playback would miss and fall
+      // back to m_dummyMaterial. RemoveInvalidReferences rebuilds m_materialMap from
+      // m_materials, so our newly-added entry becomes findable on the next render frame.
+      player.m_ptable->RemoveInvalidReferences();
    }
 
    // Geometry
@@ -2436,7 +2463,8 @@ void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex
    pLine->m_d.m_height = midpoint.z;
    pLine->m_d.m_thickness = thickness;
    pLine->m_d.m_staticRendering = false;
-   pLine->m_d.m_szImage = imageColorName;
+   pLine->m_d.m_szMaterial = materialColorName; // material drives the color
+   pLine->m_d.m_szImage = "";                   // explicit empty → SetBasic takes no-texture branch
 
    DrawLineRotate(*pLine, midpoint, start, posA);
 
@@ -2749,6 +2777,7 @@ bool BallHistory::ShouldDrawTrainerBallCorridor(int currentTimeMs)
       break;
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorPassLocation:
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorPassWidth:
+   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorPassRotation:
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorOpeningLeftLocation:
    case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorOpeningRightLocation:
       return (currentTimeMs % OneSecondMs) >= ShouldDrawBlinkMs;
@@ -2801,7 +2830,15 @@ void BallHistory::DrawTrainerBallCorridorPass(Player& player, const char* name, 
       float passBallRadius = GetDefaultBallRadius();
       float passWidth = passBallRadius * (bcor.m_PassRadiusPercent / 100.0f);
 
-      DrawLine(player, name, { position->x - passWidth, position->y, position->z }, { position->x + passWidth, position->y, position->z }, m_TrainerBallCorridorPassColor, int(passBallRadius));
+      // Rotate the pass-wall endpoints in the playfield XY plane around the pass position.
+      // 0° = horizontal (along +X), CCW positive. See BallCorridorOptionsRecord::PassRotation*.
+      const float angleRad = bcor.m_PassRotationDegrees * (float)M_PI / 180.0f;
+      const float cosA = cosf(angleRad);
+      const float sinA = sinf(angleRad);
+      const Vertex3Ds passLeftEnd  = { position->x - passWidth * cosA, position->y - passWidth * sinA, position->z };
+      const Vertex3Ds passRightEnd = { position->x + passWidth * cosA, position->y + passWidth * sinA, position->z };
+
+      DrawLine(player, name, passLeftEnd, passRightEnd, m_TrainerBallCorridorPassColor, int(passBallRadius));
 
       POINT screenPoint = Get2DPointFrom3D(player, *position);
       PrintScreenRecord::Text(name, float(screenPoint.x), float(screenPoint.y), "P");
@@ -2823,7 +2860,12 @@ void BallHistory::DrawTrainerBallCorridorOpeningLeft(Player& player, TrainerOpti
 
    if (!bcor.m_PassPosition.IsZero() && !bcor.m_OpeningPositionLeft.IsZero())
    {
-      DrawLine(player, "BallCorridorOpeningLeftWall", { bcor.m_PassPosition.x - passWidth, bcor.m_PassPosition.y, bcor.m_PassPosition.z }, bcor.m_OpeningPositionLeft, Color::Red,         int(passBallRadius));
+      // Connecting wall starts at the rotated left end of the pass wall, ends at the user-placed opening.
+      const float angleRad = bcor.m_PassRotationDegrees * (float)M_PI / 180.0f;
+      const float cosA = cosf(angleRad);
+      const float sinA = sinf(angleRad);
+      const Vertex3Ds passLeftEnd = { bcor.m_PassPosition.x - passWidth * cosA, bcor.m_PassPosition.y - passWidth * sinA, bcor.m_PassPosition.z };
+      DrawLine(player, "BallCorridorOpeningLeftWall", passLeftEnd, bcor.m_OpeningPositionLeft, Color::Red, int(passBallRadius));
    }
 }
 
@@ -2842,7 +2884,12 @@ void BallHistory::DrawTrainerBallCorridorOpeningRight(Player& player, TrainerOpt
 
    if (!bcor.m_PassPosition.IsZero() && !bcor.m_OpeningPositionRight.IsZero())
    {
-      DrawLine(player, "BallCorridorOpeningRightWall", { bcor.m_PassPosition.x + passWidth, bcor.m_PassPosition.y, bcor.m_PassPosition.z }, bcor.m_OpeningPositionRight, Color::Red, int(passBallRadius));
+      // Connecting wall starts at the rotated right end of the pass wall, ends at the user-placed opening.
+      const float angleRad = bcor.m_PassRotationDegrees * (float)M_PI / 180.0f;
+      const float cosA = cosf(angleRad);
+      const float sinA = sinf(angleRad);
+      const Vertex3Ds passRightEnd = { bcor.m_PassPosition.x + passWidth * cosA, bcor.m_PassPosition.y + passWidth * sinA, bcor.m_PassPosition.z };
+      DrawLine(player, "BallCorridorOpeningRightWall", passRightEnd, bcor.m_OpeningPositionRight, Color::Red, int(passBallRadius));
    }
 }
 
@@ -3433,13 +3480,26 @@ void BallHistory::ShowStatus(Player& player, int currentTimeMs)
       statuses.push_back({ "Ball\nCorridor", "" });
       statuses.push_back({ "Pass", std::format("{:.1f}x\n{:.1f}y\n{:.1f}z", bcor.m_PassPosition.x, bcor.m_PassPosition.y, bcor.m_PassPosition.z) });
       statuses.push_back({ "Pass Radius", std::format("{}%", bcor.m_PassRadiusPercent) });
+      statuses.push_back({ "Pass Rotation", std::format("{:.0f}\xC2\xB0", bcor.m_PassRotationDegrees) });
       statuses.push_back({ "Opening\nLeft", std::format("{:.1f}x\n{:.1f}y\n{:.1f}z", bcor.m_OpeningPositionLeft.x, bcor.m_OpeningPositionLeft.y, bcor.m_OpeningPositionLeft.z) });
       statuses.push_back({ "Opening\nRight", std::format("{:.1f}x\n{:.1f}y\n{:.1f}z", bcor.m_OpeningPositionRight.x, bcor.m_OpeningPositionRight.y, bcor.m_OpeningPositionRight.z) });
 
-      Vertex3Ds passPosition1 = bcor.m_PassPosition - Vertex3Ds(GetDefaultBallRadius(), 0.0f, 0.0f);
-      Vertex3Ds passPosition2 = bcor.m_PassPosition + Vertex3Ds(GetDefaultBallRadius(), 0.0f, 0.0f);
+      // Rotate the reference endpoints in the same XY plane the pass wall is rotated in,
+      // so the diagnostic distances match the visible geometry. (Note: this status block
+      // uses GetDefaultBallRadius() instead of passWidth for the offset — pre-existing
+      // discrepancy, not introduced here.)
+      const float statusAngleRad = bcor.m_PassRotationDegrees * (float)M_PI / 180.0f;
+      const float statusCosA = cosf(statusAngleRad);
+      const float statusSinA = sinf(statusAngleRad);
+      const float statusOffset = GetDefaultBallRadius();
+      Vertex3Ds passPosition1 = bcor.m_PassPosition - Vertex3Ds(statusOffset * statusCosA, statusOffset * statusSinA, 0.0f);
+      Vertex3Ds passPosition2 = bcor.m_PassPosition + Vertex3Ds(statusOffset * statusCosA, statusOffset * statusSinA, 0.0f);
       statuses.push_back({ "Distance\nPassL<->PassR", std::format("{:.1f}wu", DistanceToLineSegment(passPosition1, passPosition2, mousePosition3D)) });
-      if (bcor.m_OpeningPositionLeft.x < bcor.m_OpeningPositionRight.x)
+      // Distance-based opening pairing (replaces the original X-coordinate compare which
+      // doesn't survive rotation).
+      const bool statusSwap = DistancePixels(passPosition1, bcor.m_OpeningPositionRight)
+                            < DistancePixels(passPosition1, bcor.m_OpeningPositionLeft);
+      if (!statusSwap)
       {
          statuses.push_back({ "Distance\nPassL<->OpenL", std::format("{:.1f}wu", DistanceToLineSegment(passPosition1, bcor.m_OpeningPositionLeft, mousePosition3D)) });
          statuses.push_back({ "Distance\nPassR<->OpenR", std::format("{:.1f}wu", DistanceToLineSegment(passPosition2, bcor.m_OpeningPositionRight, mousePosition3D)) });
@@ -3694,8 +3754,20 @@ void BallHistory::ShowCurrentRunRecord(int currentTimeMs)
    {
       printScreenTexts.push_back({ "Run #", std::format("{} of {}", std::to_string(m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord + 1), m_MenuOptions.m_TrainerOptions.m_RunRecords.size()) });
 
+      // During the result-hold (pass/fail sound playing) the Time field would otherwise keep
+      // ticking down even though the run has ended. Freeze it at the value it had the moment
+      // the run ended by using runEndedAtMs as the reference time instead of currentTimeMs.
+      // m_ResultDisplayEndTimeMs is set to (currentTimeMs + ResultDisplayDurationMs) at the
+      // pass/fail/timeout site, so subtracting recovers the run-end timestamp.
+      const bool inResultHold
+         = m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs != 0
+         && currentTimeMs < m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs;
+      const int referenceTimeMs = inResultHold
+         ? (m_MenuOptions.m_TrainerOptions.m_ResultDisplayEndTimeMs - TrainerOptions::ResultDisplayDurationMs)
+         : currentTimeMs;
+
       DWORD totalMsPerRun = (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun + m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun) * OneSecondMs;
-      DWORD runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
+      DWORD runElapsedTimeMs = referenceTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
       printScreenTexts.push_back({ "Time", std::format("{:.2f}s", std::min(float(m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun), (totalMsPerRun - runElapsedTimeMs) / float(OneSecondMs))) });
    }
    else
@@ -3857,6 +3929,7 @@ void BallHistory::GetBallCorridorOptionsConfigs(std::vector<std::pair<std::strin
    TrainerOptions::BallCorridorOptionsRecord& bcor = m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord;
    ballCorridorOptionsConfig.push_back({ "Pass", std::format("{:.2f},{:.2f},{:.2f} (x,y,z)", bcor.m_PassPosition.x, bcor.m_PassPosition.y, bcor.m_PassPosition.z) });
    ballCorridorOptionsConfig.push_back({ "Pass Radius", std::format("{:.0f}%", bcor.m_PassRadiusPercent) });
+   ballCorridorOptionsConfig.push_back({ "Pass Rotation", std::format("{:.0f}\xC2\xB0", bcor.m_PassRotationDegrees) });
    ballCorridorOptionsConfig.push_back({ "Opening Left", std::format("{:.2f},{:.2f},{:.2f} (x,y,z)", bcor.m_OpeningPositionLeft.x, bcor.m_OpeningPositionLeft.y, bcor.m_OpeningPositionLeft.z) });
    ballCorridorOptionsConfig.push_back({ "Opening Right", std::format("{:.2f},{:.2f},{:.2f} (x,y,z)", bcor.m_OpeningPositionRight.x, bcor.m_OpeningPositionRight.y, bcor.m_OpeningPositionRight.z) });
 }
@@ -7282,8 +7355,12 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
 
       float passBallRadius = GetDefaultBallRadius();
       float passWidth = passBallRadius * (bcor.m_PassRadiusPercent / 100.0f);
-      Vertex3Ds passPositionLeft = { mousePosition3D.x - passWidth, mousePosition3D.y, mousePosition3D.z };
-      Vertex3Ds passPositionRight = { mousePosition3D.x + passWidth, mousePosition3D.y, mousePosition3D.z };
+      // Apply current pass rotation so the live preview lines match what the placed corridor will look like.
+      const float angleRad = bcor.m_PassRotationDegrees * (float)M_PI / 180.0f;
+      const float cosA = cosf(angleRad);
+      const float sinA = sinf(angleRad);
+      Vertex3Ds passPositionLeft = { mousePosition3D.x - passWidth * cosA, mousePosition3D.y - passWidth * sinA, mousePosition3D.z };
+      Vertex3Ds passPositionRight = { mousePosition3D.x + passWidth * cosA, mousePosition3D.y + passWidth * sinA, mousePosition3D.z };
       DrawLine(player, "BallCorridorPassLocationLeft", passPositionLeft, bcor.m_OpeningPositionLeft, Color::Red, int(passBallRadius));
       DrawLine(player, "BallCorridorPassLocationRight", passPositionRight, bcor.m_OpeningPositionRight, Color::Red, int(passBallRadius));
       DrawTrainerBallCorridorPass(player, "BallCorridorPassLocation", bcor, &mousePosition3D);
@@ -7369,6 +7446,50 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
          ProcessMenuChangeValueInc<float, float>(bcor.m_PassRadiusPercent, TrainerOptions::BallCorridorOptionsRecord::RadiusPercentMinimum, TrainerOptions::BallCorridorOptionsRecord::RadiusPercentMaximum);
          break;
       case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
+         m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorPassRotation;
+         break;
+      default:
+         InvalidEnumValue("MenuOptionsRecord::MenuActionType", menuAction);
+         break;
+      }
+   }
+   break;
+   case MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorPassRotation:
+   {
+      TrainerOptions::BallCorridorOptionsRecord& bcor = m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord;
+
+      PrintScreenRecord::MenuTitleText("Ball Corridor Pass Rotation (degrees)");
+      PrintScreenRecord::MenuText(false, std::format("(minimum){}\xC2\xB0 <-- {}\xC2\xB0 --> {}\xC2\xB0(maximum)", TrainerOptions::BallCorridorOptionsRecord::PassRotationMinimum, static_cast<int32_t>(bcor.m_PassRotationDegrees), TrainerOptions::BallCorridorOptionsRecord::PassRotationMaximum));
+
+      PrintScreenRecord::MenuText(false, "");
+
+      PrintScreenRecord::MenuTitleText("Current Configuration");
+      std::vector<std::pair<std::string, std::string>> ballCorridorOptionsConfig;
+      GetBallCorridorOptionsConfigs(ballCorridorOptionsConfig);
+      PrintScreenRecord::Results(ballCorridorOptionsConfig);
+
+      ShowSection(DescriptionSectionTitle,
+      {
+         "Use flippers to rotate the pass wall in the playfield XY plane",
+         "0 degrees = pass wall horizontal; 90 = vertical; up to 180",
+         "Hold flipper to skip values quickly"
+      });
+
+      switch (menuAction)
+      {
+      case MenuOptionsRecord::MenuActionType::MenuActionType_None:
+         ProcessMenuChangeValueSkip<float, float>(bcor.m_PassRotationDegrees, TrainerOptions::BallCorridorOptionsRecord::PassRotationMinimum, TrainerOptions::BallCorridorOptionsRecord::PassRotationMaximum, currentTimeMs);
+         break;
+      case MenuOptionsRecord::MenuActionType::MenuActionType_Toggle:
+         // do nothing
+         break;
+      case MenuOptionsRecord::MenuActionType::MenuActionType_UpLeft:
+         ProcessMenuChangeValueDec<float, float>(bcor.m_PassRotationDegrees, TrainerOptions::BallCorridorOptionsRecord::PassRotationMinimum, TrainerOptions::BallCorridorOptionsRecord::PassRotationMaximum);
+         break;
+      case MenuOptionsRecord::MenuActionType::MenuActionType_DownRight:
+         ProcessMenuChangeValueInc<float, float>(bcor.m_PassRotationDegrees, TrainerOptions::BallCorridorOptionsRecord::PassRotationMinimum, TrainerOptions::BallCorridorOptionsRecord::PassRotationMaximum);
+         break;
+      case MenuOptionsRecord::MenuActionType::MenuActionType_Enter:
          m_MenuOptions.m_MenuState = MenuOptionsRecord::MenuStateType::MenuStateType_Trainer_SelectBallCorridorOpeningLeftLocation;
          break;
       default:
@@ -7402,7 +7523,13 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
 
       float passBallRadius = GetDefaultBallRadius();
       float passWidth = passBallRadius * (bcor.m_PassRadiusPercent / 100.0f);
-      Vertex3Ds passPositionLeft = { bcor.m_PassPosition.x - passWidth, bcor.m_PassPosition.y, bcor.m_PassPosition.z };
+      // Match the rotated pass-wall left endpoint used by DrawTrainerBallCorridorOpeningLeft;
+      // otherwise the placement preview line and the connecting wall start at different
+      // points and cross.
+      const float angleRadL = bcor.m_PassRotationDegrees * (float)M_PI / 180.0f;
+      const float cosAL = cosf(angleRadL);
+      const float sinAL = sinf(angleRadL);
+      Vertex3Ds passPositionLeft = { bcor.m_PassPosition.x - passWidth * cosAL, bcor.m_PassPosition.y - passWidth * sinAL, bcor.m_PassPosition.z };
       DrawFakeBall(player, "BallCorridorOpeningLeft", mousePosition3D, GetDefaultBallRadius() / 2.0f, m_TrainerBallCorridorOpeningEndColor, &passPositionLeft, Color::Red, int(GetDefaultBallRadius()));
 
 
@@ -7477,7 +7604,11 @@ void BallHistory::ProcessMenu(Player& player, MenuOptionsRecord::MenuActionType 
 
       float passBallRadius = GetDefaultBallRadius();
       float passWidth = passBallRadius * (bcor.m_PassRadiusPercent / 100.0f);
-      Vertex3Ds passPositionRight = { bcor.m_PassPosition.x + passWidth, bcor.m_PassPosition.y, bcor.m_PassPosition.z };
+      // Match the rotated pass-wall right endpoint used by DrawTrainerBallCorridorOpeningRight.
+      const float angleRadR = bcor.m_PassRotationDegrees * (float)M_PI / 180.0f;
+      const float cosAR = cosf(angleRadR);
+      const float sinAR = sinf(angleRadR);
+      Vertex3Ds passPositionRight = { bcor.m_PassPosition.x + passWidth * cosAR, bcor.m_PassPosition.y + passWidth * sinAR, bcor.m_PassPosition.z };
       DrawFakeBall(player, "BallCorridorOpeningRight", mousePosition3D, GetDefaultBallRadius() / 2.0f, m_TrainerBallCorridorOpeningEndColor, &passPositionRight, Color::Red,
          int(GetDefaultBallRadius()));
 
@@ -8754,6 +8885,9 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
                m_MenuOptions.m_TrainerOptions.m_TrainerLockedBalls.push_back(ball);
             }
          }
+         ShowRemainingRunInfo();
+         ShowPreviousRunRecord();
+         ShowCurrentRunRecord(currentTimeMs);
          DrawTrainerModeVisuals(player, currentTimeMs);
          return;
       }
@@ -8940,16 +9074,21 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
       return;
    }
 
-   ShowRemainingRunInfo();
-
-   ShowPreviousRunRecord();
-
-   ShowCurrentRunRecord(currentTimeMs);
-
    TrainerOptions::RunRecord& currentRunRecord = m_MenuOptions.m_TrainerOptions.m_RunRecords[m_MenuOptions.m_TrainerOptions.m_CurrentRunRecord];
    int32_t runElapsedTimeMs = currentTimeMs - m_MenuOptions.m_TrainerOptions.m_RunStartTimeMs;
-   if (runElapsedTimeMs == 0 || runElapsedTimeMs < (m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * int32_t(OneSecondMs)))
+   // Effective countdown: the user-configured value, with a one-time silent ~1s delay added
+   // when the user just exited the menu and the configured countdown is 0. Run-to-run
+   // transitions (no menu involvement) leave this equal to the user value.
+   const int32_t userCountdownMs = m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * int32_t(OneSecondMs);
+   const int32_t effectiveCountdownMs
+      = (userCountdownMs == 0 && m_MenuOptions.m_TrainerOptions.m_ForceInitialDelayOnControlExit)
+         ? TrainerOptions::ForcedInitialDelayMs
+         : userCountdownMs;
+   if (runElapsedTimeMs == 0 || runElapsedTimeMs < effectiveCountdownMs)
    {
+      ShowRemainingRunInfo();
+      ShowPreviousRunRecord();
+      ShowCurrentRunRecord(currentTimeMs);
       DrawTrainerModeVisuals(player, currentTimeMs);
       
       for (std::size_t controlVBallIndex = 0; controlVBallIndex < m_ControlVBalls.size(); ++controlVBallIndex)
@@ -8989,9 +9128,13 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
 
       player.m_renderer->m_trailForBalls = 0;
    }
-   else if (runElapsedTimeMs
-      < ((m_MenuOptions.m_TrainerOptions.m_CountdownSecondsBeforeRun * int32_t(OneSecondMs)) + (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * int32_t(OneSecondMs))))
+   else if (runElapsedTimeMs < (effectiveCountdownMs + (m_MenuOptions.m_TrainerOptions.m_MaxSecondsPerRun * int32_t(OneSecondMs))))
    {
+      // Show "Current" panel during the active run so the player can see which run number
+      // they're on and the time remaining. Remaining/Previous stay hidden — they show only
+      // in the countdown and result-hold phases (above and at the top of this function).
+      ShowCurrentRunRecord(currentTimeMs);
+
       if (m_MenuOptions.m_TrainerOptions.m_CountdownSoundPlayed != -1)
       {
          if (m_MenuOptions.m_TrainerOptions.m_SoundEffectsCountdownEnabled)
@@ -9039,6 +9182,9 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
          }
 
          m_MenuOptions.m_TrainerOptions.m_SetupBallStarts = false;
+         // The forced-initial-delay was consumed once, when this run transitioned from
+         // countdown to active. Subsequent run-to-run transitions (no menu involvement) skip it.
+         m_MenuOptions.m_TrainerOptions.m_ForceInitialDelayOnControlExit = false;
          if (anyVelocityAngularMomentumSet == false)
          {
             player.m_renderer->m_trailForBalls = m_UseTrailsForBallsInitialValue;
@@ -9296,8 +9442,13 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
       {
          TrainerOptions::BallCorridorOptionsRecord& bcor = m_MenuOptions.m_TrainerOptions.m_BallCorridorOptionsRecord;
          float passWidth = GetDefaultBallRadius() * (bcor.m_PassRadiusPercent / 100.0f);
-         Vertex3Ds passPositionLeft = bcor.m_PassPosition - Vertex3Ds(passWidth, 0.0f, 0.0f);
-         Vertex3Ds passPositionRight = bcor.m_PassPosition + Vertex3Ds(passWidth, 0.0f, 0.0f);
+         // Hit-detection has to use the same rotated endpoints the renderer uses, otherwise
+         // the visual pass wall and the actual collision line drift apart.
+         const float angleRad = bcor.m_PassRotationDegrees * (float)M_PI / 180.0f;
+         const float cosA = cosf(angleRad);
+         const float sinA = sinf(angleRad);
+         Vertex3Ds passPositionLeft = bcor.m_PassPosition - Vertex3Ds(passWidth * cosA, passWidth * sinA, 0.0f);
+         Vertex3Ds passPositionRight = bcor.m_PassPosition + Vertex3Ds(passWidth * cosA, passWidth * sinA, 0.0f);
          {
             std::size_t startToPassCorridorIndex = 0;
             TrainerOptions::RunRecord::ResultType resultType = TrainerOptions::RunRecord::ResultType::ResultType_Unknown;
@@ -9342,7 +9493,12 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
                float distanceToFailLeft = 0.0f;
                float distanceToFailRight = 0.0f;
 
-               if (bcor.m_OpeningPositionLeft.x < bcor.m_OpeningPositionRight.x)
+               // Pair each rotated pass-end with the closer opening point. The original
+               // x-coordinate comparison only worked for horizontal pass walls; with rotation
+               // it can flip the wrong way (e.g., a vertical pass wall would always swap).
+               const bool swap = DistancePixels(passPositionLeft, bcor.m_OpeningPositionRight)
+                              < DistancePixels(passPositionLeft, bcor.m_OpeningPositionLeft);
+               if (!swap)
                {
                   distanceToFailLeft = DistanceToLineSegment(passPositionLeft, bcor.m_OpeningPositionLeft, controlVBall.m_d.m_pos);
                   distanceToFailRight = DistanceToLineSegment(passPositionRight, bcor.m_OpeningPositionRight, controlVBall.m_d.m_pos);

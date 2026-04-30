@@ -108,6 +108,32 @@ When upstream changes conflict with Ball History integration points:
 - **In-game settings UI**: Press F12 while playing (replaces old Video Options dialog)
 - **Ball History debug log**: `<exe folder>/BallHistory/ballhistory_debug.log` (Debug builds only)
 
+### Cabinet table-rotation universal fix (`ViewCabRotation = 90.000000`)
+
+In Gary's `VPinballX.ini` `[TableOverride]` section, `ViewCabRotation = 90.000000` is the universal cabinet-orientation fix. Empirically verified across a 500-table audit — produces the correct landscape orientation for **both** of the rotation regimes that exist in the wild:
+
+- **Legacy-mode tables** (~98% of tables, ROTF=270 baked in `.vpx`)
+- **Window-mode tables with the broken-author bug** (ROTF=0 baked, e.g. White Water v.1.2, 4 Queens, World Poker Tour, Space Station VPW, Junior, Defender VPW, Central Park)
+
+**Why one value fixes both modes** (`src/renderer/ViewSetup.cpp`):
+- Window mode (`GetRotation`, line 302-306) auto-adds `270°` for landscape viewports before applying the user value: setting 90 → effective `(270 + 90) % 360 = 0°` (no rotation, table fills landscape directly because Window mode already maps physical screen cm to playfield).
+- Legacy mode (line 309-310, plus `MatrixScale(mSceneScaleX, -mSceneScaleY, -mSceneScaleZ)` Y/Z-axis flip in `ComputeMVP` line 447) applies the user value through a flipped coordinate system, so 90° in legacy is not the geometric inverse of 270° in window — the combined transforms produce equivalent visual orientations on a landscape display.
+
+**Practical implication**: when triaging a table that renders "wrong orientation" on the cabinet, **first** assume the global override already covers it. Per-table sidecar `.ini` files (`<table>.ini` next to `<table>.vpx` with `[TableOverride] ViewCabRotation = X`) are only needed for genuine outliers — not the routine ROTF=0 author bug.
+
+**Limitation**: only verified on Gary's landscape cabinet (4K landscape physical, BGSet=1, ScreenWidth=95.9 / Height=53.9 cm). Different cabinet geometries (portrait monitor, head-tracking, VR) may need different values.
+
+**Diagnosing future "wrong orientation" reports**: extract `GameStg/GameData` stream from the `.vpx` (it's an OLE compound document — 7-Zip lists/extracts streams directly) and binary-grep for the 4-byte tags. The full set is in `src/parts/pintable.cpp:1225-1227`, but the ones to check first are:
+
+| Tag (Cabinet view setup) | Meaning | Type |
+|---|---|---|
+| `VSM1` | Cabinet view layout mode (0=LEGACY, 1=CAMERA, 2=WINDOW) | int32 |
+| `ROTF` | Cabinet viewport rotation in degrees | float |
+| `SCFX/SCFY/SCFZ` | Cabinet scene scale | float |
+| `XLFX/XLFY/XLFZ` | Cabinet camera position | float |
+| `LAYF` | Cabinet layback | float |
+| `FOVF` | Cabinet field of view | float |
+
 ## Architecture
 
 ### Source Layout (`src/`)

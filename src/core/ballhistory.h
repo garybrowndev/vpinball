@@ -363,14 +363,21 @@ public:
       static const int32_t RadiusPercentMinimum = 0;
       static const int32_t RadiusPercentMaximum = 300;
 
+      // In-plane (yaw, around Z) rotation of the pass wall in degrees. 0° = horizontal pass
+      // wall along +X (original behavior). 0..180 covers every unique orientation since a
+      // line segment is symmetric (180° is visually identical to 0° with the ends swapped).
+      static const int32_t PassRotationMinimum = 0;
+      static const int32_t PassRotationMaximum = 180;
+
       Vertex3Ds m_PassPosition;
       float m_PassRadiusPercent;
+      float m_PassRotationDegrees;
 
       Vertex3Ds m_OpeningPositionLeft;
       Vertex3Ds m_OpeningPositionRight;
 
       BallCorridorOptionsRecord();
-      BallCorridorOptionsRecord(const Vertex3Ds &passPosition, float passRadiusPercent, const Vertex3Ds &openingLeft, const Vertex3Ds &openingRight);
+      BallCorridorOptionsRecord(const Vertex3Ds &passPosition, float passRadiusPercent, float passRotationDegrees, const Vertex3Ds &openingLeft, const Vertex3Ds &openingRight);
    };
 
    struct RunRecord
@@ -474,6 +481,13 @@ public:
    static const int32_t CountdownSecondsBeforeRunMinimum = 0;
    static const int32_t CountdownSecondsBeforeRunMaximum = 5;
    int32_t m_CountdownSecondsBeforeRun;
+
+   // When the user exits the BH menu (control→non-control) and CountdownSecondsBeforeRun is 0,
+   // a one-time 1-second delay is forced before the run starts so the user has a moment to
+   // settle in. Set in SetControl(false), cleared when the run transitions from countdown to
+   // active. Run-to-run transitions (no menu involvement) do NOT trigger the delay.
+   bool m_ForceInitialDelayOnControlExit;
+   static const int32_t ForcedInitialDelayMs = 1000;
 
    std::vector<BallStartOptionsRecord> m_BallStartOptionsRecords;
    std::size_t m_BallStartOptionsRecordsSize;
@@ -717,6 +731,7 @@ private:
          MenuStateType_Trainer_SelectBallCorridorComplete,
          MenuStateType_Trainer_SelectBallCorridorPassLocation,
          MenuStateType_Trainer_SelectBallCorridorPassWidth,
+         MenuStateType_Trainer_SelectBallCorridorPassRotation,
          MenuStateType_Trainer_SelectBallCorridorOpeningLeftLocation,
          MenuStateType_Trainer_SelectBallCorridorOpeningRightLocation,
          MenuStateType_Trainer_SelectGameplayDifficultyOptions,
@@ -868,6 +883,7 @@ private:
    static const char *TrainerModeBallFailAssociationsKeyName;
    static const char *TrainerModeBallCorridorPassPosition3DKeyName;
    static const char *TrainerModeBallCorridorPassRadiusPercentKeyName;
+   static const char *TrainerModeBallCorridorPassRotationDegreesKeyName;
    static const char *TrainerModeBallCorridorOpeningPositionLeft3DKeyName;
    static const char *TrainerModeBallCorridorOpeningPositionRight3DKeyName;
    
