@@ -42,31 +42,31 @@ public:
       CopyToXrBuffer(actionSetInfo.localizedActionSetName, "VPX Generic Input"s);
       xrCreateActionSet(m_instance, &actionSetInfo, &m_actionSet);
 
-      m_joyId = m_pininput.RegisterDevice("OpenXR", InputManager::DeviceType::Joystick, "Controller");
+      m_joyId = m_pininput.RegisterDevice("OpenXR", InputManager::DeviceType::Joystick, "VR Controller");
 
-      // There is no way to enumerate and listen for change in OpenXR, so we do it the other way: we define all known input path and listen for change on all of them
+      // There is no way to enumerate and listen for change in OpenXR, so we do it the other way: we define all known input paths and listen for changes on all of them
       std::vector<std::pair<std::string, XrActionType>> allPaths = { // Common Buttons (Boolean)
-         { "/user/hand/left/input/select/click", XR_ACTION_TYPE_BOOLEAN_INPUT }, { "/user/hand/right/input/select/click", XR_ACTION_TYPE_BOOLEAN_INPUT },
-         { "/user/hand/left/input/menu/click", XR_ACTION_TYPE_BOOLEAN_INPUT }, { "/user/hand/right/input/menu/click", XR_ACTION_TYPE_BOOLEAN_INPUT },
-         { "/user/hand/left/input/squeeze/click", XR_ACTION_TYPE_BOOLEAN_INPUT }, { "/user/hand/right/input/squeeze/click", XR_ACTION_TYPE_BOOLEAN_INPUT },
-         { "/user/hand/left/input/trigger/click", XR_ACTION_TYPE_BOOLEAN_INPUT }, { "/user/hand/right/input/trigger/click", XR_ACTION_TYPE_BOOLEAN_INPUT },
+         { "/user/hand/left/input/select/click"s, XR_ACTION_TYPE_BOOLEAN_INPUT }, { "/user/hand/right/input/select/click"s, XR_ACTION_TYPE_BOOLEAN_INPUT },
+         { "/user/hand/left/input/menu/click"s, XR_ACTION_TYPE_BOOLEAN_INPUT }, { "/user/hand/right/input/menu/click"s, XR_ACTION_TYPE_BOOLEAN_INPUT },
+         { "/user/hand/left/input/squeeze/click"s, XR_ACTION_TYPE_BOOLEAN_INPUT }, { "/user/hand/right/input/squeeze/click"s, XR_ACTION_TYPE_BOOLEAN_INPUT },
+         { "/user/hand/left/input/trigger/click"s, XR_ACTION_TYPE_BOOLEAN_INPUT }, { "/user/hand/right/input/trigger/click"s, XR_ACTION_TYPE_BOOLEAN_INPUT },
 
          // Controller Specific Buttons
-         { "/user/hand/left/input/x/click", XR_ACTION_TYPE_BOOLEAN_INPUT }, { "/user/hand/left/input/y/click", XR_ACTION_TYPE_BOOLEAN_INPUT },
-         { "/user/hand/right/input/a/click", XR_ACTION_TYPE_BOOLEAN_INPUT }, { "/user/hand/right/input/b/click", XR_ACTION_TYPE_BOOLEAN_INPUT },
-         { "/user/hand/left/input/thumbstick/click", XR_ACTION_TYPE_BOOLEAN_INPUT }, { "/user/hand/right/input/thumbstick/click", XR_ACTION_TYPE_BOOLEAN_INPUT },
-         { "/user/hand/left/input/trackpad/click", XR_ACTION_TYPE_BOOLEAN_INPUT }, { "/user/hand/right/input/trackpad/click", XR_ACTION_TYPE_BOOLEAN_INPUT },
+         { "/user/hand/left/input/x/click"s, XR_ACTION_TYPE_BOOLEAN_INPUT }, { "/user/hand/left/input/y/click"s, XR_ACTION_TYPE_BOOLEAN_INPUT },
+         { "/user/hand/right/input/a/click"s, XR_ACTION_TYPE_BOOLEAN_INPUT }, { "/user/hand/right/input/b/click"s, XR_ACTION_TYPE_BOOLEAN_INPUT },
+         { "/user/hand/left/input/thumbstick/click"s, XR_ACTION_TYPE_BOOLEAN_INPUT }, { "/user/hand/right/input/thumbstick/click"s, XR_ACTION_TYPE_BOOLEAN_INPUT },
+         { "/user/hand/left/input/trackpad/click"s, XR_ACTION_TYPE_BOOLEAN_INPUT }, { "/user/hand/right/input/trackpad/click"s, XR_ACTION_TYPE_BOOLEAN_INPUT },
 
          // Analog Inputs (Float)
-         { "/user/hand/left/input/trigger/value", XR_ACTION_TYPE_FLOAT_INPUT }, { "/user/hand/right/input/trigger/value", XR_ACTION_TYPE_FLOAT_INPUT },
-         { "/user/hand/left/input/squeeze/value", XR_ACTION_TYPE_FLOAT_INPUT }, { "/user/hand/right/input/squeeze/value", XR_ACTION_TYPE_FLOAT_INPUT },
-         { "/user/hand/left/input/thumbstick/x", XR_ACTION_TYPE_FLOAT_INPUT }, { "/user/hand/left/input/thumbstick/y", XR_ACTION_TYPE_FLOAT_INPUT },
-         { "/user/hand/right/input/thumbstick/x", XR_ACTION_TYPE_FLOAT_INPUT }, { "/user/hand/right/input/thumbstick/y", XR_ACTION_TYPE_FLOAT_INPUT },
-         { "/user/hand/left/input/trackpad/x", XR_ACTION_TYPE_FLOAT_INPUT }, { "/user/hand/left/input/trackpad/y", XR_ACTION_TYPE_FLOAT_INPUT },
-         { "/user/hand/right/input/trackpad/x", XR_ACTION_TYPE_FLOAT_INPUT }, { "/user/hand/right/input/trackpad/y", XR_ACTION_TYPE_FLOAT_INPUT },
+         { "/user/hand/left/input/trigger/value"s, XR_ACTION_TYPE_FLOAT_INPUT }, { "/user/hand/right/input/trigger/value"s, XR_ACTION_TYPE_FLOAT_INPUT },
+         { "/user/hand/left/input/squeeze/value"s, XR_ACTION_TYPE_FLOAT_INPUT }, { "/user/hand/right/input/squeeze/value"s, XR_ACTION_TYPE_FLOAT_INPUT },
+         { "/user/hand/left/input/thumbstick/x"s, XR_ACTION_TYPE_FLOAT_INPUT }, { "/user/hand/left/input/thumbstick/y"s, XR_ACTION_TYPE_FLOAT_INPUT },
+         { "/user/hand/right/input/thumbstick/x"s, XR_ACTION_TYPE_FLOAT_INPUT }, { "/user/hand/right/input/thumbstick/y"s, XR_ACTION_TYPE_FLOAT_INPUT },
+         { "/user/hand/left/input/trackpad/x"s, XR_ACTION_TYPE_FLOAT_INPUT }, { "/user/hand/left/input/trackpad/y"s, XR_ACTION_TYPE_FLOAT_INPUT },
+         { "/user/hand/right/input/trackpad/x"s, XR_ACTION_TYPE_FLOAT_INPUT }, { "/user/hand/right/input/trackpad/y"s, XR_ACTION_TYPE_FLOAT_INPUT },
 
          // Poses
-         { "/user/hand/left/input/grip/pose", XR_ACTION_TYPE_POSE_INPUT }, { "/user/hand/right/input/grip/pose", XR_ACTION_TYPE_POSE_INPUT }
+         { "/user/hand/left/input/grip/pose"s, XR_ACTION_TYPE_POSE_INPUT }, { "/user/hand/right/input/grip/pose"s, XR_ACTION_TYPE_POSE_INPUT }
       };
 
       // Bind them
@@ -103,7 +103,7 @@ public:
       }
 
       // Register these bindings for major profiles
-      std::array<const char*, 6> profiles { //
+      static const std::array<const char*, 6> profiles { //
          "/interaction_profiles/khr/simple_controller", //
          "/interaction_profiles/oculus/touch_controller", //
          "/interaction_profiles/valve/index_controller", //
@@ -138,6 +138,10 @@ public:
          success &= mapButton(ButtonMapping::Create(m_joyId, 10), m_pininput.GetStartActionId());
          success &= mapButton(ButtonMapping::Create(m_joyId, 8), m_pininput.GetOpenInGameUIActionId()); // Left buttons
          success &= mapButton(ButtonMapping::Create(m_joyId, 9), m_pininput.GetExitGameActionId());
+         success &= mapButton(ButtonMapping::Create(m_joyId, 21, -0.3f), m_pininput.GetUIUpActionId()); // Left stick
+         success &= mapButton(ButtonMapping::Create(m_joyId, 21, 0.3f), m_pininput.GetUIDownActionId());
+         success &= mapButton(ButtonMapping::Create(m_joyId, 20, -0.3f), m_pininput.GetUILeftActionId());
+         success &= mapButton(ButtonMapping::Create(m_joyId, 20, 0.3f), m_pininput.GetUIRightActionId());
          auto plungerMapping = SensorMapping::Create(m_joyId, 23, SensorMapping::Type::Position); // Right stick
          plungerMapping.SetScale(-1.f);
          success &= mapPlunger(plungerMapping, SensorMapping::Type::Position, true);
