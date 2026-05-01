@@ -312,8 +312,15 @@ void PhysicsEngine::UpdateNudge(float dtime)
       m_tableVelOld = m_tableVel;
 
       // Simulate hardware nudge by getting the cabinet acceleration (optionally through velocity sensor) and applying it directly to the ball
-      Vertex2D sensor = g_pplayer->m_pininput.GetNudge(); // Acquire from sensor input
-      m_nudgeAcceleration.Set(sensor.x, sensor.y, 0.f);
+      if (g_pplayer && g_pplayer->m_liveUI->IsInGameUIOpened())
+      {
+         m_nudgeAcceleration.SetZero();
+      }
+      else
+      {
+         Vertex2D sensor = g_pplayer->m_pininput.GetNudge(); // Acquire from sensor input
+         m_nudgeAcceleration.Set(sensor.x, sensor.y, 0.f);
+      }
 
       // Evaluate visual table displacement due to sensor nudge
       // Always apply a damping factor to limit drifting when using a 'bad' nudge sensor
@@ -547,11 +554,14 @@ void PhysicsEngine::UpdatePhysics(uint64_t targetTimeUs)
    if (!g_pplayer->IsPlaying() || g_pplayer->m_noTimeCorrect)
    {
       const uint64_t curPhysicsFrameTime = m_startTime_usec + (uint64_t)(g_pplayer->m_time_sec * 1000000.0);
-      const uint64_t timeShift = initial_time_usec - curPhysicsFrameTime;
-      m_startTime_usec += timeShift;
-      m_nextPhysicsFrameTime += timeShift;
-      m_curPhysicsFrameTime += timeShift;
-      g_pplayer->m_noTimeCorrect = false;
+      if (initial_time_usec > curPhysicsFrameTime)
+      {
+         const uint64_t timeShift = initial_time_usec - curPhysicsFrameTime;
+         m_startTime_usec += timeShift;
+         m_nextPhysicsFrameTime += timeShift;
+         m_curPhysicsFrameTime += timeShift;
+         g_pplayer->m_noTimeCorrect = false;
+      }
    }
 
    // Walk a single physics step forward

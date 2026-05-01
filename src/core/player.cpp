@@ -6,10 +6,6 @@
 #include "ui/win/codeview.h"
 
 #ifndef __STANDALONE__
-#include "BAM/BAMView.h"
-#endif
-
-#ifndef __STANDALONE__
 #define SDL_MAIN_NOIMPL
 #include <SDL3/SDL_main.h>
 #endif
@@ -274,7 +270,6 @@ Player::Player(PinTable *const table, const PlayMode playMode)
    const StereoMode stereo3D = useVR ? STEREO_VR : m_ptable->m_settings.GetPlayer_Stereo3D();
    #endif
 
-   m_headTracking = (stereo3D == STEREO_VR) ? false : m_ptable->m_settings.GetPlayer_BAMHeadTracking();
    m_detectScriptHang = m_ptable->m_settings.GetPlayer_DetectHang();
 
    m_minphyslooptime = m_ptable->m_settings.GetPlayer_MinPhysLoopTime();
@@ -388,8 +383,8 @@ Player::Player(PinTable *const table, const PlayMode playMode)
    }
    #endif
 
-   // Disable static prerendering for VR and legacy headtracking (this won't be reenabled)
-   if (m_headTracking || (stereo3D == STEREO_VR))
+   // Disable static prerendering for VR
+   if (stereo3D == STEREO_VR)
       m_renderer->DisableStaticPrePass(true);
 
    m_renderer->m_renderDevice->m_vsyncCount = 1;
@@ -632,10 +627,9 @@ Player::Player(PinTable *const table, const PlayMode playMode)
                   }
                   if ((image->m_width > buffer->width()) || (image->m_height > buffer->height()))
                   {
-                     const bool isError = (buffer->width() < maxTexDim) || (buffer->height() < maxTexDim);
-                     PLOG(isError ? plog::Severity::error : plog::Severity::warning) << "Image '" << image->m_name << "' was downsized from "
-                           << image->m_width << 'x' << image->m_height << " to " << buffer->width() << 'x' << buffer->height() << (isError ? " due to low memory " : " due to user settings");
-                     if (isError)
+                     PLOG(buffer->m_resizedOnLowMem ? plog::Severity::error : plog::Severity::info) << "Image '" << image->m_name << "' was downsized from " << image->m_width << 'x' << image->m_height << " to " << buffer->width() << 'x' << buffer->height()
+                        << (buffer->m_resizedOnLowMem ? " due to low memory " : " due to user settings");
+                     if (buffer->m_resizedOnLowMem)
                         m_liveUI->PushNotification("Image '" + image->m_name + "' was downsized due to low memory", 5000);
                   }
                   //PLOGD << "Image '" << image->m_name << "' loaded to " << (uploaded ? "GPU" : "RAM");
@@ -1009,7 +1003,7 @@ Player::~Player()
    {
       if (auto ph = editable->GetIRenderable(); ph)
          ph->RenderRelease();
-      editable->TimerRelease(/*m_vht*/); // as everything is killed, not necessary to remove from timer list
+      editable->TimerRelease(m_vht);
    }
    assert(m_vballDelete.empty());
    m_vball.clear();
@@ -1202,7 +1196,7 @@ void Player::ApplyPlayingState(const bool play)
    #endif
    if (play)
    {
-      m_LastKnownGoodCounter++; // Reset hang script detection
+      m_lastKnownGoodCounter++; // Reset hang script detection
       m_noTimeCorrect = true;   // Disable physics engine time correction on next physic update
       UnpauseMusic();
       PLOGI << "Unpausing Game";
@@ -1601,6 +1595,11 @@ void Player::ProcessOSMessages(const bool isInitialized)
       if ((usec() - startTick) > 1000ull)
          break;
    }
+
+   #if BX_PLATFORM_WINDOWS
+   if (m_renderer)
+      m_renderer->m_renderDevice->OnInputSampled();
+   #endif
 };
 
 class AttractCapture
@@ -2108,11 +2107,11 @@ void Player::PrepareFrame()
    m_logicProfiler.EnterProfileSection(FrameProfiler::PROFILE_PREPARE_FRAME);
 
    m_overall_frames++; // This causes the next VPinMAME <-> VPX sync to update light status which can be heavy since it needs to perform PWM integration of all lights
-   m_LastKnownGoodCounter++;
+   m_lastKnownGoodCounter++;
    m_startFrameTick = usec();
-   
+
    m_pluginAPI.BroadcastVPXMsg(m_onPrepareFrameMsgId, nullptr);
-   
+
    // Update visually animated parts (e.g. primitives, reels, gates, lights, bumper-skirts, hittargets, etc)
    if (IsPlaying())
    {

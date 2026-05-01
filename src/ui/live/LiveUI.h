@@ -14,8 +14,6 @@
 #include "PlumbOverlay.h"
 #include "BallControl.h"
 
-constexpr const char * const ID_BAM_SETTINGS = "Headtracking Settings";
-
 class LiveUI final
 {
 public:
@@ -38,8 +36,6 @@ public:
    void ToggleFPS() { m_perfUI.NextPerfMode(); }
    bool IsShowingFPSDetails() const { return m_perfUI.GetPerfMode() != PerfUI::PerfMode::PM_DISABLED; }
    
-   bool ProposeInputLayout(const string &deviceName, const std::function<void(bool, bool)> &handler);
-
    void ShowTouchOverlay(bool show) { m_showTouchOverlay = show; }
 
    unsigned int PushNotification(const string &message, const int lengthMs, const unsigned int reuseId = 0) { return m_notificationOverlay.PushNotification(message, lengthMs, reuseId); }
@@ -85,12 +81,6 @@ private:
 
    // Notifications
    NotificationOverlay m_notificationOverlay;
-
-   // Autodetected Input Device popup
-   string m_deviceLayoutName;
-   bool m_deviceLayoutDontAskAgain;
-   std::function<void(bool, bool)> m_deviceLayoutHandler;
-   void UpdateDeviceLayoutPopup();
 
    // MarkDown support
    ImGuiID markdown_start_id;

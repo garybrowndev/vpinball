@@ -19,10 +19,6 @@
 #include "imgui/imgui_stdlib.h"
 #include "imgui_markdown/imgui_markdown.h"
 
-#ifndef __STANDALONE__
-#include "BAM/BAMView.h"
-#endif
-
 
 ImGui::MarkdownConfig LiveUI::markdown_config;
 
@@ -33,11 +29,11 @@ Record &operator<<(Record &record, const ImVec2 &pt) { return record << '(' << p
 }
 
 LiveUI::LiveUI(RenderDevice *const rd)
-   : m_inGameUI(*this) 
-   , m_editorUI(*this)
-   , m_ballControl(*this)
-   , m_rd(rd)
+   : m_ballControl(*this) 
+   , m_inGameUI(*this)
    , m_perfUI(g_pplayer)
+   , m_editorUI(*this)
+   , m_rd(rd)
 {
    m_player = g_pplayer;
    m_pininput = &(m_player->m_pininput);
@@ -225,7 +221,7 @@ void LiveUI::UpdateScale()
       // For cabinet mode, the user is not standing in front of screen, so scale out the UI based on display size to be more readable (more "game like")
       if (m_player->m_ptable->GetViewMode() == ViewSetupID::BG_FULLSCREEN)
       {
-         m_uiScale = max(m_uiScale, static_cast<float>(m_player->m_playfieldWnd->GetWidth()) / 750.f);
+         m_uiScale = max(m_uiScale, static_cast<float>(min(m_player->m_playfieldWnd->GetWidth(), m_player->m_playfieldWnd->GetHeight())) / 750.f);
       }
    }
    m_uiScale = min(m_uiScale, 10.f); // To avoid texture size overflows
@@ -357,9 +353,6 @@ void LiveUI::RenderUI()
 
    ImGui::PushFont(m_baseFont, m_baseFont->LegacySize);
 
-   if (!m_deviceLayoutName.empty())
-      UpdateDeviceLayoutPopup();
-
    // Tweak UI (aligned to playfield view, using custom flipper controls)
    m_inGameUI.Update();
 
@@ -372,13 +365,7 @@ void LiveUI::RenderUI()
       ImGui::End();
    }
 
-   if (ImGui::IsPopupOpen(ID_BAM_SETTINGS))
-   { // BAM headtracking UI (aligned to desktop, using traditional mouse interaction) => hacky, remove and use plugin + plugin settings instead
-      #ifndef __STANDALONE__
-         BAMView::drawMenu();
-      #endif
-   }
-   else if (m_editorUI.IsOpened())
+   if (m_editorUI.IsOpened())
    { // Editor UI (aligned to desktop, using traditional mouse interaction)
       SetupImGuiStyle(true);
       m_editorUI.RenderUI();
@@ -603,52 +590,6 @@ void LiveUI::HideUI()
    m_player->m_ptable->m_settings.Save();
    g_app->m_settings.Save();
    m_player->SetPlayState(true);
-}
-
-bool LiveUI::ProposeInputLayout(const string &deviceName, const std::function<void(bool, bool)> &handler)
-{
-   if (!m_deviceLayoutName.empty())
-      return false;
-   m_deviceLayoutName = deviceName;
-   m_deviceLayoutHandler = handler;
-   m_deviceLayoutDontAskAgain = false;
-   return true;
-}
-
-void LiveUI::UpdateDeviceLayoutPopup()
-{
-   // FIXME add an UI for VR instead of applying blindly
-   if (m_player->IsVR())
-   {
-      m_deviceLayoutName.clear();
-      m_deviceLayoutHandler(true, false);
-      return;
-   }
-
-   if (!m_deviceLayoutName.empty())
-      ImGui::OpenPopup("Apply Device Layout ?");
-   ImGui::SetNextWindowSize(ImVec2(350.f * m_uiScale, 0.f));
-   if (ImGui::BeginPopupModal("Apply Device Layout ?"))
-   {
-      ImGui::TextWrapped("Device '%s' was detected. Would you like the default input layout to be applied ?", m_deviceLayoutName.c_str());
-      ImGui::Separator();
-      ImGui::Checkbox("Don't ask again", &m_deviceLayoutDontAskAgain);
-      ImGui::Separator();
-      if (ImGui::Button("Discard"))
-      {
-         m_deviceLayoutName.clear();
-         m_deviceLayoutHandler(false, m_deviceLayoutDontAskAgain);
-         ImGui::CloseCurrentPopup();
-      }
-      ImGui::SameLine(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("Apply").x - ImGui::GetStyle().FramePadding.x * 2.f);
-      if (ImGui::Button("Apply"))
-      {
-         m_deviceLayoutName.clear();
-         m_deviceLayoutHandler(true, m_deviceLayoutDontAskAgain);
-         ImGui::CloseCurrentPopup();
-      }
-      ImGui::EndPopup();
-   }
 }
 
 extern ImGuiKey ImGui_ImplSDL3_KeyEventToImGuiKey(SDL_Keycode keycode, SDL_Scancode scancode);

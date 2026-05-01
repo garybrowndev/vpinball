@@ -105,7 +105,7 @@ void HomePage::BuildPage()
 
    AddItem(std::make_unique<InGameUIItem>("Sound Settings"s, ""s, "settings/audio"s));
 
-   AddItem(std::make_unique<InGameUIItem>("Graphic Settings"s, ""s, "settings/graphic"s));
+   AddItem(std::make_unique<InGameUIItem>("Graphics Settings"s, ""s, "settings/graphics"s));
 
    #ifndef ENABLE_DX9
    if (m_player->m_renderer->m_stereo3D != STEREO_VR)
@@ -125,12 +125,6 @@ void HomePage::BuildPage()
    AddItem(std::make_unique<InGameUIItem>("Alpha/DMD Profile Settings"s, ""s, "settings/display_profiles"s));
 
    AddItem(std::make_unique<InGameUIItem>("Legacy DOF & B2S Settings"s, ""s, "settings/misc"s));
-
-   // FIXME remove unsupported Win32 only legacy BAM headtracking
-#ifdef WIN32
-   if (m_player->m_headTracking)
-      AddItem(std::make_unique<InGameUIItem>("BAM Headtracking Settings"s, ""s, []() { ImGui::OpenPopup(ID_BAM_SETTINGS); }));
-#endif
 
    AddItem(std::make_unique<InGameUIItem>("System Info"s, ""s, "misc/systeminfo"s));
 }
