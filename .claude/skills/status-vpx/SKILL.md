@@ -34,6 +34,8 @@ integration ← development       11 commit(s) to bring in (development has WIP 
 
 Each non-zero row carries a **parenthesized plain-English hint** explaining what the count means in that direction (e.g. "upstream has stuff master hasn't pulled in yet"). These hints are hardcoded in the script orchestration — don't change them at presentation time.
 
+Note on tip selection: when local `master`/`integration`/`development` is strictly behind its `origin/<br>` (fast-forward possible), the script uses `origin/<br>` as that branch's tip in the flow comparisons. This is what catches the "I just merged the PR on GitHub but haven't pulled locally" case — the flow row correctly reads 0 instead of double-counting commits already integrated upstream. The Origin sync table still uses the local ref so its push/pull guidance stays accurate. As a result, ranges shown in `[range: ...]` may name `origin/<br>` rather than the bare local branch name.
+
 After the fenced code block, a **single-line side note** for the local patches `master` carries on top of `upstream`, then a **3-column `Origin sync` table** (`Branch` | `Origin status (garybrowndev/vpinball)` | `What to do`) where the `What to do` column gives plain-English next-step guidance ("pull 2 from origin", "push 1 to origin", "nothing to do"). All emitted by the script verbatim — no Claude polish needed.
 
 ### Synthesizing the 2 rich summary lines (Claude's job, every run)

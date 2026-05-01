@@ -68,6 +68,31 @@ echo ""
 
 ahead_count() { git rev-list --count "$1..$2" 2>/dev/null || echo 0; }
 
+# tip <branch> — echo the ref to use as that branch's "real" tip for flow
+# comparisons. Prefers origin/<branch> when it strictly fast-forwards local
+# (origin ahead, local not ahead). This catches the common case where a PR
+# merged on GitHub but the local branch hasn't been pulled yet — without
+# this, flow rows double-count work that's already integrated upstream.
+# The origin-sync table still uses the local ref so its push/pull counts
+# stay meaningful.
+tip() {
+  local br="$1"
+  if git show-ref --verify --quiet "refs/remotes/origin/$br"; then
+    local local_behind origin_behind
+    local_behind=$(git rev-list --count "$br..origin/$br" 2>/dev/null || echo 0)
+    origin_behind=$(git rev-list --count "origin/$br..$br" 2>/dev/null || echo 0)
+    if [ "$local_behind" -gt 0 ] && [ "$origin_behind" = "0" ]; then
+      echo "origin/$br"
+      return
+    fi
+  fi
+  echo "$br"
+}
+
+mst_tip=$(tip master)
+intg_tip=$(tip integration)
+devl_tip=$(tip development)
+
 # Hardcoded 2-bullet semantic labels for stack-layer ahead portions.
 # Args: stack-pair-key. Echoes 2 lines (one per bullet).
 get_stack_bullets() {
@@ -92,8 +117,8 @@ have_um=0; um_a=0; um_b=0
 if git show-ref --verify --quiet refs/remotes/upstream/master \
    && git show-ref --verify --quiet refs/heads/master; then
   have_um=1
-  um_a=$(ahead_count upstream/master master)
-  um_b=$(ahead_count master upstream/master)
+  um_a=$(ahead_count upstream/master "$mst_tip")
+  um_b=$(ahead_count "$mst_tip" upstream/master)
 fi
 
 have_om=0; om_a=0; om_b=0
@@ -108,8 +133,8 @@ have_mi=0; mi_a=0; mi_b=0
 if git show-ref --verify --quiet refs/heads/master \
    && git show-ref --verify --quiet refs/heads/integration; then
   have_mi=1
-  mi_a=$(ahead_count master integration)
-  mi_b=$(ahead_count integration master)
+  mi_a=$(ahead_count "$mst_tip" "$intg_tip")
+  mi_b=$(ahead_count "$intg_tip" "$mst_tip")
 fi
 
 have_oi=0; oi_a=0; oi_b=0
@@ -124,8 +149,8 @@ have_id=0; id_a=0; id_b=0
 if git show-ref --verify --quiet refs/heads/integration \
    && git show-ref --verify --quiet refs/heads/development; then
   have_id=1
-  id_a=$(ahead_count integration development)
-  id_b=$(ahead_count development integration)
+  id_a=$(ahead_count "$intg_tip" "$devl_tip")
+  id_b=$(ahead_count "$devl_tip" "$intg_tip")
 fi
 
 have_od=0; od_a=0; od_b=0
@@ -253,10 +278,10 @@ echo '```'
 # read left-to-right (parent → child); the last is flipped (integration ← development)
 # so the integration column lines up vertically across rows where it matters.
 # Each non-zero row gets a parenthesized plain-English hint explaining the count.
-[ $have_um = 1 ] && emit_flow "upstream"    "→" "master"      "$um_b" "master..upstream/master"      "upstream has stuff master hasn't pulled in yet"
-[ $have_mi = 1 ] && emit_flow "master"      "→" "integration" "$mi_b" "integration..master"          "master has stuff integration hasn't merged in yet"
-[ $have_id = 1 ] && emit_flow "integration" "→" "development" "$id_b" "development..integration"     "integration has stuff development hasn't merged in yet"
-[ $have_id = 1 ] && emit_flow "integration" "←" "development" "$id_a" "integration..development"     "development has WIP integration hasn't pulled back via PR"
+[ $have_um = 1 ] && emit_flow "upstream"    "→" "master"      "$um_b" "$mst_tip..upstream/master"   "upstream has stuff master hasn't pulled in yet"
+[ $have_mi = 1 ] && emit_flow "master"      "→" "integration" "$mi_b" "$intg_tip..$mst_tip"          "master has stuff integration hasn't merged in yet"
+[ $have_id = 1 ] && emit_flow "integration" "→" "development" "$id_b" "$devl_tip..$intg_tip"         "integration has stuff development hasn't merged in yet"
+[ $have_id = 1 ] && emit_flow "integration" "←" "development" "$id_a" "$intg_tip..$devl_tip"         "development has WIP integration hasn't pulled back via PR"
 
 echo '```'
 echo ""
