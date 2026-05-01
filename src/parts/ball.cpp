@@ -33,7 +33,7 @@ Ball::~Ball()
 {
    if (m_rd)
       RenderRelease();
-   TimerRelease();
+   assert(m_phittimer == nullptr);
 }
 
 
@@ -474,10 +474,10 @@ void Ball::Render(const unsigned int renderMask)
          // If playing also apply velocity extrapolation to account for:
          // - the time elapsed since last physic,
          // - the time between now and when it will be presented,
-         // - the time the display will need to actually show it (3ms is just a magic number here)
+         // - the time the display will need to actually show it (1ms is just a magic number here)
          if (g_pplayer->IsPlaying())
          {
-            const float delay = (float)(static_cast<double>(usec() - g_pplayer->m_timeUpdateTimeStamp) / 1000000.) + rd->GetPredictedDisplayDelay() + 0.003f;
+            const float delay = (float)(static_cast<double>(usec() - g_pplayer->m_timeUpdateTimeStamp) / 1000000.) + rd->GetPredictedDisplayDelay() + 0.001f;
             posl += delay * m_hitBall.m_d.m_vel;
          }
          if (m_hitBall.m_d.m_lockedInKicker)
@@ -487,6 +487,9 @@ void Ball::Render(const unsigned int renderMask)
          // Release on main thread as Ball methods are not multithreaded
          g_pplayer->m_pluginManager.GetMsgAPI().RunOnMainThread(g_pplayer->m_pluginAPI.GetVPXEndPointId(), 0.0, [](void *userData) { static_cast<Ball *>(userData)->Release(); }, this);
       });
+
+   if (m_rd->m_noMovingBalls && m_hitBall.m_d.m_vel.LengthSquared() > 0.1f)
+      m_rd->m_noMovingBalls = false;
 
    // draw debug points for visualizing ball rotation (this uses point rendering which is a deprecated feature, not available in OpenGL ES)
    #if defined(DEBUG_BALL_SPIN) && !defined(__OPENGLES__)

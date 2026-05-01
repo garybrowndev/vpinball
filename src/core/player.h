@@ -29,7 +29,6 @@ enum InfoMode
    IF_AO_ONLY,
    IF_LIGHT_BUFFER_ONLY,
    IF_RENDER_PROBES,
-   IF_BAM_MENU,
    IF_INVALID
 };
 
@@ -227,7 +226,6 @@ public:
    VPX::RenderOutput m_topperOutput;
    Renderer *m_renderer = nullptr;
    VRDevice *m_vrDevice = nullptr;
-   bool m_headTracking = false;
    vector<AncillaryRendererDef> m_ancillaryWndRenderers[VPXWindowId::VPXWINDOW_Topper + 1];
 
    bool IsVR() const { return m_vrDevice != nullptr; }
@@ -323,8 +321,8 @@ public:
 
    // Used to detect script hangs (modal is used by script to tell VPX that it is in a modal state, so disabling watch dog)
    bool m_detectScriptHang;
-   int m_LastKnownGoodCounter = 0;
-   int m_ModalRefCount = 0;
+   int m_lastKnownGoodCounter = 0;
+   int m_modalRefCount = 0;
 
    Primitive *m_implicitPlayfieldMesh = nullptr;
    Flasher *m_implicitVRBackglass = nullptr;

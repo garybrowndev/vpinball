@@ -223,6 +223,8 @@ public:
    string m_GPU_name;
    string m_driver_name;
 
+   bool m_noMovingBalls = false;
+
 private:
    const bool m_isAnaglyph;
    const bool m_isVR;
@@ -274,11 +276,22 @@ public:
 
    uint64_t m_lastGPUFrameLength = 0;
 
+#if BX_PLATFORM_WINDOWS
+   void OnInputSampled();
+   struct PresentMonProvider* m_presentMonProvider = nullptr;
+#endif
+
 private:
    void SubmitAndFlipFrame(bool present);
    bgfx::TextureFormat::Enum SelectBackBufferFormat(const VPX::Window* wnd, bgfx::TextureFormat::Enum defaultFormat, bool isWCG) const;
    static colorFormat BGFXtoVPXTextureFormat(bgfx::TextureFormat::Enum format);
    static void RenderThread(RenderDevice* rd, bgfx::Init init);
+   void BGFXDesktopRenderLoop(const bgfx::Init& init);
+#ifdef ENABLE_XR
+   void BGFXOpenXRRenderLoop(const bgfx::Init& init);
+#endif
+
+   uint32_t m_frameIndex = 0;
 
    uint32_t m_lastPresentFrameIdx = 0;
    float m_renderLatency = 0.f;

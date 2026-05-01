@@ -79,7 +79,12 @@ DisplaySettingsPage::DisplaySettingsPage(VPXWindowId wndId)
    for (const auto& display : m_displays)
       m_displayNames.push_back((display.isPrimary ? '*' : ' ') + std::to_string(display.width) + 'x' + std::to_string(display.height) + " [" + display.displayName + ']');
 
-   // Identify initial AR lock
+   ResetARLock();
+   BuildPage();
+}
+
+void DisplaySettingsPage::ResetARLock()
+{
    double ar;
    if (m_wndId == VPXWindowId::VPXWINDOW_Playfield || m_wndId == VPXWindowId::VPXWINDOW_VRPreview)
       ar = static_cast<double>(m_player->m_playfieldWnd->GetWidth()) / static_cast<double>(m_player->m_playfieldWnd->GetHeight());
@@ -95,6 +100,7 @@ DisplaySettingsPage::DisplaySettingsPage(VPXWindowId wndId)
          m_arLock = static_cast<int>(j);
       }
    }
+}
 
    // Override auto-detect with saved AR lock if present
    {
@@ -109,6 +115,20 @@ DisplaySettingsPage::DisplaySettingsPage(VPXWindowId wndId)
    }
 
    BuildPage();
+}
+
+void DisplaySettingsPage::ResetToStoredValues()
+{
+   m_arLock = 0;
+   InGameUIPage::ResetToStoredValues();
+   ResetARLock();
+}
+
+void DisplaySettingsPage::ResetToDefaults()
+{
+   m_arLock = 0;
+   InGameUIPage::ResetToDefaults();
+   ResetARLock();
 }
 
 void DisplaySettingsPage::Close(bool isBackwardAnimation)
@@ -431,14 +451,15 @@ void DisplaySettingsPage::BuildWindowPage()
       else
 #endif
       {
-         Settings::GetRegistry().Register(Settings::GetWindow_Width_Property(m_wndId)->WithRange(m_isMainWindow ? 320 : 0, min(maxWidth, containerWidth)));
+         Settings::GetRegistry().Register(Settings::GetWindow_Width_Property(m_wndId)->WithRange(m_isMainWindow ? 320 : 0, maxWidth));
          AddItem(std::make_unique<InGameUIItem>(
                     Settings::m_propWindow_Width[m_wndId], "%d"s, //
                     [this]() { return (m_isMainWindow ? m_player->m_playfieldWnd : GetOutput(m_wndId).GetWindow())->GetWidth(); }, //
-                    [this, containerWidth](int prev, int v)
+                    [this, containerWidth, containerHeight](int prev, int v)
                     {
                        // Apply AR constraint
                        Window* const wnd = m_isMainWindow ? m_player->m_playfieldWnd : GetOutput(m_wndId).GetWindow();
+                       SDL_Point prevSize { prev, wnd->GetHeight() };
                        SDL_Point size { v, wnd->GetHeight() };
                        if (m_arLock != 0)
                        {
@@ -456,28 +477,26 @@ void DisplaySettingsPage::BuildWindowPage()
                           m_delayApplyNotifId
                              = m_player->m_liveUI->PushNotification("You have changed main window size\nRendering will be stretched until you restart the game"s, 5000, m_delayApplyNotifId);
 
-                       // Center scale
                        SDL_Point pos;
                        wnd->GetPos(pos.x, pos.y);
-                       pos.x -= (v - prev) / 2;
-                       pos.x = clamp(pos.x, 0, containerWidth - v);
-
+                       pos.x = clamp(pos.x - (size.x - prevSize.x) / 2, 0, containerWidth - size.x);
+                       pos.y = clamp(pos.y - (size.y - prevSize.y) / 2, 0, containerHeight - size.y);
                        wnd->SetPos(pos.x, pos.y);
                        wnd->SetSize(size.x, size.y);
-
                        OnStaticRenderDirty();
                        BuildPage();
                     }))
             .m_excludeFromDefault
             = true;
 
-         Settings::GetRegistry().Register(Settings::GetWindow_Height_Property(m_wndId)->WithRange(m_isMainWindow ? 320 : 0, min(maxHeight, containerHeight)));
+         Settings::GetRegistry().Register(Settings::GetWindow_Height_Property(m_wndId)->WithRange(m_isMainWindow ? 320 : 0, maxHeight));
          AddItem(std::make_unique<InGameUIItem>(
                     Settings::m_propWindow_Height[m_wndId], "%d"s, //
                     [this]() { return (m_isMainWindow ? m_player->m_playfieldWnd : GetOutput(m_wndId).GetWindow())->GetHeight(); }, //
-                    [this, containerHeight](int prev, int v)
+                    [this, containerWidth, containerHeight](int prev, int v)
                     {
                        Window* const wnd = m_isMainWindow ? m_player->m_playfieldWnd : GetOutput(m_wndId).GetWindow();
+                       SDL_Point prevSize { wnd->GetWidth(), prev };
                        SDL_Point size { wnd->GetWidth(), v };
                        if (m_arLock != 0)
                        {
@@ -495,12 +514,10 @@ void DisplaySettingsPage::BuildWindowPage()
                           m_delayApplyNotifId
                              = m_player->m_liveUI->PushNotification("You have changed main window size\nRendering will be stretched until you restart the game"s, 5000, m_delayApplyNotifId);
 
-                       // Center scale
                        SDL_Point pos;
                        wnd->GetPos(pos.x, pos.y);
-                       pos.y -= (v - prev) / 2;
-                       pos.y = clamp(pos.y, 0, containerHeight - v);
-
+                       pos.x = clamp(pos.x - (size.x - prevSize.x) / 2, 0, containerWidth - size.x);
+                       pos.y = clamp(pos.y - (size.y - prevSize.y) / 2, 0, containerHeight - size.y);
                        wnd->SetPos(pos.x, pos.y);
                        wnd->SetSize(size.x, size.y);
 

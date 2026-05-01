@@ -201,7 +201,14 @@ VRDevice::VRDevice(const Settings& settings)
          }
          #endif
          else if (gfxBackend == "Direct3D12"sv)
+         #if defined(_DEBUG) || defined(ENABLE_BGFX_DX12)
             m_rendererType = bgfx::RendererType::Enum::Direct3D12;
+         #else
+         {
+            PLOGI << "Renderer backend enforced to Direct3D11 as Direct3D12 is still experimental and not enabled in release builds";
+            m_rendererType = bgfx::RendererType::Enum::Direct3D11;
+         }
+         #endif
          else
             m_rendererType = bgfx::RendererType::Enum::Direct3D11; // Default to Direct3D 11
       #elif BX_PLATFORM_ANDROID
@@ -1188,7 +1195,7 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
 
                const vec3 rightPos = vec3(rightSpaceLocation.pose.position.x, rightSpaceLocation.pose.position.y, rightSpaceLocation.pose.position.z);
                const vec3 leftPos = vec3(leftSpaceLocation.pose.position.x, leftSpaceLocation.pose.position.y, leftSpaceLocation.pose.position.z);
-               const vec3 centerPos = -(rightPos + leftPos) * 0.5f * 100.f;
+               const vec3 centerPos = -(rightPos + leftPos) * (float)(0.5 * 100.);
                const vec3 lockbarAxis = rightPos - leftPos;
                const float lockbarAngle = atan2f(-lockbarAxis.z, lockbarAxis.x);
                m_headsetViewCentering = false;
