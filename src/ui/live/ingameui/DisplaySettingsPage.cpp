@@ -100,7 +100,6 @@ void DisplaySettingsPage::ResetARLock()
          m_arLock = static_cast<int>(j);
       }
    }
-}
 
    // Override auto-detect with saved AR lock if present
    {
@@ -113,8 +112,6 @@ void DisplaySettingsPage::ResetARLock()
          fclose(_f);
       }
    }
-
-   BuildPage();
 }
 
 void DisplaySettingsPage::ResetToStoredValues()
