@@ -38,11 +38,13 @@ val versionFilename: String by lazy {
     value
 }
 
+val androidAbi: String = System.getenv("ABI")?.takeIf { it.isNotBlank() } ?: "arm64-v8a"
+
 tasks {
     val copyLibs by registering(Copy::class) {
-        val destinationDir = file("$projectDir/src/main/jniLibs/arm64-v8a")
+        val destinationDir = file("$projectDir/src/main/jniLibs/$androidAbi")
         destinationDir.listFiles()?.forEach { it.deleteRecursively() }
-        from("${layout.buildDirectory}/../../../../build/android-arm64-v8a") { include("**.so") }
+        from("${layout.buildDirectory}/../../../../build/android-$androidAbi") { include("**.so") }
         into(destinationDir)
     }
 
@@ -82,7 +84,7 @@ android {
 
         vectorDrawables { useSupportLibrary = true }
 
-        ndk { abiFilters += "arm64-v8a" }
+        ndk { abiFilters += androidAbi }
     }
 
     flavorDimensions += "platform"
