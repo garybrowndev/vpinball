@@ -54,6 +54,94 @@ start .build/bin/vpx/Debug-x64/VPinballX64.exe "C:\code\Pinball\vpinball_ballhis
 Press F5 to play, ESC to return to editor, Q to quit from play mode.
 When debugging Ball History, always launch with a table loaded — starting empty wastes time navigating menus.
 
+## Android x86_64 emulator build (pioneer port — fork-local only)
+
+A working x86_64 Android cross-compile path lives on branch `android-x86_64-discovery`. **Upstream has no x86_64 path** — CI is arm64-only — so this is fork-local. Never PR upstream; the changes are scoped to give Gary an emulator dev workflow on his Windows x86_64 box.
+
+### Why this path exists
+
+The Android emulator on a Windows/Linux **x86_64 host** can no longer run an arm64 system image: Google removed the `berberis` ARM-translation layer ~2026-04-22. After that removal the only AVD that boots on Gary's box is `VPinball_Pixel7_x86` (x86_64), and an APK only installs if its native libs match the AVD ABI — so `arm64-v8a` APKs are rejected. The **only** path to emulator-based dev is a full x86_64 cross-compile of VPinball + every third-party lib + BGFX.
+
+The arm64 build path (`platforms/android-arm64-v8a/`) for the Samsung S21 is untouched and still primary.
+
+### Build sequence (WSL Ubuntu — Windows is unsupported by the bash scripts)
+
+```bash
+export ANDROID_NDK_HOME=/mnt/c/Users/gary.brown/AppData/Local/Android/Sdk/ndk/28.2.13676358
+export ANDROID_NDK=$ANDROID_NDK_HOME
+export ANDROID_NDK_ROOT=$ANDROID_NDK_HOME
+
+# 1. Build all 12 third-party libs for x86_64 (long — ~30-60 min)
+BUILD_TYPE=Debug ./platforms/android-x86_64/external.sh
+
+# 2. Apply BGFX emulator workaround patches (see Three Walls below)
+python3 ./platforms/android-x86_64/_patch_bgfx_debugname.py
+python3 ./platforms/android-x86_64/_patch_skip_swapchain_recreate.py
+
+# 3. Rebuild BGFX in Release config with the patches, overlay onto third-party/
+./platforms/android-x86_64/_rebuild_bgfx_release.sh
+
+# 4. Cross-compile libvpinball.so for x86_64
+./platforms/android-x86_64/_build_libvpinball.sh
+```
+
+Then from PowerShell (WSL gradle hits build-tools/35.0.0 corruption from Gary's duplicate SDK dir):
+
+```powershell
+cd standalone\android
+$env:ABI = "x86_64"
+.\gradlew assembleMobileDebug
+```
+
+The `ABI` env var (default `arm64-v8a`) drives `build.gradle.kts`'s jniLibs path, build dir, and `abiFilters`. Omit it for the S21 build; set `x86_64` for emulator. **Never re-introduce the literal hardcode** — both archs share this file.
+
+Also: `make/CMakeLists_bgfx_lib.txt:21` is `set(CMAKE_ANDROID_ARCH_ABI ${ARCH})`. With the arm64 external.sh passing `-DARCH=arm64-v8a` (multiple call sites), this reduces to the original hardcode. Provably no-op for arm64.
+
+### The three emulator graphics walls and their fixes
+
+The Android emulator's `gfxstream` + `vulkan.ranchu.so` drivers implement *just enough* Vulkan/GLES for typical Android apps. BGFX exercises paths the emulator hasn't validated. Three distinct crashes hit during the pioneer work:
+
+| Wall | Symptom | Root cause | Fix |
+|---|---|---|---|
+| **GL backend** | `bgfx::gl::GlContext::create+8317` SIGABRT under `-gpu host` and `-gpu swiftshader_indirect` | Emulator GLES rejects the EGL config BGFX wants | Don't use GL — set `GfxBackend = Vulkan` in `VPinballX.ini` |
+| **Vulkan + debug-utils** | `vk_common_SetDebugUtilsObjectNameEXT+35` SIGABRT in `vulkan.ranchu.so` | BGFX's `setDebugObjectName` template (gated by `BGFX_CONFIG_DEBUG_OBJECT_NAME`, defaults on with `BGFX_CONFIG_DEBUG`) hits a debug-helper extension the emulator's Vulkan driver doesn't implement properly. Building BGFX in `Release` does NOT fully skip the calls | `_patch_bgfx_debugname.py` rewrites the template body to `BX_UNUSED(...)` — full no-op even in Release |
+| **Vulkan swapchain recreate** | `bgfx::vk::SwapChainVK::createSwapChain+1156` → `libvulkan.so CreateSwapchainKHR+2184` SIGSEGV during the first-frame resolution update | `vulkan.ranchu.so` returns null swapchain handle when BGFX recreates the swapchain on resolution-change | `_patch_skip_swapchain_recreate.py` short-circuits `recreateSurface = false; recreateSwapchain = false` in `SwapChainVK::update`. **Plus** `~/.android/advancedFeatures.ini` flips `VulkanNativeSwapchain = on` to route Vulkan via ANGLE → host NVIDIA driver, bypassing `vulkan.ranchu.so` entirely |
+
+### Required emulator host flags (`~/.android/advancedFeatures.ini`)
+
+```ini
+Vulkan = on
+GLDirectMem = on
+VulkanSnapshots = off
+VulkanNativeSwapchain = on
+```
+
+`VulkanNativeSwapchain = on` is the load-bearing one. Without it the host GPU isn't reachable via ANGLE and walls 2/3 re-emerge.
+
+### Run sequence
+
+```powershell
+# AVD launch
+$env:ANDROID_HOME = "C:\Users\gary.brown\AppData\Local\Android\Sdk"
+& "$env:ANDROID_HOME\emulator\emulator.exe" -avd VPinball_Pixel7_x86 -gpu host -no-snapshot
+
+# Install + run
+adb install -r standalone\android\app\build\outputs\apk\mobile\debug\VPinballX_BGFX-*-mobile-debug.apk
+adb shell am start -n org.vpinball.vpinball_bgfx/org.vpinball.app.MainActivity
+```
+
+In-app, set Vulkan + 1080×2400 + FullScreen in `VPinballX.ini` before running the table. The ralph loop in `_research/android-x86_64/_ralph_iteration.sh` documents the full sequence end-to-end.
+
+### Research/debug helpers (local-only, not committed)
+
+`_research/android-x86_64/` (gitignored) holds:
+- `_ralph_iteration.sh` — the deterministic build → install → drive UI → screenshot loop used to fix bugs without manual taps
+- `_switch_gpu.ps1` — kill emulator, relaunch with a different `-gpu` mode, wait for boot
+- `_drive_app.sh`, `_dump_manifest.sh`, `_apk_check.sh`, `_arch_check.sh`, `_set_backend.sh`, `_set_vulkan.sh` — assorted runtime/debug helpers
+- `seed/` (tables.json + blankTable.vpx pre-seeded into app data) and `ralph_out/` (per-iteration screenshots/logcat) — research artifacts
+
+Don't promote any of these to `platforms/android-x86_64/` — the rule is: **only files the build pipeline strictly needs go there.** Everything else stays research-local.
+
 ## Branch Strategy & Update Workflow
 
 - `master` — tracks upstream `vpinball/vpinball` **plus one cherry-picked patch** (see "Master is not pure upstream" below).
