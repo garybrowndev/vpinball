@@ -127,10 +127,20 @@ $env:ANDROID_HOME = "C:\Users\gary.brown\AppData\Local\Android\Sdk"
 
 # Install + run
 adb install -r standalone\android\app\build\outputs\apk\mobile\debug\VPinballX_BGFX-*-mobile-debug.apk
-adb shell am start -n org.vpinball.vpinball_bgfx/org.vpinball.app.MainActivity
+adb shell am start -n org.vpinball.vpinball_bgfx/org.vpinball.app.VPinballActivity
 ```
 
 In-app, set Vulkan + 1080×2400 + FullScreen in `VPinballX.ini` before running the table. The ralph loop in `_research/android-x86_64/_ralph_iteration.sh` documents the full sequence end-to-end.
+
+### Troubleshooting: emulator gets slow after a long session
+
+After ~1 hour of use — especially if there were any native crashes (SIGSEGV/SIGABRT/SIGFPE) — frame times degrade dramatically (16ms → 200-2700ms per `dumpsys gfxinfo`). Cause: emulator state accumulates leaked GPU resources, surface/swapchain refcount imbalances, fragmented heap, and stuck tombstone-collection threads. Stopping gradle daemons and shutting down WSL does **not** help (Windows reallocates immediately). The fix:
+
+1. Kill QEMU/emulator: `& adb emu kill; Stop-Process -Name qemu*,emulator* -Force`
+2. Relaunch fresh (`-no-snapshot`, ~30 sec to boot)
+3. **Do NOT `adb install -r` the APK** — this wipes BGFX's compiled-shader cache and you'll pay for re-JIT on first encounter. Just relaunch the existing install with `am start`.
+
+If slowness persists after a clean restart with cache preserved, then suspect host pressure or BGFX/Vulkan path issues. Otherwise, restarting on this loop is normal hygiene during long debug sessions.
 
 ### Research/debug helpers (local-only, not committed)
 
