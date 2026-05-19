@@ -46,6 +46,7 @@ public:
       , m_isPressed(other.m_isPressed)
       , m_axisThreshold(other.m_axisThreshold)
       , m_isAxisReversed(other.m_isAxisReversed)
+      , m_lastChangeArrivalUs(other.m_lastChangeArrivalUs)
    {
       if (m_eventManager)
          m_eventManager->Register(this);
@@ -64,6 +65,7 @@ public:
          m_isPressed = other.m_isPressed;
          m_axisThreshold = other.m_axisThreshold;
          m_isAxisReversed = other.m_isAxisReversed;
+         m_lastChangeArrivalUs = other.m_lastChangeArrivalUs;
          m_buttonCaptureStartMs = other.m_buttonCaptureStartMs;
          m_buttonCapturePos = other.m_buttonCapturePos;
          if (m_eventManager)
@@ -100,19 +102,20 @@ public:
       return ButtonMapping(eventManager, mappingHandler, m_deviceId, m_axisOrButtonId, m_axisThreshold, m_isAxisReversed);
    }
 
-   void SetAxisPosition(float position)
+   void SetAxisPosition(float position, uint64_t sdlArrivalUs = 0)
    {
       if (m_isAxisReversed)
-         SetPressed(position <= m_axisThreshold);
+         SetPressed(position <= m_axisThreshold, sdlArrivalUs);
       else
-         SetPressed(position >= m_axisThreshold);
+         SetPressed(position >= m_axisThreshold, sdlArrivalUs);
    }
 
-   void SetPressed(bool pressed)
+   void SetPressed(bool pressed, uint64_t sdlArrivalUs = 0)
    {
       if (pressed != m_isPressed)
       {
          m_isPressed = pressed;
+         m_lastChangeArrivalUs = sdlArrivalUs;
          if (m_mappingHandler)
             m_mappingHandler->OnInputChanged(this);
       }
@@ -122,6 +125,9 @@ public:
    {
       return m_isPressed;
    }
+
+   // Timestamp of the SDL event that caused the last state change, in VPX usec() timebase. 0 if unknown.
+   uint64_t GetLastChangeArrivalUs() const { return m_lastChangeArrivalUs; }
 
    uint16_t GetDeviceId() const { return m_deviceId; }
    uint16_t GetAxisOrButtonId() const { return m_axisOrButtonId; }
@@ -143,4 +149,5 @@ private:
    bool m_isPressed;
    float m_axisThreshold;
    bool m_isAxisReversed;
+   uint64_t m_lastChangeArrivalUs = 0;
 };

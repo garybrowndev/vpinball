@@ -535,10 +535,15 @@ void InputManager::PushButtonEvent(uint16_t deviceId, uint16_t buttonId, uint64_
    if (deviceId == m_keyboardDeviceId && ImGui::GetIO().WantCaptureKeyboard)
       return;
 
+   // Convert SDL ns timestamp into VPX usec() timebase so latency diagnostics in PerfUI can subtract directly.
+   // OpenPinDev callers pass a firmware clock (not SDL) — converted value is meaningless for that path,
+   // but it's a debug-only display and OpenPinDev isn't Gary's primary input route.
+   const uint64_t sdlArrivalUs = sdl_ns_to_usec(timestampNs);
+
    uint32_t id = deviceId << 16 | buttonId;
    if (auto it = m_buttonMappings.find(id); it != m_buttonMappings.end())
       for (ButtonMapping* mapping : it->second)
-         mapping->SetPressed(isPressed);
+         mapping->SetPressed(isPressed, sdlArrivalUs);
 
    // Special handling for keyboard events to trigger custom KeyDown/KeyUp events in the script based on Windows DirectInput key codes
    if (deviceId == m_keyboardDeviceId && !m_player->m_liveUI->IsInGameUIOpened())
@@ -578,8 +583,11 @@ void InputManager::PushAxisEvent(uint16_t deviceId, uint16_t axisId, uint64_t ti
          mapping->SetAxisPosition(timestampNs, position);
 
    if (auto it = m_buttonMappings.find(id); it != m_buttonMappings.end())
+   {
+      const uint64_t sdlArrivalUs = sdl_ns_to_usec(timestampNs);
       for (ButtonMapping* mapping : it->second)
-         mapping->SetAxisPosition(position);
+         mapping->SetAxisPosition(position, sdlArrivalUs);
+   }
 
    for (const auto& listener : m_axisListeners)
       listener();
