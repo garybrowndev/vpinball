@@ -4,14 +4,22 @@
 #include "rubber.h"
 
 //#include "forsyth.h"
-#include "utils/objloader.h"
+#include "core/VPApp.h"
+#include "parts/Collection.h"
+#include "renderer/MeshBuffer.h"
+#include "renderer/RenderDevice.h"
+#include "renderer/Renderer.h"
 #include "renderer/Shader.h"
+#include "renderer/trace.h"
 #include "ui/win/DragPointDialogs.h"
+#include "ui/win/sur.h"
+#include "ui/win/WinEditor.h"
+#include "utils/objloader.h"
 
 
 Rubber::~Rubber()
 {
-   assert(m_rd == nullptr);
+   assert(m_renderer == nullptr);
 }
 
 Rubber *Rubber::CopyForPlay() const
@@ -659,16 +667,16 @@ float Rubber::GetDepth(const Vertex3Ds& viewDir) const
    return viewDir.x * center2D.x + viewDir.y * center2D.y + viewDir.z * m_d.m_height;
 }
 
-void Rubber::RenderSetup(RenderDevice *device)
+void Rubber::RenderSetup(Renderer *renderer)
 {
-   assert(m_rd == nullptr);
-   m_rd = device;
+   assert(m_renderer == nullptr);
+   m_renderer = renderer;
    m_bboxDirty = true;
 
    GenerateMesh();
 
-   std::shared_ptr<VertexBuffer> dynamicVertexBuffer = std::make_shared<VertexBuffer>(m_rd, m_numVertices, (float *)m_vertices.data(), !m_d.m_staticRendering);
-   std::shared_ptr<IndexBuffer> dynamicIndexBuffer = std::make_shared<IndexBuffer>(m_rd, m_ringIndices);
+   std::shared_ptr<VertexBuffer> dynamicVertexBuffer = std::make_shared<VertexBuffer>(m_renderer->m_renderDevice, m_numVertices, (float *)m_vertices.data(), !m_d.m_staticRendering);
+   std::shared_ptr<IndexBuffer> dynamicIndexBuffer = std::make_shared<IndexBuffer>(m_renderer->m_renderDevice, m_ringIndices);
    m_meshBuffer = std::make_shared<MeshBuffer>(GetName(), dynamicVertexBuffer, dynamicIndexBuffer, true);
    UpdateRubber(true, m_d.m_height);
 
@@ -678,8 +686,8 @@ void Rubber::RenderSetup(RenderDevice *device)
 
 void Rubber::RenderRelease()
 {
-   assert(m_rd != nullptr);
-   m_rd = nullptr;
+   assert(m_renderer != nullptr);
+   m_renderer = nullptr;
    m_meshBuffer = nullptr;
    m_meshEdgeBuffer = nullptr;
    m_dynamicVertexBufferRegenerate = true;
@@ -691,7 +699,7 @@ void Rubber::UpdateAnimation(const float diff_time_msec)
 
 void Rubber::Render(const unsigned int renderMask)
 {
-   assert(m_rd != nullptr);
+   assert(m_renderer != nullptr);
    assert(!m_desktopBackdrop);
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
@@ -712,7 +720,7 @@ void Rubber::Render(const unsigned int renderMask)
    if (isUIPass)
    {
       if (renderMask & Renderer::UI_FILL)
-         m_rd->DrawMesh(m_rd->m_basicShader, true, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
+         m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, true, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
       if (renderMask & Renderer::UI_EDGES && m_meshEdgeBuffer == nullptr)
       {
          vector<WORD> indices(8 * m_numVertices);
@@ -727,16 +735,16 @@ void Rubber::Render(const unsigned int renderMask)
             indices[i * 8 + 6] = m_ringIndices[i * 6 + 2];
             indices[i * 8 + 7] = m_ringIndices[i * 6 + 0];
          }
-         m_meshEdgeBuffer = std::make_shared<MeshBuffer>(m_meshBuffer->m_vb, std::make_shared<IndexBuffer>(m_rd, indices), true);
+         m_meshEdgeBuffer = std::make_shared<MeshBuffer>(m_meshBuffer->m_vb, std::make_shared<IndexBuffer>(m_renderer->m_renderDevice, indices), true);
       }
       if (renderMask & Renderer::UI_EDGES)
-         m_rd->DrawMesh(m_rd->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshEdgeBuffer, RenderDevice::LINELIST, 0, 8 * m_numVertices);
+         m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshEdgeBuffer, RenderDevice::LINELIST, 0, 8 * m_numVertices);
    }
    else
    {
-      m_rd->ResetRenderState();
-      m_rd->m_basicShader->SetBasic(m_ptable->GetMaterial(m_d.m_szMaterial), m_ptable->GetImage(m_d.m_szImage));
-      m_rd->DrawMesh(m_rd->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
+      m_renderer->m_renderDevice->ResetRenderState();
+      m_renderer->m_renderDevice->m_basicShader->SetBasic(m_ptable->GetMaterial(m_d.m_szMaterial), m_ptable->GetImage(m_d.m_szImage));
+      m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, m_boundingSphereCenter, 0.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
    }
 }
 
@@ -1062,21 +1070,18 @@ STDMETHODIMP Rubber::put_Scatter(float newVal)
 
 STDMETHODIMP Rubber::get_Collidable(VARIANT_BOOL *pVal)
 {
-   *pVal = FTOVB((!g_pplayer) ? m_d.m_collidable : m_vhoCollidable[0]->m_enabled);
+   *pVal = FTOVB(m_vhoCollidable.empty() ? m_d.m_collidable : m_vhoCollidable[0]->m_enabled);
    return S_OK;
 }
 
 STDMETHODIMP Rubber::put_Collidable(VARIANT_BOOL newVal)
 {
    const bool val = VBTOb(newVal);
-   if (!g_pplayer)
+   if (m_vhoCollidable.empty())
       m_d.m_collidable = val;
-   else
-   {
-       if (!m_vhoCollidable.empty() && m_vhoCollidable[0]->m_enabled != val)
-           for (size_t i = 0; i < m_vhoCollidable.size(); i++) //!! costly
-               m_vhoCollidable[i]->m_enabled = val; //copy to hit checking on entities composing the object
-   }
+   else if (m_vhoCollidable[0]->m_enabled != val)
+      for (size_t i = 0; i < m_vhoCollidable.size(); i++) //!! costly
+         m_vhoCollidable[i]->m_enabled = val; //copy to hit checking on entities composing the object
 
    return S_OK;
 }
@@ -1089,7 +1094,7 @@ STDMETHODIMP Rubber::get_Visible(VARIANT_BOOL *pVal)
 
 STDMETHODIMP Rubber::put_Visible(VARIANT_BOOL newVal)
 {
-   if (g_pplayer && m_d.m_staticRendering)
+   if (m_d.m_staticRendering && !m_vhoCollidable.empty())
       ShowError("Rubber is static! Visible property not supported!");
    m_d.m_visible = VBTOb(newVal);
 
@@ -1237,11 +1242,11 @@ void Rubber::GenerateMesh(const int _accuracy, const bool createHitShape) //!! h
    else if (accuracy < 8)
       accuracy = 8;
    else
-      accuracy = (int)((float)accuracy * 1.3f); // see also below
+      accuracy = (int)((float)accuracy * 1.30000007152557373046875f); // see also below
 
    // as solid rubbers are rendered into the static buffer, always use maximum precision
    if (m_d.m_staticRendering)
-      accuracy = (int)(10.f*1.3f); // see also above
+      accuracy = (int)(10.f * 1.30000007152557373046875f); // see also above
 
    if (_accuracy != -1) // hit shapes and UI display have the same, static, precision
       accuracy = _accuracy;

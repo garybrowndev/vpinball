@@ -10,6 +10,10 @@
 #include "standalone/PoleStorage.h"
 #endif
 
+#include "core/VPApp.h"
+#include "ui/win/resource.h"
+#include "ui/win/WinEditor.h"
+
 #include <charconv>
 #include <iomanip>
 #include <filesystem>
@@ -231,15 +235,18 @@ string SizeToReadable(const size_t bytes)
 
    // Format with one decimal for KiB and above, no decimal for bytes
    if (bytes < 1024)
-      return std::to_string(bytes) + " B";
+      return std::format("{} B", bytes);
 
-   double size = static_cast<double>(bytes);
+   double size = static_cast<double>(bytes) / 1024.0;
    int suffixIndex = 0;
-   while (size >= 1024.0 && suffixIndex++ < (int)std::size(suffixes)-1)
+   while (size >= 1024.0 && suffixIndex < (int)std::size(suffixes) - 1)
+   {
+      suffixIndex++;
       size /= 1024.0;
+   }
 
    const int whole = (int)size;
-   return std::to_string(whole) + '.' + std::to_string((int)((size-whole)*10.0 + 0.5)) + ' ' + suffixes[suffixIndex-1] + "iB";
+   return std::format("{}.{} {}iB", whole, (int)((size - whole) * 10.0 + 0.5), suffixes[suffixIndex]);
 }
 
 //
@@ -257,7 +264,7 @@ static bool HelperConvertASCII(const char* const __restrict szcstr, const int le
       if (_mm_movemask_epi8(sz16) != 0) // test highest bit of each byte, so check for >=0x80 -> non-ASCII
          return false;
 #if (WCHAR_T_SIZE == 2) // UTF16
-      _mm_storeu_si128((__m128i*)(result + i    ), _mm_unpacklo_epi8(sz16, zero)); // zero-extend 16 bytes -> 2×8 uint16 and store
+      _mm_storeu_si128((__m128i*)(result + i    ), _mm_unpacklo_epi8(sz16, zero)); // zero-extend 16 bytes -> 2x8 uint16 and store
       _mm_storeu_si128((__m128i*)(result + i + 8), _mm_unpackhi_epi8(sz16, zero));
 #else // UTF32
       // zero-extend 16 bytes -> 4×4 uint32 and store

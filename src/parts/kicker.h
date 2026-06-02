@@ -4,7 +4,14 @@
 
 #pragma once
 
+#include "parts/pintable.h"
+#include "physics/hitable.h"
+#include "renderer/Renderable.h"
 #include "ui/win/resource.h"
+#include "utils/eventproxy.h"
+
+class MeshBuffer;
+class Texture;
 
 class KickerData final : public BaseProperty
 {
@@ -43,7 +50,7 @@ public:
 #ifdef __STANDALONE__
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
-   STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
+   STDMETHOD(GetDocumentation)(MEMBERID index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
    Kicker() { }
@@ -58,8 +65,8 @@ public:
       COM_INTERFACE_ENTRY(IProvideClassInfo)
       COM_INTERFACE_ENTRY(IProvideClassInfo2)
    END_COM_MAP()
-   //DECLARE_NOT_AGGREGATABLE(Kicker) 
-   // Remove the comment from the line above if you don't want your object to 
+   //DECLARE_NOT_AGGREGATABLE(Kicker)
+   // Remove the comment from the line above if you don't want your object to
    // support aggregation.
 
    BEGIN_CONNECTION_POINT_MAP(Kicker)
@@ -93,7 +100,7 @@ public:
 private:
    void GenerateMesh(Vertex3D_NoTex2 *const buf) const;
 
-   RenderDevice* m_rd = nullptr;
+   Renderer* m_renderer = nullptr;
    std::shared_ptr<MeshBuffer> m_plateMeshBuffer;
    std::shared_ptr<MeshBuffer> m_meshBuffer;
    std::shared_ptr<MeshBuffer> m_plateMeshEdgeBuffer;

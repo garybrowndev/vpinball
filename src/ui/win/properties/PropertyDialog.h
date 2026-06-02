@@ -2,10 +2,20 @@
 
 #pragma once
 
+#include "ui/win/resource.h"
+
+#include <wxx_dialog.h>
+#include <wxx_docking.h>
+#include <wxx_stdcontrols.h>
+
+#include "utils/vector.h"
+
+
 #pragma region BasePropertyDialog
 
 class EditBox;
 class ComboBox;
+class Texture;
 
 class BasePropertyDialog: public CDialog
 {
@@ -251,7 +261,7 @@ public:
 
     static void UpdateTextureComboBox(const vector<Texture*>& contentList, const CComboBox &combo, const string &selectName);
     static void UpdateComboBox(const vector<string>& contentList, const CComboBox &combo, const string &selectName);
-    static void UpdateMaterialComboBox(const vector<Material *>& contentList, const CComboBox &combo, const string &selectName);
+    static void UpdateMaterialComboBox(const vector<class Material *>& contentList, const CComboBox &combo, const string &selectName);
     static void UpdateSurfaceComboBox(const PinTable *const ptable, const CComboBox &combo, const string &selectName);
     static void UpdateSoundComboBox(const PinTable *const ptable, const CComboBox &combo, const string &selectName);
     static void UpdateCollectionComboBox(const PinTable *const ptable, const CComboBox &combo, const char *selectName);

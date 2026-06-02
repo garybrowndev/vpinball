@@ -1,11 +1,16 @@
 // license:GPLv3+
 
-// interface for the HitTarget class.
-
 #pragma once
 
+#include "parts/pintable.h"
+#include "physics/hitable.h"
+#include "renderer/MeshBuffer.h"
+#include "renderer/Renderable.h"
 #include "ui/win/resource.h"
+#include "utils/eventproxy.h"
+
 #include "unordered_dense.h"
+
 
 // Indices for RotAndTra:
 //     RotX = 0
@@ -59,7 +64,7 @@ public:
 #ifdef __STANDALONE__
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
-   STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
+   STDMETHOD(GetDocumentation)(MEMBERID index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
 
@@ -184,7 +189,7 @@ private:
    void AddHitEdge(class PhysicsEngine *physics, ankerl::unordered_dense::set<std::pair<unsigned, unsigned>> &addedEdges, const unsigned i, const unsigned j, const Vertex3Ds &vi,
       const Vertex3Ds &vj, const bool setHitObject, const bool isUI);
 
-   RenderDevice    *m_rd = nullptr;
+   Renderer *m_renderer = nullptr;
    const Vertex3D_NoTex2 *m_vertices = nullptr; // pointer just to the existing hittargets hardcoded in arrays
    const WORD      *m_indices = nullptr; // dto.
    unsigned int     m_numVertices = 0;

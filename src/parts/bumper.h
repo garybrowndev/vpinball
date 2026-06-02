@@ -2,7 +2,15 @@
 
 #pragma once
 
+#include "parts/Collection.h"
+#include "parts/pintable.h"
+#include "physics/hitable.h"
+#include "renderer/Renderable.h"
+#include "renderer/Texture.h"
 #include "ui/win/resource.h"
+#include "utils/eventproxy.h"
+
+class MeshBuffer;
 
 class BumperData final : public BaseProperty
 {
@@ -46,7 +54,7 @@ public:
 #ifdef __STANDALONE__
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
-   STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
+   STDMETHOD(GetDocumentation)(MEMBERID index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
    Bumper() { m_d.m_ringDropOffset = 0.0f; }
@@ -152,7 +160,7 @@ private:
    void GenerateRingMesh(Vertex3D_NoTex2 *buf) const;
    void GenerateCapMesh(Vertex3D_NoTex2 *buf) const;
 
-   RenderDevice *m_rd = nullptr;
+   Renderer *m_renderer = nullptr;
    std::shared_ptr<MeshBuffer> m_baseMeshBuffer;
    std::shared_ptr<MeshBuffer> m_socketMeshBuffer;
    std::shared_ptr<MeshBuffer> m_ringMeshBuffer;

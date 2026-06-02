@@ -9,9 +9,10 @@
 #include "renderer/Texture.h"
 #include "plugins/ControllerPlugin.h"
 #include "parts/PartGroup.h"
+#include "renderer/RenderProbe.h"
 
 class Renderable;
-
+class PinTable;
 class Renderer final
 {
 public:
@@ -27,8 +28,8 @@ public:
    int GetDisplayHeight() const; // Playfield display width, taking in consideration stretching applied by some stereo modes
    float GetDisplayAspectRatio() const;
    void InitLayout(const float xpixoff = 0.f, const float ypixoff = 0.f);
-   ModelViewProj& GetMVP() { return *m_mvp; }
-   const ModelViewProj& GetMVP() const { return *m_mvp; }
+   ModelViewProj& GetMVP() { return m_mvp; }
+   const ModelViewProj& GetMVP() const { return m_mvp; }
    Vertex3Ds Unproject(const int width, const int height, const Vertex3Ds& point) const;
    Vertex3Ds Get3DPointFrom2D(const int width, const int height, const Vertex2D& p, float z);
 
@@ -39,7 +40,15 @@ public:
    void UpdateStereoShaderState();
 
    void DisableStaticPrePass(const bool disable) { bool wasUsingStaticPrepass = IsUsingStaticPrepass(); m_disableStaticPrepass += disable ? 1 : -1; m_isStaticPrepassDirty |= wasUsingStaticPrepass != IsUsingStaticPrepass(); }
-   bool IsUsingStaticPrepass() const { return (m_disableStaticPrepass <= 0) && (m_stereo3D != STEREO_VR); }
+   bool IsUsingStaticPrepass() const
+   {
+      #ifdef ENABLE_BGFX
+      // Static prepass is not compatible with MSAA as BGFX does not allow to blit between MSAA textures
+      return !GetMSAABackBufferTexture()->IsMSAA() && (m_disableStaticPrepass <= 0) && (m_stereo3D != STEREO_VR);
+      #else
+      return (m_disableStaticPrepass <= 0) && (m_stereo3D != STEREO_VR);
+      #endif
+   }
    unsigned int GetNPrerenderTris() const { return m_statsDrawnStaticTriangles; }
 
    enum class ShadeMode
@@ -88,22 +97,8 @@ public:
 
    void ReinitRenderable(IRenderable* part) { if (part) m_renderableToInit.push_back(part); }
 
-   RenderProbe::ReflectionMode GetMaxReflectionMode() const {
-      // For dynamic mode, static reflections are not available so adapt the mode
-      return !IsUsingStaticPrepass() && m_maxReflectionMode >= RenderProbe::REFL_STATIC ? RenderProbe::REFL_DYNAMIC : m_maxReflectionMode;
-   }
-   int GetAOMode() const // 0=Off, 1=Static, 2=Dynamic
-   {
-      // We must evaluate this dynamically since AO scale and enabled/disable can be changed from script
-      if (m_disableAO || !m_table->m_enableAO || !m_renderDevice->DepthBufferReadBackAvailable() || m_table->m_AOScale == 0.f)
-         return 0;
-      // The existing implementation suffers from high temporal artefacts that make it unsuitable for dynamic camera situations
-      if (m_stereo3D == STEREO_VR)
-         return 0;
-      if (m_dynamicAO)
-         return 2;
-      return IsUsingStaticPrepass() ? 1 : 0; // If AO is static prepass only, and we are running without it, disable AO
-   }
+   RenderProbe::ReflectionMode GetMaxReflectionMode() const;
+   int GetAOMode() const; // 0=Off, 1=Static, 2=Dynamic
 
    bool UseAnisoFiltering() const;
    void SetAnisoFiltering(bool enable);
@@ -217,9 +212,10 @@ private:
    // Postprocess passes
    void UpdateAmbientOcclusion(RenderTarget* renderedRT);
    void UpdateBloom(RenderTarget* renderedRT);
+   void SetupTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapRT, bool isFullTonemap);
+   RenderTarget* ApplyTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapRT);
    RenderTarget* ApplyAdditiveScreenSpaceReflection(RenderTarget* renderedRT);
-   ShaderTechniques ApplyTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapRT);
-   RenderTarget* ApplyBallMotionBlur(RenderTarget* beforeTonemapRT, RenderTarget* afterTonemapRT, ShaderTechniques tonemapTechnique);
+   RenderTarget* ApplyBallMotionBlur(RenderTarget* beforeTonemapRT, RenderTarget* afterTonemapRT);
    RenderTarget* ApplyPostProcessedAntialiasing(RenderTarget* renderedRT, RenderTarget* outputBackBuffer);
    RenderTarget* ApplySharpening(RenderTarget* renderedRT, RenderTarget* outputBackBuffer);
    RenderTarget* ApplyUpscaling(RenderTarget* renderedRT, RenderTarget* outputBackBuffer);
@@ -289,8 +285,8 @@ private:
 
    PinTable* const m_table;
 
-   ModelViewProj* m_mvp = nullptr; // Store the active Model / View / Projection
-   Matrix3D m_playfieldView; // Store the base playfield view matrix computed at beginning of frame render
+   ModelViewProj m_mvp; // Store the active Model / View / Projection
+   Matrix3D m_playfieldView[2]; // Store the base playfield view matrix computed at beginning of frame render
    PartGroupData::SpaceReference m_mvpSpaceReference = PartGroupData::SpaceReference::SR_PLAYFIELD;
 
    bool m_isStaticPrepassDirty = true;
@@ -324,7 +320,7 @@ private:
 
    Texture* m_tonemapLUT = nullptr;
 
-   #if defined(ENABLE_DX9) || defined(__OPENGLES__) || defined(__APPLE__)
+   #if defined(ENABLE_DX9) || defined(__OPENGLES__) || defined(__APPLE__) || (defined(__ANDROID__) && defined(ENABLE_XR))
    std::shared_ptr<BaseTexture> m_envRadianceTexture = nullptr;
    #else
    RenderTarget* m_envRadianceTexture = nullptr;

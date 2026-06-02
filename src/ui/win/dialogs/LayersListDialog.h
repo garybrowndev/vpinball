@@ -2,6 +2,9 @@
 
 #pragma once
 
+#include <wxx_docking.h>
+#include <wxx_treeview.h>
+
 class LayerTreeView final : public CTreeView
 {
 public:

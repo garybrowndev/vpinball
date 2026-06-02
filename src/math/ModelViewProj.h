@@ -8,27 +8,60 @@ public:
    enum FlipMode { NONE, FLIPX, FLIPY };
    ModelViewProj(const unsigned int nEyes = 1) : m_nEyes(nEyes) {}
 
+   void SetModel(const Matrix3D& model) { SetWithDirty(model, m_matModel); }
+   void SetReflection(const Matrix3D& reflection) { SetWithDirty(reflection, m_matReflection); }
+   void SetView(const unsigned int index, const Matrix3D& view) { SetWithDirty(view, m_matView[index]); }
+   void SetProj(const unsigned int index, const Matrix3D& proj) { SetWithDirty(proj, m_matProj[index]); }
    void SetFlip(const FlipMode flip) { m_dirty = true; m_flip = flip; }
-   void SetModel(const Matrix3D& Model) { MarkDirty(Model, m_matModel); m_matModel = Model; }
-   void SetView(const Matrix3D& view) { MarkDirty(view, m_matView); m_matView = view; }
-   void SetProj(const unsigned int index, const Matrix3D& proj) { MarkDirty(proj, m_matProj[index]); m_matProj[index] = proj; }
+
+   void Set(const ModelViewProj& mvp) {
+      assert(m_nEyes == mvp.m_nEyes);
+      m_flip = mvp.m_flip;
+      m_matModel = mvp.m_matModel;
+      m_matReflection = mvp.m_matReflection;
+      for (unsigned int i = 0; i < m_nEyes; i++)
+      {
+         m_matView[i] = mvp.m_matView[i];
+         m_matProj[i] = mvp.m_matProj[i];
+      }
+      m_dirty = mvp.m_dirty;
+      if (!m_dirty)
+      {
+         for (unsigned int i = 0; i < m_nEyes; i++)
+         {
+            m_matReflectedView[i] = mvp.m_matReflectedView[i];
+            m_matModelView[i] = mvp.m_matModelView[i];
+            m_matModelViewInverse[i] = mvp.m_matModelViewInverse[i];
+            m_matModelViewInverseTranspose[i] = mvp.m_matModelViewInverseTranspose[i];
+            m_matModelViewProj[i] = mvp.m_matModelViewProj[i];
+            m_viewVec[i] = mvp.m_viewVec[i];
+         }
+      }
+   }
 
    const Matrix3D& GetModel() const { return m_matModel; }
-   const Matrix3D& GetView() const { return m_matView; }
+   const Matrix3D& GetView(const unsigned int eye) const { Update(); return m_matReflectedView[eye]; }
    const Matrix3D& GetProj(const unsigned int eye) const { return m_matProj[eye]; }
-   const Matrix3D& GetModelView() const { Update(); return m_matModelView; }
-   const Matrix3D& GetModelViewInverse() const { Update(); return m_matModelViewInverse; }
-   const Matrix3D& GetModelViewInverseTranspose() const { Update(); return m_matModelViewInverseTranspose; }
+   const Matrix3D& GetModelView(const unsigned int eye) const { Update(); return m_matModelView[eye]; }
+   const Matrix3D& GetModelViewInverse(const unsigned int eye) const { Update(); return m_matModelViewInverse[eye]; }
+   const Matrix3D& GetModelViewInverseTranspose(const unsigned int eye) const { Update(); return m_matModelViewInverseTranspose[eye]; }
    const Matrix3D& GetModelViewProj(const unsigned int eye) const { Update(); return m_matModelViewProj[eye]; }
-   const Vertex3Ds& GetViewVec() const { Update(); return m_viewVec; }
+   const Vertex3Ds& GetViewVec(const unsigned int eye) const { Update(); return m_viewVec[eye]; }
+   const Matrix3D& GetRotViewProj(const unsigned int eye) const { Update(); return m_matRotViewProj[eye]; }
+   const vec4& GetCameraPos(const unsigned int eye) const { Update(); return m_cameraPos[eye]; }
 
    const unsigned int m_nEyes;
 
 private:
-   void MarkDirty(const Matrix3D& newMat, const Matrix3D& oldMat)
+   void SetWithDirty(const Matrix3D& newMat, Matrix3D& localMat)
    {
-      if (!m_dirty)
-         m_dirty = memcmp(oldMat.m, newMat.m, 4 * 4 * sizeof(float)) != 0;
+      if (m_dirty)
+         localMat = newMat;
+      else if (memcmp(localMat.m, newMat.m, 4 * 4 * sizeof(float)) != 0)
+      {
+         m_dirty = true;
+         localMat = newMat;
+      }
    }
 
    void Update() const
@@ -36,50 +69,62 @@ private:
       if (m_dirty)
       {
          m_dirty = false;
-         m_matModelViewInverse = m_matModelView = m_matModel * m_matView;
-         m_matModelViewInverse.Invert();
-         m_matModelViewInverseTranspose = m_matModelViewInverse;
-         m_matModelViewInverseTranspose.Transpose();
+         for (unsigned int eye = 0; eye < m_nEyes; eye++)
+         {
+            m_matReflectedView[eye] = m_matReflection * m_matView[eye];
+            m_matModelView[eye] = m_matModel * m_matReflectedView[eye];
+            m_matModelViewProj[eye] = m_matModelView[eye] * m_matProj[eye];
+            m_matModelViewInverse[eye] = Matrix3D::MatrixInverse(m_matModelView[eye]);
+            m_matModelViewInverseTranspose[eye] = m_matModelViewInverse[eye];
+            m_matModelViewInverseTranspose[eye].Transpose();
+
+            const Matrix3D invReflectedView = Matrix3D::MatrixInverse(m_matReflectedView[eye]);
+
+            const Vertex3Ds camPos = invReflectedView.GetOrthoNormalPos();
+            m_cameraPos[eye] = vec4(camPos.x, camPos.y, camPos.z, 0.f);
+            m_matRotViewProj[eye] = m_matReflectedView[eye].GetRotationPart() * m_matProj[eye];
+
+            const Matrix3D viewRot = invReflectedView.GetRotationPart();
+            m_viewVec[eye] = viewRot * Vertex3Ds { 0.f, 0.f, 1.f };
+            m_viewVec[eye].NormalizeSafe();
+         }
+
+         // Flip is a clipspace flip, applied after projection
          switch (m_flip)
          {
-         case NONE:
-         {
-            for (unsigned int eye = 0; eye < m_nEyes; eye++)
-               m_matModelViewProj[eye] = m_matModelView * m_matProj[eye];
-            break;
-         }
+         case NONE: break;
          case FLIPX:
          {
             static constexpr Matrix3D flipx{-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
             for (unsigned int eye = 0; eye < m_nEyes; eye++)
-               m_matModelViewProj[eye] = m_matModelView * m_matProj[eye] * flipx;
+               m_matModelViewProj[eye] = m_matModelViewProj[eye] * flipx;
             break;
          }
          case FLIPY:
          {
             static constexpr Matrix3D flipy{1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
             for (unsigned int eye = 0; eye < m_nEyes; eye++)
-               m_matModelViewProj[eye] = m_matModelView * m_matProj[eye] * flipy;
+               m_matModelViewProj[eye] = m_matModelViewProj[eye] * flipy;
             break;
          }
+         default: assert(false); break;
          }
-         Matrix3D temp = m_matView;
-         temp.Invert();
-         const Matrix3D viewRot = temp.GetRotationPart();
-         m_viewVec = viewRot * Vertex3Ds{0, 0, 1};
-         m_viewVec.NormalizeSafe();
       }
    }
 
-   Matrix3D m_matModel;
-   Matrix3D m_matView;
-   Matrix3D m_matProj[6];
+   Matrix3D m_matModel { Matrix3D::MatrixIdentity() };
+   Matrix3D m_matReflection { Matrix3D::MatrixIdentity() };
+   Matrix3D m_matView[2];
+   Matrix3D m_matProj[2];
 
    mutable bool m_dirty = true;
    FlipMode m_flip = NONE;
-   mutable Matrix3D m_matModelView;
-   mutable Matrix3D m_matModelViewInverse;
-   mutable Matrix3D m_matModelViewInverseTranspose;
-   mutable Matrix3D m_matModelViewProj[6];
-   mutable Vertex3Ds m_viewVec;
+   mutable Matrix3D m_matReflectedView[2];
+   mutable Matrix3D m_matModelView[2];
+   mutable Matrix3D m_matModelViewInverse[2];
+   mutable Matrix3D m_matModelViewInverseTranspose[2];
+   mutable Matrix3D m_matModelViewProj[2];
+   mutable Matrix3D m_matRotViewProj[2];
+   mutable vec4 m_cameraPos[2];
+   mutable Vertex3Ds m_viewVec[2];
 };

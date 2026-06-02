@@ -4,26 +4,26 @@
 
 #pragma once
 
-#include "unordered_dense.h"
 
 #include <atomic>
-#include "utils/hash.h"
+
+#include "core/pinundo.h"
+#include "parts/Collection.h"
+#include "parts/pinbinary.h"
 #include "renderer/RenderProbe.h"
 #include "renderer/ViewSetup.h"
-
-#include "input/InputManager.h"
-
-#include "ui/win/PinTableMDI.h"
-
-#include "parts/pinbinary.h"
+#include "unordered_dense.h"
+#include "utils/eventproxy.h"
+#include "utils/fileio.h"
+#include "utils/hash.h"
+#include "utils/vector.h"
 
 #ifdef __STANDALONE__
 #include <iostream>
 class Light;
 #endif
 
-#define VIEW_PLAYFIELD 1
-#define VIEW_BACKGLASS 2
+
 
 #define MIN_ZOOM 0.126f // purposely make them offset from powers to 2 to account for roundoff error
 #define MAX_ZOOM 63.9f
@@ -44,6 +44,13 @@ struct WhereUsedInfo
    string whereUsedPropertyName; // Property name where used (If searching for images this could be 'Image', 'Side Image' etc.  If search for materials this could be 'Material', 'Cap Material, 'Base Material' etc.
 };
 
+namespace VPX
+{
+class Sound;
+};
+class Texture;
+class Material;
+class Collection;
 
 class VPXFileFeedback;
 namespace VPX::InGameUI { class InGameUIItem; }
@@ -65,7 +72,7 @@ public:
 #ifdef __STANDALONE__
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
-   STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
+   STDMETHOD(GetDocumentation)(MEMBERID index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
    STDMETHOD(get_BallFrontDecal)(/*[out, retval]*/ BSTR *pVal);
@@ -356,6 +363,7 @@ public:
    void ShowWhereMaterialsUsed(vector<WhereUsedInfo> &);
    void ShowWhereMaterialUsed(vector<WhereUsedInfo> &, Material *const ppi);
 
+   void ParseScript(const string &script, vector<string> &functions, vector<string> &identifiers, const std::function<void(const string &, int)>& onDuplicate) const;
    string AuditTable(bool log) const;
 
    void ListCustomInfo(HWND hwndListView);

@@ -5,12 +5,20 @@
 #pragma once
 
 #include "dragpoint.h"
+#include "math/MeshUtils.h"
+#include "parts/Material.h"
+#include "parts/pintable.h"
+#include "physics/hitable.h"
+#include "renderer/Renderable.h"
 #include "ui/win/resource.h"
+#include "utils/eventproxy.h"
+
+class MeshBuffer;
 
 class SurfaceData final : public BaseProperty
 {
 public:
-   float m_slingshot_threshold;	// speed at which ball needs to trigger slingshot 
+   float m_slingshot_threshold;	// speed at which ball needs to trigger slingshot
    string m_szSideImage;
    string m_szTopMaterial;
    string m_szSideMaterial;
@@ -51,7 +59,7 @@ public:
 #ifdef __STANDALONE__
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
-   STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
+   STDMETHOD(GetDocumentation)(MEMBERID index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
 
@@ -116,7 +124,7 @@ protected:
    void RenderSlingshots();
    void RenderWallsAtHeight(const bool drop, const bool isReflectionPass);
 
-   RenderDevice *m_rd = nullptr;
+   Renderer *m_renderer = nullptr;
 
 public:
    void SetDefaultPhysics(const bool fromMouseClick) final;
@@ -134,7 +142,7 @@ public:
    {
       if (m_d.m_droppable)
          return false;
-      if (m_rd != nullptr) // Static behavior is cached since changing the material could break rendering (is it still valid since we now allow to disable/enable static prerendering while playing)
+      if (m_renderer != nullptr) // Static behavior is cached since changing the material could break rendering (is it still valid since we now allow to disable/enable static prerendering while playing)
          return !m_isDynamic;
       if (m_d.m_sideVisible)
       {

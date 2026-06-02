@@ -421,6 +421,11 @@ bool DynamicTypeLibrary::COMToScriptVariant(const VARIANT* cv, const ScriptTypeN
       if ((V_VT(cv) == VT_DISPATCH) || (V_VT(cv) == (VT_BYREF | VT_DISPATCH)))
       {
          DynamicDispatch* dispatch = static_cast<DynamicDispatch*>((V_VT(cv) & VT_BYREF) ? *V_DISPATCHREF(cv) : V_DISPATCH(cv));
+         if (dispatch == nullptr)
+         {
+            PLOGE << "Null object (Nothing) passed where an object of class " << typeDef.classDef->classDef->name.name << " was expected";
+            return false;
+         }
          sv.vObject = dispatch->m_nativeObject;
          if (sv.vObject != nullptr)
             PSC_ADD_REF(typeDef.classDef->classDef, sv.vObject);
@@ -428,6 +433,11 @@ bool DynamicTypeLibrary::COMToScriptVariant(const VARIANT* cv, const ScriptTypeN
       else if ((V_VT(cv) == VT_UNKNOWN) || (V_VT(cv) == (VT_BYREF | VT_UNKNOWN)))
       {
          DynamicDispatch* dispatch = static_cast<DynamicDispatch*>((V_VT(cv) & VT_BYREF) ? *V_UNKNOWNREF(cv) : V_UNKNOWN(cv));
+         if (dispatch == nullptr)
+         {
+            PLOGE << "Null object (Nothing) passed where an object of class " << typeDef.classDef->classDef->name.name << " was expected";
+            return false;
+         }
          sv.vObject = dispatch->m_nativeObject;
          if (sv.vObject != nullptr)
             PSC_ADD_REF(typeDef.classDef->classDef, sv.vObject);
@@ -889,8 +899,6 @@ HRESULT DynamicTypeLibrary::Invoke(const ScriptClassDef * classDef, void* native
       return DISP_E_MEMBERNOTFOUND;
    }
    const ScriptClassMemberDef& memberDef = classDef->members[memberIndex];
-   if ((memberDef.type.id != TypeID::TYPEID_VOID) && (pVarResult == nullptr))
-      return E_POINTER;
 
    // Convert all incoming COM arguments to ScriptVariants
    ScriptVariant args[PSC_CALL_MAX_ARG_COUNT];
@@ -985,8 +993,11 @@ HRESULT DynamicTypeLibrary::Invoke(const ScriptClassDef * classDef, void* native
    // Convert then dispose the return value if any
    if (memberDef.type.id != TypeID::TYPEID_VOID)
    {
-      assert(V_VT(pVarResult) == VT_EMPTY);
-      ScriptToCOMVariant(memberDef.type, retValue, pVarResult);
+      if (pVarResult)
+      {
+         assert(V_VT(pVarResult) == VT_EMPTY);
+         ScriptToCOMVariant(memberDef.type, retValue, pVarResult);
+      }
       ReleaseScriptVariant(memberDef.type, retValue);
    }
 

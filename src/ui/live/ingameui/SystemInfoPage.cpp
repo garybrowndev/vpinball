@@ -3,6 +3,10 @@
 #include "core/stdafx.h"
 #include "SystemInfoPage.h"
 
+#include "core/VPApp.h"
+#include "renderer/Renderer.h"
+
+
 namespace VPX::InGameUI
 {
 

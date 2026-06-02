@@ -3,6 +3,10 @@
 #include "core/stdafx.h"
 #include "Window.h"
 
+#include "core/VPApp.h"
+#include "parts/Collection.h"
+#include "renderer/Renderer.h"
+
 #include <SDL3/SDL_video.h>
 
 #ifdef _MSC_VER
@@ -85,11 +89,18 @@ Window::Window(const string& title, const Settings& settings, VPXWindowId window
 #endif
 
    // Both fullscreen and windowed modes are anchored to a user selected display
-   const DisplayConfig selectedDisplay = GetDisplayConfig(settings.GetWindow_Display((int)m_windowId));
-   if (selectedDisplay.displayName != settings.GetWindow_Display((int)m_windowId))
+   const string configuredDisplay = settings.GetWindow_Display((int)m_windowId);
+   const DisplayConfig selectedDisplay = GetDisplayConfig(configuredDisplay);
+   if (selectedDisplay.displayName != configuredDisplay)
    {
-      PLOGW << "The selected display \"" << settings.GetWindow_Display((int)m_windowId)
-            << "\" is not available. Using display \"" << selectedDisplay.displayName << "\" instead.";
+      if (configuredDisplay.empty())
+      {
+         PLOGI << "No display configured. Using display \"" << selectedDisplay.displayName << "\".";
+      }
+      else
+      {
+         PLOGW << "The selected display \"" << configuredDisplay << "\" is not available. Using display \"" << selectedDisplay.displayName << "\" instead.";
+      }
    }
    int wnd_x = selectedDisplay.left;
    int wnd_y = selectedDisplay.top;
@@ -434,6 +445,13 @@ Window::DisplayConfig Window::GetDisplayConfig(const string& display)
    }
    assert(selectedDisplay.width > 0); // We should at least have selected the default display
    return selectedDisplay;
+}
+
+void Window::SetBackBuffer(RenderTarget* rt, const bool wcgBackbuffer)
+{
+   assert(rt == nullptr || (rt->GetWidth() == m_pixelWidth && rt->GetHeight() == m_pixelHeight));
+   m_backBuffer = rt;
+   m_wcgBackbuffer = wcgBackbuffer;
 }
 
 #if defined(_WIN32)

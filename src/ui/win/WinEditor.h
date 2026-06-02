@@ -5,10 +5,11 @@
 #pragma once
 
 #include "core/Settings.h"
-#include "renderer/RenderDevice.h"
-#include "parts/Sound.h"
+#include "ui/win/resource.h"
+#include "utils/vector.h"
 
 #ifndef __STANDALONE__
+   #include <wxx_docking.h>
    #include <wxx_dockframe.h>
    #include "dialogs/ImageDialog.h"
    #include "dialogs/SoundDialog.h"
@@ -19,7 +20,6 @@
    #include "dialogs/TableInfoDialog.h"
    #include "dialogs/DimensionDialog.h"
    #include "dialogs/MaterialDialog.h"
-   #include "dialogs/SoundDialog.h"
    #include "dialogs/AboutDialog.h"
    #include "dialogs/ToolbarDialog.h"
    #include "dialogs/LayersListDialog.h"
@@ -28,6 +28,18 @@
 
    #define OVERRIDE override
 #else
+   class ImageDialog final { };
+   class SoundDialog final { };
+   class EditorOptionsDialog final { };
+   class CollectionManagerDialog final { };
+   class PhysicsOptionsDialog final { };
+   class TableInfoDialog final { };
+   class DimensionDialog final { };
+   class RenderProbeDialog final { };
+   class MaterialDialog final { };
+   class AboutDialog final { };
+   class ToolbarDialog final { };
+   class NotesDialog final { };
    #define OVERRIDE
 #endif
 

@@ -23,6 +23,8 @@
 
 #include <SDL3_ttf/SDL_ttf.h>
 
+#include "PUPFont.h"
+
 #define PUP_SCREEN_TOPPER             0
 #define PUP_SETTINGS_TOPPERX          320
 #define PUP_SETTINGS_TOPPERY          30
@@ -60,6 +62,22 @@
 
 namespace PUP {
 
+enum class PlayAction : int
+{
+   Normal,           // plays the file until it ends
+   Loop,             // plays the file in a Loop
+   SplashReset,      // meant to be used with a Looping file. If this is triggered while a Looping file is currently playing…then the SplashReset file will play to its end, and then the original Looping file will resume from its beginning (there may be a pause when the Looping file begins again). This can be handy, but you would be better using SetBG in most cases to do something similar.
+   SplashReturn,     // meant to be used with a Looping file. If this is triggered while a Looping file is currently playing…then the SplashReturn file will play to its end, and then the original Looping file will resume from where it left off (there may be a pause when the Looping file begins again). This can be handy, but you would be better using SetBG in most cases to do something similar.
+   StopPlayer,       // will stop whatever file is currently playing. Priority MUST be HIGHER than the file currently playing for this to work!
+   StopFile,         // will stop ONLY the file specified in PlayFile (if it's playing). This has no effect on other files that are playing.
+   SetBG,            // Set Background will set a new default looping "Background" file. When other files are done playing, then this new SetBG file will be played in a loop. Example: This can be handy for setting a new looping "mode" video, so that new other video events during the new mode will fall back to this SetBG video. Then you can change SetBG again to the main game mode video when the mode is completed.
+   PlaySSF,          // used to play WAV files for Surround Sound Feedback. (You don't want these sounds playing from your front / backbox speakers). The settings for the 3D position of the sound files are set in COUNTER. The format is in X,Z,Y. Example: "-2,1,-8". X values range from -10 (left), 0 (center), 10 (right). Z values don't ever change and stay at 1. Y values range from 0 (top), -5 (center), -10 (bottom). NOTE: This currently will only work with the DEFAULT sound card in Windows. Additional sound card / devices are not yet supported!
+   SkipSamePriority, // this will ignore the trigger if the file playing has the same Priority. This is nice for events such as Jackpot videos or others that will play very often, and you don't want to have them constantly interrupting each other. "Normal" PlayAction files with the same Priority will interrupt each other no matter the Rest Seconds. Using SkipSamePri will not play the new file (with the same Priority) if the current file is still playing and allows for smoother non-interruptive action for common events.
+   CustomFunction    // Call a custom function
+};
+
+const string& PlayActionToString(PlayAction value);
+
 class PUPScreen;
 class PUPPlaylist;
 class PUPTrigger;
@@ -83,8 +101,8 @@ public:
    std::shared_ptr<PUPScreen> GetScreen(int screenNum, bool logMissing = false) const;
    void SendScreenToBack(const PUPScreen* screen);
    void SendScreenToFront(const PUPScreen* screen);
-   bool AddFont(TTF_Font* pFont, const string& szFilename);
-   TTF_Font* GetFont(const string& szFont);
+   bool AddFont(std::unique_ptr<PUPFont> pFont, const string& szFilename);
+   PUPFont* GetFont(const string& szFont);
 
    void QueueDOFEvent(char c, int id, int value);
 
@@ -105,9 +123,9 @@ private:
    string m_szRomName;
    vector<std::shared_ptr<PUPScreen>> m_screenOrder;
    ankerl::unordered_dense::map<int, std::shared_ptr<PUPScreen>> m_screenMap;
-   vector<TTF_Font*> m_fonts;
-   ankerl::unordered_dense::map<string, TTF_Font*> m_fontMap;
-   ankerl::unordered_dense::map<string, TTF_Font*> m_fontFilenameMap;
+   vector<std::unique_ptr<PUPFont>> m_fonts;
+   ankerl::unordered_dense::map<string, PUPFont*> m_fontMap;
+   ankerl::unordered_dense::map<string, PUPFont*> m_fontFilenameMap;
    vector<PUPPlaylist*> m_playlists;
 
    const uint32_t m_endpointId;

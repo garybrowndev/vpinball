@@ -4,7 +4,13 @@
 
 #pragma once
 
+#include "parts/pintable.h"
+#include "physics/hitable.h"
+#include "renderer/Renderable.h"
 #include "ui/win/resource.h"
+#include "utils/eventproxy.h"
+
+class MeshBuffer;
 
 class SpinnerData final : public BaseProperty
 {
@@ -42,7 +48,7 @@ public:
 #ifdef __STANDALONE__
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
-   STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
+   STDMETHOD(GetDocumentation)(MEMBERID index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
    Spinner() { }
@@ -94,7 +100,7 @@ public:
 private:
    void UpdatePlate(Vertex3D_NoTex2 * const vertBuffer);
 
-   RenderDevice *m_rd = nullptr;
+   Renderer *m_renderer = nullptr;
    std::shared_ptr<MeshBuffer> m_bracketMeshBuffer;
    std::shared_ptr<MeshBuffer> m_plateMeshBuffer;
    Matrix3D m_fullMatrix;

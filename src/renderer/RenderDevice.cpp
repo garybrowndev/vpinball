@@ -1,6 +1,9 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
+#include "renderer/Renderer.h"
+
+#include "parts/Collection.h"
 
 #ifdef _MSC_VER
 #include "dwmapi.h"
@@ -364,10 +367,6 @@ void RenderDevice::RenderThread(RenderDevice* rd, bgfx::Init init)
       // Note that this is needed for native VR (running directly on the headset)
       if (init.type == bgfx::RendererType::Vulkan)
          init.platformData.nwh = nullptr;
-      // FIXME We need to set the backbuffer size to the eye size for bgfx::clear to work.
-      // This is not clean and should be fixed as this is also the size of the desktop swapchain
-      init.resolution.width = max(init.resolution.width, static_cast<uint32_t>(g_pplayer->m_vrDevice->GetEyeWidth()));
-      init.resolution.height = max(init.resolution.height, static_cast<uint32_t>(g_pplayer->m_vrDevice->GetEyeHeight()));
 #endif
    }
 
@@ -497,6 +496,7 @@ void RenderDevice::RenderThread(RenderDevice* rd, bgfx::Init init)
 void RenderDevice::BGFXOpenXRRenderLoop(const bgfx::Init& init)
 {
    // OpenXR renderloop, synchronized on headset (using xrWaitFrame), with game logic preparing frames when headset request them
+   m_frameIndex = 0;
    while (m_renderDeviceAlive)
    {
       // Process OpenXR events (headset status, ...)
@@ -528,14 +528,6 @@ void RenderDevice::BGFXOpenXRRenderLoop(const bgfx::Init& init)
 
             // Submit frame to BGFX (which contains all rendering commands, for VR headset but also other windows like preview,...)
             {
-#if defined(__ANDROID__)
-               void* nwh = SDL_GetPointerProperty(SDL_GetWindowProperties(m_outputWnd[1]->GetCore()), SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, NULL);
-               if (nwh == nullptr)
-               {
-                  m_framePending = true;
-                  return;
-               }
-#endif
                BEGIN_SPAN(tagSpan, "VPX->BGFX")
                std::lock_guard lock(m_frameMutex);
                g_pplayer->m_renderProfiler->NewFrame(g_pplayer->m_time_msec);
@@ -550,6 +542,7 @@ void RenderDevice::BGFXOpenXRRenderLoop(const bgfx::Init& init)
             BEGIN_SPAN(tagSpan, "BGFX->GPU")
             g_pplayer->m_renderProfiler->EnterProfileSection(FrameProfiler::PROFILE_RENDER_FLIP);
             Flip();
+            m_frameIndex++;
             if (m_screenshotFrameDelay > 0)
             {
                m_screenshotFrameDelay--;
@@ -1098,6 +1091,7 @@ RenderDevice::RenderDevice(
 {
    // Main render target (playfield window or VR target)
    m_outputWnd.push_back(wnd);
+   VPX::Window* swapchainWnd = wnd;
 
    // Create preview in the render device as it holds the desktop swapchain (not really clean and should be refactored for all windows to be added/removed by the client)
    if (isVR && !g_isAndroid)
@@ -1106,7 +1100,7 @@ RenderDevice::RenderDevice(
 #ifdef ENABLE_BGFX
       // Color and depth format are likely wrong => use the ones selected by the OpenXR backend
       RenderTarget* backbuffer = new RenderTarget(this, SurfaceType::RT_DEFAULT, BGFX_INVALID_HANDLE, BGFX_INVALID_HANDLE, bgfx::TextureFormat::RGBA8, BGFX_INVALID_HANDLE,
-         bgfx::TextureFormat::D24, "BackBuffer", previewWnd->GetPixelWidth(), previewWnd->GetPixelHeight(), colorFormat::RGBA8);
+         bgfx::TextureFormat::D32F, "BackBuffer", previewWnd->GetPixelWidth(), previewWnd->GetPixelHeight(), colorFormat::RGBA8);
 #else
       RenderTarget* backbuffer = new RenderTarget(this, SurfaceType::RT_DEFAULT, previewWnd->GetPixelWidth(), previewWnd->GetPixelHeight(), colorFormat::RGBA8);
 #endif
@@ -1114,6 +1108,7 @@ RenderDevice::RenderDevice(
       previewWnd->Show();
       previewWnd->RaiseAndFocus();
       m_outputWnd.push_back(previewWnd);
+      swapchainWnd = previewWnd;
    }
 
    assert(!isVR || m_nEyes == 2);
@@ -1176,29 +1171,29 @@ RenderDevice::RenderDevice(
 
    init.callback = &m_bgfxCallback;
    init.fallback = true;
-   init.resolution.width = wnd->GetPixelWidth();
-   init.resolution.height = wnd->GetPixelHeight();
+   init.resolution.width = swapchainWnd->GetPixelWidth();
+   init.resolution.height = swapchainWnd->GetPixelHeight();
    init.platformData.context = nullptr;
    init.platformData.backBuffer = nullptr;
    init.platformData.backBufferDS = nullptr;
    #if BX_PLATFORM_LINUX || BX_PLATFORM_BSD
    if (SDL_GetCurrentVideoDriver() == "x11"sv) {
-      init.platformData.ndt = SDL_GetPointerProperty(SDL_GetWindowProperties(m_outputWnd[0]->GetCore()), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, NULL);
-      init.platformData.nwh = (void*)SDL_GetNumberProperty(SDL_GetWindowProperties(m_outputWnd[0]->GetCore()), SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
+      init.platformData.ndt = SDL_GetPointerProperty(SDL_GetWindowProperties(swapchainWnd->GetCore()), SDL_PROP_WINDOW_X11_DISPLAY_POINTER, NULL);
+      init.platformData.nwh = (void*)SDL_GetNumberProperty(SDL_GetWindowProperties(swapchainWnd->GetCore()), SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0);
    }
    else if (SDL_GetCurrentVideoDriver() == "wayland"sv) {
       init.platformData.type = bgfx::NativeWindowHandleType::Wayland;
-      init.platformData.ndt = SDL_GetPointerProperty(SDL_GetWindowProperties(m_outputWnd[0]->GetCore()), SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, NULL);
-      init.platformData.nwh = SDL_GetPointerProperty(SDL_GetWindowProperties(m_outputWnd[0]->GetCore()), SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, NULL);
+      init.platformData.ndt = SDL_GetPointerProperty(SDL_GetWindowProperties(swapchainWnd->GetCore()), SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, NULL);
+      init.platformData.nwh = SDL_GetPointerProperty(SDL_GetWindowProperties(swapchainWnd->GetCore()), SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, NULL);
    }
    #elif BX_PLATFORM_OSX
-   init.platformData.nwh = SDL_GetRenderMetalLayer(SDL_CreateRenderer(m_outputWnd[0]->GetCore(), "Metal"));
+   init.platformData.nwh = SDL_GetRenderMetalLayer(SDL_CreateRenderer(swapchainWnd->GetCore(), "Metal"));
    #elif BX_PLATFORM_IOS
    init.platformData.nwh = VPinballLib::VPinballLib::Instance().GetMetalLayer();
    #elif BX_PLATFORM_ANDROID
-   init.platformData.nwh = SDL_GetPointerProperty(SDL_GetWindowProperties(m_outputWnd[0]->GetCore()), SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, NULL);
+   init.platformData.nwh = SDL_GetPointerProperty(SDL_GetWindowProperties(swapchainWnd->GetCore()), SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, NULL);
    #elif BX_PLATFORM_WINDOWS
-   init.platformData.nwh = m_outputWnd[0]->GetNativeHWND();
+   init.platformData.nwh = swapchainWnd->GetNativeHWND();
    #elif BX_PLATFORM_STEAMLINK
    init.platformData.ndt = wmInfo.info.vivante.display;
    init.platformData.nwh = wmInfo.info.vivante.window;
@@ -1587,13 +1582,6 @@ RenderDevice::RenderDevice(
       memset(surf->data(), 0, 4);
       m_nullTexture = std::make_shared<Sampler>(this, "Null"s, surf, false);
    }
-
-   // alloc float buffer for rendering
-   #if defined(ENABLE_OPENGL)
-   int maxSamples;
-   glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
-   nMSAASamples = min(maxSamples, nMSAASamples); // unused
-   #endif
 
    // create default vertex declarations for shaders
    #if defined(ENABLE_BGFX)
@@ -2607,10 +2595,10 @@ void RenderDevice::DrawMesh(Shader* shader, const bool isTranparentPass, const V
       // This happens during startup for offscreen rendering (somewhat hacky)
       depth = 0.f;
    else if (g_pplayer->m_renderer->GetShadeMode() != Renderer::ShadeMode::Default)
-      // Used by the new wireframe renderer: sort along view vector
+      // Used by the new wireframe renderer: sort along the left eye view vector
       //depth = isTranparentPass ? g_pplayer->m_renderer->GetMVP().GetModelView().MultiplyVectorNoPerspective(center).z : -g_pplayer->m_renderer->GetMVP().GetModelView().MultiplyVectorNoPerspective(center).z;
       // back to front
-      depth = g_pplayer->m_renderer->GetMVP().GetModelView().MultiplyVectorNoPerspective(center).z;
+      depth = g_pplayer->m_renderer->GetMVP().GetModelView(0).MultiplyVectorNoPerspective(center).z;
    else
       // Legacy sorting order (only along negative z axis, which is reversed for reflections).
       // This is completely wrong, but needed to preserve backward compatibility. We should sort along the view axis (especially for reflection probes)
