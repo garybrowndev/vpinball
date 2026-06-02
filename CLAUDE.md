@@ -29,11 +29,14 @@ git checkout -- third-party/
 ```
 
 ### Build tips
-- After upstream merges, re-run `make/create_vs_solution.bat` to regenerate VS project files
-- When changing headers (especially `def.h`, `stdafx.h`, `ballhistory.h`), delete ALL `.obj` files: `rm -rf .build/obj/vpx/Debug-x64/*.obj`
+- After upstream merges, re-run `make/create_vs_solution.bat` to regenerate VS project files. **Symptom of skipping**: `error C1083: Cannot open source file ... BAMView.cpp` — the templated vcxproj is stale and references files upstream deleted.
+- When changing headers (especially `def.h`, `stdafx.h`, `ballhistory.h`, `Settings_properties.inl`), delete ALL `.obj` files: `rm -rf .build/obj/vpx/Debug-x64/*.obj`
 - Force relink by also deleting the exe: `rm -f .build/bin/vpx/Debug-x64/VPinballX64.exe`
-- Build just vpx without plugins: add `-p:BuildProjectReferences=false` to MSBuild
-- MSBuild from CLI: `"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe" ".build/vsproject/vpx.vcxproj" -p:Configuration=Debug -p:Platform=x64 -m`
+- Build via the **solution** for non-Debug configs (Release_BGFX, Release_GL): `MSBuild .build/vsproject/VisualPinball.sln -t:vpx -p:Configuration=Release_BGFX -p:Platform=x64`. **Building the vcxproj directly fails** with `error MSB8013: This project doesn't contain the Configuration and Platform combination of Release_BGFX|x64` for every plugin — the sln config-map translates `Release_BGFX|x64` → `Release|x64` for plugins, but the standalone vcxproj doesn't.
+- Build just vpx without plugins: add `-p:BuildProjectReferences=false` to MSBuild (works for Debug-x64; for Release_BGFX, use `-t:vpx` on the sln instead — same effect, correct config mapping)
+- Cap parallelism at `-m:9` (75% of 12 cores) to avoid heap-limit C1076 errors
+- MSBuild from CLI: `"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe" ".build/vsproject/VisualPinball.sln" -t:vpx -p:Configuration=Release_BGFX -p:Platform=x64 -m:9`
+- **Deploy convention**: build artifact at `.build/bin/vpx/<Config>-x64/VPinballX_BGFX64.exe` → cabinet at `Z:\visual pinball\VPinballX_BGFX64_BH.exe` (rename adds `_BH` suffix at deploy time)
 
 ### CMake Build (windows-x64)
 ```
@@ -127,10 +130,20 @@ $env:ANDROID_HOME = "C:\Users\gary.brown\AppData\Local\Android\Sdk"
 
 # Install + run
 adb install -r standalone\android\app\build\outputs\apk\mobile\debug\VPinballX_BGFX-*-mobile-debug.apk
-adb shell am start -n org.vpinball.vpinball_bgfx/org.vpinball.app.MainActivity
+adb shell am start -n org.vpinball.vpinball_bgfx/org.vpinball.app.VPinballActivity
 ```
 
 In-app, set Vulkan + 1080×2400 + FullScreen in `VPinballX.ini` before running the table. The ralph loop in `_research/android-x86_64/_ralph_iteration.sh` documents the full sequence end-to-end.
+
+### Troubleshooting: emulator gets slow after a long session
+
+After ~1 hour of use — especially if there were any native crashes (SIGSEGV/SIGABRT/SIGFPE) — frame times degrade dramatically (16ms → 200-2700ms per `dumpsys gfxinfo`). Cause: emulator state accumulates leaked GPU resources, surface/swapchain refcount imbalances, fragmented heap, and stuck tombstone-collection threads. Stopping gradle daemons and shutting down WSL does **not** help (Windows reallocates immediately). The fix:
+
+1. Kill QEMU/emulator: `& adb emu kill; Stop-Process -Name qemu*,emulator* -Force`
+2. Relaunch fresh (`-no-snapshot`, ~30 sec to boot)
+3. **Do NOT `adb install -r` the APK** — this wipes BGFX's compiled-shader cache and you'll pay for re-JIT on first encounter. Just relaunch the existing install with `am start`.
+
+If slowness persists after a clean restart with cache preserved, then suspect host pressure or BGFX/Vulkan path issues. Otherwise, restarting on this loop is normal hygiene during long debug sessions.
 
 ### Research/debug helpers (local-only, not committed)
 
@@ -196,18 +209,74 @@ When upstream changes conflict with Ball History integration points:
 - **In-game settings UI**: Press F12 while playing (replaces old Video Options dialog)
 - **Ball History debug log**: `<exe folder>/BallHistory/ballhistory_debug.log` (Debug builds only)
 
-### Cabinet table-rotation universal fix (`ViewCabRotation = 90.000000`)
+### Cabinet ini recovery recipe (known-good baseline as of 2026-05-14)
 
-In Gary's `VPinballX.ini` `[TableOverride]` section, `ViewCabRotation = 90.000000` is the universal cabinet-orientation fix. Empirically verified across a 500-table audit — produces the correct landscape orientation for **both** of the rotation regimes that exist in the wild:
+Minimum config needed to recover a working cabinet from a blank ini. Everything else can stay at code defaults; VPX repopulates auto-state on first launch.
 
-- **Legacy-mode tables** (~98% of tables, ROTF=270 baked in `.vpx`)
-- **Window-mode tables with the broken-author bug** (ROTF=0 baked, e.g. White Water v.1.2, 4 Queens, World Poker Tour, Space Station VPW, Junior, Defender VPW, Central Park)
+```ini
+[Player]
+; --- View mode + autofit (the unlock) ---
+BGSet                = 1                  ; Cabinet view set
+CabinetAutofitMode   = 2                  ; Fit Screen — autofit derives per-table values
+FullScreen           = 1
 
-**Why one value fixes both modes** (`src/renderer/ViewSetup.cpp`):
-- Window mode (`GetRotation`, line 302-306) auto-adds `270°` for landscape viewports before applying the user value: setting 90 → effective `(270 + 90) % 360 = 0°` (no rotation, table fills landscape directly because Window mode already maps physical screen cm to playfield).
-- Legacy mode (line 309-310, plus `MatrixScale(mSceneScaleX, -mSceneScaleY, -mSceneScaleZ)` Y/Z-axis flip in `ComputeMVP` line 447) applies the user value through a flipped coordinate system, so 90° in legacy is not the geometric inverse of 270° in window — the combined transforms produce equivalent visual orientations on a landscape display.
+; --- Display target ---
+PlayfieldDisplay     = 1
+PlayfieldWidth       = 3840
+PlayfieldHeight      = 2160
+RefreshRate          = 144
+GfxBackend           = Direct3D11
+SyncMode             = 1                  ; Hardware V-Sync. NOT 3 — Frame Pacing stutters.
+MaxFramerate         = -1.0               ; Uncapped; V-Sync drives cadence
 
-**Practical implication**: when triaging a table that renders "wrong orientation" on the cabinet, **first** assume the global override already covers it. Per-table sidecar `.ini` files (`<table>.ini` next to `<table>.vpx` with `[TableOverride] ViewCabRotation = X`) are only needed for genuine outliers — not the routine ROTF=0 author bug.
+; --- Physical cabinet geometry (autofit math reads these) ---
+ScreenWidth          = 95.889999          ; cm — measured TV display area
+ScreenHeight         = 53.939999
+ScreenInclination    = 0.0
+ScreenPlayerX        = 0.0
+ScreenPlayerY        = 0.0
+ScreenPlayerZ        = 70.0               ; cm eye height above playfield bottom edge
+
+; --- Anti-stretch + max quality push (Gary's RTX-class GPU) ---
+BallAntiStretch      = 1
+AAFactor             = 1.0                ; 100% (no supersample); 1.5 was too soft, 2.0 broke 144Hz
+MSAASamples          = 3                  ; 8 samples — max
+FXAA                 = 7                  ; Quality FAAA — max
+Sharpen              = 2                  ; Bilateral CAS — max
+SSRefl               = 1                  ; Additive screen-space reflection — max
+
+[TableOverride]
+ViewCabMode          = 2                  ; Window mode (required for autofit)
+ViewCabRotation      = 0.0                ; Post-Vincent autofit fix — see history below
+ViewCabWindowTopScale = 1.0               ; Calibrate per-cabinet via F12; ~0.7 on Gary's rig
+```
+
+Other quality knobs (`PFReflection`, `AlphaRampAccuracy`, `MaxTexDimension`, `DynamicAO`, `ForceAnisotropicFiltering`) are already at max in their **code defaults** — no ini override needed.
+
+### `ViewCabWindowTopScale` — fork-local autofit calibration knob (added 2026-05-13)
+
+Multiplier applied to autofit-computed `WindowTopZOfs` so the top-glass-plane bias on Gary's cabinet can be trimmed **proportionally across all tables**. Default `1.0` = no-op. `0.7` trims every table's top by 30%, preserving per-table variation (short tables get small trim, tall tables get large trim — what an offset can't do).
+
+- Property defs in `src/core/Settings_properties.inl` (DT/FSS/Cab triple at lines ~684, ~705, ~726).
+- Multiplier applied in `src/renderer/ViewSetup.cpp` `ApplyTableOverrideSettings` (line 185-186).
+- F12 → Point Of View slider in `src/ui/live/ingameui/PointOfViewSettingsPage.cpp` (visible only in autofit modes; setter applies incremental ratio `mWindowTopZOfs *= (v/prev)` — **does NOT** call `SetWindowAutofit` because that clobbers every other slider's transient state).
+- Page's `SaveMode` upgraded from `Table` to `Both` so changes can be saved globally OR per-table.
+
+Fork-local feature — upstream-worthy PR but not yet filed.
+
+### Cabinet rotation: post-Vincent regime change (April 29, 2026)
+
+**Current rule**: `ViewCabRotation = 0.0` in `[TableOverride]` is correct for Gary's landscape cabinet under post-Vincent-fix builds.
+
+Upstream commit `89a84494c "Fix cabinet autofit on landscape display"` (Vincent, April 29) changed `SetWindowAutofit` to derive landscape rotation itself — removing the `mViewportRotation = GetRotation(1080*aspect, 1080)` line and replacing with `mViewportRotation = 0.f`. Plus an axis-swap in the vertical-offset dichotomy search (`-bottomFlipper.x` for landscape vs `bottomFlipper.y` for portrait).
+
+**Symptom of getting this wrong**: with `ViewCabRotation = 90` (the old empirically-verified value) on a post-fix build, the table renders **sideways**. Rollback to a pre-fix build OR change ini to `0.0` — both fix it.
+
+**Historical context** (pre-Vincent regime, kept for reference only — no longer the current rule):
+
+> `ViewCabRotation = 90.000000` was the universal cabinet-orientation fix, empirically verified across a 500-table audit. Produced the correct landscape orientation for both Legacy-mode tables (ROTF=270 baked in `.vpx`) and Window-mode tables with the broken-author bug (ROTF=0 baked, e.g. White Water v1.2, 4 Queens, World Poker Tour, Space Station VPW). Worked because Window mode's `GetRotation` auto-adds 270° for landscape viewports: `(270 + 90) % 360 = 0` effective — no rotation, table fills landscape directly.
+
+**Practical implication**: when triaging a "wrong orientation" report, first check whether the build is pre- or post-Vincent. If post-Vincent, use 0. If pre-Vincent, use 90. Per-table sidecar `.ini` files are only needed for genuine outliers.
 
 **Limitation**: only verified on Gary's landscape cabinet (4K landscape physical, BGSet=1, ScreenWidth=95.9 / Height=53.9 cm). Different cabinet geometries (portrait monitor, head-tracking, VR) may need different values.
 

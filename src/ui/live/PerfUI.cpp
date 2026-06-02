@@ -107,7 +107,8 @@ void PerfUI::RenderFPS()
    {
       const ImVec2 inputTextPos = ImGui::GetCursorScreenPos();
       bool hasFlipperLatency = false;
-      const uint64_t lastLeftFlipChange = m_player->m_pininput.GetInputActions()[m_player->m_pininput.GetLeftFlipperActionId()]->GetLastStateChange();
+      const auto& leftAction = m_player->m_pininput.GetInputActions()[m_player->m_pininput.GetLeftFlipperActionId()];
+      const uint64_t lastLeftFlipChange = leftAction->GetLastStateChange();
       const uint64_t lastRightFlipChange = m_player->m_pininput.GetInputActions()[m_player->m_pininput.GetRightFlipperActionId()]->GetLastStateChange();
       if (const uint64_t now = usec(); now < lastLeftFlipChange + 1000000ULL && now > lastRightFlipChange + 1000000ULL)
       {
@@ -120,6 +121,41 @@ void PerfUI::RenderFPS()
                   const double prevAcqToAction = 1e-3 * (static_cast<double>(flipper->GetLastRotateTime() - lastLeftFlipChange) + m_player->m_pininput.m_leftFlipperLastChangePollDelay);
                   const double acqToAction = 1e-3 * static_cast<double>(flipper->GetLastRotateTime() - lastLeftFlipChange);
                   ImGui::Text("Flipper latency: %3.1f - %3.1fms", acqToAction, prevAcqToAction);
+
+                  // Components line: per-press breakdown including the SDL queue piece and the GPU piece that the
+                  // existing line above doesn't show. Act->Phys here equals acqToAction by construction — visible
+                  // equality is the cross-check that the new instrumentation is wired correctly.
+                  const uint64_t sdlArrivalUs = leftAction->GetSdlArrival();
+                  const bool hasSdl = (sdlArrivalUs != 0 && sdlArrivalUs <= lastLeftFlipChange);
+                  const double sdlToActMs = hasSdl ? 1e-3 * static_cast<double>(lastLeftFlipChange - sdlArrivalUs) : 0.0;
+#ifdef ENABLE_BGFX
+                  const uint64_t gpuRawUs = m_player->m_renderer->m_renderDevice->m_lastGPUFrameLength;
+                  const char* gpuLabel = "GPU";
+#else
+                  const uint64_t gpuRawUs = m_player->m_renderProfiler->GetPrev(FrameProfiler::PROFILE_RENDER_FLIP);
+                  const char* gpuLabel = "~GPU";
+#endif
+                  const double gpuMs = 1e-3 * static_cast<double>(gpuRawUs);
+                  const double totalMs = sdlToActMs + acqToAction + gpuMs;
+                  const ImVec2 componentsTextPos = ImGui::GetCursorScreenPos();
+                  if (hasSdl)
+                     ImGui::Text("Components: SDL->Act %3.1f  Act->Phys %3.1f  %s %3.1f  Total %3.1f ms", sdlToActMs, acqToAction, gpuLabel, gpuMs, totalMs);
+                  else
+                     ImGui::Text("Components: SDL->Act  -    Act->Phys %3.1f  %s %3.1f  Total  -   ms", acqToAction, gpuLabel, gpuMs);
+                  if (ImGui::IsMouseHoveringRect(componentsTextPos, ImGui::GetCursorScreenPos() + ImVec2(0, ImGui::GetTextLineHeight())))
+                     ImGui::SetTooltip(
+                        "SDL->Act: time from SDL event arrival to VPX action dispatch (input-pipeline queueing)\n"
+                        "Act->Phys: action dispatch to physics flipper rotate (matches the first number above)\n"
+                        "%s: last completed GPU frame length%s\n"
+                        "Total: sum of the three. Does NOT include USB poll staleness or display present + pixel response.",
+                        gpuLabel,
+#ifdef ENABLE_BGFX
+                        " (BGFX gpuTimeBegin/End)"
+#else
+                        " (PROFILE_RENDER_FLIP — CPU-side wait, approximation)"
+#endif
+                     );
+
                   hasFlipperLatency = true;
                   break;
                }

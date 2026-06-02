@@ -23,6 +23,11 @@ void wintimer_init();
 uint32_t msec();
 uint64_t usec();
 
+// Convert an SDL3 nanosecond timestamp (e.g. SDL_Event.common.timestamp, same clock as SDL_GetTicksNS)
+// into the VPX usec() timebase. Backed by a one-time offset captured at wintimer_init.
+// Returns 0 if sdl_ns is 0 (callers use 0 as "no SDL timestamp available").
+uint64_t sdl_ns_to_usec(uint64_t sdl_ns);
+
 // needs timeBeginPeriod(1) before calling 1st time to make the Sleep(1) in here behave more or less accurately (and timeEndPeriod(1) after not needing that precision anymore)
 void uSleep(const uint64_t u);
 
