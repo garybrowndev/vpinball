@@ -546,7 +546,7 @@ public:
 
    bool GetCollectionIndex(const ISelect *const element, int &collectionIndex, int &elementIndex);
 
-   Vertex2D EvaluateGlassHeight() const;
+   Vertex2D EvaluateGlassHeight(bool useWalkDown = true) const;
 
    void LockElements();
 
