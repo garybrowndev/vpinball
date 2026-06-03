@@ -2,11 +2,17 @@
 
 #include "core/stdafx.h"
 #include "AppCommands.h"
-#include "extern.h"
-#include "core/TournamentFile.h"
-#include "utils/BiffReader.h"
 
 #include <iostream>
+
+#include "extern.h"
+#include "core/TournamentFile.h"
+#include "core/VPApp.h"
+#include "parts/Material.h"
+#include "parts/pintable.h"
+#include "ui/win/WinEditor.h"
+#include "utils/BiffReader.h"
+
 
 ShowInfoAndExitCommand::ShowInfoAndExitCommand(const string& title, const string& message, int exitCode)
    : m_title(title)

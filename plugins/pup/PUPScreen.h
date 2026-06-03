@@ -55,6 +55,7 @@ public:
 
    float m_screenAlpha = 1.0f;
    bool m_hudVisible = true;
+   bool m_padTextAlways = false;
    // Action queued by LabelShowPage, applied when the main media ends.
    enum class HudReturn
    {
@@ -99,8 +100,8 @@ public:
 
    void SetGameTime(double gameTime);
 
-   void Play(const string& szPlaylist, const std::filesystem::path& szPlayFile, float volume, int priority);
-   void Play(PUPPlaylist* playlist, const std::filesystem::path& szPlayFile, float volume, int priority, bool skipSamePriority, int length, bool background);
+   void Play(const string& szPlaylist, const std::filesystem::path& szPlayFile, float volume, int priority, PlayAction action = PlayAction::Normal);
+   void Play(PUPPlaylist* playlist, const std::filesystem::path& szPlayFile, float volume, int priority, PlayAction action, int length);
    void Stop();
    void Stop(int priority);
    void Stop(PUPPlaylist* pPlaylist, const std::filesystem::path& szPlayFile);
@@ -140,9 +141,9 @@ private:
    ankerl::unordered_dense::map<string, PUPLabel*> m_labelMap;
    ankerl::unordered_dense::map<string, PUPPlaylist*> m_playlistMap;
    ankerl::unordered_dense::map<string, vector<PUPTrigger*>> m_triggerMap;
-   PUPImage m_background;    // PuPFrames playlist — underlay behind video
-   PUPImage m_staticImage;   // Static PNG/JPG from Default function — renders on video layer, bypasses FFmpeg
-   PUPImage m_overlay;       // PuPOverlays/PuPAlphas playlist — overlay rendered above video
+   PUPImage m_background;    // PuPFrames playlist - underlay behind video
+   PUPImage m_staticImage;   // Static PNG/JPG from Default function - renders on video layer, bypasses FFmpeg
+   PUPImage m_overlay;       // PuPOverlays/PuPAlphas playlist - overlay rendered above video
    std::unique_ptr<PUPMediaManager> m_pMediaPlayerManager;
    bool m_labelInit = false;
    int m_pagenum = 0;

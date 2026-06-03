@@ -1,6 +1,7 @@
 // license:GPLv3+
 
 #include <cstdlib>
+#include <atomic>
 #include <chrono>
 #include <cstring>
 #include <charconv>
@@ -33,7 +34,7 @@ static unsigned int getDmdSrcMsgId;
 static std::mutex sourceMutex;
 static std::thread updateThread;
 static DisplaySrcId selectedDmdId = {};
-static bool isRunning = false;
+static std::atomic<bool> isRunning = false;
 
 static DMDUtil::DMD* pDmd = nullptr;
 
@@ -41,15 +42,20 @@ static uint8_t tintR;
 static uint8_t tintG;
 static uint8_t tintB;
 
-MSGPI_BOOL_VAL_SETTING(zeDMDProp, "ZeDMD", "ZeDMD", "", true, true);
+MSGPI_BOOL_VAL_SETTING(zeDMDProp, "ZeDMD", "ZeDMD", "", true, false);
 MSGPI_STRING_VAL_SETTING(zeDMDDeviceFolderProp, "ZeDMDDevice", "ZeDMDDevice", "", true, "", 1024);
 MSGPI_BOOL_VAL_SETTING(zeDMDDebugFolderProp, "ZeDMDDebug", "ZeDMDDebug", "", true, false);
 MSGPI_INT_VAL_SETTING(zeDMDBrightnessFolderProp, "ZeDMDBrightness", "ZeDMDBrightness", "", true, -1, 1000, -1);
-MSGPI_BOOL_VAL_SETTING(zeDMDWifiProp, "ZeDMDWiFi", "ZeDMDWiFi", "", true, false);
+MSGPI_BOOL_VAL_SETTING(zeDMDWiFiEnabledProp, "ZeDMDWiFiEnabled", "ZeDMDWiFiEnabled", "", true, false);
 MSGPI_STRING_VAL_SETTING(zeDMDWiFiAddrFolderProp, "ZeDMDWiFiAddr", "ZeDMDWiFiAddr", "", true, "zedmd-wifi.local", 1024);
-MSGPI_BOOL_VAL_SETTING(pixelcadeProp, "Pixelcade", "Pixelcade", "", true, true);
+MSGPI_BOOL_VAL_SETTING(zeDMDSPIEnabledProp, "ZeDMDSPIEnabled", "ZeDMDSPIEnabled", "", true, false);
+MSGPI_INT_VAL_SETTING(zeDMDSPISpeedProp, "ZeDMDSPISpeed", "ZeDMDSPISpeed", "", true, 0, 100000000, 72000000);
+MSGPI_INT_VAL_SETTING(zeDMDSPIFramePauseProp, "ZeDMDSPIFramePause", "ZeDMDSPIFramePause", "", true, 0, 1000, 2);
+MSGPI_INT_VAL_SETTING(zeDMDSPIWidthProp, "ZeDMDSPIWidth", "ZeDMDSPIWidth", "", true, 0, 1000, 128);
+MSGPI_INT_VAL_SETTING(zeDMDSPIHeightProp, "ZeDMDSPIHeight", "ZeDMDSPIHeight", "", true, 0, 1000, 32);
+MSGPI_BOOL_VAL_SETTING(pixelcadeProp, "Pixelcade", "Pixelcade", "", true, false);
 MSGPI_STRING_VAL_SETTING(pixelcadeDeviceProp, "PixelcadeDevice", "PixelcadeDevice", "", true, "", 1024);
-MSGPI_BOOL_VAL_SETTING(pin2dmdProp, "PIN2DMD", "PIN2DMD", "", true, true);
+MSGPI_BOOL_VAL_SETTING(pin2dmdProp, "PIN2DMD", "PIN2DMD", "", true, false);
 MSGPI_BOOL_VAL_SETTING(dmdServerFolderProp, "DMDServer", "DMDServer", "", true, false);
 MSGPI_STRING_VAL_SETTING(dmdServerAddrFolderProp, "DMDServerAddr", "DMDServerAddr", "", true, "localhost", 1024);
 MSGPI_INT_VAL_SETTING(dmdServerPortFolderProp, "DMDServerPort", "DMDServerPort", "", true, 0, 1000, 6789);
@@ -99,12 +105,17 @@ void DMDUTILCALLBACK OnDMDUtilLog(DMDUtil_LogLevel logLevel, const char* format,
 static void UpdateThread()
 {
    int lastFrameID = 0;
-   while (isRunning && pDmd && selectedDmdId.id.id != 0)
+   while (isRunning)
    {
       // Fixed update at 60 FPS
       std::this_thread::sleep_for(std::chrono::microseconds(16666));
 
       std::lock_guard<std::mutex> lock(sourceMutex);
+
+      // Read the shared source/display state under the lock: it can be reset (e.g. the source removed
+      // during teardown, clearing GetRenderFrame) concurrently with this thread. Skip until it is valid.
+      if (pDmd == nullptr || selectedDmdId.id.id == 0 || selectedDmdId.GetRenderFrame == nullptr)
+         continue;
 
       const DisplayFrame frame = selectedDmdId.GetRenderFrame(selectedDmdId.id);
       if (lastFrameID == frame.frameId)
@@ -228,8 +239,13 @@ MSGPI_EXPORT void MSGPIAPI DMDUtilPluginLoad(const uint32_t sessionId, const Msg
    msgApi->RegisterSetting(endpointId, &zeDMDDeviceFolderProp);
    msgApi->RegisterSetting(endpointId, &zeDMDDebugFolderProp);
    msgApi->RegisterSetting(endpointId, &zeDMDBrightnessFolderProp);
-   msgApi->RegisterSetting(endpointId, &zeDMDWifiProp);
+   msgApi->RegisterSetting(endpointId, &zeDMDWiFiEnabledProp);
    msgApi->RegisterSetting(endpointId, &zeDMDWiFiAddrFolderProp);
+   msgApi->RegisterSetting(endpointId, &zeDMDSPIEnabledProp);
+   msgApi->RegisterSetting(endpointId, &zeDMDSPISpeedProp);
+   msgApi->RegisterSetting(endpointId, &zeDMDSPIFramePauseProp);
+   msgApi->RegisterSetting(endpointId, &zeDMDSPIWidthProp);
+   msgApi->RegisterSetting(endpointId, &zeDMDSPIHeightProp);
    msgApi->RegisterSetting(endpointId, &pixelcadeProp);
    msgApi->RegisterSetting(endpointId, &pixelcadeDeviceProp);
    msgApi->RegisterSetting(endpointId, &pin2dmdProp);
@@ -252,8 +268,13 @@ MSGPI_EXPORT void MSGPIAPI DMDUtilPluginLoad(const uint32_t sessionId, const Msg
    pConfig->SetZeDMDDevice(zeDMDDeviceFolderProp_Get());
    pConfig->SetZeDMDDebug(zeDMDDebugFolderProp_Get());
    pConfig->SetZeDMDBrightness(zeDMDBrightnessFolderProp_Val);
-   pConfig->SetZeDMDWiFiEnabled(zeDMDWifiProp_Val);
+   pConfig->SetZeDMDWiFiEnabled(zeDMDWiFiEnabledProp_Val);
    pConfig->SetZeDMDWiFiAddr(zeDMDWiFiAddrFolderProp_Get());
+   pConfig->SetZeDMDSpiEnabled(zeDMDSPIEnabledProp_Val);
+   pConfig->SetZeDMDSpiSpeed(zeDMDSPISpeedProp_Val);
+   pConfig->SetZeDMDSpiFramePause(zeDMDSPIFramePauseProp_Val);
+   pConfig->SetZeDMDWidth(zeDMDSPIWidthProp_Val);
+   pConfig->SetZeDMDHeight(zeDMDSPIHeightProp_Val);
    pConfig->SetPixelcade(pixelcadeProp_Val);
    pConfig->SetPixelcadeDevice(pixelcadeDeviceProp_Get());
    pConfig->SetPIN2DMD(pin2dmdProp_Val);

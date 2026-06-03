@@ -1,14 +1,20 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
-
 #include "PinTableWnd.h"
 
-#include "ui/win/paintsur.h"
-#include "ui/win/worker.h"
+#include "core/editablereg.h"
+#include "core/VPApp.h"
+#include "parts/Collection.h"
+#include "renderer/Texture.h"
 #include "ui/win/codeview.h"
-#include "ui/win/hitsur.h"
 #include "ui/win/hitrectsur.h"
+#include "ui/win/hitsur.h"
+#include "ui/win/paintsur.h"
+#include "ui/win/PinTableMDI.h"
+#include "ui/win/sur.h"
+#include "ui/win/WinEditor.h"
+#include "ui/win/worker.h"
 
 #ifndef __STANDALONE__
 #include "ui/win/dialogs/VPXLoadFileProgressBar.h"
@@ -1162,8 +1168,10 @@ void PinTableWnd::DoContextMenu(int x, int y, const int menuid, ISelect *psel)
       newMenu.AppendMenu(MF_SEPARATOR, ~0u, "");
 
       FillLayerContextMenu(newMenu, layerSubMenu, psel);
+      layerSubMenu.Detach();
       newMenu.AppendMenu(MF_STRING, ID_ASSIGN_TO_CURRENT_LAYER, LocalString(IDS_ASSIGN_TO_CURRENT_LAYER).m_szbuffer);
       FillCollectionContextMenu(newMenu, colSubMenu, psel);
+      colSubMenu.Detach();
 
       newMenu.AppendMenu(MF_STRING, ID_LOCK, LocalString(IDS_LOCK).m_szbuffer);
 

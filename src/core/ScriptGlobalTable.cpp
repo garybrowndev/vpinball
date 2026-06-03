@@ -1,13 +1,14 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
-
 #include "ScriptGlobalTable.h"
 
+#include "core/VPApp.h"
 #include "core/vpversion.h"
 #include "core/VPXPluginAPIImpl.h"
-
 #include "parts/ball.h"
+#include "renderer/Renderer.h"
+#include "ui/win/WinEditor.h"
 
 #ifndef __STANDALONE__
 #include <atlsafe.h>

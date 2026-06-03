@@ -1,10 +1,14 @@
 // license:GPLv3+
 
-// Definition of the Gate class
-
 #pragma once
 
+#include "parts/pintable.h"
+#include "physics/hitable.h"
+#include "renderer/MeshBuffer.h"
+#include "renderer/Renderable.h"
 #include "ui/win/resource.h"
+#include "utils/eventproxy.h"
+
 
 class GateData final : public BaseProperty
 {
@@ -43,7 +47,7 @@ public:
 #ifdef __STANDALONE__
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
-   STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
+   STDMETHOD(GetDocumentation)(MEMBERID index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
    Gate() { }
@@ -104,7 +108,7 @@ private:
    void GenerateBracketMesh(Vertex3D_NoTex2 *buf) const;
    void GenerateWireMesh(Vertex3D_NoTex2 *buf) const;
 
-   RenderDevice *m_rd = nullptr;
+   Renderer *m_renderer = nullptr;
 
    LineSeg *m_plineseg = nullptr;
    HitGate *m_phitgate = nullptr;

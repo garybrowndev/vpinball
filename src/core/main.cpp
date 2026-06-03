@@ -10,6 +10,7 @@
 #include "core/VPXPluginAPIImpl.h"
 
 #include "core/AppCommands.h"
+#include "core/VPApp.h"
 
 #include "ui/win/resource.h"
 #include <initguid.h>
@@ -202,6 +203,9 @@ extern "C" int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, 
          PLOGE << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
          // FIXME this is not correct as we may be running something else than the player (extract vbs, ...)
          exit(1);
+      }
+      if (const char* const drv = SDL_GetCurrentVideoDriver()) {
+         PLOGI << "SDL video driver: " << drv;
       }
 
       // Run the application

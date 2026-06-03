@@ -3,61 +3,56 @@
 #include "core/stdafx.h"
 #include "pintable.h"
 
-#include "core/vpversion.h"
-#include "parts/Sound.h"
-#include "ui/win/resource.h"
-#include "utils/hash.h"
 #include <algorithm>
-#include "utils/objloader.h"
-#include "tinyxml2/tinyxml2.h"
 #include <fstream>
 #include <sstream>
-#include "renderer/Shader.h"
+
+#include "core/editablereg.h"
+#include "core/ScriptGlobalTable.h"
+#include "core/VPApp.h"
+#include "core/vpversion.h"
+#include "parts/ball.h"
+#include "parts/bumper.h"
+#include "parts/Collection.h"
+#include "parts/decal.h"
+#include "parts/dispreel.h"
+#include "parts/flasher.h"
+#include "parts/flipper.h"
+#include "parts/gate.h"
+#include "parts/hittarget.h"
+#include "parts/kicker.h"
+#include "parts/light.h"
+#include "parts/PartGroup.h"
+#include "parts/plunger.h"
+#include "parts/primitive.h"
+#include "parts/ramp.h"
+#include "parts/rubber.h"
+#include "parts/Sound.h"
+#include "parts/spinner.h"
+#include "parts/surface.h"
+#include "parts/textbox.h"
+#include "parts/timer.h"
+#include "parts/trigger.h"
+#include "renderer/Renderer.h"
+#include "ThreadPool.h"
+#include "tinyxml2/tinyxml2.h"
 #include "ui/VPXFileFeedback.h"
+#include "ui/live/LiveUI.h"
+#include "ui/win/codeview.h"
+#include "ui/win/DragPointDialogs.h"
+#include "ui/win/hitsur.h"
+#include "ui/win/PinTableWnd.h"
+#include "ui/win/resource.h"
+#include "ui/win/WinEditor.h"
+#include "utils/BiffReader.h"
+#include "utils/BiffWriter.h"
+#include "utils/hash.h"
+#include "utils/objloader.h"
+#include "utils/ushock_output.h"
+
 #ifndef __STANDALONE__
 #include "ui/win/dialogs/VPXLoadFileProgressBar.h"
 #include "ui/win/dialogs/VPXSaveFileProgressBar.h"
-#include "FreeImage.h"
-#endif
-#include "ThreadPool.h"
-#include "core/VPXPluginAPIImpl.h"
-#include "core/ScriptGlobalTable.h"
-
-#include "ui/win/DragPointDialogs.h"
-#include "ui/win/codeview.h"
-#include "ui/win/hitsur.h"
-
-#include "ui/live/ingameui/InGameUIItem.h"
-
-#include "utils/BiffReader.h"
-#include "utils/BiffWriter.h"
-
-#include "utils/ushock_output.h"
-
-#include "parts/ball.h"
-#include "parts/plunger.h"
-#include "parts/flipper.h"
-#include "parts/timer.h"
-#include "parts/textbox.h"
-#include "parts/surface.h"
-#include "parts/dispreel.h"
-#include "parts/lightseq.h"
-#include "parts/bumper.h"
-#include "parts/trigger.h"
-#include "parts/light.h"
-#include "parts/kicker.h"
-#include "parts/decal.h"
-#include "parts/primitive.h"
-#include "parts/hittarget.h"
-#include "parts/gate.h"
-#include "parts/spinner.h"
-#include "parts/ramp.h"
-#include "parts/flasher.h"
-#include "parts/rubber.h"
-#include "parts/PartGroup.h"
-
-#ifdef __STANDALONE__
-#include "mINI/ini.h"
 #endif
 
 #define HASHLENGTH 16
@@ -1163,8 +1158,9 @@ HRESULT PinTable::LoadInfo(IStorage* pstg, HCRYPTHASH hcrypthash, int version)
       std::from_chars(numTimesSaved.c_str(), numTimesSaved.c_str() + numTimesSaved.length(), m_numTimesSaved);
 
    // Write the version to the registry.  This will be read later by the front end.
+   // FIXME This is deprecated and we should update the info file along the table instead (frontend are not supposed to read internal settings file, table informations should be stored in a distributed db along table)
+   if (string optId = trim_string(m_tableName); !optId.empty() && !m_version.empty())
    {
-      string optId = trim_string(m_tableName);
       std::replace_if(optId.begin(), optId.end(), [](char c) { return !isalnum(c) || c == '.' || c == '-'; }, '_');
       const auto propId
          = Settings::GetRegistry().Register(std::make_unique<VPX::Properties::StringPropertyDef>("Version"s, optId, "Table Version"s, "Last played version"s, true, m_version));
@@ -1851,6 +1847,10 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
 
             // Resolve layer names once all part & collection names are known as they must be unique but this constraint was added in 10.8.1 when adding hierarchical PartGroup
             parts = GetParts();
+            vector<string> functions;
+            vector<string> identifiers;
+            ParseScript(m_script_text, functions, identifiers, [](const string&, int) {});
+            const wstring lowerCaseScript = lowerCase(MakeWString(m_script_text));
             for (auto part : parts)
             {
                if (const wstring& requestedLayerName = part->m_onLoadExpectedPartGroup; !requestedLayerName.empty())
@@ -1858,12 +1858,22 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
                   wstring layerName = requestedLayerName;
                   auto partGroupF = std::ranges::find_if(m_vedit,
                      [&layerName](const IEditable *editable) { return (editable->GetItemType() == ItemTypeEnum::eItemPartGroup) && (editable->GetIScriptable()->m_wzName == layerName); });
-                  // Part group was not found and the name is in use: find a suitable one
-                  while (partGroupF == m_vedit.end() && !IsNameUnique(layerName))
+                  // If part group was not already added, we need to check if the name is conflicting with other editables, collections or script declarations
+                  int renameIndex = 1;
+                  bool layerPostpend = false;
+                  while (partGroupF == m_vedit.end())
                   {
-                     if (!layerName.ends_with(L"_Layer"))
+                     bool nameIsUnique = true
+                        && IsNameUnique(layerName)
+                        && std::ranges::find(functions, MakeString(lowerCase(layerName))) == functions.end()
+                        && std::ranges::find(identifiers, MakeString(lowerCase(layerName))) == identifiers.end();
+                     if (nameIsUnique)
+                        break;
+
+                     // Postpend "layer" to keep alphabetic order of layer
+                     if (!layerPostpend && !layerName.ends_with(L"_Layer"))
                      {
-                        // Postpend "layer" to keep alphabetic order of layer
+                        layerPostpend = true; 
                         layerName += L"_Layer";
                      }
                      else
@@ -1877,14 +1887,17 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
                            std::wstring numberStr = layerName.substr(lastNonDigit);
                            const int number = std::stoi(numberStr);
                            layerName.resize(lastNonDigit); // base
-                           layerName += std::to_wstring(number+1);
+                           renameIndex = max(renameIndex, number + 1);
                         }
                         else
                         {
                            // If not, add it
-                           layerName += L"_001";
+                           layerName += L"_";
                         }
+                        layerName += std::format(L"{:3d}", renameIndex);
+                        renameIndex += 1;
                      }
+
                      partGroupF = std::ranges::find_if(m_vedit,
                         [&layerName](const IEditable *editable) { return (editable->GetItemType() == ItemTypeEnum::eItemPartGroup) && (editable->GetIScriptable()->m_wzName == layerName); });
                   }
@@ -2418,7 +2431,7 @@ void PinTable::Load(IObjectReader& reader)
          case FID(UFXA):
             // Before 10.8, user tweaks were stored in the table file (now moved to a user ini file), we import the legacy settings if there is no user ini file
             if (const int fxaa = reader.AsInt(); fxaa != -1 && !hasIni)
-               m_settings.SetPlayer_FXAA(fxaa, false);
+               m_settings.SetPlayer_FXAA(fxaa, true);
             break;
          case FID(BLST): m_bloom_strength = reader.AsFloat(); break;
          case FID(BCLR): m_colorbackdrop = reader.AsInt(); break;
@@ -4578,18 +4591,14 @@ PinBinary *PinTable::GetImageLinkBinary(const int id)
    return nullptr;
 }
 
-string PinTable::AuditTable(bool log) const
+void PinTable::ParseScript(const string& script, vector<string>& functions, vector<string>& identifiers, const std::function<void(const string&, int)>& onDuplicate) const
 {
-   // Perform a simple table audit (disable lighting vs static, script reference of static parts, png vs webp, hdr vs exr,...)
-   std::stringstream ss;
-
    // Ultra basic parser to get a (somewhat) valid list of referenced parts
    const char *const szText = m_script_text.c_str();
    const char *wordStart = nullptr;
    const char *wordPos = szText;
    string inClass;
    bool nextIsFunc = false, nextIsEnd = false, nextIsClass = false, isInString = false, isInComment = false;
-   vector<string> functions, identifiers;
    int line = 0;
    while (wordPos[0] != '\0')
    {
@@ -4605,8 +4614,8 @@ string PinTable::AuditTable(bool log) const
          if (wordPos[0] == '\'')
             isInComment = true;
          // Split identifiers (eventually class/function identifier)
-         else if (wordPos[0] == ' ' || wordPos[0] == '\r' || wordPos[0] == '\t' || wordPos[0] == '\n' || wordPos[0] == '.' 
-               || wordPos[0] == ':' || wordPos[0] == '('  || wordPos[0] == ')'  || wordPos[0] == '['  || wordPos[0] == ']')
+         else if (wordPos[0] == ' ' || wordPos[0] == '\r' || wordPos[0] == '\t' || wordPos[0] == '\n' || wordPos[0] == '.' || wordPos[0] == ':' || wordPos[0] == '(' || wordPos[0] == ')'
+            || wordPos[0] == '[' || wordPos[0] == ']')
          {
             if (wordStart)
             {
@@ -4639,7 +4648,7 @@ string PinTable::AuditTable(bool log) const
                      {
                         //ss << "- " << word << ", line=" << (line + 1) << ", class=" << inClass << "\r\n";
                         if (FindIndexOf(functions, inClass + '.' + word) != -1)
-                           ss << ". Error: Duplicate declaration of '" << word << "' in script at line " << line << "\r\n";
+                           onDuplicate(word, line);
                         else
                            functions.push_back(inClass + '.' + word);
                      }
@@ -4665,6 +4674,17 @@ string PinTable::AuditTable(bool log) const
 
       wordPos++;
    }
+}
+
+string PinTable::AuditTable(bool log) const
+{
+   // Perform a simple table audit (disable lighting vs static, script reference of static parts, png vs webp, hdr vs exr,...)
+   std::stringstream ss;
+
+   vector<string> functions;
+   vector<string> identifiers;
+   ParseScript(m_script_text, functions, identifiers,
+      [&ss](const string &functionName, int line) { ss << ". Error: Duplicate declaration of '" << functionName << "' in script at line " << line << "\r\n"; });
 
    if (FindIndexOf(identifiers, "execute"s) != -1)
       ss << ". Warning: Scripts seems to use the 'Execute' command. This command triggers computer security checks and will likely cause stutters during play.\r\n";
@@ -7174,8 +7194,7 @@ STDMETHODIMP PinTable::get_BackglassMode(BackglassIndex *pVal)
 
 STDMETHODIMP PinTable::put_BackglassMode(BackglassIndex pVal)
 {
-   PLOGE << "BackglassMode is deprecated";
-   m_viewMode = (ViewSetupID)(pVal - DESKTOP);
+   PLOGE << "BackglassMode is deprecated and ignored, this call has no effect";
    return S_OK;
 }
 

@@ -2,11 +2,18 @@
 
 #pragma once
 
-class HitTimer;
-class Collection;
+#include "core/iselect.h"
+#include "ui/win/resource.h"
+#include "utils/fileio.h"
+
 class IHitable;
 class IRenderable;
 class IScriptable;
+
+class Collection;
+class EventProxyBase;
+class HitTimer;
+class PinTable;
 
 #define BLUEPRINT_SOLID_COLOR RGB(0,0,0)
 
@@ -41,6 +48,8 @@ public:
 // Value gets and'ed with 1 (table view) or 2 (backglass view).
 // If you want to allow an element to be pasted only into the table view, use 1,
 // for only backglass view, use 2, and for both, use 3.
+#define VIEW_PLAYFIELD 1
+#define VIEW_BACKGLASS 2
 
 // declare and implement some methods for an IEditable which supports scripting
 #define STANDARD_EDITABLE_DECLARES(T, ItemType, ResName, AllowedViews) \
@@ -146,7 +155,7 @@ public:
 #define _STANDARD_DISPATCH_INDEPENDENT_EDITABLE_RENDERABLE_DECLARES(T, ItemType) \
    IRenderable *GetIRenderable() final { return static_cast<IRenderable *>(this); } \
    const IRenderable *GetIRenderable() const final { return static_cast<const IRenderable *>(this); } \
-   void RenderSetup(RenderDevice *device) final; \
+   void RenderSetup(Renderer *renderer) final; \
    void UpdateAnimation(const float diff_time_msec) final; \
    void Render(const unsigned int renderMask) final; \
    void RenderRelease() final;
@@ -306,30 +315,8 @@ private:
 
 #pragma region Script events
 public:
-   void TimerSetup(vector<HitTimer *> &pvht)
-   {
-      m_singleEvents = true;
-      for (size_t i = 0; i < m_vCollection.size(); i++)
-      {
-         Collection *const pcol = m_vCollection[i];
-         if (pcol->m_fireEvents)
-         {
-            m_vEventCollection.push_back(pcol);
-            m_viEventCollection.push_back(m_viCollection[i]);
-         }
-         if (pcol->m_stopSingleEvents)
-            m_singleEvents = false;
-      }
-      m_phittimer = std::make_unique<HitTimer>(GetName(), m_timerInterval, GetIFireEvents());
-      if (m_timerEnabled)
-         pvht.push_back(m_phittimer.get());
-   }
-   void TimerRelease(vector<HitTimer *> &pvht)
-   {
-      if (m_timerEnabled)
-         RemoveFromVectorSingle(pvht, m_phittimer.get());
-      m_phittimer = nullptr;
-   }
+   void TimerSetup(vector<HitTimer *> &pvht);
+   void TimerRelease(vector<HitTimer *> &pvht);
 
    // was: TimerDataRoot m_tdr: then it was limited to be used by a limited amount of table elements (most prominently not by decals and primitives though), could be changed/generalized nowadays
    int m_timerInterval = 100;

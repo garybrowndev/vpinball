@@ -4,8 +4,9 @@
 
 #include <SDL3/SDL.h>
 
-#include "InputAction.h"
-#include "PhysicsSensor.h"
+#include "input/InputAction.h"
+#include "input/PhysicsSensor.h"
+#include "math/vector.h"
 
 
 class InputManager final
@@ -49,6 +50,9 @@ public:
    unsigned int GetResetActionId() const { return m_resetActionId; }
    unsigned int GetServiceActionId(int idx) const { assert(0 <= idx && idx < 8); return m_serviceActionId[idx]; }
    unsigned int GetVRControllerViewCenteringActionId() const { return m_vrControllerViewCenteringActionId; }
+   unsigned int GetVRViewCenterActionId() const { return m_vrViewCenterActionId; }
+   unsigned int GetVRViewUpActionId() const { return m_vrViewUpActionId; }
+   unsigned int GetVRViewDownActionId() const { return m_vrViewDownActionId; }
    bool IsPressed(int actionId) const;
    int GetWindowVirtualKeyForAction(unsigned int actionId) const;
 
@@ -114,9 +118,9 @@ public:
    Vertex2D GetNudge() const;
 
    // Allow to override local state for remote control support
-   void SetPlungerPos(bool override, const float pos);
-   void SetPlungerSpeed(bool override, const float speed);
-   void SetNudge(bool override, const float nudgeAccelerationX, const float nudgeAccelerationY);
+   void SetPlungerPos(bool overrideInput, const float pos);
+   void SetPlungerSpeed(bool overrideInput, const float speed);
+   void SetNudge(bool overrideInput, const float nudgeAccelerationX, const float nudgeAccelerationY);
 
    ///// Input devices
    enum class DeviceType
@@ -233,6 +237,9 @@ private:
    unsigned int m_coinDoorActionId;
    unsigned int m_resetActionId;
    unsigned int m_serviceActionId[8];
+   unsigned int m_vrViewCenterActionId;
+   unsigned int m_vrViewUpActionId;
+   unsigned int m_vrViewDownActionId;
    unsigned int m_vrControllerViewCenteringActionId;
    ankerl::unordered_dense::map<uint32_t, vector<ButtonMapping*>> m_buttonMappings;
    vector<InputAction*> m_onUpdateActions;
@@ -282,7 +289,7 @@ private:
    bool m_hasPendingLayoutApply = false;
    void LoadDevicesFromSettings();
    void SaveDevicesToSettings() const;
-   void ApplyDefaultDeviceMapping(uint16_t deviceId);
+   void ApplyDefaultDeviceMapping(uint16_t deviceId, bool overwriteSensors);
 
    int m_buttonCaptureState = 0;
    vector<ButtonMapping> m_buttonCapture;

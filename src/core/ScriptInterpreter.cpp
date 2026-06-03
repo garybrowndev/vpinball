@@ -1,9 +1,12 @@
 #include "core/stdafx.h"
-
-#include "core/vpversion.h"
-
 #include "ScriptInterpreter.h"
-#include "ScriptGlobalTable.h"
+
+#include "core/ScriptGlobalTable.h"
+#include "core/VPApp.h"
+#include "core/vpversion.h"
+#include "parts/Collection.h"
+#include "parts/pintable.h"
+#include "ui/win/WinEditor.h"
 
 #ifndef __STANDALONE__
 #include <initguid.h>
@@ -171,7 +174,7 @@ void ScriptInterpreter::Stop(PinTable *table, bool interruptDirectly)
 
 void ScriptInterpreter::AddItem(const wstring& name, IDispatch *dispatch, const bool global)
 {
-   if (auto it = m_vcvd.find(name); it != m_vcvd.end())
+   if (auto it = m_scriptItemMap.find(name); it != m_scriptItemMap.end())
    {
       PLOGE << "Script item with name '" << MakeString(name) << "' already exists. Skipping addition of this item.";
       return;
@@ -185,7 +188,7 @@ void ScriptInterpreter::AddItem(const wstring& name, IDispatch *dispatch, const 
       pcvd->m_pdisp->QueryInterface(IID_IUnknown, (void **)&pcvd->m_punk);
       pcvd->m_punk->Release();
       pcvd->m_global = global;
-      m_vcvd[pcvd->m_wName] = std::move(pcvd);
+      m_scriptItemMap[pcvd->m_wName] = std::move(pcvd);
    }
 
    int flags = SCRIPTITEM_ISSOURCE | SCRIPTITEM_ISVISIBLE;
@@ -198,7 +201,7 @@ void ScriptInterpreter::AddItem(const wstring& name, IDispatch *dispatch, const 
 void ScriptInterpreter::RemoveItem(IScriptable *const piscript)
 {
    piscript->GetIDispatch()->Release();
-   m_vcvd.erase(piscript->get_Name());
+   m_scriptItemMap.erase(piscript->get_Name());
 }
 
 void ScriptInterpreter::Evaluate(const string &script, bool isDebugStatement)
@@ -341,26 +344,27 @@ STDMETHODIMP ScriptInterpreter::GetItemInfo(LPCOLESTR pstrName, DWORD dwReturnMa
    if (dwReturnMask & SCRIPTINFO_ITYPEINFO)
       *ppti = nullptr;
 
-   std::wstring wName(pstrName);
-   auto it = m_vcvd.find(wName);
-   if (it == m_vcvd.end())
+   const auto it = m_scriptItemMap.find(std::wstring { pstrName });
+   if (it == m_scriptItemMap.end())
       return E_FAIL;
-   const std::unique_ptr<ScriptItem> &pcvd = it->second;
 
-   if (dwReturnMask & SCRIPTINFO_IUNKNOWN)
+   if (IUnknown * punk = it->second->m_punk; punk)
    {
-      if ((*ppiunkItem = pcvd->m_punk))
-         (*ppiunkItem)->AddRef();
-   }
-
-   if (dwReturnMask & SCRIPTINFO_ITYPEINFO)
-   {
-      IProvideClassInfo *pClassInfo;
-      pcvd->m_punk->QueryInterface(IID_IProvideClassInfo, (LPVOID *)&pClassInfo);
-      if (pClassInfo)
+      if (dwReturnMask & SCRIPTINFO_IUNKNOWN)
       {
-         pClassInfo->GetClassInfo(ppti);
-         pClassInfo->Release();
+         punk->AddRef();
+         *ppiunkItem = punk;
+      }
+
+      if (dwReturnMask & SCRIPTINFO_ITYPEINFO)
+      {
+         IProvideClassInfo *pClassInfo;
+         punk->QueryInterface(IID_IProvideClassInfo, (LPVOID *)&pClassInfo);
+         if (pClassInfo)
+         {
+            pClassInfo->GetClassInfo(ppti);
+            pClassInfo->Release();
+         }
       }
    }
 

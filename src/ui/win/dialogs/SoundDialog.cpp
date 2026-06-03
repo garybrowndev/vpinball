@@ -1,8 +1,13 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
-#include "ui/win/resource.h"
 #include "SoundDialog.h"
+
+#include "core/VPApp.h"
+#include "parts/pintable.h"
+#include "ui/win/resource.h"
+#include "ui/win/WinEditor.h"
+
 
 typedef struct _tagSORTDATA
 {

@@ -123,7 +123,9 @@ void InGameUI::Close()
 void InGameUI::Update()
 {
    const uint32_t now = msec();
-   const float elapsed = static_cast<float>(now - m_lastRenderMs) / 1000.f;
+   float elapsed = static_cast<float>(now - m_lastRenderMs) / 1000.f;
+   if (elapsed > 1.f)
+      elapsed = 0.f;
    m_lastRenderMs = now;
    if (m_activePages.empty())
       return;
@@ -199,23 +201,42 @@ void InGameUI::HandlePageInput(const InputManager::ActionState &state)
    // Allow pages to force flipper navigation (needed by anaglyph calibration)
    for (const auto &page : m_activePages)
       m_useFlipperNav |= page->IsFlipperNavNeeded();
+   const uint32_t flipperNavRepeat = m_flipperNavRepeatCount == 0 ? 500 : m_flipperNavRepeatCount == 1 ? 250 : 125;
+
+   const uint32_t now = msec();
 
    if (state.IsKeyPressed(m_player->m_pininput.GetUIUpActionId(), m_prevActionState))
    {
       const bool wasFlipperNav = m_useFlipperNav;
       m_useFlipperNav = true;
+      m_flipperNavStart = now;
+      m_flipperNavRepeatCount = 0;
       GetActivePage()->SelectPrevItem();
       if (!wasFlipperNav)
          GetActivePage()->SelectNextItem();
+   }
+   else if (m_useFlipperNav && state.IsKeyDown(m_player->m_pininput.GetUIUpActionId()) && (now - m_flipperNavStart) > flipperNavRepeat)
+   {
+      m_flipperNavStart = now;
+      m_flipperNavRepeatCount++;
+      GetActivePage()->SelectPrevItem();
    }
 
    if (state.IsKeyPressed(m_player->m_pininput.GetUIDownActionId(), m_prevActionState))
    {
       const bool wasFlipperNav = m_useFlipperNav;
       m_useFlipperNav = true;
+      m_flipperNavStart = now;
+      m_flipperNavRepeatCount = 0;
       GetActivePage()->SelectNextItem();
       if (!wasFlipperNav)
          GetActivePage()->SelectPrevItem();
+   }
+   else if (m_useFlipperNav && state.IsKeyDown(m_player->m_pininput.GetUIDownActionId()) && (now - m_flipperNavStart) > flipperNavRepeat)
+   {
+      m_flipperNavStart = now;
+      m_flipperNavRepeatCount++;
+      GetActivePage()->SelectNextItem();
    }
 
    if (m_useFlipperNav && state.IsKeyPressed(m_player->m_pininput.GetUILeftActionId(), m_prevActionState))
@@ -286,7 +307,7 @@ void InGameUI::HandleLegacyFlyOver(const InputManager::ActionState &state)
       m_player->m_ptable->GetViewSetup().mViewportRotation += 1.0f;
 }
 
-bool InGameUI::ProposeInputLayout(const string& deviceName, const std::function<void(bool, bool)>& handler)
+bool InGameUI::ProposeInputLayout(const string& deviceName, const std::function<void(bool, bool, bool)>& handler)
 {
    if (IsOpened())
       return false;

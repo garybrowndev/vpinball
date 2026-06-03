@@ -1,27 +1,32 @@
 // license:GPLv3+
 
-// implementation of the HitTarget class.
-
 #include "core/stdafx.h"
 #include "hittarget.h"
 
-#include "utils/objloader.h"
+#include "core/VPApp.h"
 #include "meshes/dropTargetT2Mesh.h"
 #include "meshes/dropTargetT3Mesh.h"
 #include "meshes/dropTargetT4Mesh.h"
-#include "meshes/hitTargetRoundMesh.h"
-#include "meshes/hitTargetRectangleMesh.h"
 #include "meshes/hitTargetFatRectangleMesh.h"
 #include "meshes/hitTargetFatSquareMesh.h"
+#include "meshes/hitTargetRectangleMesh.h"
+#include "meshes/hitTargetRoundMesh.h"
 #include "meshes/hitTargetT1SlimMesh.h"
 #include "meshes/hitTargetT2SlimMesh.h"
-#include "renderer/Shader.h"
-#include "renderer/VertexBuffer.h"
+#include "parts/Collection.h"
 #include "renderer/IndexBuffer.h"
+#include "renderer/Renderer.h"
+#include "renderer/Shader.h"
+#include "renderer/trace.h"
+#include "renderer/VertexBuffer.h"
+#include "ui/win/sur.h"
+#include "ui/win/WinEditor.h"
+#include "utils/objloader.h"
+
 
 HitTarget::~HitTarget()
 {
-   assert(m_rd == nullptr);
+   assert(m_renderer == nullptr);
 }
 
 HitTarget *HitTarget::CopyForPlay() const
@@ -533,17 +538,17 @@ void HitTarget::UpdateStatusBarInfo()
 
 #pragma region Rendering
 
-void HitTarget::RenderSetup(RenderDevice *device)
+void HitTarget::RenderSetup(Renderer *renderer)
 {
-   assert(m_rd == nullptr);
-   m_rd = device;
+   assert(m_renderer == nullptr);
+   m_renderer = renderer;
 
    SetMeshType(m_d.m_targetType);
    m_transformedVertices.resize(m_numVertices);
 
    GenerateMesh(m_transformedVertices);
-   std::shared_ptr<VertexBuffer> vertexBuffer = std::make_shared<VertexBuffer>(m_rd, m_numVertices, (float *)m_transformedVertices.data(), true);
-   std::shared_ptr<IndexBuffer> indexBuffer = std::make_shared<IndexBuffer>(m_rd, m_numIndices, m_indices);
+   std::shared_ptr<VertexBuffer> vertexBuffer = std::make_shared<VertexBuffer>(m_renderer->m_renderDevice, m_numVertices, (float *)m_transformedVertices.data(), true);
+   std::shared_ptr<IndexBuffer> indexBuffer = std::make_shared<IndexBuffer>(m_renderer->m_renderDevice, m_numIndices, m_indices);
    m_meshBuffer = std::make_shared<MeshBuffer>(GetName(), vertexBuffer, indexBuffer, true);
 
    m_moveAnimationOffset = 0.0f;
@@ -561,9 +566,9 @@ void HitTarget::RenderSetup(RenderDevice *device)
 
 void HitTarget::RenderRelease()
 {
-   assert(m_rd != nullptr);
+   assert(m_renderer != nullptr);
    m_meshBuffer = nullptr;
-   m_rd = nullptr;
+   m_renderer = nullptr;
 }
 
 // Ported at: VisualPinball.Unity/VisualPinball.Unity/VPT/HitTarget/HitTargetAnimationSystem.cs
@@ -659,7 +664,7 @@ void HitTarget::UpdateAnimation(const float diff_time_msec)
 
 void HitTarget::Render(const unsigned int renderMask)
 {
-   assert(m_rd != nullptr);
+   assert(m_renderer != nullptr);
    assert(!m_desktopBackdrop);
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
@@ -675,17 +680,17 @@ void HitTarget::Render(const unsigned int renderMask)
    if (isUIPass)
    {
       if (renderMask & Renderer::UI_FILL)
-         m_rd->DrawMesh(m_rd->m_basicShader, true, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
+         m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, true, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
       // FIXME render wireframe
    }
    else
    {
-      m_rd->ResetRenderState();
-      m_rd->m_basicShader->SetVector(SHADER_fDisableLighting_top_below, m_d.m_disableLightingTop, m_d.m_disableLightingBelow, 0.f, 0.f);
+      m_renderer->m_renderDevice->ResetRenderState();
+      m_renderer->m_renderDevice->m_basicShader->SetVector(SHADER_fDisableLighting_top_below, m_d.m_disableLightingTop, m_d.m_disableLightingBelow, 0.f, 0.f);
       const Material *const mat = m_ptable->GetMaterial(m_d.m_szMaterial);
-      m_rd->m_basicShader->SetBasic(mat, m_ptable->GetImage(m_d.m_szImage));
-      m_rd->DrawMesh(m_rd->m_basicShader, mat->m_bOpacityActive, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
-      m_rd->m_basicShader->SetVector(SHADER_fDisableLighting_top_below, 0.f, 0.f, 0.f, 0.f);
+      m_renderer->m_renderDevice->m_basicShader->SetBasic(mat, m_ptable->GetImage(m_d.m_szImage));
+      m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, mat->m_bOpacityActive, m_d.m_vPosition, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
+      m_renderer->m_renderDevice->m_basicShader->SetVector(SHADER_fDisableLighting_top_below, 0.f, 0.f, 0.f, 0.f);
    }
 }
 

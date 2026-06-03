@@ -3,16 +3,23 @@
 #include "core/stdafx.h"
 #include "spinner.h"
 
-#include "utils/objloader.h"
+#include "core/VPApp.h"
 #include "meshes/spinnerBracketMesh.h"
 #include "meshes/spinnerPlateMesh.h"
-#include "renderer/Shader.h"
+#include "parts/Collection.h"
 #include "renderer/IndexBuffer.h"
+#include "renderer/Renderer.h"
+#include "renderer/Shader.h"
+#include "renderer/trace.h"
 #include "renderer/VertexBuffer.h"
+#include "ui/win/sur.h"
+#include "ui/win/WinEditor.h"
+#include "utils/objloader.h"
+
 
 Spinner::~Spinner()
 {
-   assert(m_rd == nullptr);
+   assert(m_renderer == nullptr);
 }
 
 Spinner *Spinner::CopyForPlay() const
@@ -29,59 +36,57 @@ void Spinner::UpdateStatusBarInfo()
    m_vpinball->SetStatusBarUnitInfo(tbuf, true);
 }
 
-float Spinner::GetAngleMax() const
-{
-   return (g_pplayer) ? RADTOANG(m_phitspinner->m_spinnerMover.m_angleMax) : // player active value
-                        m_d.m_angleMax;
-}
+float Spinner::GetAngleMax() const { return m_phitspinner ? RADTOANG(m_phitspinner->m_spinnerMover.m_angleMax) : m_d.m_angleMax; }
 
 void Spinner::SetAngleMax(const float angle)
 {
-    float newVal = angle;
+   float newVal = angle;
 
-    if (g_pplayer)
-    {
-        if (m_d.m_angleMin != m_d.m_angleMax)	// allow only if in limited angle mode
-        {
-            if (newVal > m_d.m_angleMax) newVal = m_d.m_angleMax;
-            else if (newVal < m_d.m_angleMin) newVal = m_d.m_angleMin;
+   if (m_phitspinner)
+   {
+      if (m_d.m_angleMin != m_d.m_angleMax) // allow only if in limited angle mode
+      {
+         if (newVal > m_d.m_angleMax)
+            newVal = m_d.m_angleMax;
+         else if (newVal < m_d.m_angleMin)
+            newVal = m_d.m_angleMin;
 
-            newVal = ANGTORAD(newVal);
+         newVal = ANGTORAD(newVal);
 
-            if (m_phitspinner->m_spinnerMover.m_angleMin < newVal)  // Min is smaller???
-                m_phitspinner->m_spinnerMover.m_angleMax = newVal;  // yes set new max
-            else m_phitspinner->m_spinnerMover.m_angleMin = newVal; // no set new minumum
-        }
-    }
-    else
-        m_d.m_angleMax = newVal;
+         if (m_phitspinner->m_spinnerMover.m_angleMin < newVal) // Min is smaller???
+            m_phitspinner->m_spinnerMover.m_angleMax = newVal; // yes set new max
+         else
+            m_phitspinner->m_spinnerMover.m_angleMin = newVal; // no set new minumum
+      }
+   }
+   else
+      m_d.m_angleMax = newVal;
 }
 
-float Spinner::GetAngleMin() const
-{
-    return (g_pplayer) ? RADTOANG(m_phitspinner->m_spinnerMover.m_angleMin) : // player active value
-                        m_d.m_angleMin;
-}
+float Spinner::GetAngleMin() const { return m_phitspinner ? RADTOANG(m_phitspinner->m_spinnerMover.m_angleMin) : m_d.m_angleMin; }
 
 void Spinner::SetAngleMin(const float angle)
 {
-    float newVal = angle;
-    if (g_pplayer)
-    {
-        if (m_d.m_angleMin != m_d.m_angleMax)	// allow only if in limited angle mode
-        {
-            if (newVal > m_d.m_angleMax) newVal = m_d.m_angleMax;
-            else if (newVal < m_d.m_angleMin) newVal = m_d.m_angleMin;
+   float newVal = angle;
+   if (m_phitspinner)
+   {
+      if (m_d.m_angleMin != m_d.m_angleMax) // allow only if in limited angle mode
+      {
+         if (newVal > m_d.m_angleMax)
+            newVal = m_d.m_angleMax;
+         else if (newVal < m_d.m_angleMin)
+            newVal = m_d.m_angleMin;
 
-            newVal = ANGTORAD(newVal);
+         newVal = ANGTORAD(newVal);
 
-            if (m_phitspinner->m_spinnerMover.m_angleMax > newVal)  // max is bigger
-                m_phitspinner->m_spinnerMover.m_angleMin = newVal;  // then set new minumum
-            else m_phitspinner->m_spinnerMover.m_angleMax = newVal; // else set new max
-        }
-    }
-    else
-        m_d.m_angleMin = newVal;
+         if (m_phitspinner->m_spinnerMover.m_angleMax > newVal) // max is bigger
+            m_phitspinner->m_spinnerMover.m_angleMin = newVal; // then set new minumum
+         else
+            m_phitspinner->m_spinnerMover.m_angleMax = newVal; // else set new max
+      }
+   }
+   else
+      m_d.m_angleMin = newVal;
 }
 
 HRESULT Spinner::Init(const float x, const float y, const bool fromMouseClick, const bool forPlay)
@@ -194,10 +199,9 @@ void Spinner::PhysicSetup(PhysicsEngine* physics, const bool isUI)
       m_d.m_angleMin = angleMin;
       m_d.m_angleMax = angleMax;
 
-      HitSpinner *const phitspinner = new HitSpinner(this, height);
-      m_phitspinner = phitspinner;
+      m_phitspinner = new HitSpinner(this, height);
 
-      physics->AddCollider(phitspinner, isUI);
+      physics->AddCollider(m_phitspinner, isUI);
 
       if (m_d.m_showBracket)
       {
@@ -291,16 +295,16 @@ void Spinner::ExportMesh(ObjLoader& loader)
 
 #pragma region Rendering
 
-void Spinner::RenderSetup(RenderDevice *device)
+void Spinner::RenderSetup(Renderer *renderer)
 {
-   assert(m_rd == nullptr);
-   m_rd = device;
+   assert(m_renderer == nullptr);
+   m_renderer = renderer;
 
    const float height = m_ptable->GetSurfaceHeight(m_d.m_szSurface, m_d.m_vCenter.x, m_d.m_vCenter.y);
    m_posZ = height + m_d.m_height;
 
-   std::shared_ptr<IndexBuffer> bracketIndexBuffer = std::make_shared<IndexBuffer>(m_rd, spinnerBracketNumFaces, spinnerBracketIndices);
-   std::shared_ptr<VertexBuffer> bracketVertexBuffer = std::make_shared<VertexBuffer>(m_rd, spinnerBracketNumVertices);
+   std::shared_ptr<IndexBuffer> bracketIndexBuffer = std::make_shared<IndexBuffer>(m_renderer->m_renderDevice, spinnerBracketNumFaces, spinnerBracketIndices);
+   std::shared_ptr<VertexBuffer> bracketVertexBuffer = std::make_shared<VertexBuffer>(m_renderer->m_renderDevice, spinnerBracketNumVertices);
    m_bracketMeshBuffer = std::make_shared<MeshBuffer>(GetName() + ".Bracket"s, bracketVertexBuffer, bracketIndexBuffer, true);
 
    m_fullMatrix = Matrix3D::MatrixRotateZ(ANGTORAD(m_d.m_rotation));
@@ -324,8 +328,8 @@ void Spinner::RenderSetup(RenderDevice *device)
    }
    bracketVertexBuffer->Unlock();
 
-   std::shared_ptr<IndexBuffer> plateIndexBuffer = std::make_shared<IndexBuffer>(m_rd, spinnerPlateNumFaces, spinnerPlateIndices);
-   std::shared_ptr<VertexBuffer> plateVertexBuffer = std::make_shared<VertexBuffer>(m_rd, spinnerPlateNumVertices, nullptr, true);
+   std::shared_ptr<IndexBuffer> plateIndexBuffer = std::make_shared<IndexBuffer>(m_renderer->m_renderDevice, spinnerPlateNumFaces, spinnerPlateIndices);
+   std::shared_ptr<VertexBuffer> plateVertexBuffer = std::make_shared<VertexBuffer>(m_renderer->m_renderDevice, spinnerPlateNumVertices, nullptr, true);
    m_plateMeshBuffer = std::make_shared<MeshBuffer>(GetName() + ".Plate"s, plateVertexBuffer, plateIndexBuffer, true);
 
    m_vertexBuffer_spinneranimangle = -FLT_MAX;
@@ -334,8 +338,8 @@ void Spinner::RenderSetup(RenderDevice *device)
 
 void Spinner::RenderRelease()
 {
-   assert(m_rd != nullptr);
-   m_rd = nullptr;
+   assert(m_renderer != nullptr);
+   m_renderer = nullptr;
    m_bracketMeshBuffer = nullptr;
    m_plateMeshBuffer = nullptr;
 }
@@ -353,7 +357,7 @@ void Spinner::UpdateAnimation(const float diff_time_msec)
 
 void Spinner::Render(const unsigned int renderMask)
 {
-   assert(m_rd != nullptr);
+   assert(m_renderer != nullptr);
    assert(!m_desktopBackdrop);
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
@@ -364,7 +368,7 @@ void Spinner::Render(const unsigned int renderMask)
    || (isReflectionPass && !m_d.m_reflectionEnabled))
       return;
 
-   m_rd->ResetRenderState();
+   m_renderer->m_renderDevice->ResetRenderState();
 
    if (m_d.m_showBracket && !isDynamicOnly)
    {
@@ -379,17 +383,17 @@ void Spinner::Render(const unsigned int renderMask)
       mat.m_cClearcoat = 0x20202020;
       mat.m_fEdge = 1.0f;
       mat.m_fEdgeAlpha = 1.0f;
-      m_rd->m_basicShader->SetBasic(&mat, nullptr);
+      m_renderer->m_renderDevice->m_basicShader->SetBasic(&mat, nullptr);
       Vertex3Ds pos(m_d.m_vCenter.x, m_d.m_vCenter.y, m_posZ);
-      m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_bracketMeshBuffer, RenderDevice::TRIANGLELIST, 0, spinnerBracketNumFaces);
+      m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_bracketMeshBuffer, RenderDevice::TRIANGLELIST, 0, spinnerBracketNumFaces);
    }
 
    if (m_phitspinner->m_spinnerMover.m_visible && !isStaticOnly)
    {
       UpdatePlate(nullptr);
       Vertex3Ds pos(m_d.m_vCenter.x, m_d.m_vCenter.y, m_posZ);
-      m_rd->m_basicShader->SetBasic(m_ptable->GetMaterial(m_d.m_szMaterial), m_ptable->GetImage(m_d.m_szImage));
-      m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_plateMeshBuffer, RenderDevice::TRIANGLELIST, 0, spinnerPlateNumFaces);
+      m_renderer->m_renderDevice->m_basicShader->SetBasic(m_ptable->GetMaterial(m_d.m_szMaterial), m_ptable->GetImage(m_d.m_szImage));
+      m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_plateMeshBuffer, RenderDevice::TRIANGLELIST, 0, spinnerPlateNumFaces);
    }
 }
 
@@ -563,14 +567,14 @@ STDMETHODIMP Spinner::put_Height(float newVal)
 
 STDMETHODIMP Spinner::get_Damping(float *pVal)
 {
-   *pVal = !g_pplayer ? m_d.m_damping : powf(m_phitspinner->m_spinnerMover.m_damping,(float)(1.0/PHYS_FACTOR));
+   *pVal = m_phitspinner ? powf(m_phitspinner->m_spinnerMover.m_damping, (float)(1.0 / PHYS_FACTOR)) : m_d.m_damping;
    return S_OK;
 }
 
 STDMETHODIMP Spinner::put_Damping(float newVal)
 {
    const float tmp = saturate(newVal);
-   if (g_pplayer)
+   if (m_phitspinner)
       m_phitspinner->m_spinnerMover.m_damping = powf(tmp, (float)PHYS_FACTOR);
    else
       m_d.m_damping = tmp;
@@ -666,7 +670,7 @@ STDMETHODIMP Spinner::get_AngleMax(float *pVal)
 
 STDMETHODIMP Spinner::put_AngleMax(float newVal)
 {
-   if (g_pplayer && (m_d.m_angleMin == m_d.m_angleMax)) // allow only if in limited angle mode
+   if (m_phitspinner && (m_d.m_angleMin == m_d.m_angleMax)) // allow only if in limited angle mode
       return E_FAIL;
 
    SetAngleMax(newVal);
@@ -675,14 +679,13 @@ STDMETHODIMP Spinner::put_AngleMax(float newVal)
 
 STDMETHODIMP Spinner::get_AngleMin(float *pVal)
 {
-   *pVal = (g_pplayer) ? RADTOANG(m_phitspinner->m_spinnerMover.m_angleMin) :	//player active value
-                         m_d.m_angleMin;
+   *pVal = m_phitspinner ? RADTOANG(m_phitspinner->m_spinnerMover.m_angleMin) : m_d.m_angleMin;
    return S_OK;
 }
 
 STDMETHODIMP Spinner::put_AngleMin(float newVal)
 {
-   if (g_pplayer && (m_d.m_angleMin != m_d.m_angleMax))	// allow only if in limited angle mode
+   if (m_phitspinner && (m_d.m_angleMin != m_d.m_angleMax)) // allow only if in limited angle mode
       return E_FAIL;
 
    SetAngleMin(newVal);
@@ -691,15 +694,14 @@ STDMETHODIMP Spinner::put_AngleMin(float newVal)
 
 STDMETHODIMP Spinner::get_Elasticity(float *pVal)
 {
-   *pVal = (g_pplayer) ? m_phitspinner->m_spinnerMover.m_elasticity :	//player active value
-                         m_d.m_elasticity;
+   *pVal = m_phitspinner ? m_phitspinner->m_spinnerMover.m_elasticity : m_d.m_elasticity;
    return S_OK;
 }
 
 STDMETHODIMP Spinner::put_Elasticity(float newVal)
 {
-   if (g_pplayer)
-      m_phitspinner->m_spinnerMover.m_elasticity = newVal;	//player active value
+   if (m_phitspinner)
+      m_phitspinner->m_spinnerMover.m_elasticity = newVal; //player active value
    else
       m_d.m_elasticity = newVal;
 
@@ -708,13 +710,13 @@ STDMETHODIMP Spinner::put_Elasticity(float newVal)
 
 STDMETHODIMP Spinner::get_Visible(VARIANT_BOOL *pVal)
 {
-   *pVal = FTOVB((g_pplayer) ? m_phitspinner->m_spinnerMover.m_visible : m_d.m_visible);
+   *pVal = FTOVB(m_phitspinner ? m_phitspinner->m_spinnerMover.m_visible : m_d.m_visible);
    return S_OK;
 }
 
 STDMETHODIMP Spinner::put_Visible(VARIANT_BOOL newVal)
 {
-   if (g_pplayer)
+   if (m_phitspinner)
       m_phitspinner->m_spinnerMover.m_visible = VBTOb(newVal);// && m_d.m_visible;
    else
       m_d.m_visible = VBTOb(newVal);

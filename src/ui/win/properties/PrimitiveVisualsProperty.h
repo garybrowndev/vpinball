@@ -2,6 +2,10 @@
 
 #pragma once
 
+#include "PropertyDialog.h"
+
+class RenderProbe;
+
 class PrimitiveVisualsProperty final : public BasePropertyDialog
 {
 public:

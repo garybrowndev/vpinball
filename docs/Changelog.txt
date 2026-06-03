@@ -49,6 +49,7 @@ FEATURES:
 - balls can now be created and edited directly from the editor like all other parts, and not only from the script
 - the movement of the ball is now slightly extrapolated/predicted to (ideally) reduce the display/visual latency to 0
 - improved ball trail, also exposing strength control
+- add 'raytraced'/true ball motion blur (BGFX only, not supported in VR or headtracking)
 
 - move the plumb simulation to VPX's physics engine with an improved physics model. NudgePlugIn_xxx.vbs files that were used depending on each user setup are not needed anymore and were removed.
   Emulation of the plumb must be enabled in the settings, and adjusted to user setup. The LiveUI offers a dedicated UI with live feedback to ease this process.
@@ -66,7 +67,7 @@ FEATURES:
 
 - add support to visual screen nudge to sensor based nudge (strength/disabling is available in the 'Nudge/Tilt Settings' page).
 
-- the BGFX library employs all the latest rendering backends (Vulkan, Metal, DirectX11/12, OpenGL, ...) with some unique benefits: (note that DX11 should be preferred on Windows)
+- the BGFX library employs all the latest rendering backends (Vulkan, Metal, DirectX11, OpenGL, ...) with some unique benefits: (note that DX11 should be preferred on Windows) (DX12 currently disabled)
   . it supports Variable Refresh Rate display (when VSync is switched off)
   . it uses multiple CPU cores to separately process the rendering from the game simulation, allowing for lower input/physics/controller latency,
     better nudging, more stable gameplay emulation, as well as a performance boost
@@ -90,6 +91,7 @@ FEATURES:
   . on the Windows platform, the Windows keys can now be used as a normal key input
   . a few hardware devices and generic layouts are automatically detected, when this happens, the user is supposed to apply the corresponding default mapping.
     Explicit support for some very old hardware has been removed (Microsoft's Sidewinder, UltraCade's UltraPin,...)
+    Explicit support for newer hardware has been added (Pinscape, Arcade2TV-XR)
   . the hardware acceleration filter may not be enabled anymore for keyboard nudge (as it is not supposed to be used for keyboard nudge)
   The new input setup is stored along the old one to allow to use older versions of VPX together with newers.
   This change requires users to redefine their input settings in the new UI.
@@ -161,7 +163,7 @@ FEATURES:
   . Remote Control: a plugin that allows to control an instance of VPX from another running instance. For example running VPX on a little controller PC that communicates with a more powerful computer that runs VPX driving a VR headset
   . Score View: a tool to provide default score rendering (for example DMD, but also supporting alphanumeric segment displays, including dimmed segments)
   . Serum: a DMD colorizer
-  . UpscaleDMD: upscale or anti-alias DMD content (modes: xBRZ 2x/3x/4x/5x/6x, ScaleFX AA 1x, ScaleFX 3x and Super-XBR 2x)
+  . UpscaleDMD: upscale or anti-alias DMD content (modes: MMPX 2x, xBRZ 2x/3x/4x/5x/6x, ScaleFX AA 1x, ScaleFX 3x and Super-XBR 2x)
   . WMP: the window media player, but as a portable plugin, running on any of the supported platforms
   Note that due to this, some settings (e.g. DMD antialias/upscale) moved from VPX itself to the plugins
 
@@ -184,7 +186,7 @@ FEATURES:
   . Add mouse interaction support
   . Add settings pages, moving lots of settings inside these pages
   . Add a system info page, displaying some details of the GPU,CPU,Display,etc, and the paths used to load the various components
-  . Navigation using flipper input has been unified: magna buttons allow to move, while flipper buttons allow to select
+  . Navigation using flipper input has been unified: per default, magna buttons allow to move, while flipper buttons allow to select
 
 - for cabinet users, a new option in the graphics settings allows to enable an automatic window camera fitting at table startup, based on table or screen fitting
 
@@ -206,6 +208,8 @@ FIXES:
 - allow for larger inclination value range
 
 - fix 0-scaled rubber crash (like it can happen if invalid UI-inputs like 'Scale' are mapped to 0)
+
+- fix different maximum tessellation/detail levels for ramps & rubbers, dependent on static vs non-static rendering
 
 - improve 'resting' ball detection and better filtering for physics hit events
 

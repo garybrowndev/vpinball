@@ -2,6 +2,13 @@
 
 #pragma once
 
+#include "utils/fileio.h"
+
+class RenderTarget;
+class RenderPass;
+class RenderDevice;
+class RenderDeviceState;
+
 // A render probe is a render of the scene to an offscreen render target which is later used for shading scene parts, for example for reflections
 class RenderProbe final
 {
@@ -83,7 +90,6 @@ private:
 
    // Properties used for rendering (not saved)
    Renderer* m_renderer = nullptr;
-   RenderDevice* m_rd = nullptr;
    RenderDeviceState* m_rdState = nullptr;
    bool m_dirty = true;
    bool m_rendering = false;

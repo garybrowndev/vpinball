@@ -2,10 +2,18 @@
 
 #pragma once
 
-#include "ui/win/resource.h"
-#include "unordered_dense.h"
 #include "math/Mesh.h"
 #include "math/MeshUtils.h"
+#include "parts/pintable.h"
+#include "physics/hitable.h"
+#include "renderer/Renderable.h"
+#include "ui/win/resource.h"
+#include "utils/eventproxy.h"
+
+#include "unordered_dense.h"
+
+
+class MeshBuffer;
 
 // Indices for RotAndTra:
 //     RotX = 0
@@ -82,7 +90,7 @@ public:
 #ifdef __STANDALONE__
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
-   STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
+   STDMETHOD(GetDocumentation)(MEMBERID index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
 
@@ -294,7 +302,7 @@ public:
    bool m_inPlayState = false;
 
 private:
-   RenderDevice *m_rd = nullptr;
+   Renderer *m_renderer = nullptr;
 
    Light * m_lightmap = nullptr;
 
