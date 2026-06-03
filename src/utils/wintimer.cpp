@@ -97,6 +97,9 @@ static LARGE_INTEGER sTimerStart = {};
 static LONGLONG OneMSTimerTicks = 0;
 static LONGLONG TwoMSTimerTicks = 0;
 static char highrestimer = 0;
+// SDL3 SDL_GetTicksNS clock starts at SDL init, VPX usec() starts at wintimer_init. Both monotonic but unrelated.
+// Captured once below; usec_at_init - sdl_us_at_init.
+static int64_t sSdlNsToVpxUsOffset = 0;
 
 // call before 1st use of msec,usec or uSleep
 void wintimer_init()
@@ -120,6 +123,19 @@ void wintimer_init()
 
    OneMSTimerTicks = (1000 * TimerFreq.QuadPart) / 1000000ull;
    TwoMSTimerTicks = (2000 * TimerFreq.QuadPart) / 1000000ull;
+
+   // SDL clock vs VPX usec() offset — sampled adjacent so the two reads are within microseconds of each other.
+   const uint64_t sdl_now_ns = SDL_GetTicksNS();
+   const uint64_t vpx_now_us = usec();
+   sSdlNsToVpxUsOffset = static_cast<int64_t>(vpx_now_us) - static_cast<int64_t>(sdl_now_ns / 1000ull);
+}
+
+uint64_t sdl_ns_to_usec(uint64_t sdl_ns)
+{
+   if (sdl_ns == 0)
+      return 0;
+   const int64_t result = static_cast<int64_t>(sdl_ns / 1000ull) + sSdlNsToVpxUsOffset;
+   return result < 0 ? 0 : static_cast<uint64_t>(result);
 }
 
 uint64_t usec()

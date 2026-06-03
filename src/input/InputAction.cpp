@@ -189,7 +189,7 @@ void InputAction::SetDirectState(int slot, bool state)
    }
 }
 
-void InputAction::OnInputChanged(ButtonMapping*)
+void InputAction::OnInputChanged(ButtonMapping* mapping)
 {
    const bool wasPressed = m_isPressed;
    m_isPressed = false;
@@ -218,6 +218,10 @@ void InputAction::OnInputChanged(ButtonMapping*)
    if (m_isPressed != wasPressed)
    {
       m_eventManager->OnInputActionStateChanged(this);
+      // Stamp SDL arrival (from the mapping that just flipped) BEFORE m_lastOnChangeUs so PerfUI's "Components"
+      // line can compute SDL->Act = m_lastOnChangeUs - m_sdlArrivalUs. Direct-state path passes mapping=nullptr;
+      // m_sdlArrivalUs stays 0 in that case and PerfUI shows '-'.
+      m_sdlArrivalUs = mapping ? mapping->GetLastChangeArrivalUs() : 0;
       m_lastOnChangeUs = usec();
       m_onStateChange(*this, wasPressed, m_isPressed);
       if (m_isPressed && m_repeatPeriodUs >= 0)
