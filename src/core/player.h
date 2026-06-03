@@ -2,22 +2,29 @@
 
 #pragma once
 
-#include "renderer/typedefs3D.h"
-#include "renderer/Renderer.h"
-#include "renderer/Window.h"
-#include "physics/PhysicsEngine.h"
-#include "ui/win/Debugger.h"
-#include "ui/live/LiveUI.h"
-#include "input/InputManager.h"
-#include "plugins/ControllerPlugin.h"
-#include "plugins/VPXPlugin.h"
-#include "plugins/ResURIResolver.h"
+#ifndef __STANDALONE__
+#include <wxx_stdcontrols.h> // Add CButton, CEdit, CListBox
+#endif
+
 #include "audio/AudioPlayer.h"
 #include "core/ballhistory.h"
 #include "core/ScriptInterpreter.h"
+#include "input/InputManager.h"
+#include "physics/PhysicsEngine.h"
+#include "plugins/ControllerPlugin.h"
+#include "plugins/ResURIResolver.h"
+#include "plugins/VPXPlugin.h"
+#include "renderer/typedefs3D.h"
+#include "renderer/Window.h"
+#include "ui/win/Debugger.h"
+#include "ui/win/ProgressDialog.h"
+#include "utils/wintimer.h"
 #include "VPXPluginAPIImpl.h"
 
+class Renderer;
 class VRDevice;
+class LiveUI;
+class BaseTexture;
 
 enum InfoMode
 {
@@ -36,48 +43,6 @@ enum ProfilingMode
 {
    PF_DISABLED,
    PF_ENABLED,
-};
-
-////////////////////////////////////////////////////////////////////////////////
-// Startup progress dialog
-
-class ProgressDialog final : public CDialog
-{
-public:
-   ProgressDialog() : CDialog(IDD_PROGRESS) { }
-
-   void SetProgress(const string &text, const int value = -1) {
-      #ifndef __STANDALONE__
-      if (IsWindow()) {
-         m_progressName.SetWindowText(text.c_str());
-         if (value != -1)
-            m_progressBar.SetPos(value);
-      }
-      #else
-      if (value != -1 && m_progress != value) {
-         PLOGI.printf("%s %d%%", text.c_str(), value);
-         m_progress = value;
-      }
-      #endif
-   }
-
-protected:
-   BOOL OnInitDialog() override
-   {
-      #ifndef __STANDALONE__
-      AttachItem(IDC_PROGRESS2, m_progressBar);
-      AttachItem(IDC_STATUSNAME, m_progressName);
-      #endif
-      return TRUE;
-   }
-
-private:
-   #ifdef __STANDALONE__
-   int m_progress = -1;
-   #else
-   CProgressBar m_progressBar;
-   CStatic m_progressName;
-   #endif
 };
 
 ////////////////////////////////////////////////////////////////////////////////

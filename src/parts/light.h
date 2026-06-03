@@ -5,8 +5,14 @@
 #pragma once
 
 #include "dragpoint.h"
-#include "ui/win/resource.h"
+#include "parts/pintable.h"
+#include "physics/hitable.h"
+#include "renderer/Renderable.h"
 #include "renderer/RenderDevice.h"
+#include "ui/win/resource.h"
+#include "utils/eventproxy.h"
+
+class MeshBuffer;
 
 enum ShadowMode : int // has to be int for loading
 {
@@ -82,7 +88,7 @@ public:
 #ifdef __STANDALONE__
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
-   STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
+   STDMETHOD(GetDocumentation)(MEMBERID index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
    Light() : m_lightcenter(this) { m_menuid = IDR_SURFACEMENU; m_d.m_depthBias = 0.0f; m_d.m_shape = ShapeCustom; m_d.m_visible = true; }
@@ -137,7 +143,7 @@ public:
    float GetCurrentHeight() const { return m_desktopBackdrop ? 0.0f : m_initSurfaceHeight + m_d.m_height; }
 
 protected:
-   RenderDevice *m_rd = nullptr;
+   Renderer *m_renderer = nullptr;
 
 public:
    float GetDepth(const Vertex3Ds& viewDir) const final;

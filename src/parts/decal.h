@@ -4,8 +4,14 @@
 
 #pragma once
 
+#include "parts/Collection.h"
+#include "parts/pintable.h"
+#include "renderer/Renderable.h"
 #include "physics/hittimer.h"
+#include "utils/eventproxy.h"
 #include "utils/fileio.h"
+
+class MeshBuffer;
 
 class DecalData final : public BaseProperty
 {
@@ -41,7 +47,7 @@ public:
 #ifdef __STANDALONE__
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
-   STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
+   STDMETHOD(GetDocumentation)(MEMBERID index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
    Decal() { m_wzName = L"Decal"sv; }
@@ -81,7 +87,7 @@ public:
 private:
    void GetTextSize(int * const px, int * const py);
 
-   RenderDevice *m_rd = nullptr;
+   Renderer *m_renderer = nullptr;
    std::shared_ptr<MeshBuffer> m_meshBuffer;
    std::shared_ptr<BaseTexture> m_textImg = nullptr;
    float m_leading = 0.0f, m_descent = 0.0f;

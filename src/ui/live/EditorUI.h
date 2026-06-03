@@ -3,13 +3,17 @@
 #pragma once
 
 #include "input/InputManager.h"
-
 #include "imgui/imgui.h"
 #include "imguizmo/ImGuizmo.h"
 #include "imgui_markdown/imgui_markdown.h"
-
-#include "LiveUI.h"
 #include "editor/EditableUIPart.h"
+#include "renderer/Renderer.h"
+
+class LiveUI;
+class PinTable;
+class Player;
+class InputManager;
+class Renderer;
 
 namespace VPX::EditorUI
 {

@@ -1,8 +1,12 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
-#include "ui/win/resource.h"
 #include "DimensionDialog.h"
+
+#include "parts/pintable.h"
+#include "ui/win/resource.h"
+#include "ui/win/WinEditor.h"
+
 
 DimensionDialog::DimensionDialog() : CDialog(IDD_DIMENSION_CALCULATOR)
 {

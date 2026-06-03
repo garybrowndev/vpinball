@@ -3,8 +3,9 @@
 #pragma once
 
 #include <iomanip>
+
+#include "math/vector.h"
 #include "renderer/typedefs3D.h"
-#include <math/vector.h>
 
 #if !defined(ENABLE_DX9)
 class alignas(16) D3DMATRIX {
@@ -274,7 +275,7 @@ public:
    string ToString() const
    {
       std::stringstream ss;
-      ss << std::fixed << std::setw(8) << std::setprecision(2);
+      ss << std::fixed << std::setw(10) << std::setprecision(5);
       ss << "[ " << _11 << ' ' << _12 << ' ' << _13 << ' ' << _14 << '\n'
          << "  " << _21 << ' ' << _22 << ' ' << _23 << ' ' << _24 << '\n'
          << "  " << _31 << ' ' << _32 << ' ' << _33 << ' ' << _34 << '\n'

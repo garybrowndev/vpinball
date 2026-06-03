@@ -1,8 +1,10 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
-
 #include "GraphicSettingsPage.h"
+
+#include "renderer/Renderer.h"
+#include "ui/live/LiveUI.h"
 
 namespace VPX::InGameUI
 {
@@ -264,7 +266,7 @@ void GraphicSettingsPage::BuildPage()
          m_notificationId = m_player->m_liveUI->PushNotification("This change will be applied after restarting the player."s, 3000, m_notificationId);
       }));
 
-#ifdef ENABLE_OPENGL
+#if defined(ENABLE_OPENGL) || defined(ENABLE_BGFX)
    // TODO this property is directly persisted. It does not follow the overall UI design: App/Table/Live state => Implement live state (will also enable table override)
    AddItem(std::make_unique<InGameUIItem>( //
       Settings::m_propPlayer_MSAASamples, //
@@ -409,12 +411,10 @@ void GraphicSettingsPage::BuildPage()
       [this]() { return m_player->m_renderer->m_bloomOff; }, //
       [this](bool v) { m_player->m_renderer->m_bloomOff = v; }));
 
-   // Disabled as this needs some fixes for VR, nudgeing & latency correction
-   if (false)
-      AddItem(std::make_unique<InGameUIItem>( //
-         Settings::m_propPlayer_ForceMotionBlurOff, //
-         [this]() { return m_player->m_renderer->m_motionBlurOff; }, //
-         [this](bool v) { m_player->m_renderer->m_motionBlurOff = v; }));
+   AddItem(std::make_unique<InGameUIItem>( //
+      Settings::m_propPlayer_ForceMotionBlurOff, //
+      [this]() { return m_player->m_renderer->m_motionBlurOff; }, //
+      [this](bool v) { m_player->m_renderer->m_motionBlurOff = v; }));
 
 #ifdef ENABLE_DX9
    // TODO this property is directly persisted. It does not follow the overall UI design: App/Table/Live state => Implement live state (will also enable table override)

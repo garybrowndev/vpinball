@@ -22,7 +22,7 @@ public:
    void Update();
    void Close();
 
-   bool ProposeInputLayout(const string& deviceName, const std::function<void(bool, bool)>& handler);
+   bool ProposeInputLayout(const string& deviceName, const std::function<void(bool, bool, bool)>& handler);
 
    void AddPage(const string &path, const std::function<std::unique_ptr<InGameUIPage>()>& pageFactory);
    void Navigate(const string &path, bool isBack = false);
@@ -38,6 +38,8 @@ private:
    Player *m_player;
    ImVec2 m_prevMousePos;
    bool m_useFlipperNav = false;
+   int m_flipperNavRepeatCount = 0;
+   uint32_t m_flipperNavStart = 0;
    InputManager::ActionState m_prevActionState { };
    ankerl::unordered_dense::map<string, std::function<std::unique_ptr<InGameUIPage>()>> m_pages;
    vector<string> m_navigationHistory;

@@ -2,13 +2,16 @@
 
 #pragma once
 
-#include "ui/win/resource.h"
+#include "parts/Collection.h"
+#include "parts/timer.h"
 #include "physics/hitable.h"
 #include "physics/hitball.h"
 #include "renderer/Renderable.h"
-#include "parts/timer.h"
+#include "ui/win/resource.h"
+#include "utils/eventproxy.h"
 
 class HitBall;
+class ITexManCacheable;
 
 // Helper class used for projecting sphere points, which is then used to compensate for projection stretch if anti-ball-stretch is enabled
 class AntiStretchHelper final
@@ -116,7 +119,7 @@ public:
 #ifdef __STANDALONE__
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
-   STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
+   STDMETHOD(GetDocumentation)(MEMBERID index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
    Ball();
@@ -230,7 +233,7 @@ private:
    static unsigned int GetNextBallID();
 
    const unsigned int m_id; // unique ID for each ball
-   RenderDevice *m_rd = nullptr;
+   Renderer *m_renderer = nullptr;
    ITexManCacheable *m_pinballEnv = nullptr;
    ITexManCacheable *m_pinballDecal = nullptr;
    bool m_antiStretch = false;

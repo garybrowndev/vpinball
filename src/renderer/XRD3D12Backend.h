@@ -9,6 +9,8 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 
+#include "bx/os.h"
+
 #define D3D12_CHECK(x, y)                                                                                                                                                                    \
    {                                                                                                                                                                                         \
       const HRESULT result = (x);                                                                                                                                                            \
@@ -108,7 +110,7 @@ public:
       case DXGI_FORMAT_D16_UNORM: swapchain.format = bgfx::TextureFormat::D16; flags |= BGFX_TEXTURE_BLIT_DST; break;
       default: assert(false); break; // Unsupported format
       };
-      flags |= BGFX_TEXTURE_RT_WRITE_ONLY;
+      // flags |= BGFX_TEXTURE_RT_WRITE_ONLY; // We need read access for the preview
       for (size_t i = 0; i < m_swapchainImagesMap[swapchain.swapchain].second.size(); i++)
       {
          const bgfx::TextureHandle handle = bgfx::createTexture2D(static_cast<uint16_t>(swapchain.width), static_cast<uint16_t>(swapchain.height), false,

@@ -1,11 +1,16 @@
 // license:GPLv3+
 
-// Definition of the Flasher class
-
 #pragma once
 
-#include "dragpoint.h"
+#include "parts/dragpoint.h"
+#include "parts/pintable.h"
+#include "physics/hitable.h"
+#include "renderer/Renderable.h"
 #include "ui/win/resource.h"
+#include "utils/eventproxy.h"
+
+
+class MeshBuffer;
 
 class FlasherData final
 {
@@ -76,7 +81,7 @@ public:
 #ifdef __STANDALONE__
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
-   STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
+   STDMETHOD(GetDocumentation)(MEMBERID index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
    Flasher() { m_menuid = IDR_SURFACEMENU; }
@@ -129,7 +134,7 @@ public:
    void AddPoint(int x, int y, const bool smooth) final;
 
 protected:
-   RenderDevice *m_rd = nullptr;
+   Renderer *m_renderer = nullptr;
 
 public:
    void UpdatePoint(int index, float x, float y);

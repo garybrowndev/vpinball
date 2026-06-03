@@ -1,11 +1,17 @@
 // license:GPLv3+
 
-// Definition of the Ramp class
-
 #pragma once
 
-#include "dragpoint.h"
+#include "parts/dragpoint.h"
+#include "parts/Material.h"
+#include "parts/pintable.h"
+#include "physics/hitable.h"
+#include "renderer/Renderable.h"
 #include "ui/win/resource.h"
+#include "utils/eventproxy.h"
+
+
+class MeshBuffer;
 
 class RampData final : public BaseProperty
 {
@@ -51,7 +57,7 @@ public:
 #ifdef __STANDALONE__
    STDMETHOD(GetIDsOfNames)(REFIID /*riid*/, LPOLESTR* rgszNames, UINT cNames, LCID lcid,DISPID* rgDispId);
    STDMETHOD(Invoke)(DISPID dispIdMember, REFIID /*riid*/, LCID lcid, WORD wFlags, DISPPARAMS* pDispParams, VARIANT* pVarResult, EXCEPINFO* pExcepInfo, UINT* puArgErr);
-   STDMETHOD(GetDocumentation)(INT index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
+   STDMETHOD(GetDocumentation)(MEMBERID index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
    Ramp()
@@ -130,7 +136,7 @@ public:
    RampData m_d;
 
 private:
-   RenderDevice *m_rd = nullptr;
+   Renderer *m_renderer = nullptr;
 
    int m_rampVertex;
    float *m_rgheightInit = nullptr;

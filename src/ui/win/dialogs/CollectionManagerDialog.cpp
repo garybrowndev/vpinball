@@ -1,8 +1,14 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
-#include "ui/win/resource.h"
 #include "CollectionManagerDialog.h"
+
+#include "core/VPApp.h"
+#include "parts/Collection.h"
+#include "ui/win/PinTableWnd.h"
+#include "ui/win/resource.h"
+#include "ui/win/WinEditor.h"
+
 
 typedef struct _tagSORTDATA
 {

@@ -1,9 +1,13 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
-
 #include "HomePage.h"
+
 #include "core/TournamentFile.h"
+#include "core/VPApp.h"
+#include "renderer/Renderer.h"
+#include "ui/live/LiveUI.h"
+
 
 namespace VPX::InGameUI
 {
@@ -62,7 +66,7 @@ void HomePage::BuildPage()
             m_player->m_liveUI->OpenEditorUI();
          }));
 
-   if (isTouch)
+   if (isTouch && !m_player->m_vrDevice)
       AddItem(std::make_unique<InGameUIItem>(g_app->m_settings.GetPlayer_TouchOverlay() ? "Disable Touch Overlay"s : "Enable Touch Overlay"s, ""s,
          [this]()
          {

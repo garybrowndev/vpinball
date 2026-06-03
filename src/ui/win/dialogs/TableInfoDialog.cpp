@@ -1,8 +1,12 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
-#include "ui/win/resource.h"
 #include "TableInfoDialog.h"
+
+#include "parts/pintable.h"
+#include "renderer/Texture.h"
+#include "ui/win/resource.h"
+#include "ui/win/WinEditor.h"
 
 TableInfoDialog::TableInfoDialog() : CDialog(IDD_TABLEINFO)
 {

@@ -2,9 +2,15 @@
 
 #include "core/stdafx.h"
 #include "VRDevice.h"
-#include "core/vpversion.h"
 
+#include "core/VPApp.h"
+#include "core/vpversion.h"
 #include "parts/primitive.h"
+#include "renderer/MeshBuffer.h"
+#include "renderer/IndexBuffer.h"
+#include "renderer/RenderTarget.h"
+#include "renderer/Sampler.h"
+#include "renderer/VertexBuffer.h"
 
 // MSVC Concurrency Viewer support
 // This requires to add the MSVC Concurrency SDK to the project
@@ -16,10 +22,14 @@ extern marker_series series;
 #endif
 
 #if defined(ENABLE_XR) && defined(ENABLE_BGFX)
-   #include "bgfx/platform.h"
    #include "bgfx/bgfx.h"
+   #ifdef _far
+      #undef _far
+   #endif
+   #ifdef _near
+      #undef _near
+   #endif
    #include "bx/math.h"
-   #include "bx/os.h"
    #include <map>
    #include <vector>
    #include <time.h>
@@ -123,7 +133,6 @@ VRDevice::VRDevice(const Settings& settings)
    #if defined(ENABLE_VR)
       m_slope = settings.GetPlayerVR_Slope();
    #endif
-   m_worldDirty = true;
 
    #if defined(ENABLE_XR)
       // Relative scale factor and positioning
@@ -365,7 +374,7 @@ VRDevice::VRDevice(const Settings& settings)
          for (int i = 0; i < 2; i++)
          {
             const Matrix3D proj = Matrix3D::MatrixPerspectiveFovLH(90.f, 1.f, zNear, zFar);
-            m_pfMatProj[i] = coords * sceneScale * proj;
+            m_sceneProj[i] = coords * sceneScale * proj;
          }
       }
       else
@@ -393,7 +402,7 @@ VRDevice::VRDevice(const Settings& settings)
             for (int j = 0;j < 4;j++)
                matProjection.m[j][i] = left_eye_proj.m[i][j];
 
-         m_pfMatProj[0] = coords * sceneScale * matEye2Head * matProjection;
+         m_sceneProj[0] = coords * sceneScale * matEye2Head * matProjection;
 
          //Calculate right EyeProjection Matrix relative to HMD position
          matEye2Head = Matrix3D::MatrixIdentity();
@@ -408,7 +417,7 @@ VRDevice::VRDevice(const Settings& settings)
             for (int j = 0;j < 4;j++)
                matProjection.m[j][i] = right_eye_proj.m[i][j];
 
-         m_pfMatProj[1] = coords * sceneScale * matEye2Head * matProjection;
+         m_sceneProj[1] = coords * sceneScale * matEye2Head * matProjection;
       }
 
       if (vr::k_unMaxTrackedDeviceCount > 0) {
@@ -834,10 +843,7 @@ void VRDevice::CreateSession()
    m_swapchainRenderTargets.resize(m_colorSwapchainInfo.imageViews.size() * m_depthSwapchainInfo.imageViews.size());
 
    auto inputHandler = std::make_unique<XRInputHandler>(g_pplayer->m_pininput, m_xrInstance, m_session);
-   m_xrInputHandler = inputHandler.get();
-   g_pplayer->m_pininput.AddInputHandler(std::move(inputHandler));
-
-   XrAction leftPoseAction = m_xrInputHandler->GetAction("/user/hand/left/input/grip/pose");
+   XrAction leftPoseAction = inputHandler->GetAction("/user/hand/left/input/grip/pose");
    if (leftPoseAction != XR_NULL_HANDLE)
    {
       XrActionSpaceCreateInfo actionSpaceInfo { XR_TYPE_ACTION_SPACE_CREATE_INFO };
@@ -845,8 +851,7 @@ void VRDevice::CreateSession()
       actionSpaceInfo.poseInActionSpace = { { 0.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 0.0f } };
       OPENXR_CHECK(xrCreateActionSpace(m_session, &actionSpaceInfo, &m_leftControllerSpace), "Failed to create Left Controller Action Space.");
    }
-
-   XrAction rightPoseAction = m_xrInputHandler->GetAction("/user/hand/right/input/grip/pose");
+   XrAction rightPoseAction = inputHandler->GetAction("/user/hand/right/input/grip/pose");
    if (rightPoseAction != XR_NULL_HANDLE)
    {
       XrActionSpaceCreateInfo actionSpaceInfo { XR_TYPE_ACTION_SPACE_CREATE_INFO };
@@ -854,6 +859,8 @@ void VRDevice::CreateSession()
       actionSpaceInfo.poseInActionSpace = { { 0.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 0.0f } };
       OPENXR_CHECK(xrCreateActionSpace(m_session, &actionSpaceInfo, &m_rightControllerSpace), "Failed to create Right Controller Action Space.");
    }
+   m_xrInputHandler = inputHandler.get();
+   g_pplayer->m_pininput.AddInputHandler(std::move(inputHandler));
 }
 
 void VRDevice::ReleaseSession()
@@ -1165,13 +1172,6 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
          constexpr float zNear = 0.1f; // 10cm in front of player
          const float zFar = max(5.f, m_sceneSize * vpuToWorldScale); // This could be fairly optimized for better accuracy (as well as use an optimized depth buffer for rendering)
 
-         // Compute the eye median pose in VPU coordinates to be used as the view point for shading
-         XrPosef medianPoseInVPU;
-         XrVector3f_Lerp(&medianPoseInVPU.position, &views[0].pose.position, &views[1].pose.position, 0.5f);
-         XrQuaternionf_Lerp(&medianPoseInVPU.orientation, &views[0].pose.orientation, &views[1].pose.orientation, 0.5f);
-         XrVector3f_Scale(&medianPoseInVPU.position , & medianPoseInVPU.position, 1.f / vpuToWorldScale); // Convert position from meters to VPU
-         XrPosef_ToMatrix3D(&m_nextMedianView, &medianPoseInVPU);
-
          // Fixed value of 5 cm between playfield bottom and lockbar border
          // We could (should ?) make this a table data but this does not vary that much so this seems fine for the time being
          constexpr float lockbarToPlayfield = 5.f;
@@ -1221,8 +1221,16 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
          // Space positionning based on head pose (not continuous)
          if (m_headsetViewCentering)
          {
+            // Compute the eye median pose in VPU coordinates
+            Matrix3D medianView;
+            XrPosef medianPoseInVPU;
+            XrVector3f_Lerp(&medianPoseInVPU.position, &views[0].pose.position, &views[1].pose.position, 0.5f);
+            XrQuaternionf_Lerp(&medianPoseInVPU.orientation, &views[0].pose.orientation, &views[1].pose.orientation, 0.5f);
+            XrVector3f_Scale(&medianPoseInVPU.position, &medianPoseInVPU.position, 1.f / vpuToWorldScale); // Convert position from meters to VPU
+            XrPosef_ToMatrix3D(&medianView, &medianPoseInVPU);
+
             m_headsetViewCentering = false;
-            m_orientation = RADTOANG(atan2f(m_nextMedianView.m[0][2], m_nextMedianView.m[0][0]));
+            m_orientation = RADTOANG(atan2f(medianView.m[0][2], medianView.m[0][0]));
             m_tablePos.x = g_app->m_settings.GetPlayer_ScreenPlayerX() - VPUTOCM(medianPoseInVPU.position.x);
             m_tablePos.y = g_app->m_settings.GetPlayer_ScreenPlayerY() - VPUTOCM(medianPoseInVPU.position.z);
             m_tablePos.z = 0.f;
@@ -1239,8 +1247,7 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
          // playfield is inclined at a fixed slope that should be defined with the table (it corresponds to the cabinet design),
          // then player adjust the play angle by adjusting the feet casters, so the whole cab rotates.
          const PinTable* const table = g_pplayer->m_ptable;
-         const float liveSlope = table->GetPlayfieldSlope();
-         if (m_worldDirty || m_slope != liveSlope)
+         if (const float liveSlope = table->GetPlayfieldSlope(); m_worldDirty || m_slope != liveSlope)
          {
             m_worldDirty = false;
             m_slope = liveSlope;
@@ -1248,6 +1255,8 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
             // Update fixed scaling, considering lockbar size to be the width of the playfield + 2"1/4
             const float tableWidth = VPUTOCM(table->m_right - table->m_left) + 2.25f * 2.54f;
             m_scale = clamp(m_lockbarWidth / tableWidth, 0.1f, 2.0f);
+            const Matrix3D sceneScale = Matrix3D::MatrixScale(m_scale);
+            const Matrix3D invSceneScale = Matrix3D::MatrixScale(1.f / m_scale);
 
             // Move table (in VPU coordinates), adjust coord from RH to LH system
             const Matrix3D coords = Matrix3D::MatrixScale(1.f, -1.f, 1.f);
@@ -1281,7 +1290,7 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
                 CMTOVPU(m_tablePos.y + lockbarToPlayfield),
                 CMTOVPU(m_tablePos.z + m_lockbarHeight - scaledGlassHeight)); 
             const Matrix3D playfieldPosInv = Matrix3D::MatrixInverse(playfieldPos);
-            m_pfWorld = coords * tableCoords * playfieldSlope * playfieldPos * viewOrientation;
+            m_pfWorld.m_toWorld = sceneScale * coords * tableCoords * playfieldSlope * playfieldPos * viewOrientation;
 
             const Matrix3D cabinetSlope = playfieldPosInv * Matrix3D::MatrixRotateX(ANGTORAD(liveSlope - baseSlope)) * playfieldPos;
             const Matrix3D pfToCab = viewOrientationInv // Revert view orientation
@@ -1293,7 +1302,7 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
                    CMTOVPU(m_tablePos.z + m_lockbarHeight - scaledGlassHeight) - groundToPlayfieldHeight)
                * cabinetSlope // Apply cabinet slope
                * viewOrientation; // Reapply view orientation
-            m_cabWorld = m_pfWorld * pfToCab;
+            m_cabWorld.m_toWorld = m_pfWorld.m_toWorld * pfToCab;
 
             // Feet are always touching the ground, scaled against the real world vs model defined playfield level
             // Note that since we are rotating the cabinet with its feet, the feet may slightly leave or enter the ground.
@@ -1307,7 +1316,7 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
                * Matrix3D::MatrixScale(1.f, 1.f, feetScale) // Scale feets in order to match feet bottom to real world floor
                * cabinetSlope // Apply cabinet slope
                * viewOrientation; // Reapply view orientation
-            m_feetWorld = m_pfWorld * pfToFeet;
+            m_feetWorld.m_toWorld = m_pfWorld.m_toWorld * pfToFeet;
 
             // Room does not apply the cabinet scaling nor any inclination, as it is the real world room
             const Matrix3D pfToRoom = viewOrientationInv // Revert view orientation
@@ -1321,32 +1330,33 @@ void VRDevice::RenderFrame(RenderDevice* rd, const std::function<void(RenderTarg
                    CMTOVPU(m_tablePos.y + lockbarToPlayfield),
                    CMTOVPU(m_tablePos.z))
                * viewOrientation; // Reapply view orientation
-            m_roomWorld = m_pfWorld * pfToRoom;
+            m_roomWorld.m_toWorld = invSceneScale * m_pfWorld.m_toWorld * pfToRoom;
          }
 
          // As we only have one view matrix for shading, each eye view is integrated in the projection matrix, by reverting the 'shading' view matrix then
          // applying the eye view matrix, we also apply scale in the projection matrix as it would break shading otherwise (it needs an orthonormal view matrix)
 
-         m_pfMatView = m_pfWorld * m_nextMedianView;
-         m_cabMatView = m_cabWorld * m_nextMedianView;
-         m_feetMatView = m_feetWorld * m_nextMedianView;
-         m_roomMatView = m_roomWorld * m_nextMedianView;
-
-         const Matrix3D sceneScale = Matrix3D::MatrixScale(m_scale);
          const Matrix3D vpuScale = Matrix3D::MatrixScale(vpuToWorldScale);
-         const Matrix3D pfBaseView = Matrix3D::MatrixInverse(m_pfMatView) * sceneScale * m_pfWorld * vpuScale;
-         const Matrix3D cabBaseView = Matrix3D::MatrixInverse(m_cabMatView) * sceneScale * m_cabWorld * vpuScale;
-         const Matrix3D feetBaseView = Matrix3D::MatrixInverse(m_feetMatView) * sceneScale * m_feetWorld * vpuScale;
-         const Matrix3D roomBaseView = Matrix3D::MatrixInverse(m_roomMatView) * m_roomWorld * vpuScale;
-         for (uint32_t i = 0; i < viewCount; i++)
+         const Matrix3D invVpuScale = Matrix3D::MatrixScale(1.f / vpuToWorldScale);
+         const Matrix3D sceneScale = Matrix3D::MatrixScale(m_scale);
+         const Matrix3D invSceneScale = Matrix3D::MatrixScale(1.f / m_scale);
+
+         for (unsigned int eye = 0; eye < 2; eye++)
          {
-            XrPosef_ToMatrix3D(&m_nextView[i], &views[i].pose);
-            m_nextProj[i].SetPerspectiveFovRH(views[i].fov.angleLeft, views[i].fov.angleRight, views[i].fov.angleDown, views[i].fov.angleUp, zNear, zFar);
-            const Matrix3D viewProj = m_nextView[i] * m_nextProj[i];
-            m_pfMatProj[i] = pfBaseView * viewProj;
-            m_cabMatProj[i] = cabBaseView * viewProj;
-            m_feetMatProj[i] = feetBaseView * viewProj;
-            m_roomMatProj[i] = roomBaseView * viewProj;
+            Matrix3D view;
+            XrPosef_ToMatrix3D(&view, &views[eye].pose);
+            view = vpuScale * view * invVpuScale;
+            m_nextProj[eye].SetPerspectiveFovRH(views[eye].fov.angleLeft, views[eye].fov.angleRight, views[eye].fov.angleDown, views[eye].fov.angleUp, zNear, zFar);
+
+            // View is per eye, must be orthonormal (so every scale must be compensated)
+            const Matrix3D viewInvSceneScale = view * invSceneScale;
+            m_pfWorld.m_view[eye] = m_pfWorld.m_toWorld * viewInvSceneScale;
+            m_cabWorld.m_view[eye] = m_cabWorld.m_toWorld * viewInvSceneScale;
+            m_feetWorld.m_view[eye] = m_feetWorld.m_toWorld * viewInvSceneScale;
+            m_roomWorld.m_view[eye] = m_roomWorld.m_toWorld * view;
+
+            m_roomProj[eye] = vpuScale * m_nextProj[eye];
+            m_sceneProj[eye] = sceneScale * m_roomProj[eye];
          }
 
          // Swapchain is acquired, rendered to, and released together for all views as a texture array
@@ -1534,40 +1544,23 @@ void VRDevice::SubmitFrame(const std::shared_ptr<Sampler>& leftEye, const std::s
 
 void VRDevice::UpdateVRPosition(PartGroupData::SpaceReference spaceRef, ModelViewProj& mvp)
 {
+   using enum PartGroupData::SpaceReference;
+
    #ifdef ENABLE_XR
+      const Matrix3D* viewpoint = nullptr;
+      const Matrix3D* proj = nullptr;
       switch (spaceRef)
       {
-      case PartGroupData::SpaceReference::SR_PLAYFIELD:
-      {
-         mvp.SetView(m_pfMatView);
-         mvp.SetProj(0, m_pfMatProj[0]);
-         mvp.SetProj(1, m_pfMatProj[1]);
-         break;
+      case SR_PLAYFIELD: viewpoint = m_pfWorld.m_view; proj = m_sceneProj; break;
+      case SR_CABINET: viewpoint = m_cabWorld.m_view; proj = m_sceneProj; break;
+      case SR_CABINET_FEET: viewpoint = m_feetWorld.m_view; proj = m_sceneProj; break;
+      case SR_ROOM: viewpoint = m_roomWorld.m_view; proj = m_roomProj; break;
+      default: assert(false); return;
       }
-      
-      case PartGroupData::SpaceReference::SR_CABINET:
+      for (unsigned int eye = 0; eye < 2; eye++)
       {
-         mvp.SetView(m_cabMatView);
-         mvp.SetProj(0, m_cabMatProj[0]);
-         mvp.SetProj(1, m_cabMatProj[1]);
-         break;
-      }
-
-      case PartGroupData::SpaceReference::SR_CABINET_FEET:
-      {
-         mvp.SetView(m_feetMatView);
-         mvp.SetProj(0, m_feetMatProj[0]);
-         mvp.SetProj(1, m_feetMatProj[1]);
-         break;
-      }
-
-      case PartGroupData::SpaceReference::SR_ROOM:
-      {
-         mvp.SetView(m_roomMatView);
-         mvp.SetProj(0, m_roomMatProj[0]);
-         mvp.SetProj(1, m_roomMatProj[1]);
-         break;
-      }
+         mvp.SetView(eye, viewpoint[eye]);
+         mvp.SetProj(eye, proj[eye]);
       }
 
    #elif defined(ENABLE_VR)
@@ -1613,14 +1606,15 @@ void VRDevice::UpdateVRPosition(PartGroupData::SpaceReference spaceRef, ModelVie
          m_worldDirty = false;
          // Locate front left corner of the table in the room -x is to the right, -y is up and -z is back - all units in meters
          const float inv_transScale = 1.0f / (100.0f * m_scale);
-         m_pfWorld = Matrix3D::MatrixRotateX(ANGTORAD(-m_slope)) // Tilt playfield
+         m_pfWorld.m_toWorld = Matrix3D::MatrixRotateX(ANGTORAD(-m_slope)) // Tilt playfield
             * Matrix3D::MatrixRotateZ(ANGTORAD(180.f + m_orientation)) // Rotate table around VR height axis
             * Matrix3D::MatrixTranslate(-m_tablePos.x * inv_transScale, m_tablePos.y * inv_transScale, m_tablePos.z * inv_transScale);
       }
 
-      mvp.SetView(m_pfWorld * matView);
-      mvp.SetProj(0, m_pfMatProj[0]);
-      mvp.SetProj(1, m_pfMatProj[1]);
+      mvp.SetView(0, m_pfWorld.m_toWorld * matView);
+      mvp.SetView(1, m_pfWorld.m_toWorld * matView);
+      mvp.SetProj(0, m_sceneProj[0]);
+      mvp.SetProj(1, m_sceneProj[1]);
    #endif
 }
 

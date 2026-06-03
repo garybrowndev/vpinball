@@ -2,9 +2,14 @@
 
 #include "core/stdafx.h"
 #include "lightseq.h"
-#include "light.h"
-#include "primitive.h"
+
+#include "core/VPApp.h"
+#include "parts/Collection.h"
 #include "parts/flasher.h"
+#include "parts/light.h"
+#include "parts/primitive.h"
+#include "ui/win/sur.h"
+#include "ui/win/WinEditor.h"
 
 LightSeq *LightSeq::CopyForPlay() const
 {
@@ -134,9 +139,8 @@ void LightSeq::RenderOutline(Sur * const psur)
 
 #pragma region Rendering
 
-void LightSeq::RenderSetup(RenderDevice *device)
+void LightSeq::RenderSetup(Renderer *renderer)
 {
-   // zero pointers as a safe guard
    m_pcollection = nullptr;
    m_pgridData = nullptr;
    // no animation in progress

@@ -1,18 +1,28 @@
 // license:GPLv3+
 
 #include "core/stdafx.h"
-#include "ThreadPool.h"
+#include "Renderer.h"
+
+#include "core/VPApp.h"
+#include "core/VPXPluginAPIImpl.h"
 #include "math/bluenoise.h"
 #include "math/math.h"
 #include "meshes/ballMesh.h"
+#include "parts/ball.h"
+#include "parts/Collection.h"
+#include "parts/light.h"
+#include "parts/pintable.h"
 #include "renderer/Anaglyph.h"
 #include "renderer/Shader.h"
 #include "renderer/RenderCommand.h"
 #include "renderer/RenderDevice.h"
 #include "renderer/VRDevice.h"
-#include "core/VPXPluginAPIImpl.h"
-#include "parts/light.h"
-#include "parts/ball.h"
+#include "renderer/trace.h"
+#include "ui/live/LiveUI.h"
+#include "utils/color.h"
+
+#include "ThreadPool.h"
+
 
 #ifdef __LIBVPINBALL__
 #include "lib/src/VPinballLib.h"
@@ -35,6 +45,7 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
    : m_sceneLighting(table) 
    , m_stereo3D(stereo3D)
    , m_table(table)
+   , m_mvp(stereo3D == STEREO_OFF ? 1 : 2)
 {
    m_stereo3Denabled = true; // m_table->m_settings.GetPlayer_Stereo3DEnabled();
    m_toneMapper = (ToneMapper)m_table->m_settings.GetTableOverride_ToneMapper();
@@ -69,14 +80,14 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
    m_vrColorKey.z = InvsRGB(m_vrColorKey.z);
    m_visualNudgeStrength = m_table->m_settings.GetPlayer_NudgeStrength();
 
-   m_mvp = new ModelViewProj(m_stereo3D == STEREO_OFF ? 1 : 2);
-
-   #if defined(ENABLE_OPENGL)
-   constexpr int MSAASamples[] = { 1, 4, 6, 8 };
+   #if defined(ENABLE_BGFX)
+   constexpr int MSAASamples[] = { 1, 4, 6, 8, 16 };
    const int nMSAASamples = MSAASamples[m_table->m_settings.GetPlayer_MSAASamples()];
-   #elif defined(ENABLE_DX9) || defined(ENABLE_BGFX)
-   // Sadly DX9 does not support resolving an MSAA depth buffer, making MSAA implementation complex for it. So just disable for now
-   // BGFX MSAA is likely possible but not yet implemented
+   #elif defined(ENABLE_OPENGL)
+   constexpr int MSAASamples[] = { 1, 4, 6, 8, 16 };
+   int nMSAASamples = MSAASamples[m_table->m_settings.GetPlayer_MSAASamples()];
+   #elif defined(ENABLE_DX9)
+   // Sadly DX9 does not support resolving an MSAA depth buffer, making MSAA implementation complex for it. So just disable
    constexpr int nMSAASamples = 1;
    #endif
    const bool useNvidiaApi = m_table->m_settings.GetPlayer_UseNVidiaAPI();
@@ -140,26 +151,37 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
 
    #if defined(ENABLE_BGFX)
       constexpr colorFormat renderFormat = colorFormat::RGB16F;
+
    #elif defined(ENABLE_OPENGL)
       #ifndef __OPENGLES__
          constexpr colorFormat renderFormat = colorFormat::RGB16F;
       #else
          constexpr colorFormat renderFormat = colorFormat::RGBA16F;
       #endif
+      int maxSamples;
+      glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+      nMSAASamples = min(maxSamples, nMSAASamples);
+
    #elif defined(ENABLE_DX9)
       constexpr colorFormat renderFormat = colorFormat::RGBA16F;
+
    #endif
    const SurfaceType rtType = m_stereo3D == STEREO_OFF || !m_renderDevice->SupportLayeredRendering() ? SurfaceType::RT_DEFAULT : SurfaceType::RT_STEREO;
 
+   #ifdef ENABLE_BGFX
+   // BGFX handles MSAA internally and provides the resolved texture directly, so just create one render target for the back buffer
+   m_pOffscreenBackBufferTexture1 = new RenderTarget(m_renderDevice, rtType, "BackBuffer1"s, renderWidthAA, renderHeightAA, renderFormat, true, nMSAASamples, "Fatal Error: unable to create offscreen back buffer");
+   #else
    // MSAA render target which is resolved to the non MSAA render target
    if (nMSAASamples > 1) 
       m_pOffscreenMSAABackBufferTexture = new RenderTarget(m_renderDevice, rtType, "MSAABackBuffer"s, renderWidthAA, renderHeightAA, renderFormat, true, nMSAASamples, "Fatal Error: unable to create MSAA render buffer!");
 
    // Either the main render target for non MSAA, or the buffer where the MSAA render is resolved
    m_pOffscreenBackBufferTexture1 = new RenderTarget(m_renderDevice, rtType, "BackBuffer1"s, renderWidthAA, renderHeightAA, renderFormat, true, 1, "Fatal Error: unable to create offscreen back buffer");
+   #endif
 
    // Second render target to swap, allowing to read previous frame render for ball reflection and motion blur
-   m_pOffscreenBackBufferTexture2 = m_pOffscreenBackBufferTexture1->Duplicate("BackBuffer2"s, true);
+   m_pOffscreenBackBufferTexture2 = m_pOffscreenBackBufferTexture1->Duplicate("BackBuffer2"s, false);
 
    // Initialize shaders
    m_renderDevice->m_basicShader->SetVector(SHADER_w_h_height, (float)(1.0 / (double)GetMSAABackBufferTexture()->GetWidth()), (float)(1.0 / (double)GetMSAABackBufferTexture()->GetHeight()), 0.0f, 0.0f);
@@ -212,7 +234,8 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
    // DirectX 9 does not support bitwise operation in shader, so radical_inverse is not implemented, and therefore we use the slow CPU path instead of GPU
    // OpenGL ES does not support features used in the irradiance shader, so we use the CPU path for it as well
    // There is a bug when using the Metal shader, so we use the CPU path for it as well
-   #if defined(ENABLE_DX9) || defined(__OPENGLES__) || defined(__APPLE__)
+   // On Android VR (Quest), the VR init path leaves m_framePending=true before SubmitRenderFrame can run, so use the CPU path there too.
+   #if defined (ENABLE_DX9) || defined(__OPENGLES__) || defined(__APPLE__) || (defined(__ANDROID__) && defined(ENABLE_XR))
       m_envRadianceTexture = EnvmapPrecalc(envTex, envTexWidth, envTexHeight);
       m_renderDevice->m_texMan.SetDirty(m_envRadianceTexture.get());
       m_renderDevice->m_basicShader->SetTexture(SHADER_tex_diffuse_env, m_envRadianceTexture.get());
@@ -333,7 +356,6 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
 
 Renderer::~Renderer()
 {
-   delete m_mvp;
    m_gpu_profiler.Shutdown();
    m_ballMeshBuffer = nullptr;
    #ifdef DEBUG_BALL_SPIN
@@ -354,7 +376,7 @@ Renderer::~Renderer()
    delete m_pOffscreenVRRight;
    for (int window = 0; window <= VPXWindowId::VPXWINDOW_Topper; window++)
       m_ancillaryWndHdrRT[window] = nullptr;
-   #if defined(ENABLE_DX9) || defined(__OPENGLES__) || defined(__APPLE__)
+   #if defined(ENABLE_DX9) || defined(__OPENGLES__) || defined(__APPLE__) || (defined(__ANDROID__) && defined(ENABLE_XR))
    m_envRadianceTexture.reset();
    #else
    delete m_envRadianceTexture;
@@ -970,13 +992,13 @@ void Renderer::InitLayout(const float xpixoff, const float ypixoff)
    #elif defined(ENABLE_DX9)
    constexpr bool stereo = false;
    #endif
-   viewSetup.ComputeMVP(m_table, GetDisplayAspectRatio(), stereo, *m_mvp, vec3(m_cam.x, m_cam.y, m_cam.z), m_inc, xpixoff / (float)GetDisplayWidth(), ypixoff / (float)GetDisplayHeight());
+   viewSetup.ComputeMVP(m_table, GetDisplayAspectRatio(), stereo, m_mvp, vec3(m_cam.x, m_cam.y, m_cam.z), m_inc, xpixoff / (float)GetDisplayWidth(), ypixoff / (float)GetDisplayHeight());
    SetupShaders();
 }
 
 Vertex3Ds Renderer::Unproject(const int width, const int height, const Vertex3Ds& point) const
 {
-   Matrix3D invMVP = m_mvp->GetModelViewProj(0);
+   Matrix3D invMVP = m_mvp.GetModelViewProj(0);
    invMVP.Invert();
    const Vertex3Ds p(
       2.0f * point.x / static_cast<float>(width)  - 1.0f,
@@ -1065,64 +1087,135 @@ void Renderer::SetupShaders()
 
 void Renderer::UpdateBasicShaderMatrix(const Matrix3D& objectTrafo)
 {
-   struct
-   {
-      Matrix3D matWorld;
-      Matrix3D matView;
-      Matrix3D matWorldView;
-      Matrix3D matWorldViewInverseTranspose;
-      Matrix3D matWorldViewProj[2];
-   } matrices;
-   GetMVP().SetModel(objectTrafo);
-   matrices.matWorld = GetMVP().GetModel();
-   matrices.matView = GetMVP().GetView();
-   matrices.matWorldView = GetMVP().GetModelView();
-   matrices.matWorldViewInverseTranspose = GetMVP().GetModelViewInverseTranspose();
-   const int nEyes = m_renderDevice->m_nEyes;
-   for (int eye = 0; eye < nEyes; eye++)
-      matrices.matWorldViewProj[eye] = GetMVP().GetModelViewProj(eye);
+   m_mvp.SetModel(objectTrafo);
 
-#if defined(ENABLE_DX9) || defined(ENABLE_BGFX)
-   m_renderDevice->m_basicShader->SetMatrix(SHADER_matWorld, &matrices.matWorld);
-   m_renderDevice->m_basicShader->SetMatrix(SHADER_matView, &matrices.matView);
-   m_renderDevice->m_basicShader->SetMatrix(SHADER_matWorldView, &matrices.matWorldView);
-   m_renderDevice->m_basicShader->SetMatrix(SHADER_matWorldViewInverseTranspose, &matrices.matWorldViewInverseTranspose);
-   m_renderDevice->m_basicShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj[0], nEyes);
-   m_renderDevice->m_flasherShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj[0], nEyes);
-   m_renderDevice->m_lightShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj[0], nEyes);
-   m_renderDevice->m_DMDShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj[0], nEyes);
+#if defined(ENABLE_BGFX)
+   m_renderDevice->m_basicShader->SetMatrix(SHADER_matWorld, &m_mvp.GetModel());
+   m_renderDevice->m_basicShader->SetMatrix(SHADER_matView, &m_mvp.GetView(0), m_mvp.m_nEyes);
+   m_renderDevice->m_basicShader->SetMatrix(SHADER_matWorldView, &m_mvp.GetModelView(0), m_mvp.m_nEyes);
+   m_renderDevice->m_basicShader->SetMatrix(SHADER_matWorldViewInverseTranspose, &m_mvp.GetModelViewInverseTranspose(0), m_mvp.m_nEyes);
+
+   // Camera-relative uniforms. The shader subtracts cameraPosWorld from the world
+   // position on the GPU, then applies (viewRotation x proj). This avoids Adreno (Quest) f32
+   // precision loss in mul(matWorldViewProj, pos) where the camera-translation column dominates the
+   // CPU-composed mvp entries; the cancellation now happens at full f32 precision per-vertex.
+   m_renderDevice->m_basicShader->SetMatrix(SHADER_matRotViewProj, &m_mvp.GetRotViewProj(0), m_mvp.m_nEyes);
+   m_renderDevice->m_basicShader->SetVector(SHADER_cameraPosWorld, &m_mvp.GetCameraPos(0), m_mvp.m_nEyes);
+   m_renderDevice->m_lightShader->SetMatrix(SHADER_matRotViewProj, &m_mvp.GetRotViewProj(0), m_mvp.m_nEyes);
+   m_renderDevice->m_lightShader->SetVector(SHADER_cameraPosWorld, &m_mvp.GetCameraPos(0), m_mvp.m_nEyes);
+   m_renderDevice->m_flasherShader->SetMatrix(SHADER_matRotViewProj, &m_mvp.GetRotViewProj(0), m_mvp.m_nEyes);
+   m_renderDevice->m_flasherShader->SetVector(SHADER_cameraPosWorld, &m_mvp.GetCameraPos(0), m_mvp.m_nEyes);
+   m_renderDevice->m_DMDShader->SetMatrix(SHADER_matRotViewProj, &m_mvp.GetRotViewProj(0), m_mvp.m_nEyes);
+   m_renderDevice->m_DMDShader->SetVector(SHADER_cameraPosWorld, &m_mvp.GetCameraPos(0), m_mvp.m_nEyes);
+
+#elif defined(ENABLE_DX9)
+   m_renderDevice->m_basicShader->SetMatrix(SHADER_matWorld, &m_mvp.GetModel());
+   m_renderDevice->m_basicShader->SetMatrix(SHADER_matView, &m_mvp.GetView(0), m_mvp.m_nEyes);
+   m_renderDevice->m_basicShader->SetMatrix(SHADER_matWorldView, &m_mvp.GetModelView(0), m_mvp.m_nEyes);
+   m_renderDevice->m_basicShader->SetMatrix(SHADER_matWorldViewInverseTranspose, &m_mvp.GetModelViewInverseTranspose(0), m_mvp.m_nEyes);
+   m_renderDevice->m_basicShader->SetMatrix(SHADER_matWorldViewProj, &m_mvp.GetModelViewProj(0), m_mvp.m_nEyes);
+   m_renderDevice->m_flasherShader->SetMatrix(SHADER_matWorldViewProj, &m_mvp.GetModelViewProj(0), m_mvp.m_nEyes);
+   m_renderDevice->m_lightShader->SetMatrix(SHADER_matWorldViewProj, &m_mvp.GetModelViewProj(0), m_mvp.m_nEyes);
+   m_renderDevice->m_DMDShader->SetMatrix(SHADER_matWorldViewProj, &m_mvp.GetModelViewProj(0), m_mvp.m_nEyes);
+
 #elif defined(ENABLE_OPENGL)
-   m_renderDevice->m_basicShader->SetUniformBlock(SHADER_basicMatrixBlock, &matrices.matWorld.m[0][0]);
-   m_renderDevice->m_flasherShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj[0], nEyes);
-   m_renderDevice->m_lightShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj[0], nEyes);
-   m_renderDevice->m_DMDShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj[0], nEyes);
+   if (m_mvp.m_nEyes == 2)
+   {
+      struct
+      {
+         Matrix3D matWorld;
+         Matrix3D matView[2];
+         Matrix3D matWorldView[2];
+         Matrix3D matWorldViewInverseTranspose[2];
+         Matrix3D matWorldViewProj[2];
+      } matrices;
+      matrices.matWorld = m_mvp.GetModel();
+      for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
+      {
+         matrices.matView[eye] = m_mvp.GetView(eye);
+         matrices.matWorldView[eye] = m_mvp.GetModelView(eye);
+         matrices.matWorldViewInverseTranspose[eye] = m_mvp.GetModelViewInverseTranspose(eye);
+         matrices.matWorldViewProj[eye] = m_mvp.GetModelViewProj(eye);
+      }
+      m_renderDevice->m_basicShader->SetUniformBlock(SHADER_basicMatrixBlock, &matrices.matWorld.m[0][0]);
+      m_renderDevice->m_flasherShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj[0], m_mvp.m_nEyes);
+      m_renderDevice->m_lightShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj[0], m_mvp.m_nEyes);
+      m_renderDevice->m_DMDShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj[0], m_mvp.m_nEyes);
+   }
+   else
+   {
+      struct
+      {
+         Matrix3D matWorld;
+         Matrix3D matView;
+         Matrix3D matWorldView;
+         Matrix3D matWorldViewInverseTranspose;
+         Matrix3D matWorldViewProj;
+      } matrices;
+      matrices.matWorld = m_mvp.GetModel();
+      matrices.matView = m_mvp.GetView(0);
+      matrices.matWorldView = m_mvp.GetModelView(0);
+      matrices.matWorldViewInverseTranspose = m_mvp.GetModelViewInverseTranspose(0);
+      matrices.matWorldViewProj = m_mvp.GetModelViewProj(0);
+      m_renderDevice->m_basicShader->SetUniformBlock(SHADER_basicMatrixBlock, &matrices.matWorld.m[0][0]);
+      m_renderDevice->m_flasherShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj, m_mvp.m_nEyes);
+      m_renderDevice->m_lightShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj, m_mvp.m_nEyes);
+      m_renderDevice->m_DMDShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj, m_mvp.m_nEyes);
+   }
 #endif
 }
 
 void Renderer::UpdateBallShaderMatrix()
 {
-   struct
-   {
-      Matrix3D matView;
-      Matrix3D matWorldView;
-      Matrix3D matWorldViewInverse;
-      Matrix3D matWorldViewProj[2];
-   } matrices;
-   GetMVP().SetModel(Matrix3D::MatrixIdentity());
-   matrices.matView = GetMVP().GetView();
-   matrices.matWorldView = GetMVP().GetModelView();
-   matrices.matWorldViewInverse = GetMVP().GetModelViewInverse();
-   const int nEyes = m_renderDevice->m_nEyes;
-   for (int eye = 0; eye < nEyes; eye++)
-      matrices.matWorldViewProj[eye] = GetMVP().GetModelViewProj(eye);
+   m_mvp.SetModel(Matrix3D::MatrixIdentity());
 
-#if defined(ENABLE_DX9) || defined(ENABLE_BGFX)
-   m_renderDevice->m_ballShader->SetMatrix(SHADER_matWorldViewProj, &matrices.matWorldViewProj[0], nEyes);
-   m_renderDevice->m_ballShader->SetMatrix(SHADER_matWorldView, &matrices.matWorldView);
-   m_renderDevice->m_ballShader->SetMatrix(SHADER_matWorldViewInverse, &matrices.matWorldViewInverse);
-   m_renderDevice->m_ballShader->SetMatrix(SHADER_matView, &matrices.matView);
+#if defined(ENABLE_BGFX)
+   m_renderDevice->m_ballShader->SetMatrix(SHADER_matWorldView, &m_mvp.GetModelView(0), m_mvp.m_nEyes);
+   m_renderDevice->m_ballShader->SetMatrix(SHADER_matWorldViewInverse, &m_mvp.GetModelViewInverse(0), m_mvp.m_nEyes);
+   m_renderDevice->m_ballShader->SetMatrix(SHADER_matView, &m_mvp.GetView(0), m_mvp.m_nEyes);
+   m_renderDevice->m_ballShader->SetMatrix(SHADER_matRotViewProj, &m_mvp.GetRotViewProj(0), m_mvp.m_nEyes);
+   m_renderDevice->m_ballShader->SetVector(SHADER_cameraPosWorld, &m_mvp.GetCameraPos(0), m_mvp.m_nEyes);
+
+#elif defined(ENABLE_DX9)
+   m_renderDevice->m_ballShader->SetMatrix(SHADER_matWorldViewProj, &m_mvp.GetModelViewProj(0), m_mvp.m_nEyes);
+   m_renderDevice->m_ballShader->SetMatrix(SHADER_matWorldView, &m_mvp.GetModelView(0), m_mvp.m_nEyes);
+   m_renderDevice->m_ballShader->SetMatrix(SHADER_matWorldViewInverse, &m_mvp.GetModelViewInverse(0), m_mvp.m_nEyes);
+   m_renderDevice->m_ballShader->SetMatrix(SHADER_matView, &m_mvp.GetView(0), m_mvp.m_nEyes);
+
 #elif defined(ENABLE_OPENGL)
-   m_renderDevice->m_ballShader->SetUniformBlock(SHADER_ballMatrixBlock, &matrices.matView.m[0][0]);
+   if (m_mvp.m_nEyes == 2)
+   {
+      struct
+      {
+         Matrix3D matView[2];
+         Matrix3D matWorldView[2];
+         Matrix3D matWorldViewInverse[2];
+         Matrix3D matWorldViewProj[2];
+      } matrices;
+      for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
+      {
+         matrices.matView[eye] = m_mvp.GetView(eye);
+         matrices.matWorldView[eye] = m_mvp.GetModelView(eye);
+         matrices.matWorldViewInverse[eye] = m_mvp.GetModelViewInverse(eye);
+         matrices.matWorldViewProj[eye] = m_mvp.GetModelViewProj(eye);
+      }
+      m_renderDevice->m_ballShader->SetUniformBlock(SHADER_ballMatrixBlock, &matrices.matView[0].m[0][0]);
+   }
+   else
+   {
+      struct
+      {
+         Matrix3D matView;
+         Matrix3D matWorldView;
+         Matrix3D matWorldViewInverse;
+         Matrix3D matWorldViewProj;
+      } matrices;
+      matrices.matView = m_mvp.GetView(0);
+      matrices.matWorldView = m_mvp.GetModelView(0);
+      matrices.matWorldViewInverse = m_mvp.GetModelViewInverse(0);
+      matrices.matWorldViewProj = m_mvp.GetModelViewProj(0);
+      m_renderDevice->m_ballShader->SetUniformBlock(SHADER_ballMatrixBlock, &matrices.matView.m[0][0]);
+   }
 #endif
 }
 
@@ -1139,11 +1232,30 @@ void Renderer::UpdateDesktopBackdropShaderMatrix(bool basic, bool light, bool fl
    if (eyes > 1)
       matWorldViewProj[1] = matWorldViewProj[0];
 
+#if defined(ENABLE_BGFX)
+   const vec4 cameraPosWorld[2] = { { 0.f, 0.f, 0.f, 0.f }, { 0.f, 0.f, 0.f, 0.f } };
    if (basic)
    {
-   #if defined(ENABLE_BGFX)
-      m_renderDevice->m_basicShader->SetMatrix(SHADER_matWorldViewProj, &matWorldViewProj[0], eyes);
-   #elif defined(ENABLE_OPENGL)
+      m_renderDevice->m_basicShader->SetMatrix(SHADER_matRotViewProj, &matWorldViewProj[0], eyes);
+      m_renderDevice->m_basicShader->SetVector(SHADER_cameraPosWorld, &cameraPosWorld[0], eyes);
+   }
+   if (light)
+   {
+      m_renderDevice->m_lightShader->SetMatrix(SHADER_matRotViewProj, &matWorldViewProj[0], eyes);
+      m_renderDevice->m_lightShader->SetVector(SHADER_cameraPosWorld, &cameraPosWorld[0], eyes);
+   }
+   if (flasherDMD)
+   {
+      m_renderDevice->m_flasherShader->SetMatrix(SHADER_matRotViewProj, &matWorldViewProj[0], eyes);
+      m_renderDevice->m_flasherShader->SetVector(SHADER_cameraPosWorld, &cameraPosWorld[0], eyes);
+      m_renderDevice->m_DMDShader->SetMatrix(SHADER_matRotViewProj, &matWorldViewProj[0], eyes);
+      m_renderDevice->m_DMDShader->SetVector(SHADER_cameraPosWorld, &cameraPosWorld[0], eyes);
+   }
+
+#else
+   if (basic)
+   {
+#if defined(ENABLE_OPENGL)
       struct
       {
          Matrix3D matWorld;
@@ -1155,19 +1267,22 @@ void Renderer::UpdateDesktopBackdropShaderMatrix(bool basic, bool light, bool fl
       memcpy(&matrices.matWorldViewProj[0].m[0][0], &matWorldViewProj[0].m[0][0], 4 * 4 * sizeof(float));
       memcpy(&matrices.matWorldViewProj[1].m[0][0], &matWorldViewProj[0].m[0][0], 4 * 4 * sizeof(float));
       m_renderDevice->m_basicShader->SetUniformBlock(SHADER_basicMatrixBlock, &matrices.matWorld.m[0][0]);
-   #elif defined(ENABLE_DX9)
+
+#elif defined(ENABLE_DX9)
       m_renderDevice->m_basicShader->SetMatrix(SHADER_matWorldViewProj, &matWorldViewProj[0]);
-   #endif
+
+#endif
    }
 
    if (light)
       m_renderDevice->m_lightShader->SetMatrix(SHADER_matWorldViewProj, &matWorldViewProj[0], eyes);
-   
+
    if (flasherDMD)
    {
       m_renderDevice->m_flasherShader->SetMatrix(SHADER_matWorldViewProj, &matWorldViewProj[0], eyes);
       m_renderDevice->m_DMDShader->SetMatrix(SHADER_matWorldViewProj, &matWorldViewProj[0], eyes);
    }
+#endif
 }
 
 void Renderer::UpdateStereoShaderState()
@@ -1217,7 +1332,7 @@ void Renderer::SetupDisplayRenderer(const bool isBackdrop, Vertex3D_NoTex2* vert
       m_renderDevice->m_DMDShader->SetTexture(SHADER_displayGlass, glassTex);
    float parallaxU = 0.f, parallaxV = 0.f;
    if (!isBackdrop && (vertices != nullptr))
-   { // (fake) depth by applying some parallax mapping
+   { // (fake) depth by applying some parallax mapping (i stereo based on left eye view)
       const Vertex3Ds v0(vertices[0].x, vertices[0].y, vertices[0].z);
       const Vertex3Ds v1(vertices[1].x, vertices[1].y, vertices[1].z);
       const Vertex3Ds v2(vertices[3].x, vertices[3].y, vertices[3].z);
@@ -1231,7 +1346,7 @@ void Renderer::SetupDisplayRenderer(const bool isBackdrop, Vertex3D_NoTex2* vert
       const float r = 1.0f / (duv1.x * duv2.y - duv1.y * duv2.x);
       Vertex3Ds tangent = (dv1 * duv2.y - dv2 * duv1.y) * r;
       Vertex3Ds bitangent = (dv2 * duv1.x - dv1 * duv2.x) * r;
-      const Matrix3D& mv = GetMVP().GetModelView();
+      const Matrix3D& mv = GetMVP().GetModelView(0);
       tangent = mv.MultiplyVectorNoTranslate(tangent);
       bitangent = mv.MultiplyVectorNoTranslate(bitangent);
       Vertex3Ds eye = (v1 + v2) * 0.5f; // Assume a rectangle shape, use opposite corners to get its center
@@ -1515,9 +1630,7 @@ void Renderer::RenderItem(IEditable* const editable, bool isNoBackdrop)
    {
       #if defined(ENABLE_XR)
       if (m_stereo3D == STEREO_VR)
-      {
-         g_pplayer->m_vrDevice->UpdateVRPosition(spaceReference, GetMVP());
-      }
+         g_pplayer->m_vrDevice->UpdateVRPosition(spaceReference, m_mvp);
       else
       #endif
       {
@@ -1526,12 +1639,14 @@ void Renderer::RenderItem(IEditable* const editable, bool isNoBackdrop)
          case PartGroupData::SpaceReference::SR_CABINET:
          case PartGroupData::SpaceReference::SR_CABINET_FEET:
          case PartGroupData::SpaceReference::SR_ROOM:
-            m_mvp->SetView(g_pplayer->m_ptable->GetDefaultPlayfieldToCabMatrix() * m_playfieldView);
+            for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
+               m_mvp.SetView(eye, g_pplayer->m_ptable->GetDefaultPlayfieldToCabMatrix() * m_playfieldView[eye]);
             break;
 
          case PartGroupData::SpaceReference::SR_PLAYFIELD:
          default:
-            m_mvp->SetView(m_playfieldView);
+            for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
+               m_mvp.SetView(eye, m_playfieldView[eye]);
             break;
          }
       }
@@ -1541,7 +1656,8 @@ void Renderer::RenderItem(IEditable* const editable, bool isNoBackdrop)
          if (const auto nudge = g_pplayer->m_physics->GetTableDisplacement(); nudge.x != 0.f || nudge.y != 0.f)
          {
             const Matrix3D nudgeMat = Matrix3D::MatrixTranslate(2.5f * 100.f * m_visualNudgeStrength * nudge.x, 2.5f * 100.f * m_visualNudgeStrength * nudge.y, 0.f);
-            m_mvp->SetView(nudgeMat * m_mvp->GetView());
+            for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
+               m_mvp.SetView(eye, nudgeMat * m_mvp.GetView(eye));
          }
       }
       m_mvpSpaceReference = spaceReference;
@@ -1655,7 +1771,7 @@ void Renderer::RenderStaticPrepass()
          m_renderDevice->m_FBShader->SetTechnique(SHADER_TECHNIQUE_fb_mirror);
          m_renderDevice->m_FBShader->SetVector(SHADER_w_h_height, 
             (float)(1.0 / (double)renderRT->GetWidth()), (float)(1.0 / (double)renderRT->GetHeight()),
-            (float)((double)STATIC_PRERENDER_ITERATIONS), 1.0f);
+            (float)((double)STATIC_PRERENDER_ITERATIONS), 0.0f);
          m_renderDevice->m_FBShader->SetTexture(SHADER_tex_fb_unfiltered, renderRT->GetColorSampler());
          m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
          m_renderDevice->m_FBShader->SetTextureNull(SHADER_tex_fb_unfiltered);
@@ -2124,7 +2240,7 @@ void PrecompSplineTonemap(const float displayMaxLum, float out[6])
    out[5] = Qb;
 }
 
-ShaderTechniques Renderer::ApplyTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapRT)
+void Renderer::SetupTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapRT, bool isFullTonemap)
 {
    //const unsigned int jittertime = (unsigned int)((uint64_t)msec()*90/1000);
    //const float jitter = (float)((msec() & 2047) / 1000.0);
@@ -2134,7 +2250,7 @@ ShaderTechniques Renderer::ApplyTonemapping(RenderTarget* renderedRT, RenderTarg
    // switch to output buffer (main output frame buffer, or a temporary one for postprocessing)
    RenderTarget* outputRT = tonemapRT;
    assert(outputRT != renderedRT);
-   m_renderDevice->SetRenderTarget("Tonemap/Dither/ColorGrade"s, outputRT, false);
+   m_renderDevice->SetRenderTarget("Tonemap/Dither/ColorGrade"s, outputRT, !isFullTonemap);
 
    m_renderDevice->ResetRenderState();
    m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
@@ -2234,6 +2350,7 @@ ShaderTechniques Renderer::ApplyTonemapping(RenderTarget* renderedRT, RenderTarg
 
    ShaderTechniques tonemapTechnique;
    const bool useAA = m_renderWidth > GetBackBufferTexture()->GetWidth();
+   const bool filtered = useAA || (m_screenOffset.x != 0.f) || (m_screenOffset.y != 0.f);
    if (infoMode == IF_AO_ONLY)
       tonemapTechnique = SHADER_TECHNIQUE_fb_AO;
    else if (infoMode == IF_RENDER_PROBES)
@@ -2244,26 +2361,31 @@ ShaderTechniques Renderer::ApplyTonemapping(RenderTarget* renderedRT, RenderTarg
                        : m_toneMapper == TM_AGX_PUNCHY   ? SHADER_TECHNIQUE_fb_agxptonemap
                        : /*m_toneMapper == TM_WCG_SPLINE ?*/ SHADER_TECHNIQUE_fb_wcgtonemap;
    else if (m_renderDevice->m_outputWnd[0]->IsWCGBackBuffer() && m_HDRforceDisableToneMapper)
-      tonemapTechnique = useAO ? useAA ? SHADER_TECHNIQUE_fb_wcgtonemap_AO : SHADER_TECHNIQUE_fb_wcgtonemap_AO_no_filter
-                               : useAA ? SHADER_TECHNIQUE_fb_wcgtonemap    : SHADER_TECHNIQUE_fb_wcgtonemap_no_filter;
+      tonemapTechnique = useAO ? filtered ? SHADER_TECHNIQUE_fb_wcgtonemap_AO : SHADER_TECHNIQUE_fb_wcgtonemap_AO_no_filter
+                               : filtered ? SHADER_TECHNIQUE_fb_wcgtonemap    : SHADER_TECHNIQUE_fb_wcgtonemap_no_filter;
    else if (m_toneMapper == TM_REINHARD)
-      tonemapTechnique = useAO ? useAA ? SHADER_TECHNIQUE_fb_rhtonemap_AO : SHADER_TECHNIQUE_fb_rhtonemap_AO_no_filter
-                               : useAA ? SHADER_TECHNIQUE_fb_rhtonemap    : SHADER_TECHNIQUE_fb_rhtonemap_no_filter;
+      tonemapTechnique = useAO ? filtered ? SHADER_TECHNIQUE_fb_rhtonemap_AO : SHADER_TECHNIQUE_fb_rhtonemap_AO_no_filter
+                               : filtered ? SHADER_TECHNIQUE_fb_rhtonemap    : SHADER_TECHNIQUE_fb_rhtonemap_no_filter;
    else if (m_toneMapper == TM_FILMIC)
-      tonemapTechnique = useAO ? useAA ? SHADER_TECHNIQUE_fb_fmtonemap_AO : SHADER_TECHNIQUE_fb_fmtonemap_AO_no_filter
-                               : useAA ? SHADER_TECHNIQUE_fb_fmtonemap    : SHADER_TECHNIQUE_fb_fmtonemap_no_filter;
+      tonemapTechnique = useAO ? filtered ? SHADER_TECHNIQUE_fb_fmtonemap_AO : SHADER_TECHNIQUE_fb_fmtonemap_AO_no_filter
+                               : filtered ? SHADER_TECHNIQUE_fb_fmtonemap    : SHADER_TECHNIQUE_fb_fmtonemap_no_filter;
    else if (m_toneMapper == TM_NEUTRAL)
-      tonemapTechnique = useAO ? useAA ? SHADER_TECHNIQUE_fb_nttonemap_AO : SHADER_TECHNIQUE_fb_nttonemap_AO_no_filter
-                               : useAA ? SHADER_TECHNIQUE_fb_nttonemap    : SHADER_TECHNIQUE_fb_nttonemap_no_filter;
+      tonemapTechnique = useAO ? filtered ? SHADER_TECHNIQUE_fb_nttonemap_AO : SHADER_TECHNIQUE_fb_nttonemap_AO_no_filter
+                               : filtered ? SHADER_TECHNIQUE_fb_nttonemap    : SHADER_TECHNIQUE_fb_nttonemap_no_filter;
    else if (m_toneMapper == TM_AGX)
-      tonemapTechnique = useAO ? useAA ? SHADER_TECHNIQUE_fb_agxtonemap_AO : SHADER_TECHNIQUE_fb_agxtonemap_AO_no_filter
-                               : useAA ? SHADER_TECHNIQUE_fb_agxtonemap    : SHADER_TECHNIQUE_fb_agxtonemap_no_filter;
+      tonemapTechnique = useAO ? filtered ? SHADER_TECHNIQUE_fb_agxtonemap_AO : SHADER_TECHNIQUE_fb_agxtonemap_AO_no_filter
+                               : filtered ? SHADER_TECHNIQUE_fb_agxtonemap    : SHADER_TECHNIQUE_fb_agxtonemap_no_filter;
    else if (m_toneMapper == TM_AGX_PUNCHY)
-      tonemapTechnique = useAO ? useAA ? SHADER_TECHNIQUE_fb_agxptonemap_AO : SHADER_TECHNIQUE_fb_agxptonemap_AO_no_filter
-                               : useAA ? SHADER_TECHNIQUE_fb_agxptonemap    : SHADER_TECHNIQUE_fb_agxptonemap_no_filter;
+      tonemapTechnique = useAO ? filtered ? SHADER_TECHNIQUE_fb_agxptonemap_AO : SHADER_TECHNIQUE_fb_agxptonemap_AO_no_filter
+                               : filtered ? SHADER_TECHNIQUE_fb_agxptonemap    : SHADER_TECHNIQUE_fb_agxptonemap_no_filter;
    else
       assert(!"unknown tonemapper");
+   m_renderDevice->m_FBShader->SetTechnique(tonemapTechnique);
+}
 
+RenderTarget* Renderer::ApplyTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapRT)
+{
+   SetupTonemapping(renderedRT, tonemapRT, true);
    const Vertex3D_TexelOnly shiftedVerts[4] =
    {
       {  1.0f + m_screenOffset.x,  1.0f + m_screenOffset.y, 0.0f, 1.0f, 0.0f },
@@ -2271,23 +2393,22 @@ ShaderTechniques Renderer::ApplyTonemapping(RenderTarget* renderedRT, RenderTarg
       {  1.0f + m_screenOffset.x, -1.0f + m_screenOffset.y, 0.0f, 1.0f, 1.0f },
       { -1.0f + m_screenOffset.x, -1.0f + m_screenOffset.y, 0.0f, 0.0f, 1.0f }
    };
-   m_renderDevice->m_FBShader->SetTechnique(tonemapTechnique);
    m_renderDevice->DrawTexturedQuad(m_renderDevice->m_FBShader, shiftedVerts);
-
-   return tonemapTechnique;
+   return tonemapRT;
 }
 
-RenderTarget* Renderer::ApplyBallMotionBlur(RenderTarget* beforeTonemapRT, RenderTarget* afterTonemapRT, ShaderTechniques tonemapTechnique)
+RenderTarget* Renderer::ApplyBallMotionBlur(RenderTarget* beforeTonemapRT, RenderTarget* afterTonemapRT)
 {
    #ifndef ENABLE_BGFX
    return afterTonemapRT;
    #endif
 
-   // FIXME this is broken due to not supporting head movement (VR), display shifting (when nudging), latency correction (always)
-   return afterTonemapRT;
+   // We do not support dynamic view point yet (i.e. MVP must be the same between the previous render and this one)
+   if (m_disableStaticPrepass)
+      return afterTonemapRT;
 
-   // We do not support stereo VR yet
-   if (m_stereo3D == STEREO_VR)
+   // We do not support stereo mode yet
+   if (m_stereo3D != STEREO_OFF)
       return afterTonemapRT;
 
    if (m_motionBlurOff)
@@ -2308,11 +2429,10 @@ RenderTarget* Renderer::ApplyBallMotionBlur(RenderTarget* beforeTonemapRT, Rende
    m_renderDevice->m_FBShader->SetTexture(SHADER_tex_bloom, GetPreviousBackBufferTexture()->GetColorSampler());
    m_renderDevice->AddRenderTargetDependency(beforeTonemapRT);
    m_renderDevice->m_FBShader->SetTexture(SHADER_tex_fb_filtered, beforeTonemapRT->GetColorSampler());
-   Matrix3D matProjInv[2], matProj[2];
+   Matrix3D matProj[2];
+   Matrix3D matProjInv[2];
    const int nEyes = m_renderDevice->m_nEyes;
-   Matrix3D identity;
-   identity.SetIdentity();
-   GetMVP().SetModel(identity);
+   GetMVP().SetModel(Matrix3D::MatrixIdentity());
    for (int eye = 0; eye < nEyes; eye++)
    {
       matProj[eye] = GetMVP().GetProj(eye);
@@ -2321,8 +2441,10 @@ RenderTarget* Renderer::ApplyBallMotionBlur(RenderTarget* beforeTonemapRT, Rende
    }
    m_renderDevice->m_FBShader->SetMatrix(SHADER_matProjInv, &matProjInv[0], nEyes);
    m_renderDevice->m_FBShader->SetMatrix(SHADER_matProj, &matProj[0], nEyes);
-   Vertex3D_TexelOnly quads[4 * 16];
-   Vertex3D_TexelOnly* updatedVertices[16];
+   std::array<Vertex3D_TexelOnly, 4*16> quads;
+   std::array<Vertex3D_TexelOnly*, 16> updatedVertices;
+   const float invX = static_cast<float>(1.0 / beforeTonemapRT->GetWidth());
+   const float invY = static_cast<float>(1.0 / beforeTonemapRT->GetHeight());
    int nQuads = 0;
    for (size_t i = 0; i < g_pplayer->m_vball.size() && nQuads < 16; i++)
    {
@@ -2332,64 +2454,54 @@ RenderTarget* Renderer::ApplyBallMotionBlur(RenderTarget* beforeTonemapRT, Rende
 
       // Discard stable balls or balls that have moved too much (which means the ball was likely created/moved)
       // We assume that velocity won't change before rendering (which is wrong) but extend it by a magic factor of 10
-      const Matrix3D view = GetMVP().GetView();
+      const Matrix3D view = GetMVP().GetView(0);
       const vec3 posl = pball->m_hitBall.m_d.m_pos + 0.5f * pball->m_hitBall.m_d.m_vel;
       const vec3 newPos = view.MultiplyVectorNoPerspective(posl);
       const vec3 delta = newPos - pball->m_lastRenderedPos;
-      const float deltaSquared = delta.Dot(delta);
-      if (deltaSquared < 0.01f || deltaSquared > 1000.f)
+      if (const float deltaSquared = delta.Dot(delta); deltaSquared < 0.01f || deltaSquared > 1000.f)
       {
          pball->m_lastRenderedPos = newPos;
          continue;
       }
 
-      // Compute a quad bound. This is fairly suboptimal and would benefit from a simple convex hull (at least from the 2 bounding rects)
-      float xMin = FLT_MAX, xMax = -FLT_MAX, yMin = FLT_MAX, yMax = -FLT_MAX;
-      for (int eye = 0; eye < nEyes; eye++)
-         Ball::m_ash.computeProjBounds(GetMVP().GetProj(eye), pball->m_lastRenderedPos.x, pball->m_lastRenderedPos.y, pball->m_lastRenderedPos.z, pball->GetRadius(), xMin, xMax, yMin, yMax);
-      const float prevLen = Vertex2D((xMax - xMin) * static_cast<float>(tempRT->GetWidth()), (yMax - yMin) * static_cast<float>(tempRT->GetHeight())).Length();
-      for (int eye = 0; eye < nEyes; eye++)
-         Ball::m_ash.computeProjBounds(GetMVP().GetProj(eye), newPos.x, newPos.y, newPos.z, pball->GetRadius(), xMin, xMax, yMin, yMax);
-      const float fullLen = Vertex2D((xMax - xMin) * static_cast<float>(tempRT->GetWidth()), (yMax - yMin) * static_cast<float>(tempRT->GetHeight())).Length() - prevLen;
-      const int nSamples = max(2, static_cast<int>(0.5f * fullLen));
-      //xMin = yMin = -1.f; xMax = yMax = 1.f;
-
-      const Vertex3D_TexelOnly verts[4] =
-      {
-         { xMax, yMax, 0.0f, xMax * 0.5f + 0.5f, 0.5f - yMax * 0.5f },
-         { xMin, yMax, 0.0f, xMin * 0.5f + 0.5f, 0.5f - yMax * 0.5f },
-         { xMax, yMin, 0.0f, xMax * 0.5f + 0.5f, 0.5f - yMin * 0.5f },
-         { xMin, yMin, 0.0f, xMin * 0.5f + 0.5f, 0.5f - yMin * 0.5f }
-      };
-      memcpy(quads + nQuads * 4, verts, sizeof(verts));
-
       vec4* balls = new vec4[MAX_BALL_SHADOW];
       balls[1] = vec4(pball->m_lastRenderedPos, pball->GetRadius());
-      m_renderDevice->m_FBShader->SetVector(SHADER_w_h_height, static_cast<float>(1.0 / beforeTonemapRT->GetWidth()), static_cast<float>(1.0 / beforeTonemapRT->GetHeight()),
-         0.f /* unused */ ,static_cast<float>(min(32, nSamples)));
+
+      const Vertex3D_TexelOnly verts[4] = {};
       m_renderDevice->m_FBShader->SetTechnique(SHADER_TECHNIQUE_fb_motionblur);
       m_renderDevice->DrawTexturedQuad(m_renderDevice->m_FBShader, verts);
 
       // Update drawn rect bounds and ball position to account for late adjustment
       ShaderState* ss = m_renderDevice->GetCurrentPass()->m_commands.back()->GetShaderState();
-      Vertex3D_TexelOnly* vertices = (Vertex3D_TexelOnly*)m_renderDevice->GetCurrentPass()->m_commands.back()->GetQuadVertices();
-      updatedVertices[nQuads] = vertices;
+      updatedVertices[nQuads] = (Vertex3D_TexelOnly*)m_renderDevice->GetCurrentPass()->m_commands.back()->GetQuadVertices();
       m_renderDevice->AddBeginOfFrameCmd(
-         [this, pball, view, ss, vertices, balls]()
+         [this, pball, view, ss, cmdVerts = updatedVertices[nQuads], balls, whHeight = vec4(invX, invY, 0.f, 2.f)]()
          {
             RenderTarget* tempRT = GetMotionBlurBufferTexture();
             const vec3 posl = pball->GetPosition() + m_renderDevice->GetPredictedDisplayDelay() * pball->GetVelocity();
             const vec3 newPos = view.MultiplyVectorNoPerspective(posl);
             const int nEyes = m_renderDevice->m_nEyes;
 
-            float xMin = FLT_MAX, xMax = -FLT_MAX, yMin = FLT_MAX, yMax = -FLT_MAX;
+            // Compute a quad bound. This is fairly suboptimal and would benefit from a simple convex hull (at least from the 2 bounding rects)
+            float xMin = FLT_MAX;
+            float xMax = -FLT_MAX;
+            float yMin = FLT_MAX;
+            float yMax = -FLT_MAX;
             for (int eye = 0; eye < nEyes; eye++)
                Ball::m_ash.computeProjBounds(
                   GetMVP().GetProj(eye), pball->m_lastRenderedPos.x, pball->m_lastRenderedPos.y, pball->m_lastRenderedPos.z, pball->m_hitBall.m_d.m_radius, xMin, xMax, yMin, yMax);
             const float prevLen = Vertex2D((xMax - xMin) * static_cast<float>(tempRT->GetWidth()), (yMax - yMin) * static_cast<float>(tempRT->GetHeight())).Length();
             for (int eye = 0; eye < nEyes; eye++)
                Ball::m_ash.computeProjBounds(GetMVP().GetProj(eye), newPos.x, newPos.y, newPos.z, pball->m_hitBall.m_d.m_radius, xMin, xMax, yMin, yMax);
+            const float fullLen = Vertex2D((xMax - xMin) * static_cast<float>(tempRT->GetWidth()), (yMax - yMin) * static_cast<float>(tempRT->GetHeight())).Length() - prevLen;
 
+            // Add a 1 pixel margin as the visual nudge may cause some sampling in here
+            xMin -= whHeight.x;
+            yMin -= whHeight.y;
+            xMax += whHeight.x;
+            yMax += whHeight.y;
+
+            //xMin = yMin = -1.f; xMax = yMax = 1.f;
             const Vertex3D_TexelOnly verts[4] =
             {
                { xMax, yMax, 0.0f, xMax * 0.5f + 0.5f, 0.5f - yMax * 0.5f },
@@ -2397,7 +2509,11 @@ RenderTarget* Renderer::ApplyBallMotionBlur(RenderTarget* beforeTonemapRT, Rende
                { xMax, yMin, 0.0f, xMax * 0.5f + 0.5f, 0.5f - yMin * 0.5f },
                { xMin, yMin, 0.0f, xMin * 0.5f + 0.5f, 0.5f - yMin * 0.5f }
             };
-            memcpy(vertices, verts, sizeof(verts));
+            memcpy(cmdVerts, verts, sizeof(verts));
+
+            const int nSamples = clamp(static_cast<int>(0.5f * fullLen), 2, 32);
+            vec4 whHeightWithNSamples(whHeight.x, whHeight.y, 0.f, static_cast<float>(nSamples));
+            ss->SetVector(SHADER_w_h_height, &whHeightWithNSamples);
 
             pball->m_lastRenderedPos = newPos;
             balls[0] = vec4(newPos, pball->GetRadius());
@@ -2411,35 +2527,25 @@ RenderTarget* Renderer::ApplyBallMotionBlur(RenderTarget* beforeTonemapRT, Rende
    // Then copy back from temporary buffer, applying tonemap since destination buffer is the tonemapped one
    if (nQuads)
    {
-      m_renderDevice->SetRenderTarget("Ball Motion Blur - Copy"s, afterTonemapRT, true);
-      m_renderDevice->AddRenderTargetDependency(tempRT);
-      m_renderDevice->m_FBShader->SetTexture(SHADER_tex_fb_unfiltered, tempRT->GetColorSampler());
-      m_renderDevice->m_FBShader->SetTexture(SHADER_tex_fb_filtered, tempRT->GetColorSampler());
-      if (IsBloomEnabled())
-      {
-         m_renderDevice->AddRenderTargetDependency(GetBloomBufferTexture());
-         m_renderDevice->m_FBShader->SetTexture(SHADER_tex_bloom, GetBloomBufferTexture()->GetColorSampler());
-      }
-      if (GetAOMode() == 2) // Dynamic AO ?
-      {
-         m_renderDevice->m_FBShader->SetTexture(SHADER_tex_ao, GetAORenderTarget(1)->GetColorSampler());
-         m_renderDevice->AddRenderTargetDependency(GetAORenderTarget(1));
-      }
-      const float jitter = (float)(radical_inverse(g_pplayer->m_overall_frames % 2048) / 1000.0); // Deterministic jitter to ensure stable render for regression tests
-      m_renderDevice->m_FBShader->SetVector(SHADER_w_h_height, 
-         static_cast<float>(1.0 / tempRT->GetWidth()), static_cast<float>(1.0 / tempRT->GetHeight()), jitter, jitter);
-      m_renderDevice->m_FBShader->SetTechnique(tonemapTechnique);
-      for (int i = 0; i < nQuads * 4; i++)
-      {
-         quads[i].x += m_screenOffset.x;
-         quads[i].y += m_screenOffset.y;
-      }
+      SetupTonemapping(tempRT, afterTonemapRT, false);
       for (int i = 0; i < nQuads; i++)
       {
-         m_renderDevice->DrawTexturedQuad(m_renderDevice->m_FBShader, quads + i * 4);
-         // Update drawn rect bounds and ball position to account for late adjustment
-         Vertex3D_TexelOnly* vertices = (Vertex3D_TexelOnly*)m_renderDevice->GetCurrentPass()->m_commands.back()->GetQuadVertices();
-         m_renderDevice->AddBeginOfFrameCmd([vertices, newVerts = updatedVertices[i]]() { memcpy(vertices, newVerts, 4 * sizeof(Vertex3D_TexelOnly)); });
+         // Update quad bound after late ball position adjustment in first draw command
+         m_renderDevice->DrawTexturedQuad(m_renderDevice->m_FBShader, quads.data() + i * 4);
+         m_renderDevice->AddBeginOfFrameCmd(
+            [vertices = static_cast<Vertex3D_TexelOnly*>(m_renderDevice->GetCurrentPass()->m_commands.back()->GetQuadVertices()), cmdVerts = updatedVertices[i],
+               screenOffset = m_screenOffset, invX, invY]()
+            {
+               const Vertex2D pad[4] = { { invX, invY }, { -invX, invY }, { invX, -invY }, { -invX, -invY } }; // Remove padding added to support screenOffset filtering
+               for (int i = 0; i < 4; i++)
+               {
+                  vertices[i].x = cmdVerts[i].x + screenOffset.x - pad[i].x;
+                  vertices[i].y = cmdVerts[i].y + screenOffset.y - pad[i].y;
+                  vertices[i].z = cmdVerts[i].z;
+                  vertices[i].tu = vertices[i].x * 0.5f + 0.5f;
+                  vertices[i].tv = 0.5f - vertices[i].y * 0.5f;
+               }
+            });
       }
    }
 
@@ -2618,10 +2724,12 @@ RenderTarget* Renderer::ApplyStereo(RenderTarget* renderedRT, RenderTarget* outp
    if (m_stereo3D == STEREO_VR)
    {
    #if defined(ENABLE_XR) || defined(ENABLE_VR)
-      int w = renderedRT->GetWidth(), h = renderedRT->GetHeight();
+      int w = renderedRT->GetWidth();
+      int h = renderedRT->GetHeight();
 
       #if defined(ENABLE_XR)
-         // Rendering is already directly being performed to the swapchain image, so nothing to do except for depth buffer
+         assert(outputBackBuffer == m_renderDevice->m_outputWnd[0]->GetBackBuffer()); // XR swapchain
+         // Rendering is already directly being performed to the XR swapchain image, so nothing to do except for depth buffer
          // TODO we should directly use the swapchain depth buffer too to avoid the copy
          // FIXME this will not work as the current backbuffer is declared as not having a depth buffer (even if it has like here), beside BGFX does not support blitting depth to the default backbuffer
          if (g_pplayer->m_vrDevice->UseDepthBuffer())
@@ -2634,6 +2742,7 @@ RenderTarget* Renderer::ApplyStereo(RenderTarget* renderedRT, RenderTarget* outp
          // FIXME no preview for Vulkan (as we are not creating the desktop swapchain)
          if (bgfx::getRendererType() == bgfx::RendererType::Vulkan)
             return outputBackBuffer;
+
       #elif defined(ENABLE_VR)
          // Copy each eye to the HMD texture
          assert(renderedRT != outputBackBuffer);
@@ -2682,6 +2791,7 @@ RenderTarget* Renderer::ApplyStereo(RenderTarget* renderedRT, RenderTarget* outp
          m_renderDevice->Clear(clearType::TARGET | clearType::ZBUFFER, 0x00000000);
 
       #if defined(ENABLE_XR)
+      
          Vertex3D_TexelOnly verts[4] =
          {
             { -1.0f,  1.0f, 0.0f, static_cast<float>(x     ) / w, static_cast<float>(y     ) / h },
@@ -2689,10 +2799,9 @@ RenderTarget* Renderer::ApplyStereo(RenderTarget* renderedRT, RenderTarget* outp
             { -1.0f, -1.0f, 0.0f, static_cast<float>(x     ) / w, static_cast<float>(y + fh) / h },
             {  1.0f, -1.0f, 0.0f, static_cast<float>(x + fw) / w, static_cast<float>(y + fh) / h }
          };
-         m_renderDevice->m_FBShader->SetTexture(SHADER_tex_fb_filtered, renderedRT->GetColorSampler());
-         m_renderDevice->m_FBShader->SetVector(SHADER_bloom_dither_colorgrade, 0.f, 0.f, 0.f, 0.f);
-         m_renderDevice->m_FBShader->SetVector(SHADER_exposure_wcg, m_exposure, 1.f, /*100.f*/ /*203.f*/ 350.f / 10000.f, 0.f); 
-         m_renderDevice->m_FBShader->SetTechnique(SHADER_TECHNIQUE_fb_agxtonemap);
+         m_renderDevice->m_FBShader->SetTechnique(SHADER_TECHNIQUE_fb_mirror);
+         m_renderDevice->m_FBShader->SetVector(SHADER_w_h_height, 1.f, 1.f, 1.f, 1.f);
+         m_renderDevice->m_FBShader->SetTexture(SHADER_tex_fb_unfiltered, renderedRT->GetColorSampler(), SamplerFilter::SF_BILINEAR);
          if (m_vrPreview == VRPREVIEW_LEFT || m_vrPreview == VRPREVIEW_RIGHT)
          {
             m_renderDevice->m_FBShader->SetInt(SHADER_layer, m_vrPreview == VRPREVIEW_LEFT ? 0 : 1);
@@ -2718,11 +2827,13 @@ RenderTarget* Renderer::ApplyStereo(RenderTarget* renderedRT, RenderTarget* outp
             // blending the color key with the rendered scene (alpha blending which would be kept, as it is not fullfilling the
             // color key after blending).
             m_renderDevice->SetRenderTarget("VR ColorKeying"s, m_renderDevice->GetOutputBackBuffer(), true, true);
-            m_renderDevice->AddRenderTargetDependency(previewRT);
+            m_renderDevice->AddRenderTargetDependency(previewRT); // Add a dependency on the preview to ensure color keying is done after preview copy
             Matrix3D matWorldViewProj[2];
             matWorldViewProj[0].SetIdentity();
             matWorldViewProj[1].SetIdentity();
-            m_renderDevice->m_basicShader->SetMatrix(SHADER_matWorldViewProj, &matWorldViewProj[0], 2);
+            const vec4 cameraPos[2] = { { 0.f, 0.f, 0.f, 0.f }, { 0.f, 0.f, 0.f, 0.f } };
+            m_renderDevice->m_basicShader->SetVector(SHADER_cameraPosWorld, &cameraPos[0], 2);
+            m_renderDevice->m_basicShader->SetMatrix(SHADER_matRotViewProj, &matWorldViewProj[0], 2);
             m_renderDevice->m_basicShader->SetVector(SHADER_staticColor_Alpha, &m_vrColorKey);
             m_renderDevice->m_basicShader->SetTechnique(SHADER_TECHNIQUE_unshaded_without_texture);
             static constexpr Vertex3D_NoTex2 ckVerts[4] =
@@ -2792,7 +2903,7 @@ void Renderer::RenderFrame()
    for (auto renderable : m_renderableToInit)
    {
       renderable->RenderRelease();
-      renderable->RenderSetup(m_renderDevice);
+      renderable->RenderSetup(this);
    }
    m_renderableToInit.clear();
 
@@ -2821,14 +2932,9 @@ void Renderer::RenderFrame()
    m_renderDevice->m_ballShader->SetTexture(SHADER_tex_ball_playfield, GetPreviousBackBufferTexture()->GetColorSampler());
 
    // Update camera point of view
-   #if defined(ENABLE_VR) || defined(ENABLE_XR)
-   if (m_stereo3D == STEREO_VR)
-   {
-      g_pplayer->m_vrDevice->UpdateVRPosition(m_mvpSpaceReference, GetMVP());
-   }
-   else 
-   #endif
-   m_playfieldView = m_mvp->GetView();
+   // FIXME this may lead to view drift if nudging and the mvp has not been initialized per frame
+   for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
+      m_playfieldView[eye] = m_mvp.GetView(eye);
    m_mvpSpaceReference = PartGroupData::SpaceReference::SR_INHERIT; // Force update
 
    // If using static prerendering, apply nudging by shaking the screen (otherwise, apply table displacement)
@@ -2868,6 +2974,15 @@ void Renderer::RenderFrame()
       }
       #endif
    }
+   #ifdef ENABLE_BGFX
+   else if (GetMSAABackBufferTexture()->IsMSAA())
+   {
+      // Static prepass is not compatible with MSAA as BGFX does not allow to blit between MSAA textures (the blit happens on the resolved textures)
+      m_renderDevice->SetRenderTarget("Render MSAA Scene"s, GetMSAABackBufferTexture());
+      DrawBackground();
+      m_renderDevice->SetRenderTarget("Render MSAA Scene"s, GetMSAABackBufferTexture(), true, true); // Force new pass to avoid sorting scene calls with background calls
+   }
+   #endif
    else
    {
       RenderStaticPrepass(); // Update statically prerendered parts if needed
@@ -2928,11 +3043,11 @@ void Renderer::RenderFrame()
    #endif
 
    // Perform color grade LUT / dither / tonemapping, also applying bloom and AO
-   RenderTarget* const tonemapRT = (hasAntialiasPass || hasSharpenPass || hasStereoPass || hasUpscalerPass) ? GetPostProcessRenderTarget1() : m_renderDevice->GetOutputBackBuffer();
-   const ShaderTechniques tonemapTechnique = ApplyTonemapping(renderedRT, tonemapRT);
+   RenderTarget* const tonemapRT
+      = ApplyTonemapping(renderedRT, (hasAntialiasPass || hasSharpenPass || hasStereoPass || hasUpscalerPass) ? GetPostProcessRenderTarget1() : m_renderDevice->GetOutputBackBuffer());
 
    // Raytraced ball motion blur (BGFX only)
-   renderedRT = ApplyBallMotionBlur(renderedRT, tonemapRT, tonemapTechnique);
+   renderedRT = ApplyBallMotionBlur(renderedRT, tonemapRT);
 
    // Perform post processed anti aliasing
    renderedRT = ApplyPostProcessedAntialiasing(renderedRT, (hasSharpenPass || hasStereoPass || hasUpscalerPass) ? nullptr : m_renderDevice->GetOutputBackBuffer());
@@ -3170,24 +3285,31 @@ RenderTarget* Renderer::SetupAncillaryRenderTarget(
    const int eyes = m_stereo3D != StereoMode::STEREO_OFF ? 2 : 1;
    if (eyes > 1)
       matWorldViewProj[1] = matWorldViewProj[0];
-#if defined(ENABLE_OPENGL)
+#if defined(ENABLE_BGFX)
+   const vec4 cameraPosWorld[2] = { { 0.f, 0.f, 0.f, 0.f }, { 0.f, 0.f, 0.f, 0.f } };
+   rd->m_basicShader->SetMatrix(SHADER_matRotViewProj, &matWorldViewProj[0], eyes);
+   rd->m_basicShader->SetVector(SHADER_cameraPosWorld, &cameraPosWorld[0], eyes);
+   rd->m_DMDShader->SetMatrix(SHADER_matRotViewProj, &matWorldViewProj[0], eyes);
+   rd->m_DMDShader->SetVector(SHADER_cameraPosWorld, &cameraPosWorld[0], eyes);
+#elif defined(ENABLE_OPENGL)
    struct
    {
       Matrix3D matWorld;
-      Matrix3D matView;
-      Matrix3D matWorldView;
-      Matrix3D matWorldViewInverseTranspose;
+      Matrix3D matView[2];
+      Matrix3D matWorldView[2];
+      Matrix3D matWorldViewInverseTranspose[2];
       Matrix3D matWorldViewProj[2];
    } matrices;
    memcpy(&matrices.matWorldViewProj[0].m[0][0], &matWorldViewProj[0].m[0][0], 4 * 4 * sizeof(float));
    memcpy(&matrices.matWorldViewProj[1].m[0][0], &matWorldViewProj[0].m[0][0], 4 * 4 * sizeof(float));
    rd->m_basicShader->SetUniformBlock(SHADER_basicMatrixBlock, &matrices.matWorld.m[0][0]);
-#else
+   rd->m_DMDShader->SetMatrix(SHADER_matWorldViewProj, &matWorldViewProj[0], eyes);
+#elif defined(ENABLE_DX9)
    rd->m_basicShader->SetMatrix(SHADER_matWorldViewProj, &matWorldViewProj[0], eyes);
+   rd->m_DMDShader->SetMatrix(SHADER_matWorldViewProj, &matWorldViewProj[0], eyes);
 #endif
    rd->m_basicShader->SetFloat(SHADER_alphaTestValue, -1.0f);
    rd->m_basicShader->SetTechnique(SHADER_TECHNIQUE_bg_decal_with_texture);
-   rd->m_DMDShader->SetMatrix(SHADER_matWorldViewProj, &matWorldViewProj[0], eyes);
    rd->m_DMDShader->SetFloat(SHADER_alphaTestValue, -1.0f);
 
    // Performing linear rendering + tonemapping is overkill when used for LDR rendering (Pup pack, B2S,...)
@@ -3362,4 +3484,23 @@ void Renderer::RenderAncillaryWindow(VPXWindowId window, const VPX::RenderOutput
    }
 
    UpdateBasicShaderMatrix();
+}
+
+RenderProbe::ReflectionMode Renderer::GetMaxReflectionMode() const
+{
+   // For dynamic mode, static reflections are not available so adapt the mode
+   return !IsUsingStaticPrepass() && m_maxReflectionMode >= RenderProbe::REFL_STATIC ? RenderProbe::REFL_DYNAMIC : m_maxReflectionMode;
+}
+
+int Renderer::GetAOMode() const // 0=Off, 1=Static, 2=Dynamic
+{
+   // We must evaluate this dynamically since AO scale and enabled/disable can be changed from script
+   if (m_disableAO || !m_table->m_enableAO || !m_renderDevice->DepthBufferReadBackAvailable() || m_table->m_AOScale == 0.f)
+      return 0;
+   // The existing implementation suffers from high temporal artefacts that make it unsuitable for dynamic camera situations
+   if (m_stereo3D == STEREO_VR)
+      return 0;
+   if (m_dynamicAO)
+      return 2;
+   return IsUsingStaticPrepass() ? 1 : 0; // If AO is static prepass only, and we are running without it, disable AO
 }

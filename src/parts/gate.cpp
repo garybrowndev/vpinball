@@ -3,19 +3,25 @@
 #include "core/stdafx.h"
 #include "gate.h"
 
-#include "utils/objloader.h"
+#include "core/VPApp.h"
 #include "meshes/gateBracketMesh.h"
-#include "meshes/gateWireMesh.h"
 #include "meshes/gateLongPlateMesh.h"
 #include "meshes/gatePlateMesh.h"
+#include "meshes/gateWireMesh.h"
 #include "meshes/gateWireRectangleMesh.h"
-#include "renderer/Shader.h"
+#include "parts/Collection.h"
 #include "renderer/IndexBuffer.h"
+#include "renderer/Renderer.h"
+#include "renderer/Shader.h"
+#include "renderer/trace.h"
 #include "renderer/VertexBuffer.h"
+#include "ui/win/sur.h"
+#include "ui/win/WinEditor.h"
+#include "utils/objloader.h"
 
 Gate::~Gate()
 {
-   assert(m_rd == nullptr);
+   assert(m_renderer == nullptr);
 }
 
 Gate *Gate::CopyForPlay() const
@@ -138,44 +144,48 @@ void Gate::WriteRegDefaults()
 
 float Gate::GetOpenAngle() const
 {
-    return RADTOANG(g_pplayer ? m_phitgate->m_gateMover.m_angleMax : m_d.m_angleMax);	// player active value
+   return RADTOANG(m_phitgate ? m_phitgate->m_gateMover.m_angleMax : m_d.m_angleMax); // player active value
 }
 
 void Gate::SetOpenAngle(const float angle)
 {
-    float newVal = ANGTORAD(angle);
-    if (g_pplayer)
-    {
-        if (newVal > m_d.m_angleMax) newVal = m_d.m_angleMax;
-        else if (newVal < m_d.m_angleMin) newVal = m_d.m_angleMin;
+   float newVal = ANGTORAD(angle);
+   if (m_phitgate)
+   {
+      if (newVal > m_d.m_angleMax)
+         newVal = m_d.m_angleMax;
+      else if (newVal < m_d.m_angleMin)
+         newVal = m_d.m_angleMin;
 
-        if (m_phitgate->m_gateMover.m_angleMin < newVal)  // min is smaller
-            m_phitgate->m_gateMover.m_angleMax = newVal;  // then set new maximum
-        else m_phitgate->m_gateMover.m_angleMin = newVal; // else set new min
-    }
-    else
-        m_d.m_angleMax = newVal;
+      if (m_phitgate->m_gateMover.m_angleMin < newVal) // min is smaller
+         m_phitgate->m_gateMover.m_angleMax = newVal; // then set new maximum
+      else
+         m_phitgate->m_gateMover.m_angleMin = newVal; // else set new min
+   }
+   else
+      m_d.m_angleMax = newVal;
 }
 
 float Gate::GetCloseAngle() const
-{
-    return RADTOANG(g_pplayer ? m_phitgate->m_gateMover.m_angleMin : m_d.m_angleMin);
-}
+{ return RADTOANG(m_phitgate ? m_phitgate->m_gateMover.m_angleMin : m_d.m_angleMin); }
 
 void Gate::SetCloseAngle(const float angle)
 {
-    float newVal = ANGTORAD(angle);
-    if (g_pplayer)
-    {
-        if (newVal > m_d.m_angleMax) newVal = m_d.m_angleMax;
-        else if (newVal < m_d.m_angleMin) newVal = m_d.m_angleMin;
+   float newVal = ANGTORAD(angle);
+   if (m_phitgate)
+   {
+      if (newVal > m_d.m_angleMax)
+         newVal = m_d.m_angleMax;
+      else if (newVal < m_d.m_angleMin)
+         newVal = m_d.m_angleMin;
 
-        if (m_phitgate->m_gateMover.m_angleMax > newVal)  // max is bigger
-            m_phitgate->m_gateMover.m_angleMin = newVal;  // then set new minumum
-        else m_phitgate->m_gateMover.m_angleMax = newVal; // else set new max
-    }
-    else
-        m_d.m_angleMin = newVal;
+      if (m_phitgate->m_gateMover.m_angleMax > newVal) // max is bigger
+         m_phitgate->m_gateMover.m_angleMin = newVal; // then set new minumum
+      else
+         m_phitgate->m_gateMover.m_angleMax = newVal; // else set new max
+   }
+   else
+      m_d.m_angleMin = newVal;
 }
 
 void Gate::UIRenderPass1(Sur * const psur)
@@ -339,6 +349,7 @@ void Gate::PhysicRelease(PhysicsEngine* physics, const bool isUI)
 {
    if (!isUI)
    {
+      // HitObjects are owned by the physics engine, just clear the reference
       m_phitgate = nullptr;
       m_plineseg = nullptr;
    }
@@ -349,24 +360,24 @@ void Gate::PhysicRelease(PhysicsEngine* physics, const bool isUI)
 
 #pragma region Rendering
 
-void Gate::RenderSetup(RenderDevice *device)
+void Gate::RenderSetup(Renderer *renderer)
 {
-   assert(m_rd == nullptr);
-   m_rd = device;
+   assert(m_renderer == nullptr);
+   m_renderer = renderer;
 
    SetGateType(m_d.m_type);
    m_baseHeight = m_ptable->GetSurfaceHeight(m_d.m_szSurface, m_d.m_vCenter.x, m_d.m_vCenter.y);
 
-   std::shared_ptr<IndexBuffer> bracketIndexBuffer = std::make_shared<IndexBuffer>(m_rd, gateBracketNumIndices, gateBracketIndices);
-   std::shared_ptr<VertexBuffer> bracketVertexBuffer = std::make_shared<VertexBuffer>(m_rd, gateBracketNumVertices);
+   std::shared_ptr<IndexBuffer> bracketIndexBuffer = std::make_shared<IndexBuffer>(m_renderer->m_renderDevice, gateBracketNumIndices, gateBracketIndices);
+   std::shared_ptr<VertexBuffer> bracketVertexBuffer = std::make_shared<VertexBuffer>(m_renderer->m_renderDevice, gateBracketNumVertices);
    Vertex3D_NoTex2 *buf;
    bracketVertexBuffer->Lock(buf);
    GenerateBracketMesh(buf);
    bracketVertexBuffer->Unlock();
    m_bracketMeshBuffer = std::make_shared<MeshBuffer>(GetName() + ".Bracket"s, bracketVertexBuffer, bracketIndexBuffer, true);
 
-   std::shared_ptr<IndexBuffer> wireIndexBuffer = std::make_shared<IndexBuffer>(m_rd, m_numIndices, m_indices);
-   std::shared_ptr<VertexBuffer> wireVertexBuffer = std::make_shared<VertexBuffer>(m_rd, m_numVertices, nullptr, true);
+   std::shared_ptr<IndexBuffer> wireIndexBuffer = std::make_shared<IndexBuffer>(m_renderer->m_renderDevice, m_numIndices, m_indices);
+   std::shared_ptr<VertexBuffer> wireVertexBuffer = std::make_shared<VertexBuffer>(m_renderer->m_renderDevice, m_numVertices, nullptr, true);
    wireVertexBuffer->Lock(buf);
    GenerateWireMesh(buf);
    wireVertexBuffer->Unlock();
@@ -375,18 +386,18 @@ void Gate::RenderSetup(RenderDevice *device)
 
 void Gate::RenderRelease()
 {
-   assert(m_rd != nullptr);
+   assert(m_renderer != nullptr);
    m_wireMeshBuffer = nullptr;
    m_bracketMeshBuffer = nullptr;
    m_wireEdgeMeshBuffer = nullptr;
    m_bracketEdgeMeshBuffer = nullptr;
    m_vertexbuffer_angle = FLT_MAX;
-   m_rd = nullptr;
+   m_renderer = nullptr;
 }
 
 void Gate::UpdateAnimation(const float diff_time_msec)
 {
-   assert(m_rd != nullptr);
+   assert(m_renderer != nullptr);
    // Animation is updated by physics engine through a MoverObject. No additional visual animation here
    // Still monitor angle updates in order to fire animate event at most once per frame (physics engine perform far more cycle per frame)
    if (m_phitgate && m_lastAngle != m_phitgate->m_gateMover.m_angle)
@@ -398,7 +409,7 @@ void Gate::UpdateAnimation(const float diff_time_msec)
 
 void Gate::Render(const unsigned int renderMask)
 {
-   assert(m_rd != nullptr);
+   assert(m_renderer != nullptr);
    assert(!m_desktopBackdrop);
    const bool isStaticOnly = renderMask & Renderer::STATIC_ONLY;
    const bool isDynamicOnly = renderMask & Renderer::DYNAMIC_ONLY;
@@ -434,8 +445,8 @@ void Gate::Render(const unsigned int renderMask)
       if (renderMask & Renderer::UI_FILL)
       {
          if (m_d.m_showBracket)
-            m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_bracketMeshBuffer, RenderDevice::TRIANGLELIST, 0, gateBracketNumIndices);
-         m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_wireMeshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
+            m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_bracketMeshBuffer, RenderDevice::TRIANGLELIST, 0, gateBracketNumIndices);
+         m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_wireMeshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
       }
       if (renderMask & Renderer::UI_EDGES)
       {
@@ -449,7 +460,7 @@ void Gate::Render(const unsigned int renderMask)
                vertices.push_back(m_vertices[i]);
             m_wireEdgeMeshBuffer = m_wireMeshBuffer->CreateEdgeMeshBuffer(indices, vertices);
          }
-         m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_wireEdgeMeshBuffer, RenderDevice::LINELIST, 0, m_wireEdgeMeshBuffer->m_ib->m_count);
+         m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_wireEdgeMeshBuffer, RenderDevice::LINELIST, 0, m_wireEdgeMeshBuffer->m_ib->m_count);
          if (m_d.m_showBracket)
          {
             if (m_bracketEdgeMeshBuffer == nullptr)
@@ -462,17 +473,17 @@ void Gate::Render(const unsigned int renderMask)
                   vertices.push_back(gateBracket[i]);
                m_bracketEdgeMeshBuffer = m_bracketMeshBuffer->CreateEdgeMeshBuffer(indices, vertices);
             }
-            m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_bracketEdgeMeshBuffer, RenderDevice::LINELIST, 0, m_bracketEdgeMeshBuffer->m_ib->m_count);
+            m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_bracketEdgeMeshBuffer, RenderDevice::LINELIST, 0, m_bracketEdgeMeshBuffer->m_ib->m_count);
          }
       }
    }
    else
    {
-      m_rd->ResetRenderState();
-      m_rd->m_basicShader->SetBasic(m_ptable->GetMaterial(m_d.m_szMaterial), nullptr);
+      m_renderer->m_renderDevice->ResetRenderState();
+      m_renderer->m_renderDevice->m_basicShader->SetBasic(m_ptable->GetMaterial(m_d.m_szMaterial), nullptr);
       if (m_d.m_showBracket)
-         m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_bracketMeshBuffer, RenderDevice::TRIANGLELIST, 0, gateBracketNumIndices);
-      m_rd->DrawMesh(m_rd->m_basicShader, false, pos, 0.f, m_wireMeshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
+         m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_bracketMeshBuffer, RenderDevice::TRIANGLELIST, 0, gateBracketNumIndices);
+      m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_wireMeshBuffer, RenderDevice::TRIANGLELIST, 0, m_numIndices);
    }
 }
 
@@ -821,14 +832,14 @@ STDMETHODIMP Gate::put_OpenAngle(float newVal)
 
 STDMETHODIMP Gate::get_Collidable(VARIANT_BOOL *pVal)
 {
-   *pVal = FTOVB((g_pplayer) ? m_phitgate->m_enabled : m_d.m_collidable);
+   *pVal = FTOVB(m_phitgate ? m_phitgate->m_enabled : m_d.m_collidable);
    return S_OK;
 }
 
 
 STDMETHODIMP Gate::put_Collidable(VARIANT_BOOL newVal)
 {
-   if (g_pplayer)
+   if (m_phitgate)
    {
       m_phitgate->m_enabled = VBTOb(newVal);
       if (!m_d.m_twoWay)
@@ -920,14 +931,14 @@ STDMETHODIMP Gate::put_Friction(float newVal)
 
 STDMETHODIMP Gate::get_Damping(float *pVal)
 {
-   *pVal = !g_pplayer ? m_d.m_damping : powf(m_phitgate->m_gateMover.m_damping, (float)(1.0/PHYS_FACTOR));
+   *pVal = m_phitgate ? powf(m_phitgate->m_gateMover.m_damping, (float)(1.0 / PHYS_FACTOR)) : m_d.m_damping;
    return S_OK;
 }
 
 STDMETHODIMP Gate::put_Damping(float newVal)
 {
    const float tmp = saturate(newVal);
-   if (g_pplayer)
+   if (m_phitgate)
       m_phitgate->m_gateMover.m_damping = powf(tmp, (float)PHYS_FACTOR); //0.996f;
    else
       m_d.m_damping = tmp;
@@ -937,7 +948,7 @@ STDMETHODIMP Gate::put_Damping(float newVal)
 
 STDMETHODIMP Gate::get_GravityFactor(float *pVal)
 {
-   *pVal = !g_pplayer ? m_d.m_gravityfactor : m_phitgate->m_gateMover.m_gravityfactor;
+   *pVal = m_phitgate ? m_phitgate->m_gateMover.m_gravityfactor : m_d.m_gravityfactor;
    return S_OK;
 }
 
@@ -945,7 +956,7 @@ STDMETHODIMP Gate::put_GravityFactor(float newVal)
 {
    const float tmp = clamp(newVal, 0.0f, 100.0f);
 
-   if (g_pplayer)
+   if (m_phitgate)
       m_phitgate->m_gateMover.m_gravityfactor = tmp;
    else
       m_d.m_gravityfactor = tmp;
@@ -973,7 +984,7 @@ STDMETHODIMP Gate::get_TwoWay(VARIANT_BOOL *pVal)
 
 STDMETHODIMP Gate::put_TwoWay(VARIANT_BOOL newVal)
 {
-   if (g_pplayer)
+   if (m_phitgate)
       m_phitgate->m_twoWay = VBTOb(newVal);
    else
       m_d.m_twoWay = VBTOb(newVal);
@@ -995,7 +1006,7 @@ STDMETHODIMP Gate::put_ReflectionEnabled(VARIANT_BOOL newVal)
 
 STDMETHODIMP Gate::get_CurrentAngle(float *pVal)
 {
-   if (g_pplayer)
+   if (m_phitgate)
    {
       *pVal = RADTOANG(m_phitgate->m_gateMover.m_angle);
       return S_OK;
