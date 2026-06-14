@@ -8,51 +8,60 @@ This is a fork of [Visual Pinball](https://github.com/vpinball/vpinball) (VPinba
 
 ## Build Instructions (Windows / Visual Studio)
 
-### Quick Build (no CMake)
-1. Download precompiled third-party dependencies from [upstream GitHub Actions](https://github.com/vpinball/vpinball/actions) — find a successful `vpinball` workflow run on master, download both:
-   - `VPinballX-<VERSION>-dev-third-party-windows-x64-Debug.zip`
-   - `VPinballX-<VERSION>-dev-third-party-windows-x64-Release.zip`
-2. Extract Debug first, then Release, both to `./third-party`, overwriting existing files
-3. Revert any git changes caused by the overwrite (`git checkout -- third-party/`)
-4. Run `make/create_vs_solution.bat`, select `2022` (must re-run after upstream merge)
-5. Open `.build/vsproject/VisualPinball.sln` in Visual Studio 2022
-6. Set `vpx` as the Startup Project
-7. Build for Debug or Release / x64
+### Primary build: CMake + prebuilt deps (matches upstream CI)
 
-### Third-party deps via CLI
-```bash
-gh run download <RUN_ID> --repo vpinball/vpinball -n "VPinballX-...-dev-third-party-windows-x64-Debug.zip" --dir /tmp/vpx-deps
-gh run download <RUN_ID> --repo vpinball/vpinball -n "VPinballX-...-dev-third-party-windows-x64-Release.zip" --dir /tmp/vpx-deps-release
-cp -rf /tmp/vpx-deps/* third-party/
-cp -rf /tmp/vpx-deps-release/* third-party/
-git checkout -- third-party/
-```
+Upstream builds Windows via **CMake** (`cmake -G "Visual Studio …" && cmake --build`). The old hand-maintained VS-solution path (`create_vs_solution.bat`) **broke after upstream's "import cleanup"** restructured `main.h` — see the deprecation note below. Use CMake going forward. VS**2022** is fine for the main build (only `external.sh` wants VS2026).
 
-### Build tips
-- After upstream merges, re-run `make/create_vs_solution.bat` to regenerate VS project files. **Symptom of skipping**: `error C1083: Cannot open source file ... BAMView.cpp` — the templated vcxproj is stale and references files upstream deleted.
-- When changing headers (especially `def.h`, `stdafx.h`, `ballhistory.h`, `Settings_properties.inl`), delete ALL `.obj` files: `rm -rf .build/obj/vpx/Debug-x64/*.obj`
-- Force relink by also deleting the exe: `rm -f .build/bin/vpx/Debug-x64/VPinballX64.exe`
-- Build via the **solution** for non-Debug configs (Release_BGFX, Release_GL): `MSBuild .build/vsproject/VisualPinball.sln -t:vpx -p:Configuration=Release_BGFX -p:Platform=x64`. **Building the vcxproj directly fails** with `error MSB8013: This project doesn't contain the Configuration and Platform combination of Release_BGFX|x64` for every plugin — the sln config-map translates `Release_BGFX|x64` → `Release|x64` for plugins, but the standalone vcxproj doesn't.
-- Build just vpx without plugins: add `-p:BuildProjectReferences=false` to MSBuild (works for Debug-x64; for Release_BGFX, use `-t:vpx` on the sln instead — same effect, correct config mapping)
-- Cap parallelism at `-m:9` (75% of 12 cores) to avoid heap-limit C1076 errors
-- MSBuild from CLI: `"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe" ".build/vsproject/VisualPinball.sln" -t:vpx -p:Configuration=Release_BGFX -p:Platform=x64 -m:9`
-- **Deploy convention**: build artifact at `.build/bin/vpx/<Config>-x64/VPinballX_BGFX64.exe` → cabinet at `Z:\visual pinball\VPinballX_BGFX64_BH.exe` (rename adds `_BH` suffix at deploy time)
+1. **Get matching prebuilt third-party deps — do NOT run `external.sh`.** Download the `dev-third-party-windows-x64` Release (+Debug only if you also build Debug) artifact from a CI run that matches your code. **Best source: our own fork's run for the current commit** — it builds against the exact merged dep SHAs (after a Ball-History+upstream merge the upstream artifacts won't match). The artifact extracts to `build-libs/ include/ runtime-libs/`; merge those into `third-party/`:
+   ```powershell
+   # gh must be on the personal account for fork access:  gh auth switch --user garybrowndev
+   $RUN = <fork 'vpinball' workflow run id for the current commit>   # e.g. the development-branch run
+   gh run download $RUN --repo garybrowndev/vpinball -n "VPinballX-<VER>-<sha>-dev-third-party-windows-x64-Release.zip" --dir $env:TEMP\vpx-deps
+   robocopy "$env:TEMP\vpx-deps\build-libs"   third-party\build-libs   /E
+   robocopy "$env:TEMP\vpx-deps\include"      third-party\include      /E
+   robocopy "$env:TEMP\vpx-deps\runtime-libs" third-party\runtime-libs /E
+   git checkout -- third-party/   # revert tracked-file changes; gitignored binaries keep the fresh versions
+   ```
+2. **Copy the CMake template to the repo root** (re-do if you switch flavor, e.g. GL):
+   ```powershell
+   Copy-Item make\CMakeLists_bgfx-windows-x64.txt CMakeLists.txt -Force
+   ```
+3. **Configure** (one-time per clean build dir; reconfigures automatically after that):
+   ```powershell
+   cmake -G "Visual Studio 17 2022" -A x64 -B build
+   ```
+4. **Build** (cap file-parallelism to avoid C1076 heap errors):
+   ```powershell
+   cmake --build build --config Release -- /m:9 /p:CL_MPCount=9                       # full: vpx + all plugins
+   cmake --build build --config Release --target vpinball -- /m:9 /p:CL_MPCount=9      # just the exe (faster; skips plugin post-build DLL copies)
+   ```
+   Output: **`build/Release/VPinballX_BGFX64.exe`** (CMake `RUNTIME_OUTPUT_NAME`); plugins land in `build/Release/plugins/`.
 
-### CMake Build (windows-x64)
-```
-platforms/windows-x64/external.sh
-cp make/CMakeLists_bgfx-windows-x64.txt CMakeLists.txt
-cmake -G "Visual Studio 17 2022" -A x64 -B build
-cmake --build build --config Release
-```
+- **Deploy convention**: `build/Release/VPinballX_BGFX64.exe` → cabinet `Z:\visual pinball\VPinballX_BGFX64_BH.exe` (rename adds `_BH`). **Close VPX on the cabinet first** or the copy fails with "file in use".
+- **After an upstream merge**: re-download fresh `dev-third-party` deps (versions bump) and re-`Copy-Item` the CMakeLists; CMake reconfigures itself — no `create_vs_solution.bat`. If a plugin post-build fails on a missing DLL (e.g. `libserialport64-0.dll`), your deps are stale → refresh them.
+- **Never run `platforms/windows-x64/external.sh`** unless rebuilding all 12 deps from source: it needs **VS2026 + MSYS2 (`/c/msys64` UCRT64) + nasm**. The prebuilt-deps download replaces it.
+
+### Build tips (CMake)
+- **Header changes rebuild automatically** — CMake/MSBuild tracks header dependencies, so the old VS-solution "delete all `.obj`" ritual isn't needed. For a fully clean build, delete the `build/` dir and re-run the configure step.
+- **Build just the exe** (faster; also dodges plugin post-build DLL-copy failures when deps are slightly stale): `cmake --build build --config Release --target vpinball -- /m:9 /p:CL_MPCount=9`. The cabinet keeps its existing plugins.
+- **Cap file parallelism** with `/p:CL_MPCount=9` (75% of 12 cores) to avoid C1076 heap-limit errors (`/m:9` caps project-level parallelism).
+- **GL instead of BGFX**: `Copy-Item make\CMakeLists_gl-windows-x64.txt CMakeLists.txt`, then configure into a separate `build` dir.
+- **Fork vs upstream deps**: on pure `master` the `dev-third-party` zips from `vpinball/vpinball` match; on `integration`/`development` (Ball History + upstream merged) only **our fork's** run for that commit has matching dep SHAs — pull from `garybrowndev/vpinball` (CMake build, step 1).
+- **gh account**: writes/artifact pulls on the fork need the personal account active — `gh auth switch --user garybrowndev` (the `gary-brown_bplogix` EMU account can't access `garybrowndev/vpinball`).
+
+> _Legacy (deprecated VS-solution path only — see note below): `create_vs_solution.bat` regen after merges, `MSBuild …VisualPinball.sln -t:vpx -p:Configuration=Release_BGFX`, `-p:BuildProjectReferences=false`. These no longer build merged trees._
+
+### ⚠️ Deprecated: VS-solution "Quick Build" (`create_vs_solution.bat`) — broken after upstream import-cleanup
+
+The old flow (download deps → `make/create_vs_solution.bat` → open `.build/vsproject/VisualPinball.sln` in VS2022 → build `vpx`) **no longer compiles** on any tree that includes upstream's "Import cleanup" (the −210-line `main.h` rewrite, ~mid-2026). That path builds its precompiled header through `main.h`, which used to front-load every include; upstream moved them to point-of-use, so the PCH no longer supplies core types and the build dies in the part headers with a cascade (`FRect3D` undefined → `IScriptable`/`CWinApp` undefined, etc.). Restoring it means reconstructing the entire old `main.h` include order, which fights upstream — so we switched to CMake (above). The `make/*.vcxproj` / `vpx-core.vcxitems` files and `create_vs_solution.bat` are kept only for historical reference / non-merged branches.
 
 ### Running Tests
 Build and run the `vpx-test` project in the VS solution (`.build/vsproject/vpx-test.vcxproj`). Test sources are in `tests/`.
 
 ### Running VPinball from CLI
 ```bash
-# Always launch with the Example table pre-loaded for faster debugging:
-start .build/bin/vpx/Debug-x64/VPinballX64.exe "C:\code\Pinball\vpinball_ballhistory\Example.vpx"
+# Always launch with the Example table pre-loaded for faster debugging (CMake output path):
+start build\Release\VPinballX_BGFX64.exe "C:\code\Pinball\vpinball_ballhistory\Example.vpx"
 ```
 Press F5 to play, ESC to return to editor, Q to quit from play mode.
 When debugging Ball History, always launch with a table loaded — starting empty wastes time navigating menus.
