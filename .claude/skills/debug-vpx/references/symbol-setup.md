@@ -31,7 +31,7 @@ Set per-session, not globally:
 
 **On the dev machine** (if running cdb-remote):
 ```powershell
-$env:_NT_SYMBOL_PATH = "SRV*C:\symcache*https://msdl.microsoft.com/download/symbols;C:\code\Pinball\vpinball_ballhistory\development\.build\bin\vpx\Debug_BGFX-x64"
+$env:_NT_SYMBOL_PATH = "SRV*C:\symcache*https://msdl.microsoft.com/download/symbols;C:\code\Pinball\vpinball_ballhistory\development\build\Debug"
 ```
 
 DO NOT set `_NT_SYMBOL_PATH` system-wide — leaks into unrelated processes and causes them to do unexpected network fetches.

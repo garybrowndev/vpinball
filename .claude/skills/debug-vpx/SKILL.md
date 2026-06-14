@@ -45,7 +45,7 @@ Same scripts, same cdb session, same deploy step. The distinction is *what input
 Most sessions follow this rhythm:
 
 1. **Once per session — provision** (skip if cabinet is already provisioned and the deploy folder is current):
-   - Build the relevant config (default: `Debug_BGFX|x64`)
+   - Build the Debug config via CMake (BGFX flavor; outputs to `build/Debug/`)
    - Deploy exe + pdb to `Z:\Visual Pinball\debug\`
    - Push the bundled scripts (`scripts/*`) to `Z:\Dumps\` if any are missing or stale (see "Bundled scripts" section)
 
@@ -65,32 +65,29 @@ The "always-attached cdb" stance is the key idea. It costs almost nothing (one e
 
 ### Step 1 (once per session): Build and deploy
 
-If switching configs or after upstream merge:
+Build via **CMake** — the old `create_vs_solution.bat` / VS-solution path is deprecated and no longer compiles merged trees (upstream's import-cleanup broke the PCH; see CLAUDE.md). One-time per clean `build/` dir, copy the BGFX template and configure; after that CMake reconfigures itself on each build:
 ```powershell
-Push-Location 'make'; "2022" | & '.\create_vs_solution.bat' | Out-Null; Pop-Location
+Copy-Item make\CMakeLists_bgfx-windows-x64.txt CMakeLists.txt -Force
+cmake -G "Visual Studio 17 2022" -A x64 -B build
 ```
 
-For Debug_BGFX, ensure the debug-flavor BGFX libs are active:
-```powershell
-& 'C:\Program Files\Git\bin\bash.exe' -c './make/swap-bgfx.sh status'
-# if not on debug:  ./make/swap-bgfx.sh activate debug
-```
+Debug builds need the **Debug-flavor** prebuilt deps present (download the `dev-third-party-windows-x64-Debug` artifact alongside Release — see CLAUDE.md step 1). Only Debug configs emit the PDBs cdb needs for resolved stacks.
 
-Build with `-m:9` (75% of Gary's 12 cores — full `-m` pegs the laptop and trips C1076 heap-limit errors). One MSBuild at a time:
+Build the Debug config, capping parallelism at `/m:9` (75% of Gary's 12 cores — full parallel pegs the laptop and trips C1076 heap-limit errors):
 ```powershell
-& 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' '.build\vsproject\VisualPinball.sln' -t:vpx -p:Configuration=Debug_BGFX -p:Platform=x64 -m:9 -v:minimal | Select-Object -Last 5
+cmake --build build --config Debug --target vpinball -- /m:9 /p:CL_MPCount=9 | Select-Object -Last 5
 ```
 
 Sanity-check the PE header (catches the stack-reserve=0 class of bug — see `references/known-bugs.md`):
 ```powershell
-& 'C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\bin\Hostx64\x64\dumpbin.exe' /headers '.build\bin\vpx\Debug_BGFX-x64\VPinballX_BGFX64.exe' | Select-String 'stack reserve|stack commit'
+& 'C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\bin\Hostx64\x64\dumpbin.exe' /headers 'build\Debug\VPinballX_BGFX64.exe' | Select-String 'stack reserve|stack commit'
 ```
 Expected: `100000` and `1000`.
 
 Deploy:
 ```powershell
-Copy-Item '.build\bin\vpx\Debug_BGFX-x64\VPinballX_BGFX64.exe' 'Z:\Visual Pinball\debug\VPinballX_BGFX64.exe' -Force
-Copy-Item '.build\bin\vpx\Debug_BGFX-x64\VPinballX_BGFX64.pdb' 'Z:\Visual Pinball\debug\VPinballX_BGFX64.pdb' -Force
+Copy-Item 'build\Debug\VPinballX_BGFX64.exe' 'Z:\Visual Pinball\debug\VPinballX_BGFX64.exe' -Force
+Copy-Item 'build\Debug\VPinballX_BGFX64.pdb' 'Z:\Visual Pinball\debug\VPinballX_BGFX64.pdb' -Force
 ```
 
 If copy fails with "file in use", the cabinet still has VPX or cdb running — preflight-kill first (next step) and retry.
@@ -138,7 +135,7 @@ Each hit prints the local variables (`dv`) and continues (`gc`). After Gary repr
 
 ### Step 5 (loop): Edit source, rebuild, redeploy
 
-Make the change locally. Re-run the build command from Step 1. Redeploy the exe + pdb (Copy-Item the same way). Skip `create_vs_solution.bat` regen unless you changed `make/vpx-core.vcxitems` or related templates — for source-only edits MSBuild is incremental and fast (often <30s).
+Make the change locally. Re-run the `cmake --build` command from Step 1 — CMake/MSBuild tracks dependencies, so source-only edits relink incrementally and fast (often <30s); no `create_vs_solution.bat` regen, no `.obj` deletion ritual. Only re-`Copy-Item` the CMakeLists if you switch flavor (BGFX↔GL). Redeploy the exe + pdb (Copy-Item the same way).
 
 If the running cdb session is still attached and the binary hasn't changed yet on disk: tell Gary to close VPX (or run `preflight-kill`), then redeploy + relaunch (Step 2).
 

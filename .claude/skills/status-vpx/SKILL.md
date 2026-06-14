@@ -16,8 +16,9 @@ This skill produces a single status report. Section order:
 1. **Header** — repo name, current HEAD branch, timestamp
 2. **`## CI status`** — latest commit per canonical branch with PASS/FAIL rollup (omitted when no runs)
 3. **`## Branch stack`** — four flow rows + master local-patches side note + compact origin sync block
-4. **`## Working tree`** — `git status` as a table (omitted when clean)
-5. **`## Open PRs`** — only when there are open PRs
+4. **`▶ Suggested next step`** — cross-link to the action skills (see below)
+5. **`## Working tree`** — `git status` as a table (omitted when clean)
+6. **`## Open PRs`** — only when there are open PRs
 
 ## The Branch stack section
 
@@ -37,6 +38,21 @@ Each non-zero row carries a **parenthesized plain-English hint** explaining what
 Note on tip selection: when local `master`/`integration`/`development` is strictly behind its `origin/<br>` (fast-forward possible), the script uses `origin/<br>` as that branch's tip in the flow comparisons. This is what catches the "I just merged the PR on GitHub but haven't pulled locally" case — the flow row correctly reads 0 instead of double-counting commits already integrated upstream. The Origin sync table still uses the local ref so its push/pull guidance stays accurate. As a result, ranges shown in `[range: ...]` may name `origin/<br>` rather than the bare local branch name.
 
 After the fenced code block, a **single-line side note** for the local patches `master` carries on top of `upstream`, then a **3-column `Origin sync` table** (`Branch` | `Origin status (garybrowndev/vpinball)` | `What to do`) where the `What to do` column gives plain-English next-step guidance ("pull 2 from origin", "push 1 to origin", "nothing to do"). All emitted by the script verbatim — no Claude polish needed.
+
+## The Suggested next step (`▶`) lines
+
+status-vpx is **read-only** — it reports but never acts. To make it obvious *which*
+action skill to reach for, the script emits a `▶` line after the origin sync table that
+cross-links to the WRITE skills, based on the same counts already computed:
+
+- **Upstream ahead of master** (`upstream → master` row non-zero) → `▶ **Sync round available**` pointing at **`/sync-vpx`**, which runs the full upstream→down round (rebase master → merge integration → build → merge development) with checkpoints.
+- **Development ahead of integration** (`integration ← development` row non-zero) → `▶ **Ship flow**` suggesting a `development → integration` PR (the opposite direction — not sync-vpx).
+- **Neither** → `▶ **Up to date** ✓`.
+
+These are emitted by the script verbatim — paste them through unchanged. They're the
+hand-off from "here's where you are" (status-vpx) to "here's how to move" (sync-vpx / PR).
+If the set of action skills changes, update both this block and the `suggested next step`
+block in `scripts/status.sh` together.
 
 ### Synthesizing the 2 rich summary lines (Claude's job, every run)
 

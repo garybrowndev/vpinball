@@ -301,6 +301,26 @@ echo "|---|---|---|"
 [ $have_od = 1 ] && echo "| \`development\` | $(origin_state development) | $(origin_action development) |"
 echo ""
 
+# ---- suggested next step ----
+# Cross-link to the WRITE/action skills so it's obvious WHEN to run them.
+# This skill (status-vpx) only reports; sync-vpx does the upstream→down round,
+# and the ship flow (PR) goes the other way. Surface whichever applies.
+hint_emitted=0
+if [ $have_um = 1 ] && [ "$um_b" != "0" ]; then
+  echo "▶ **Sync round available** — upstream is **$um_b** commit(s) ahead of master. Run \`/sync-vpx\` to rebase master, merge down through integration → development, rebuild, and verify (it checkpoints before every push)."
+  echo ""
+  hint_emitted=1
+fi
+if [ $have_id = 1 ] && [ "$id_a" != "0" ]; then
+  echo "▶ **Ship flow** — development has **$id_a** commit(s) integration hasn't pulled back. Open a PR (\`development → integration\`) when ready to ship."
+  echo ""
+  hint_emitted=1
+fi
+if [ $hint_emitted = 0 ]; then
+  echo "▶ **Up to date** — nothing to sync from upstream, no WIP awaiting ship. ✓"
+  echo ""
+fi
+
 case "$cur_branch" in
   master|integration|development) ;;
   *) echo "_HEAD is on \`$cur_branch\` — off the canonical 3 branches._"; echo "" ;;

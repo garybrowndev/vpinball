@@ -1,0 +1,23 @@
+[
+  {"query": "ok upstream is like 44 commits ahead of master now, can you bring all that down through the fork — rebase master, merge into integration, then development", "should_trigger": true},
+  {"query": "let's get my vpinball fork up to date from upstream, go through the whole round", "should_trigger": true},
+  {"query": "time to sync from upstream again. pull it in, rebuild, and merge down to development", "should_trigger": true},
+  {"query": "rebase master onto upstream/master and replay the b2s patch, then push it up", "should_trigger": true},
+  {"query": "status-vpx says there's stuff to bring in on the upstream→master row, let's do that round", "should_trigger": true},
+  {"query": "merge master into integration and deal with the ball history conflicts, then build and verify on the cabinet before it goes to development", "should_trigger": true},
+  {"query": "i want to pull in the latest upstream vpinball changes into my fork end to end", "should_trigger": true},
+  {"query": "do the pull/build/merge/build round across master, integration and development", "should_trigger": true},
+  {"query": "update the fork from upstream — and make sure master's local patches survive the rebase", "should_trigger": true},
+  {"query": "bring upstream down into development please, full sync", "should_trigger": true},
+
+  {"query": "where am i on the fork right now, what's the branch state and did CI pass", "should_trigger": false},
+  {"query": "show me what's not pushed and how far behind upstream i am", "should_trigger": false},
+  {"query": "vpx crashed on the cabinet when i opened the ball history menu, can you find it", "should_trigger": false},
+  {"query": "build debug bgfx and deploy it to the cabinet so i can test the trainer", "should_trigger": false},
+  {"query": "let's do a debug cycle on black pyramid, watch the trainer state machine when i hit the flipper", "should_trigger": false},
+  {"query": "create a PR to ship my development work into integration", "should_trigger": false},
+  {"query": "what did that upstream commit about SMAA vulkan shaders actually change", "should_trigger": false},
+  {"query": "rebase my fps-latency feature branch on top of development and squash the wip commits", "should_trigger": false},
+  {"query": "commit the claude.md changes and push development", "should_trigger": false},
+  {"query": "give me a status of my repo and tell me what to do next", "should_trigger": false}
+]

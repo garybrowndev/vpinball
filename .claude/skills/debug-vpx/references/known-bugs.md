@@ -21,7 +21,7 @@ Release does NOT fire it. **The exact difference between Debug and Release.**
 
 **Verification command**:
 ```powershell
-& 'C:\...\dumpbin.exe' /headers '.build\bin\vpx\Debug_BGFX-x64\VPinballX_BGFX64.exe' | Select-String 'stack reserve|stack commit'
+& 'C:\...\dumpbin.exe' /headers 'build\Debug\VPinballX_BGFX64.exe' | Select-String 'stack reserve|stack commit'
 ```
 
 Shipped fix: commit `14237196d` on master.
