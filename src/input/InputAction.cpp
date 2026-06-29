@@ -223,6 +223,7 @@ void InputAction::OnInputChanged(ButtonMapping* mapping)
       // m_sdlArrivalUs stays 0 in that case and PerfUI shows '-'.
       m_sdlArrivalUs = mapping ? mapping->GetLastChangeArrivalUs() : 0;
       m_lastOnChangeUs = usec();
+      m_sdlNowAtChangeUs = sdl_ns_to_usec(SDL_GetTicksNS()); // DIAGNOSTIC: SDL clock sampled adjacent to usec() for cross-check
       m_onStateChange(*this, wasPressed, m_isPressed);
       if (m_isPressed && m_repeatPeriodUs >= 0)
          m_eventManager->RegisterOnUpdate(this);

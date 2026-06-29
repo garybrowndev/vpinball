@@ -13,6 +13,8 @@
 #include "imgui/imgui_internal.h"
 #include "implot/implot.h"
 
+#include <fstream> // DIAGNOSTIC: latency CSV logging
+
 
 PerfUI::PerfUI(Player *const player)
    : m_player(player)
@@ -110,11 +112,22 @@ void PerfUI::RenderFPS()
 
    {
       const ImVec2 inputTextPos = ImGui::GetCursorScreenPos();
-      bool hasFlipperLatency = false;
       const auto& leftAction = m_player->m_pininput.GetInputActions()[m_player->m_pininput.GetLeftFlipperActionId()];
       const uint64_t lastLeftFlipChange = leftAction->GetLastStateChange();
       const uint64_t lastRightFlipChange = m_player->m_pininput.GetInputActions()[m_player->m_pininput.GetRightFlipperActionId()]->GetLastStateChange();
-      if (const uint64_t now = usec(); now < lastLeftFlipChange + 1000000ULL && now > lastRightFlipChange + 1000000ULL)
+
+      // A RIGHT flipper press (any state change on the right action) clears the latched snapshot.
+      if (lastRightFlipChange != m_flipLatchSeenRightChange)
+      {
+         m_flipLatchSeenRightChange = lastRightFlipChange;
+         if (lastRightFlipChange != 0)
+            m_flipLatchActive = false;
+      }
+
+      // A new LEFT flipper PRESS captures a fresh latency snapshot once its rotation has landed in physics.
+      // Captured once per press (guarded by m_flipLatchCapturedLeftChange + IsPressed so a release edge doesn't
+      // overwrite the press value) and latched until a right-flipper press clears it.
+      if (lastLeftFlipChange > m_flipLatchCapturedLeftChange && leftAction->IsPressed())
       {
          for (const auto part : m_player->m_ptable->GetParts())
          {
@@ -122,56 +135,70 @@ void PerfUI::RenderFPS()
             {
                if (auto flipper = (Flipper *)part; lastLeftFlipChange < flipper->GetLastRotateTime())
                {
-                  const double prevAcqToAction = 1e-3 * (static_cast<double>(flipper->GetLastRotateTime() - lastLeftFlipChange) + m_player->m_pininput.m_leftFlipperLastChangePollDelay);
-                  const double acqToAction = 1e-3 * static_cast<double>(flipper->GetLastRotateTime() - lastLeftFlipChange);
-                  ImGui::Text("Flipper latency: %3.1f - %3.1fms", acqToAction, prevAcqToAction);
+                  m_flipLatchPrevAcqToAction = 1e-3 * (static_cast<double>(flipper->GetLastRotateTime() - lastLeftFlipChange) + m_player->m_pininput.m_leftFlipperLastChangePollDelay);
+                  m_flipLatchAcqToAction = 1e-3 * static_cast<double>(flipper->GetLastRotateTime() - lastLeftFlipChange);
 
-                  // Components line: per-press breakdown including the SDL queue piece and the GPU piece that the
-                  // existing line above doesn't show. Act->Phys here equals acqToAction by construction — visible
-                  // equality is the cross-check that the new instrumentation is wired correctly.
+                  // Components breakdown: the SDL queue piece and GPU piece the Flipper-latency line doesn't show.
+                  // Act->Phys equals acqToAction by construction — visible equality is the wiring cross-check.
                   const uint64_t sdlArrivalUs = leftAction->GetSdlArrival();
-                  const bool hasSdl = (sdlArrivalUs != 0 && sdlArrivalUs <= lastLeftFlipChange);
-                  const double sdlToActMs = hasSdl ? 1e-3 * static_cast<double>(lastLeftFlipChange - sdlArrivalUs) : 0.0;
+                  m_flipLatchHasSdl = (sdlArrivalUs != 0 && sdlArrivalUs <= lastLeftFlipChange);
+                  m_flipLatchSdlToActMs = m_flipLatchHasSdl ? 1e-3 * static_cast<double>(lastLeftFlipChange - sdlArrivalUs) : 0.0;
 #ifdef ENABLE_BGFX
                   const uint64_t gpuRawUs = m_player->m_renderer->m_renderDevice->m_lastGPUFrameLength;
-                  const char* gpuLabel = "GPU";
 #else
                   const uint64_t gpuRawUs = m_player->m_renderProfiler->GetPrev(FrameProfiler::PROFILE_RENDER_FLIP);
-                  const char* gpuLabel = "~GPU";
 #endif
-                  const double gpuMs = 1e-3 * static_cast<double>(gpuRawUs);
-                  const double totalMs = sdlToActMs + acqToAction + gpuMs;
-                  const ImVec2 componentsTextPos = ImGui::GetCursorScreenPos();
-                  if (hasSdl)
-                     ImGui::Text("Components: SDL->Act %3.1f  Act->Phys %3.1f  %s %3.1f  Total %3.1f ms", sdlToActMs, acqToAction, gpuLabel, gpuMs, totalMs);
-                  else
-                     ImGui::Text("Components: SDL->Act  -    Act->Phys %3.1f  %s %3.1f  Total  -   ms", acqToAction, gpuLabel, gpuMs);
-                  if (ImGui::IsMouseHoveringRect(componentsTextPos, ImGui::GetCursorScreenPos() + ImVec2(0, ImGui::GetTextLineHeight())))
-                     ImGui::SetTooltip(
-                        "SDL->Act: time from SDL event arrival to VPX action dispatch (input-pipeline queueing)\n"
-                        "Act->Phys: action dispatch to physics flipper rotate (matches the first number above)\n"
-                        "%s: last completed GPU frame length%s\n"
-                        "Total: sum of the three. Does NOT include USB poll staleness or display present + pixel response.",
-                        gpuLabel,
-#ifdef ENABLE_BGFX
-                        " (BGFX gpuTimeBegin/End)"
-#else
-                        " (PROFILE_RENDER_FLIP — CPU-side wait, approximation)"
-#endif
-                     );
+                  m_flipLatchGpuMs = 1e-3 * static_cast<double>(gpuRawUs);
+                  m_flipLatchTotalMs = m_flipLatchSdlToActMs + m_flipLatchAcqToAction + m_flipLatchGpuMs;
+                  m_flipLatchCapturedLeftChange = lastLeftFlipChange; // mark this press captured (refresh on next press)
+                  m_flipLatchActive = true;
 
-                  hasFlipperLatency = true;
+                  // DIAGNOSTIC: one CSV row per press to validate SDL->Act / the clock conversion.
+                  LogLatencyDiag(sdlArrivalUs, lastLeftFlipChange, leftAction->GetSdlNowAtChange(), flipper->GetLastRotateTime(),
+                     m_flipLatchGpuMs, 1e-3 * static_cast<double>(m_player->m_renderProfiler->GetPrev(FrameProfiler::PROFILE_FRAME)), m_flipLatchHasSdl);
                   break;
                }
             }
          }
       }
-      if (!hasFlipperLatency)
-         ImGui::Text("Input Latency: %4.1fms (%4.1fms max)", 1e-3 * m_player->m_logicProfiler.GetSlidingInputLag(false), 1e-3 * m_player->m_logicProfiler.GetSlidingInputLag(true));
+
+      // Always show the rolling Input Latency average (kept visible whether or not a flipper snapshot is latched).
+      ImGui::Text("Input Latency: %4.1fms (%4.1fms max)", 1e-3 * m_player->m_logicProfiler.GetSlidingInputLag(false), 1e-3 * m_player->m_logicProfiler.GetSlidingInputLag(true));
       ImGui::SameLine();
       if (ImGui::IsMouseHoveringRect(inputTextPos, ImGui::GetCursorScreenPos() + ImVec2(0, ImGui::GetTextLineHeight())))
          ImGui::SetTooltip("'Input Latency' is an evaluation of the average finger to physics latency inside VPX\nIt does not include the polling & processing delay of the input hardware.");
       ImGui::NewLine();
+
+      // Below it, when latched, the per-press LEFT-flipper breakdown (LEFT captures/refreshes, RIGHT clears).
+      if (m_flipLatchActive)
+      {
+#ifdef ENABLE_BGFX
+         const char* gpuLabel = "GPU";
+#else
+         const char* gpuLabel = "~GPU";
+#endif
+         ImGui::Text("Flipper latency: %3.1f - %3.1fms", m_flipLatchAcqToAction, m_flipLatchPrevAcqToAction);
+         const ImVec2 componentsTextPos = ImGui::GetCursorScreenPos();
+         if (m_flipLatchHasSdl)
+            ImGui::Text("Components: SDL->Act %3.1f  Act->Phys %3.1f  %s %3.1f  Total %3.1f ms", m_flipLatchSdlToActMs, m_flipLatchAcqToAction, gpuLabel, m_flipLatchGpuMs, m_flipLatchTotalMs);
+         else
+            ImGui::Text("Components: SDL->Act  -    Act->Phys %3.1f  %s %3.1f  Total  -   ms", m_flipLatchAcqToAction, gpuLabel, m_flipLatchGpuMs);
+         if (ImGui::IsMouseHoveringRect(componentsTextPos, ImGui::GetCursorScreenPos() + ImVec2(0, ImGui::GetTextLineHeight())))
+            ImGui::SetTooltip(
+               "All values in milliseconds.\n"
+               "SDL->Act: time from SDL event arrival to VPX action dispatch (input-pipeline queueing)\n"
+               "Act->Phys: action dispatch to physics flipper rotate (matches the first number above)\n"
+               "%s: last completed GPU frame length%s\n"
+               "Total: sum of the three. Does NOT include USB poll staleness or display present + pixel response.\n"
+               "Latched on LEFT flipper press; press RIGHT flipper to clear.",
+               gpuLabel,
+#ifdef ENABLE_BGFX
+               " (BGFX gpuTimeBegin/End)"
+#else
+               " (PROFILE_RENDER_FLIP — CPU-side wait, approximation)"
+#endif
+            );
+      }
    }
 
    ImGui::EndChild();
@@ -179,6 +206,44 @@ void PerfUI::RenderFPS()
       ImGui::PopStyleVar();
 
    ImGui::End();
+}
+
+void PerfUI::LogLatencyDiag(uint64_t sdlArrivalUs, uint64_t dispatchUs, uint64_t sdlNowUs, uint64_t rotateUs, double gpuMs, double frameMs, bool hasSdl)
+{
+   // Resolve <exe-dir>/perfui_latency.csv once. On the cabinet that is C:\visual pinball\ (== Z:\visual pinball\ from dev).
+   static string s_csvPath;
+   static bool s_resolved = false;
+   if (!s_resolved)
+   {
+      char exePath[MAX_PATH] = {};
+      GetModuleFileNameA(nullptr, exePath, MAX_PATH);
+      const string p(exePath);
+      const size_t slash = p.find_last_of("\\/");
+      s_csvPath = (slash == string::npos ? string() : p.substr(0, slash + 1)) + "perfui_latency.csv";
+      s_resolved = true;
+   }
+
+   // Truncate (and write header) on the first row of the session, then append.
+   static bool s_headerWritten = false;
+   static uint64_t s_idx = 0;
+   std::ofstream f(s_csvPath, s_headerWritten ? std::ios::app : std::ios::trunc);
+   if (!f)
+      return;
+   if (!s_headerWritten)
+   {
+      f << "idx,A_sdlArrival_us,B_dispatch_us,C_sdlNow_us,rotate_us,skew_BminusC_us,sdlElapsed_CminusA_us,SDLtoAct_ms,ActToPhys_ms,GPU_ms,frame_ms,hasSdl\n";
+      s_headerWritten = true;
+   }
+
+   // skew_BminusC: clock-soundness (usec() vs SDL clock at the same instant — should be ~0 if both QPC-backed).
+   // sdlElapsed_CminusA: arrival->pump delay measured purely in the SDL clock (if ~= SDLtoAct, the conversion is sound;
+   //                     if it is large, SDL preserved an earlier hardware-arrival timestamp -> the latency is real).
+   const int64_t skew = static_cast<int64_t>(dispatchUs) - static_cast<int64_t>(sdlNowUs);
+   const int64_t sdlElapsed = static_cast<int64_t>(sdlNowUs) - static_cast<int64_t>(sdlArrivalUs);
+   const double sdlToActMs = 1e-3 * static_cast<double>(static_cast<int64_t>(dispatchUs) - static_cast<int64_t>(sdlArrivalUs));
+   const double actToPhysMs = 1e-3 * static_cast<double>(static_cast<int64_t>(rotateUs) - static_cast<int64_t>(dispatchUs));
+   f << s_idx++ << ',' << sdlArrivalUs << ',' << dispatchUs << ',' << sdlNowUs << ',' << rotateUs << ',' << skew << ',' << sdlElapsed << ',' << sdlToActMs << ',' << actToPhysMs << ','
+     << gpuMs << ',' << frameMs << ',' << (hasSdl ? 1 : 0) << '\n';
 }
 
 void PerfUI::RenderStats() const
