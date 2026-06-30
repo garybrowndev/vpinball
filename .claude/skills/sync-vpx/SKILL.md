@@ -245,11 +245,27 @@ gh run watch $run.databaseId --repo garybrowndev/vpinball --exit-status
 $ciOk = ($LASTEXITCODE -eq 0)
 ```
 
-A full fork build runs on the order of tens of minutes. While watching, report progress
-to Gary in his preferred form — **wall-clock time, elapsed since the wait started, and an
-approximate ETA** — rather than going silent. Don't spin a tight sleep loop or fire a
-short-interval poll just to "check in"; `gh run watch` already blocks until completion and
-notifies you.
+A full fork build runs on the order of tens of minutes — **never wait on it silently.**
+While the watch blocks, post an **interim CI status report every ~5 minutes** until the run
+concludes, each one carrying: **wall-clock time, elapsed since the wait started, an
+approximate ETA, and a per-job rollup** (which jobs are done vs in-progress — especially the
+`Build VPinballX-windows-x64-Release` job, since its artifacts are the Phase 3 deps). Gary
+asked for this explicitly: a big build going dark for 30 minutes is worse than a few
+heartbeat lines.
+
+Implement the cadence with a **self-scheduled ~270–300s poll** running *alongside* the
+blocking `gh run watch`, not instead of it — the watch gives the definitive
+completion/exit-status signal, the periodic poll gives Gary the heartbeat:
+
+```powershell
+gh run view <run-id> --repo garybrowndev/vpinball --json status,conclusion,createdAt,jobs
+```
+
+Use `ScheduleWakeup` (≈270s — just under the 5-min cache window so the wake-up reads warm
+context) to re-enter and emit the next status line, then reschedule while
+`status == in_progress`; stop once `conclusion` is populated (the watch will also have
+fired). Don't go tighter than ~5 minutes — sub-minute polling is noise and churns the
+prompt cache for no benefit; ~5 minutes is the sweet spot for a build this long.
 
 **Step 3 — branch on the result:**
 
