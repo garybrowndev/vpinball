@@ -126,6 +126,18 @@ public:
 };
 #define BHLOG(fmt, ...) ((void)0)
 #endif
+// ballhistory.h is pulled in very early (player.h includes it near the top of its include block), so the heavy
+// physics/parts headers below get parsed before main.h's normal ordered chain has supplied their prerequisites.
+// Upstream's "import cleanup" moved those prerequisites to point-of-use, so we must include them explicitly here:
+//   math/vector.h  -> Vertex2D/Vertex3Ds (used by math/bbox.h)
+//   math/bbox.h    -> FRect3D        (used by physics/collide.h via HitBall.h)
+//   core/Scriptable.h -> IScriptable (base of pintable.h / Collection.h, pulled in by parts/ball.h)
+//   utils/wintimer.h -> g_frameProfiler (referenced by utils/eventproxy.h)
+// Without these, defining __BALLHISTORY_WIN32__ breaks the precompiled-header build with a type cascade.
+#include "math/vector.h"
+#include "math/bbox.h"
+#include "core/Scriptable.h"
+#include "utils/wintimer.h"
 #include "renderer/typedefs3D.h"
 #include "imgui/imgui.h"
 #include "physics/HitBall.h"

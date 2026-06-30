@@ -272,6 +272,12 @@ if(PLATFORM STREQUAL "windows")
       )
    endif()
 
+   # Ball History (fork feature) is Windows-only and gated by __BALLHISTORY_WIN32__ (see src/core/ballhistory.h).
+   # The old make/vpx-core.vcxitems defined this for every Windows renderer config; upstream's build restructure
+   # replaced that file and dropped the define, which silently compiled Ball History out to a no-op stub.
+   # Re-add it here so all Windows renderer variants (BGFX/GL/DX9) get the real implementation.
+   target_compile_definitions(vpinball PRIVATE __BALLHISTORY_WIN32__)
+
    set(OPT_COMMON
       /Ob2
       /O2

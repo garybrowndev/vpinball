@@ -20,6 +20,7 @@ bool BallHistory::DrawMenu = false;
 #include "parts/light.h"
 #include "parts/rubber.h"
 #include "parts/Material.h"
+#include "renderer/Renderer.h" // full Renderer def (player.h only forward-declares it); needed for m_renderDevice / m_trailForBalls access
 #include "renderer/Shader.h"
 #include "meshes/ballMesh.h"
 #include "fonts/DroidSans.h"
@@ -2327,7 +2328,7 @@ void BallHistory::DrawFakeBall(Player& player, const std::string& name, const Ve
       drawnBall->Init(0.0f, 0.0f, false, true);
       drawnBall->m_wzName = std::wstring(name.begin(), name.end());
       player.m_ptable->AddPart(drawnBall);
-      drawnBall->RenderSetup(player.m_renderer->m_renderDevice);
+      drawnBall->RenderSetup(player.m_renderer.get());
       m_DrawnBalls[name] = drawnBall;
    }
    else
@@ -2474,7 +2475,7 @@ void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex
       pLine->m_wzName = std::wstring(name.begin(), name.end());
       player.m_ptable->AddPart(pLine);
       // First-time GPU setup
-      pLine->RenderSetup(player.m_renderer->m_renderDevice);
+      pLine->RenderSetup(player.m_renderer.get());
    }
    else
    {
@@ -2488,7 +2489,7 @@ void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex
          if (it == m_DrawnLines.end() || it->second != pLine)
             return;
          pLine->RenderRelease();
-         pLine->RenderSetup(g_pplayer->m_renderer->m_renderDevice);
+         pLine->RenderSetup(g_pplayer->m_renderer.get());
       });
    }
 
@@ -2549,7 +2550,7 @@ void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name
       pIntersectionCircle->m_wzName = std::wstring(name.begin(), name.end());
       g_pplayer->m_ptable->AddPart(pIntersectionCircle);
       // First-time GPU setup
-      pIntersectionCircle->RenderSetup(g_pplayer->m_renderer->m_renderDevice);
+      pIntersectionCircle->RenderSetup(g_pplayer->m_renderer.get());
    }
    else
    {
@@ -2560,7 +2561,7 @@ void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name
          if (it == m_DrawnIntersectionCircles.end() || it->second != pIntersectionCircle)
             return;
          pIntersectionCircle->RenderRelease();
-         pIntersectionCircle->RenderSetup(g_pplayer->m_renderer->m_renderDevice);
+         pIntersectionCircle->RenderSetup(g_pplayer->m_renderer.get());
       });
    }
 
