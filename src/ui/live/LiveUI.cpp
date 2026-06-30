@@ -397,19 +397,29 @@ void LiveUI::RenderUI()
    {
       uint32_t tick = msec();
 
-      // Dispatch flipper/plunger keys to Ball History for menu navigation
-      // (C and R keys are handled via InputManager actions registered in InputManager.cpp)
-      struct { ImGuiKey key; EnumAssignKeys action; } bhNavKeys[] = {
-         { ImGuiKey_LeftShift, eLeftFlipperKey },
-         { ImGuiKey_RightShift, eRightFlipperKey },
-         { ImGuiKey_Enter, ePlungerKey },
+      // Dispatch flipper/plunger input to Ball History for menu navigation.
+      // (V menu / R recall are handled via InputManager actions registered in InputManager.cpp.)
+      // Read the real flipper/plunger InputActions via IsPressed() rather than hardcoded ImGui
+      // keyboard scancodes: those actions honor the user's mapping (keyboard OR joystick), so the menu
+      // navigates with whatever the flippers are bound to. Hardcoding LeftShift/RightShift only worked
+      // because those are the default flipper keys — it left the menu unnavigable on joystick-mapped cabinets.
+      const struct { unsigned int actionId; EnumAssignKeys action; } bhNavActions[] = {
+         { g_pplayer->m_pininput.GetLeftFlipperActionId(),  eLeftFlipperKey },
+         { g_pplayer->m_pininput.GetRightFlipperActionId(), eRightFlipperKey },
+         { g_pplayer->m_pininput.GetLaunchBallActionId(),   ePlungerKey },
       };
-      for (auto& bk : bhNavKeys)
+      // Edge-detect press/release so a held flipper fires its MenuAction once (hold-to-scroll is handled
+      // separately inside ProcessKeys via the skip-key timestamps). App-lifetime static prev-state matches
+      // the ImGui key-state this replaces and self-corrects on the next transition.
+      static bool bhNavPrev[3] = { false, false, false };
+      for (int i = 0; i < 3; ++i)
       {
-         if (ImGui::IsKeyPressed(bk.key, false))
-            g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, bk.action, true, tick, true);
-         else if (ImGui::IsKeyReleased(bk.key))
-            g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, bk.action, false, tick, true);
+         const bool pressed = g_pplayer->m_pininput.IsPressed(bhNavActions[i].actionId);
+         if (pressed && !bhNavPrev[i])
+            g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, bhNavActions[i].action, true, tick, true);
+         else if (!pressed && bhNavPrev[i])
+            g_pplayer->m_BallHistory.ProcessKeys(*g_pplayer, bhNavActions[i].action, false, tick, true);
+         bhNavPrev[i] = pressed;
       }
 
       g_pplayer->m_BallHistory.DrawMenu = true;

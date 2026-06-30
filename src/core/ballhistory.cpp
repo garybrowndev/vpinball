@@ -1066,12 +1066,15 @@ bool BallHistory::ProcessKeys(Player& player, EnumAssignKeys action, bool isPres
       BHLOG("action=%d isPressed=%d timeMs=%d process=%d", action, isPressed, currentTimeMs, process);
    }
 
-   if (!ImGui::IsKeyDown(ImGuiKey_LeftShift))
+   // Clear the hold-to-scroll flag when the flipper is physically released. Read the real flipper
+   // InputAction (keyboard OR joystick) rather than hardcoded LeftShift/RightShift: on a joystick-mapped
+   // cabinet the Shift keys are never down, which used to clear these flags every frame and break hold-to-scroll.
+   if (!player.m_pininput.IsPressed(player.m_pininput.GetLeftFlipperActionId()))
    {
       m_MenuOptions.m_SkipKeyLeftPressed = false;
    }
 
-   if (!ImGui::IsKeyDown(ImGuiKey_RightShift))
+   if (!player.m_pininput.IsPressed(player.m_pininput.GetRightFlipperActionId()))
    {
       m_MenuOptions.m_SkipKeyRightPressed = false;
    }
