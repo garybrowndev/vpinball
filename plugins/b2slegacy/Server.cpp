@@ -42,17 +42,6 @@ Server::Server(MsgPluginAPI* msgApi, uint32_t endpointId, VPXPluginAPI* vpxApi, 
    m_singleton = this;
    m_pB2SSettings = new B2SSettings(m_msgApi, endpointId);
    m_pB2SData = new B2SData(this, m_pB2SSettings, m_vpxApi);
-   m_pFormBackglass = nullptr;
-   m_isVisibleStateSet = false;
-   m_lastTopVisible = false;
-   m_lastSecondVisible = false;
-   m_lampThreshold = 0;
-   m_giStringThreshold = 4;
-   m_changedLampsCalled = false;
-   m_changedSolenoidsCalled = false;
-   m_changedGIStringsCalled = false;
-   m_changedMechsCalled = false;
-   m_changedLEDsCalled = false;
    m_pCollectLampsData = new B2SCollectData(m_pB2SSettings->GetLampsSkipFrames());
    m_pCollectSolenoidsData = new B2SCollectData(m_pB2SSettings->GetSolenoidsSkipFrames());
    m_pCollectGIStringsData = new B2SCollectData(m_pB2SSettings->GetGIStringsSkipFrames());
@@ -60,9 +49,6 @@ Server::Server(MsgPluginAPI* msgApi, uint32_t endpointId, VPXPluginAPI* vpxApi, 
    m_pTimer = new Timer();
    m_pTimer->SetInterval(37);
    m_pTimer->SetElapsedListener(std::bind(&Server::TimerElapsed, this, std::placeholders::_1));
-   m_szPath = "./";
-
-   memset(&m_deviceStateSrc, 0, sizeof(m_deviceStateSrc));
 
    m_devSrc.id.endpointId = m_endpointId;
    m_devSrc.GetByteState = GetByteState;
@@ -113,6 +99,8 @@ int Server::OnRender(VPXRenderContext2D* const renderCtx, void* context)
 {
    if (!m_pFormBackglass)
       return 0;
+
+   Timer::ServicePendingTimers();
 
    if (!m_ready) {
       if (!m_pFormBackglass->IsValid())
@@ -175,7 +163,7 @@ void Server::OnDevSrcChanged(const unsigned int msgId, void* userData, void* msg
    if (m_deviceStateSrc.deviceDefs == nullptr)
       return;
 
-   LOGI(std::format("B2SLegacy: Device state updated - {} devices", m_deviceStateSrc.nDevices));
+   LOGI(std::format("Device state updated - {} devices", m_deviceStateSrc.nDevices));
 }
 
 void Server::OnGetDevSrc(const unsigned int, void* userData, void* msgData)
@@ -242,7 +230,7 @@ void MSGPIAPI Server::RegisterStateChangeCallback(unsigned int deviceIndex, int 
    if (auto mapIt = m_singleton->m_stateChgCallbacks.find(b2sId); mapIt == m_singleton->m_stateChgCallbacks.end())
       m_singleton->m_stateChgCallbacks[b2sId] = vector<ChgCallback>();
    auto& callbacks = m_singleton->m_stateChgCallbacks[b2sId];
-   auto it = std::ranges::find_if(callbacks, [&cb](const ChgCallback& a) { return a.m_callback == cb; });
+   auto it = std::ranges::find_if(callbacks, [&cb, ctx](const ChgCallback& a) { return a.m_callback == cb && a.m_context == ctx; });
    if (isRegister)
    {
       if (it == callbacks.end())
@@ -587,32 +575,32 @@ void Server::B2SSetScorePlayer(int playerno, int score)
 
 void Server::B2SSetScorePlayer1(int score)
 {
-   MyB2SSetScore(1, score, false);
+   MyB2SSetScorePlayer(1, score);
 }
 
 void Server::B2SSetScorePlayer2(int score)
 {
-   MyB2SSetScore(2, score, false);
+   MyB2SSetScorePlayer(2, score);
 }
 
 void Server::B2SSetScorePlayer3(int score)
 {
-   MyB2SSetScore(3, score, false);
+   MyB2SSetScorePlayer(3, score);
 }
 
 void Server::B2SSetScorePlayer4(int score)
 {
-   MyB2SSetScore(4, score, false);
+   MyB2SSetScorePlayer(4, score);
 }
 
 void Server::B2SSetScorePlayer5(int score)
 {
-   MyB2SSetScore(5, score, false);
+   MyB2SSetScorePlayer(5, score);
 }
 
 void Server::B2SSetScorePlayer6(int score)
 {
-   MyB2SSetScore(6, score, false);
+   MyB2SSetScorePlayer(6, score);
 }
 
 void Server::B2SSetScoreDigit(int digit, int value)
@@ -1749,6 +1737,10 @@ void Server::HideBackglassForm()
 
 void Server::KillBackglassForm()
 {
+   // Clear the running flag before destroying the form, like the B2S server does. The data
+   // setters gate on IsBackglassRunning(), so a script that keeps pushing B2S data after the
+   // backglass is killed then stops touching the freed form instead of dereferencing it.
+   m_pB2SData->SetBackglassVisible(false);
    if (m_pFormBackglass) {
       delete m_pFormBackglass;
       m_pFormBackglass = nullptr;

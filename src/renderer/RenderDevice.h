@@ -85,6 +85,11 @@ public:
          LINESTRIP
       };
 
+      // Names of the graphics backends selectable on this platform: reported as supported by bgfx and not
+      // filtered out (excludes Noop, WebGPU, and Direct3D12 in release). Single source of truth shared by
+      // the graphics settings UI and the GfxBackend validation/log so they cannot drift.
+      static std::vector<std::string> GetSelectableBackendNames();
+
    #elif defined(ENABLE_OPENGL)
       enum PrimitiveTypes
       {
@@ -119,7 +124,6 @@ public:
                          const int x1 = -1, const int y1 = -1, const int w1 = -1, const int h1 = -1,
                          const int x2 = -1, const int y2 = -1, const int w2 = -1, const int h2 = -1,
                          const int srcLayer = -1, const int dstLayer = -1);
-   void SubmitVR(RenderTarget* source);
    void DrawMesh(Shader* shader, const bool isTranparentPass, const Vertex3Ds& center, const float depthBias, std::shared_ptr<MeshBuffer> mb, const PrimitiveTypes type, const uint32_t startIndex, const uint32_t indexCount);
    void DrawTexturedQuad(Shader* shader, const Vertex3D_TexelOnly* vertices, const bool isTransparent = false, const float depth = 0.f);
    void DrawTexturedQuad(Shader* shader, const Vertex3D_NoTex2* vertices, const bool isTransparent = false, const float depth = 0.f);
@@ -250,6 +254,7 @@ private:
    std::shared_ptr<Sampler> m_SMAAsearchTexture = nullptr;
    std::shared_ptr<Sampler> m_SMAAareaTexture = nullptr;
 
+   std::mutex m_screenshotMutex; // Guards the screenshot state below, shared between the logic thread (CaptureScreenshot) and the render thread (request loop & BGFX screenShot callback)
    int m_screenshotFrameDelay = 0;
    bool m_screenshotSuccess = true;
    vector<VPX::Window*> m_screenshotWindow;
@@ -271,6 +276,7 @@ public:
 
    bool m_frameNoPresent = false; // Flag set when the next frame should be submitted without VBlank sync disabled
    std::binary_semaphore m_rendererInitialized { 0 }; // Semaphore to signal when the renderer is initialized
+   std::binary_semaphore m_renderThreadStopped { 0 }; // Semaphore signaled by the render thread when it has left its render loop, so the destructor can free render resources without racing in-flight rendering
    std::binary_semaphore m_frameReadySem { 0 }; // Semaphore to signal when a frame is ready to be submitted
    std::mutex m_frameMutex; // Mutex to lock acces to retained render frame between logic thread and render thread
 

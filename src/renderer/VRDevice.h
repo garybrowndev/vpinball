@@ -2,11 +2,7 @@
 
 #pragma once
 
-#ifdef ENABLE_VR
-   #include <openvr.h>
-   class Sampler;
-
-#elif defined(ENABLE_XR)
+#if defined(ENABLE_XR)
    #include "bx/platform.h"
 
    #if defined(__ANDROID__) && BX_PLATFORM_WINDOWS
@@ -148,6 +144,8 @@ public:
    void SetLockbarWidth(float width) { m_lockbarWidth = width; m_worldDirty = true; }
    float GetLockbarHeight() const { return m_lockbarHeight; }
    void SetLockbarHeight(float height) { m_lockbarHeight = height; m_worldDirty = true; }
+   bool IsLockFeetToGround() const { return m_lockFeetToGround; }
+   void SetLockFeetToGround(bool lock) { m_lockFeetToGround = lock; m_worldDirty = true; }
 
    void OffsetTable(float dx, float dy, float dz);
    void RecenterTable();
@@ -168,6 +166,7 @@ private:
    float m_scale = 1.0f;
    float m_lockbarWidth = 57.0f; // Real world width of the lockbar in cm
    float m_lockbarHeight = 85.0f; // Real world height (from ground) of the lockbar in cm
+   bool m_lockFeetToGround = true;
    float m_orientation = 0.0f;
    Vertex3Ds m_tablePos;
    float m_slope = 0.0f;
@@ -186,19 +185,6 @@ private:
    Viewpoint m_roomWorld;
    Matrix3D m_roomProj[2];
    Matrix3D m_sceneProj[2];
-
-#ifdef ENABLE_VR
-public:
-   static bool IsVRinstalled();
-   static bool IsVRturnedOn();
-   bool IsVRReady() const;
-   void SubmitFrame(const std::shared_ptr<Sampler>& leftEye, const std::shared_ptr<Sampler>& rightEye);
-
-private:
-   static vr::IVRSystem* m_pHMD;
-   vr::TrackedDevicePose_t m_hmdPosition;
-   vr::TrackedDevicePose_t* m_rTrackedDevicePose = nullptr;
-#endif
 
 #ifdef ENABLE_XR
 public:

@@ -99,6 +99,23 @@ Player::Player(PinTable *const table, const PlayMode playMode)
    g_pplayer = this;
    m_ptable->AddRef();
 
+   // Initialize the SDL video subsystem before anything that needs a display. This is done here
+   // (rather than at application startup) so headless commands, which never create a Player, run
+   // without a working video driver. It must happen before the Win32 SDL_RegisterApp / window
+   // creation below, hence at the very start of the Player. Released in the destructor.
+   SDL_SetHint(SDL_HINT_WINDOW_ALLOW_TOPMOST, "0");
+   if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+   {
+      PLOGE << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+      exit(1);
+   }
+   if (const char* const drv = SDL_GetCurrentVideoDriver()) {
+      PLOGI << "SDL video driver: " << drv;
+   }
+
+   if ((m_playMode == PlayMode::Play) || (m_playMode == PlayMode::CaptureAttract))
+      SDL_HideCursor();
+
    // Load player plugins
 
    PLOGI << "Loading player plugins"; // For profiling
@@ -227,38 +244,31 @@ Player::Player(PinTable *const table, const PlayMode playMode)
 #endif
 
    bool useVR = false;
-   #if defined(ENABLE_VR) || defined(ENABLE_XR)
+   #if defined(ENABLE_XR)
       const int vrDetectionMode = m_ptable->m_settings.GetPlayerVR_AskToTurnOn();
-      #if defined(ENABLE_XR)
-         if (vrDetectionMode != 2) // 2 is VR off (0 is VR on, 1 is autodetect)
+      if (vrDetectionMode != 2) // 2 is VR off (0 is VR on, 1 is autodetect)
+      {
+         m_vrDevice = new VRDevice(m_ptable->m_settings);
+         if (m_vrDevice->IsOpenXRReady())
          {
-            m_vrDevice = new VRDevice(m_ptable->m_settings);
-            if (m_vrDevice->IsOpenXRReady())
+            m_vrDevice->SetupHMD();
+            if (m_vrDevice->IsOpenXRHMDReady())
+               useVR = true;
+            else if (vrDetectionMode == 0) // 0 is VR on
             {
-               m_vrDevice->SetupHMD();
-               if (m_vrDevice->IsOpenXRHMDReady())
-                  useVR = true;
-               else if (vrDetectionMode == 0) // 0 is VR on
-               {
-                  while (!m_vrDevice->IsOpenXRHMDReady() && (MessageBox(nullptr, "Retry connection ?", "Connection to VR headset failed", MB_YESNO) == IDYES))
-                     m_vrDevice->SetupHMD();
-                  useVR = m_vrDevice->IsOpenXRHMDReady();
-               }
-            }
-            else if (vrDetectionMode == 0) // 0 is VR on, tell the user that the choice will not be fullfilled
-               ShowError("VR mode activated but OpenXR initialization failed.");
-            if (!useVR)
-            {
-               delete m_vrDevice;
-               m_vrDevice = nullptr;
+               while (!m_vrDevice->IsOpenXRHMDReady() && (MessageBox(nullptr, "Retry connection ?", "Connection to VR headset failed", MB_YESNO) == IDYES))
+                  m_vrDevice->SetupHMD();
+               useVR = m_vrDevice->IsOpenXRHMDReady();
             }
          }
-      #elif defined(ENABLE_VR)
-         useVR = vrDetectionMode == 2 /* VR Disabled */  ? false : VRDevice::IsVRinstalled();
-         if (useVR && (vrDetectionMode == 1 /* VR Autodetect => ask to turn on and adapt accordingly */) && !VRDevice::IsVRturnedOn())
-            useVR = MessageBox(nullptr, "VR headset detected but SteamVR is not running.\n\nTurn VR on?", "VR Headset Detected", MB_YESNO) == IDYES;
-         m_vrDevice = useVR ? new VRDevice(m_ptable->m_settings) : nullptr;
-      #endif
+         else if (vrDetectionMode == 0) // 0 is VR on, tell the user that the choice will not be fullfilled
+            ShowError("VR mode activated but OpenXR initialization failed.");
+         if (!useVR)
+         {
+            delete m_vrDevice;
+            m_vrDevice = nullptr;
+         }
+      }
    #endif
 
    #ifdef ENABLE_DX9
@@ -293,7 +303,7 @@ Player::Player(PinTable *const table, const PlayMode playMode)
       {
          m_playfieldWnd = new VPX::Window(m_vrDevice->GetEyeWidth(), m_vrDevice->GetEyeHeight());
 
-         // Disable VSync for VR (sync is performed by the OpenVR runtime)
+         // Disable VSync for VR (sync is performed by the VR runtime)
          m_videoSyncMode = VideoSyncMode::VSM_NONE;
          m_maxFramerate = 10000.f;
       }
@@ -357,7 +367,7 @@ Player::Player(PinTable *const table, const PlayMode playMode)
 
    try
    {
-      m_renderer = new Renderer(m_ptable, m_playfieldWnd, m_videoSyncMode, stereo3D);
+      m_renderer = std::make_unique<Renderer>(m_ptable, m_playfieldWnd, m_videoSyncMode, stereo3D);
    }
    catch (HRESULT hr)
    {
@@ -494,7 +504,7 @@ Player::Player(PinTable *const table, const PlayMode playMode)
    m_liveUI->m_ballControl.LoadSettings(m_ptable->m_settings);
    m_BallHistory.Init(*this, 0, true);
 
-   m_ptable->m_tblMirrorEnabled = m_ptable->m_settings.GetPlayer_Mirror();
+   m_tblMirrorEnabled = m_ptable->m_settings.GetPlayer_Mirror();
    #ifndef __STANDALONE__
    {
       const int vkLeftFlip = m_pininput.GetWindowVirtualKeyForAction(m_pininput.GetLeftFlipperActionId());
@@ -506,11 +516,11 @@ Player::Player(PinTable *const table, const PlayMode playMode)
       if (leftFlipPressed && rightFlipPressed)
       {
          PLOGI << "Both flipper buttons detected as pressed during load, enabling table mirroring";
-         m_ptable->m_tblMirrorEnabled = true;
+         m_tblMirrorEnabled = true;
       }
 
       // if left flipper is hold during load, then swap DT/FS view (for quick testing)
-      if (m_ptable->GetViewMode() != BG_FSS && !m_ptable->m_tblMirrorEnabled && leftFlipPressed)
+      if (m_ptable->GetViewMode() != BG_FSS && !m_tblMirrorEnabled && leftFlipPressed)
       {
          PLOGI << "Left flipper button detected as pressed during load, swapping playfield/backglass view";
          switch (m_ptable->GetViewMode())
@@ -523,11 +533,11 @@ Player::Player(PinTable *const table, const PlayMode playMode)
    }
    #endif
 
-   if (m_ptable->m_tblMirrorEnabled)
+   if (m_tblMirrorEnabled)
    {
       m_audioPlayer->SetMirrored(true);
       int rotation = (int)(m_ptable->GetViewSetup().GetRotation(m_renderer->m_stereo3D, m_playfieldWnd->GetWidth(), m_playfieldWnd->GetHeight())) / 90;
-      m_renderer->GetMVP().SetFlip(rotation == 0 || rotation == 2 ? ModelViewProj::FLIPX : ModelViewProj::FLIPY);
+      m_renderer->SetFlip(rotation == 0 || rotation == 2 ? ModelViewProj::FLIPX : ModelViewProj::FLIPY);
    }
 
    m_progressDialog.SetProgress("Loading Textures..."s, 50);
@@ -678,13 +688,13 @@ Player::Player(PinTable *const table, const PlayMode playMode)
 
    // Setup rendering and timers
    RenderState state;
-   state.SetRenderState(RenderState::CULLMODE, m_ptable->m_tblMirrorEnabled ? RenderState::CULL_CW : RenderState::CULL_CCW);
+   state.SetRenderState(RenderState::CULLMODE, m_tblMirrorEnabled ? RenderState::CULL_CW : RenderState::CULL_CCW);
    m_renderer->m_renderDevice->CopyRenderStates(false, state);
    m_renderer->m_renderDevice->SetDefaultRenderState();
    m_renderer->SetAnisoFiltering(m_ptable->m_settings.GetPlayer_ForceAnisotropicFiltering());
    m_renderer->InitLayout();
    for (RenderProbe *probe : m_ptable->m_vrenderprobe)
-      probe->RenderSetup(m_renderer);
+      probe->RenderSetup(m_renderer.get());
    for (auto editable : m_ptable->GetParts())
    {
       if (editable->GetItemType() == ItemTypeEnum::eItemBall)
@@ -693,7 +703,7 @@ Player::Player(PinTable *const table, const PlayMode playMode)
       editable->TimerSetup(m_vht);
 
       if (auto ph = editable->GetIRenderable(); ph)
-         ph->RenderSetup(m_renderer);
+         ph->RenderSetup(m_renderer.get());
    }
 
    if (!IsEditorMode())
@@ -1051,7 +1061,6 @@ Player::~Player()
    if (m_vrDevice)
       m_vrDevice->DiscardVisibilityMask();
    #endif
-   delete m_renderer;
    m_renderer = nullptr;
    LockForegroundWindow(false);
    delete m_playfieldWnd;
@@ -1059,6 +1068,8 @@ Player::~Player()
 
    delete m_vrDevice;
    m_vrDevice = nullptr;
+
+   SDL_QuitSubSystem(SDL_INIT_VIDEO); // Balances the init done in the constructor
 
    m_logicProfiler.LogWorstFrame();
    if (&m_logicProfiler != m_renderProfiler)
@@ -1075,8 +1086,7 @@ Player::~Player()
 
    m_ptable->Release();
 
-   while (ShowCursor(FALSE) >= 0);
-   while (ShowCursor(TRUE) < 0);
+   SDL_ShowCursor();
    PLOGI << "Player closed.";
 
 #ifdef __LIBVPINBALL__
@@ -1208,19 +1218,6 @@ void Player::ApplyPlayingState(const bool play)
       if (!IsEditorMode())
          m_ptable->FireVoidEvent(DISPID_GameEvents_Paused); // signal the script that the game is now paused
    }
-   UpdateCursorState();
-}
-
-void Player::UpdateCursorState() const
-{
-   if (m_drawCursor || !IsPlaying())
-   {
-      while (ShowCursor(TRUE) < 0); // FIXME on a system without a mouse, it looks like this may result in an infinite loop
-   }
-   else
-   {
-      while (ShowCursor(FALSE) >= 0);
-   }
 }
 
 void Player::OnScriptError(ScriptInterpreter::ErrorType type, int line, int column, const string &description, const vector<string> &stackDump)
@@ -1256,7 +1253,7 @@ Ball *Player::CreateBall(const float x, const float y, const float z, const floa
    pBall->m_hitBall.m_d.m_vel = { vx, vy, vz };
    pBall->m_d.m_useTableRenderSettings = true;
    pBall->TimerSetup(m_vht);
-   pBall->RenderSetup(m_renderer);
+   pBall->RenderSetup(m_renderer.get());
    pBall->PhysicSetup(m_physics, false);
    m_vball.push_back(pBall);
    pBall->Release(); // The ball is owned by the table, not by the player
@@ -1460,7 +1457,7 @@ void Player::LockForegroundWindow(const bool enable)
 {
 #ifdef _MSC_VER
    // TODO how do we handle this situation with multiple windows, some being full-screen, other not ?
-   if (m_playfieldWnd && m_playfieldWnd->IsFullScreen()) // revert special tweaks of exclusive full-screen app
+   if (m_playfieldWnd && m_playfieldWnd->GetWindowMode() == Window::ExclusiveFullscreen) // revert special tweaks of exclusive full-screen app
       ::LockSetForegroundWindow(enable ? LSFW_LOCK : LSFW_UNLOCK);
 #endif
 }
@@ -1508,10 +1505,22 @@ void Player::ProcessOSMessages(const bool isInitialized)
          SetCloseState(Player::CloseState::CS_STOP_PLAY);
          break;
 
+      case SDL_EVENT_WINDOW_RESIZED:
+      case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+      {
+         SDL_Window* const wnd = SDL_GetWindowFromID(e.window.windowID);
+         if (m_playfieldWnd->GetCore() == wnd)
+            m_playfieldWnd->OnResized();
+         else
+            for (VPX::RenderOutput* const output : { &m_backglassOutput, &m_scoreViewOutput, &m_topperOutput })
+               if (output->GetMode() == VPX::RenderOutput::OM_WINDOW && output->GetWindow()->GetCore() == wnd)
+                  output->GetWindow()->OnResized();
+         break;
+      }
+
       case SDL_EVENT_KEY_UP:
       case SDL_EVENT_KEY_DOWN:
          isPFWnd = (SDL_GetWindowFromID(e.key.windowID) == m_playfieldWnd->GetCore()) || IsVR();
-         ShowMouseCursor(false);
          break;
 
       case SDL_EVENT_TEXT_INPUT:
@@ -1537,9 +1546,10 @@ void Player::ProcessOSMessages(const bool isInitialized)
             static float m_lastcursorx = FLT_MAX, m_lastcursory = FLT_MAX;
             if (m_lastcursorx != e.motion.x || m_lastcursory != e.motion.y)
             {
+               if (m_lastcursorx != FLT_MAX) // hacky...
+                  SDL_ShowCursor();
                m_lastcursorx = e.motion.x;
                m_lastcursory = e.motion.y;
-               ShowMouseCursor(true);
             }
          }
          else if (dragging)
@@ -1621,8 +1631,6 @@ public:
       #if defined(ENABLE_BGFX)
          if (m_player->m_backglassOutput.GetMode() == RenderOutput::OutputMode::OM_WINDOW)
             m_captureRequestMask |= 2;
-         if (bgfx::getCaps()->rendererType == bgfx::RendererType::Metal) // Metal backend does not support screenshot from other framebuffers
-            m_captureRequestMask &= 1;
       #endif
    }
 
@@ -1856,7 +1864,7 @@ void Player::UpdateGameLogic()
 
 void Player::GameLoop()
 {
-   // Stereo must be run unthrottled to let OpenVR set the frame pace according to the head set
+   // Stereo must be run unthrottled to let VR set the frame pace according to the head set
    assert(!(m_renderer->m_stereo3D == STEREO_VR && (m_videoSyncMode != VideoSyncMode::VSM_NONE || m_maxFramerate < 1000.f)));
 
    // If we failed to initialize, returns immediately
@@ -1871,10 +1879,7 @@ void Player::GameLoop()
       m_logicProfiler.SetThreadLock();
 
       #ifdef __LIBVPINBALL__
-         auto gameLoop = [this]() {
-            MultithreadedGameLoop();
-         };
-         VPinballLib::VPinballLib::Instance().SetGameLoop(gameLoop);
+         VPinballLib::VPinballLib::Instance().SetGameLoop([this] { CallbackSteppedGameLoop(); });
       #else
          MultithreadedGameLoop();
       #endif
@@ -1888,30 +1893,37 @@ void Player::GameLoop()
    #endif
 }
 
+#ifdef ENABLE_BGFX
+bool Player::CallbackSteppedGameLoop()
+{
+   // Discard step if the player is not in one of the running states
+   if (GetCloseState() != CS_PLAYING && GetCloseState() != CS_USER_INPUT && GetCloseState() != CS_CLOSE_CAPTURE_SCREENSHOT)
+      return false;
+
+   // Continuously process input, synchronize with emulation and step physics to keep latency low
+   UpdateGameLogic();
+
+   // If rendering thread is ready, push a new frame as soon as possible
+   if (!m_renderer->m_renderDevice->m_framePending && m_renderer->m_renderDevice->m_frameMutex.try_lock())
+   {
+      FinishFrame();
+      m_lastFrameSyncOnFPS
+         = (m_videoSyncMode != VideoSyncMode::VSM_NONE) && ((m_renderProfiler->GetSlidingAvg(FrameProfiler::PROFILE_FRAME) - 100) * m_playfieldWnd->GetRefreshRate() < 1000000);
+      PrepareFrame();
+      m_renderer->m_renderDevice->m_framePending = true;
+      m_renderer->m_renderDevice->m_frameReadySem.release();
+      m_renderer->m_renderDevice->m_frameMutex.unlock();
+      return true;
+   }
+
+   return false;
+}
+
 void Player::MultithreadedGameLoop()
 {
-#ifdef ENABLE_BGFX
-   while (GetCloseState() == CS_PLAYING || GetCloseState() == CS_USER_INPUT
-#ifdef __LIBVPINBALL__
-      || GetCloseState() == CS_CLOSE_CAPTURE_SCREENSHOT
-#endif
-   )
+   while (GetCloseState() == CS_PLAYING || GetCloseState() == CS_USER_INPUT || GetCloseState() == CS_CLOSE_CAPTURE_SCREENSHOT)
    {
-      // Continuously process input, synchronize with emulation and step physics to keep latency low
-      UpdateGameLogic();
-
-      // If rendering thread is ready, push a new frame as soon as possible
-      if (!m_renderer->m_renderDevice->m_framePending && m_renderer->m_renderDevice->m_frameMutex.try_lock())
-      {
-         FinishFrame();
-         m_lastFrameSyncOnFPS = (m_videoSyncMode != VideoSyncMode::VSM_NONE) && ((m_renderProfiler->GetSlidingAvg(FrameProfiler::PROFILE_FRAME) - 100) * m_playfieldWnd->GetRefreshRate() < 1000000);
-         PrepareFrame();
-         m_renderer->m_renderDevice->m_framePending = true;
-         m_renderer->m_renderDevice->m_frameReadySem.release();
-         m_renderer->m_renderDevice->m_frameMutex.unlock();
-      }
-#ifndef __LIBVPINBALL__
-      else
+      if (!CallbackSteppedGameLoop())
       {
          m_logicProfiler.EnterProfileSection(FrameProfiler::PROFILE_SLEEP);
          // Sadly waiting is very imprecise (at least on Windows) and we suffer a bit from it.
@@ -1921,19 +1933,17 @@ void Player::MultithreadedGameLoop()
          // YieldProcessor();
          m_logicProfiler.ExitProfileSection();
       }
-#else
-      // Android and iOS use SDL main callbacks and use SDL_AppIterate
-      return;
-#endif
    }
 
    // Flush any pending frame
    {
-      std::lock_guard lock(m_renderer->m_renderDevice->m_frameMutex);
+      while (m_renderer->m_renderDevice->m_framePending || !m_renderer->m_renderDevice->m_frameMutex.try_lock())
+         uOverSleep(100000);
       FinishFrame();
+      m_renderer->m_renderDevice->m_frameMutex.unlock();
    }
-#endif
 }
+#endif
 
 void Player::GPUQueueStuffingGameLoop()
 {
@@ -2304,20 +2314,36 @@ void Player::OnAuxRendererChanged(const unsigned int msgId, void* userData, void
       me->m_ancillaryWndRenderers[window].resize(getAuxRendererMsg.count);
       getAuxRendererMsg = { window, getAuxRendererMsg.count, 0, me->m_ancillaryWndRenderers[window].data() };
       m_msgApi->BroadcastMsg(me->m_pluginAPI.GetVPXEndPointId(), me->m_getAuxRendererId, &getAuxRendererMsg);
+      auto& priorities = me->m_ancillaryWndRendererPriorities[window];
       for (const auto& renderer : me->m_ancillaryWndRenderers[window])
+      {
          Settings::GetRegistry().Register(std::make_unique<VPX::Properties::IntPropertyDef>(section, "Priority."s.append(renderer.id), renderer.name,
             "A value that will be used to select if the '"s + renderer.name + "' renderer should be used on the "s + section + " display. Higher values are priorized other lower ones."s,
             false, 0, 100, 0));
-      std::ranges::sort(me->m_ancillaryWndRenderers[window],
+         // Seed the live priority from settings, keeping any live (unsaved) adjustment made through the in game UI
+         priorities.try_emplace(renderer.id, me->m_ptable->m_settings.GetInt(Settings::GetRegistry().GetPropertyId(section, "Priority."s.append(renderer.id)).value()));
+      }
+      std::ranges::stable_sort(me->m_ancillaryWndRenderers[window],
          [&](const AncillaryRendererDef &a, const AncillaryRendererDef &b)
-         {
-            int pa = me->m_ptable->m_settings.GetInt(Settings::GetRegistry().GetPropertyId(section, "Priority."s.append(a.id)).value());
-            int pb = me->m_ptable->m_settings.GetInt(Settings::GetRegistry().GetPropertyId(section, "Priority."s.append(b.id)).value());
-            return pa > pb; // Sort in descending order (first is the most wanted)
-         });
+         { return priorities[a.id] > priorities[b.id]; }); // Sort in descending order (first is the most wanted)
       std::erase_if(me->m_ancillaryWndRenderers[window],
-         [section, me](const AncillaryRendererDef &a) { return me->m_ptable->m_settings.GetInt(Settings::GetRegistry().GetPropertyId(section, "Priority."s.append(a.id)).value()) < 0; });
+         [&priorities](const AncillaryRendererDef &a) { return priorities[a.id] < 0; });
    }
+}
+
+int Player::GetAncillaryRendererPriority(VPXWindowId window, const string& id) const
+{
+   const auto& priorities = m_ancillaryWndRendererPriorities[window];
+   const auto entry = priorities.find(id);
+   return entry != priorities.end() ? entry->second : 0;
+}
+
+void Player::SetAncillaryRendererPriority(VPXWindowId window, const string& id, int priority)
+{
+   m_ancillaryWndRendererPriorities[window][id] = priority;
+   // Re-collect and re-sort so the change is directly applied (also restores renderers
+   // previously dropped for a negative priority)
+   OnAuxRendererChanged(0, this, nullptr);
 }
 
 void Player::UpdateVolume()

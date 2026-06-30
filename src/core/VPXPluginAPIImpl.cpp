@@ -105,37 +105,65 @@ void MSGPIAPI VPXPluginAPIImpl::SetActiveViewSetup(VPXViewSetupDef* view)
 ///////////////////////////////////////////////////////////////////////////////
 // Input API
 
-void MSGPIAPI VPXPluginAPIImpl::SetActionState(const VPXAction actionId, const int isPressed)
+void MSGPIAPI VPXPluginAPIImpl::GetInputState(VPXInputState* state)
 {
    if (!g_pplayer)
-      return; // No game in progress
-
+   {
+      state->actionMask = 0;
+      state->stateMask = 0;
+      return;
+   }
    VPXPluginAPIImpl& me = g_pplayer->m_pluginAPI;
-   auto it = me.m_actionMap.find(actionId);
-   if (it == me.m_actionMap.end())
-      return; // action not mapped
 
-   const std::unique_ptr<InputAction>& action = g_pplayer->m_pininput.GetInputActions()[it->second.first];
-   if (it->second.second == -1)
-      it->second.second = action->NewDirectStateSlot();
-   action->SetDirectState(it->second.second, isPressed != 0);
+   state->actionState = 0;
+   for (int i = 0; i < 64; i++)
+   {
+      if (const uint64_t mask = 1ULL << i; state->actionMask & mask)
+      {
+         auto it = me.m_actionMap.find(static_cast<VPXAction>(i));
+         if (it == me.m_actionMap.end())
+            state->actionMask &= ~mask;
+         else if (g_pplayer->m_pininput.IsPressed(it->second.first))
+            state->actionState |= mask;
+      }
+   }
+   
+   // TODO implement
+   state->stateMask = 0;
 }
 
-void MSGPIAPI VPXPluginAPIImpl::SetNudgeState(const int stateMask, const float nudgeAccelerationX, const float nudgeAccelerationY)
+void MSGPIAPI VPXPluginAPIImpl::SetInputState(VPXInputState* state)
 {
    if (!g_pplayer)
-      return; // No game in progress
+   {
+      state->actionMask = 0;
+      state->stateMask = 0;
+      return;
+   }
+   VPXPluginAPIImpl& me = g_pplayer->m_pluginAPI;
 
-   g_pplayer->m_pininput.SetNudge((stateMask & 1) != 0, nudgeAccelerationX, nudgeAccelerationY);
-}
+   for (int i = 0; i < 64; i++)
+   {
+      if (const uint64_t mask = 1ULL << i; state->actionMask & mask)
+      {
+         auto it = me.m_actionMap.find(static_cast<VPXAction>(i));
+         if (it == me.m_actionMap.end())
+         {
+            PLOGE << "A plugin requested to set state of undefined action #" << i;
+            state->actionMask &= ~mask;
+         }
+         else
+         {
+            const std::unique_ptr<InputAction>& action = g_pplayer->m_pininput.GetInputActions()[it->second.first];
+            if (it->second.second == -1)
+               it->second.second = action->NewDirectStateSlot();
+            action->SetDirectState(it->second.second, (state->actionState & mask) != 0);
+         }
+      }
+   }
 
-void MSGPIAPI VPXPluginAPIImpl::SetPlungerState(const int stateMask, const float plungerPos, const float plungerSpeed)
-{
-   if (!g_pplayer)
-      return; // No game in progress
-
-   g_pplayer->m_pininput.SetPlungerPos((stateMask & 1) == 0x01, plungerPos);
-   g_pplayer->m_pininput.SetPlungerSpeed((stateMask & 3) == 0x03, plungerSpeed); // With speed and overriden
+   // TODO implement
+   state->stateMask = 0;
 }
 
 
@@ -235,17 +263,23 @@ void MSGPIAPI VPXPluginAPIImpl::DeleteTexture(VPXTexture texture)
 ///////////////////////////////////////////////////////////////////////////////
 // Shared logging support for plugin API
 
-void MSGPIAPI VPXPluginAPIImpl::PluginLog(unsigned int level, const char* message)
+void MSGPIAPI VPXPluginAPIImpl::PluginLog(const char* source, const char* func, int line, unsigned int level, const char* message)
 {
-   VPXPluginAPIImpl& pi = g_pplayer->m_pluginAPI;
+   plog::Severity severity;
    switch (level)
    {
-   case LPI_LVL_DEBUG: PLOGD << message; break;
-   case LPI_LVL_INFO: PLOGI << message; break;
-   case LPI_LVL_WARN: PLOGW << message; break;
-   case LPI_LVL_ERROR: PLOGE << message; break;
-   default: assert(false); PLOGE << "Invalid plugin log message level";
+   case LPI_LVL_DEBUG: severity = plog::debug; break;
+   case LPI_LVL_INFO: severity = plog::info; break;
+   case LPI_LVL_WARN: severity = plog::warning; break;
+   case LPI_LVL_ERROR: severity = plog::error; break;
+   default: assert(false); severity = plog::error; message = "Invalid plugin log message level"; break;
    }
+   auto* const logger = plog::get<PLOG_DEFAULT_INSTANCE_ID>();
+   if (logger == nullptr || !logger->checkSeverity(severity))
+      return;
+   const std::string cleanFunc = plog::util::processFuncName(func);
+   const std::string where = (source != nullptr && *source != '\0') ? (std::string(source) + ':' + cleanFunc) : cleanFunc;
+   *logger += plog::Record(severity, where.c_str(), static_cast<size_t>(line), "", nullptr, PLOG_DEFAULT_INSTANCE_ID).ref() << message;
 }
 
 
@@ -688,9 +722,8 @@ VPXPluginAPIImpl::VPXPluginAPIImpl(MsgPI::MsgPluginManager& pluginManager)
    m_api.GetActiveViewSetup = GetActiveViewSetup;
    m_api.SetActiveViewSetup = SetActiveViewSetup;
 
-   m_api.SetActionState = SetActionState;
-   m_api.SetNudgeState = SetNudgeState;
-   m_api.SetPlungerState = SetPlungerState;
+   m_api.GetInputState = GetInputState;
+   m_api.SetInputState = SetInputState;
 
    m_api.GetGameTime = GetGameTime;
 

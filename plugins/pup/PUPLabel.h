@@ -96,6 +96,9 @@ private:
    std::filesystem::path m_szPath;
    float m_imageWidth = 0; // Width of image (unused for text)
    float m_imageHeight = 0; // height of image (unused for text)
+   float m_renderAngle = 0.f; // Angle baked into the current texture (static m_angle + active wiggle)
+   SDL_Surface* m_pSourceImage = nullptr; // Cached decoded image, so rotation does not re-decode each frame
+   std::filesystem::path m_sourceImagePath; // Path m_pSourceImage was decoded from
 
    std::mutex m_mutex;
    static std::mutex m_fontMutex;
@@ -119,6 +122,8 @@ private:
          , m_height(other.m_height)
          , m_logicalHeight(other.m_logicalHeight)
          , m_baselineOffset(other.m_baselineOffset)
+         , m_imageScaleX(other.m_imageScaleX)
+         , m_imageScaleY(other.m_imageScaleY)
          , m_pAnimation(std::move(other.m_pAnimation))
          , m_accumulatedDelays(std::move(other.m_accumulatedDelays))
          , m_totalDuration(other.m_totalDuration)
@@ -143,6 +148,8 @@ private:
             m_height = other.m_height;
             m_logicalHeight = other.m_logicalHeight;
             m_baselineOffset = other.m_baselineOffset;
+            m_imageScaleX = other.m_imageScaleX;
+            m_imageScaleY = other.m_imageScaleY;
 
             other.m_pTexture = nullptr;
          }
@@ -156,6 +163,8 @@ private:
       float m_height = 0; // Height of rendered text (unused for images)
       float m_logicalHeight = 0; // Windows-equivalent text-box height for alignment
       float m_baselineOffset = 0; // Y shift to align SDL_ttf baseline with Windows GDI baseline
+      float m_imageScaleX = 1.f; // CPU rotation grows the texture to its bounding box; scale dest to compensate
+      float m_imageScaleY = 1.f;
       std::shared_ptr<IMG_Animation> m_pAnimation;
       vector<int> m_accumulatedDelays;
       int m_totalDuration = 0;
@@ -166,7 +175,7 @@ private:
    class Animation {
    public:
       Animation(PUPLabel* label, unsigned int lengthMs, int foregroundColor, int flashingPeriod);
-      Animation(PUPLabel* label, unsigned int lengthMs, int foregroundColor, int xps, int xpe, int yps, int ype, int motionLen, int motionTween, int motionColor);
+      Animation(PUPLabel* label, unsigned int lengthMs, int foregroundColor, float xps, float xpe, float yps, float ype, int motionLen, int motionTween, int motionColor);
       Animation(PUPLabel* label, unsigned int lengthMs, int foregroundColor, int alphaStart, int alphaEnd, int pulseSpeed, bool screenFade);
       Animation(PUPLabel* label, unsigned int lengthMs, int foregroundColor, float zoomStart, float zoomEnd, int zoomPulseSpeed);
       Animation(PUPLabel* label, unsigned int lengthMs, int foregroundColor, float wiggleStart, float wiggleEnd, int wiggleSpeed, int dummy);
@@ -193,10 +202,10 @@ private:
 
       int m_flashingPeriod = 0;
 
-      int m_xps = 0;
-      int m_xpe = 0;
-      int m_yps = 0;
-      int m_ype = 0;
+      float m_xps = 0.f;
+      float m_xpe = 0.f;
+      float m_yps = 0.f;
+      float m_ype = 0.f;
       int m_motionLen = 0;
       int m_motionTween = 0;
       int m_motionColor = 0;

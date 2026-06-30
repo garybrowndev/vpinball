@@ -2155,6 +2155,13 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
             m_BG_image[i] = m_BG_image[BG_DESKTOP];
       }
 
+   // Warn if the backdrop used by the active view mode references an image that is not in the
+   // table: it would render black. An empty name or the "<None>" sentinel means no backdrop is set.
+   if (const string& bg = m_BG_image[GetViewMode()];
+       !bg.empty() && !StrCompareNoCase(bg, g_szNoneSelection) && GetImage(bg) == nullptr) {
+      PLOGW << "Backdrop image '" << bg << "' set for the active view mode was not found in the table (renders black)";
+   }
+
    Settings::SetTableOverride_Difficulty_Default(m_difficulty);
    m_globalDifficulty = m_settings.GetTableOverride_Difficulty();
 
@@ -2208,6 +2215,7 @@ void PinTable::LoadScriptOverride(const std::filesystem::path& scriptPath)
       PLOGE << "Failed to open script file";
       return;
    }
+   PLOGI << "Loading script: " << scriptPath.string();
    
    std::streamsize size = file.tellg();
    file.seekg(0, std::ios::beg);
@@ -2398,41 +2406,23 @@ void PinTable::Load(IObjectReader& reader)
          case FID(AOSC): m_AOScale = reader.AsFloat(); break;
          case FID(SSSC): m_SSRScale = reader.AsFloat(); break;
          case FID(CLBH): m_groundToLockbarHeight = reader.AsFloat(); break;
-         case FID(PLST):
-            m_playfieldReflectionStrength = dequantizeUnsigned<8>(reader.AsInt());
-            break;
+         case FID(PLST): m_playfieldReflectionStrength = dequantizeUnsigned<8>(reader.AsInt()); break;
          case FID(BTRA):
-            // Before 10.8, user tweaks were stored in the table file (now moved to a user ini file), we import the legacy settings if there is no user ini file
+            // FIXME Before 10.8, user tweaks were stored in the table file (now moved to a user ini file), we import the legacy settings if there is no user ini file
             if (const int useTrailForBalls = reader.AsInt(); useTrailForBalls != -1 && !hasIni)
                m_settings.SetPlayer_BallTrail(useTrailForBalls == 1, true);
             break;
          case FID(BTST):
-            // Before 10.8, user tweaks were stored in the table file (now moved to a user ini file), we import the legacy settings if there is no user ini file
+            // FIXME Before 10.8, user tweaks were stored in the table file (now moved to a user ini file), we import the legacy settings if there is no user ini file
             if (const int ballTrailStrength = reader.AsInt(); !hasIni) 
                m_settings.SetPlayer_BallTrailStrength(dequantizeUnsigned<8>(ballTrailStrength), true);
             break;
+         case FID(UAOC): m_enableAO = reader.AsInt() != 0; break; // Before 10.8, 1 would force AO
+         case FID(USSR): m_enableSSR = reader.AsInt() != 0; break; // Before 10.8, 1 would force SSR
          case FID(BPRS): m_ballPlayfieldReflectionStrength = reader.AsFloat(); break;
          case FID(DBIS): m_defaultBulbIntensityScaleOnBall = reader.AsFloat(); break;
-         case FID(UAAL):
-            // Before 10.8, user tweaks were stored in the table file (now moved to a user ini file), we import the legacy settings if there is no user ini file
-            if (const int useAA = reader.AsInt(); useAA != -1 && !hasIni)
-               m_settings.SetPlayer_AAFactor(useAA == 0 ? 1.f : 2.f, true);
-            break;
-         case FID(UAOC):
-            // Before 10.8, this setting could be set to -1, meaning override table definition using video options instead
-            m_enableAO = reader.AsInt() != 0;
-         break;
-         case FID(USSR):
-            // Before 10.8, this setting could be set to -1, meaning override table definition using video options instead
-            m_enableSSR = reader.AsInt() != 0;
-         break;
          case FID(TMAP): m_toneMapper = static_cast<ToneMapper>(reader.AsInt()); break;
          case FID(EXPO): m_exposure = reader.AsFloat(); break;
-         case FID(UFXA):
-            // Before 10.8, user tweaks were stored in the table file (now moved to a user ini file), we import the legacy settings if there is no user ini file
-            if (const int fxaa = reader.AsInt(); fxaa != -1 && !hasIni)
-               m_settings.SetPlayer_FXAA(fxaa, true);
-            break;
          case FID(BLST): m_bloom_strength = reader.AsFloat(); break;
          case FID(BCLR): m_colorbackdrop = reader.AsInt(); break;
          case FID(SECB): // old protection/encryption data
@@ -2460,55 +2450,7 @@ void PinTable::Load(IObjectReader& reader)
          case FID(SVOL): m_TableSoundVolume = reader.AsFloat(); break;
          case FID(BDMO): m_BallDecalMode = reader.AsBool(); break;
          case FID(MVOL): m_TableMusicVolume = reader.AsFloat(); break;
-         case FID(AVSY):
-            // Before 10.8, user tweaks were stored in the table file (now moved to a user ini file), we import the legacy settings if there is no user ini file
-            if (const int tableAdaptiveVSync = reader.AsInt(); tableAdaptiveVSync != -1 && !hasIni)
-            {
-               switch (tableAdaptiveVSync)
-               {
-               case 0:
-                  m_settings.SetPlayer_MaxFramerate(0, true);
-                  m_settings.SetPlayer_SyncMode(VideoSyncMode::VSM_NONE, true);
-                  break;
-               case 1:
-                  m_settings.SetPlayer_MaxFramerate(-1, true);
-                  m_settings.SetPlayer_SyncMode(VideoSyncMode::VSM_VSYNC, true);
-                  break;
-               case 2:
-                  m_settings.SetPlayer_MaxFramerate(-1, true);
-                  m_settings.SetPlayer_SyncMode(VideoSyncMode::VSM_ADAPTIVE_VSYNC, true);
-                  break;
-               default:
-                  m_settings.SetPlayer_MaxFramerate(static_cast<float>(tableAdaptiveVSync), true);
-                  m_settings.SetPlayer_SyncMode(VideoSyncMode::VSM_ADAPTIVE_VSYNC, true);
-                  break;
-               }
-            }
-            break;
-         case FID(OGAC):
-            // Before 10.8, user tweaks were stored in the table file (now moved to a user ini file), we import the legacy settings if there is no user ini file
-            if (const bool overwriteGlobalDetailLevel = reader.AsBool(); !overwriteGlobalDetailLevel && !hasIni)
-               m_settings.ResetPlayer_AlphaRampAccuracy();
-            break;
-         case FID(OGDN):
-            // Before 10.8, user tweaks were stored in the table file (now moved to a user ini file), we import the legacy settings if there is no user ini file
-            // Global Day/Night was fairly convoluted:
-            // - table would define the value
-            // - user could select in video options to override this value by an automatic value
-            // - table could then define to reject this user settings
-            // - user could define in commandline to finally override the value
-            // Now the logic is the same as all other settings:
-            // - table defines the default value, then users define if they want to override this value (through app/table settings or commandline)
-            if (const bool overwriteGlobalDayNight = reader.AsBool(); overwriteGlobalDayNight && !hasIni)
-               m_settings.SetPlayer_OverrideTableEmissionScale(false, true);
-            break;
          case FID(GDAC): m_winEditorGrid = reader.AsBool(); break;
-         case FID(ARAC):
-            // Before 10.8, user tweaks were stored in the table file (now moved to a user ini file), we import the legacy settings if there is no user ini file
-            // The detail level was always saved **before** the override flag so we always load to settings, eventually deleting afterward
-            if (const int userDetailLevel = reader.AsInt(); !hasIni) 
-               m_settings.SetPlayer_AlphaRampAccuracy(userDetailLevel, true);
-            break;
          case FID(MASI): m_numMaterials = reader.AsInt(); break;
          case FID(MATE):
          {
@@ -2607,6 +2549,12 @@ void PinTable::Load(IObjectReader& reader)
          case FID(TLCK): m_tablelocked = reader.AsInt(); break;
 
          // Deprecated fields (kept for reference and to avoid reusing the same FID in future evolutions)
+         case FID(UAAL): reader.AsInt(); break; // Override AA factor
+         case FID(UFXA): reader.AsInt(); break; // Override postprocess AA mode
+         case FID(AVSY): reader.AsInt(); break; // Override video sync mode
+         case FID(OGDN): reader.AsBool(); break; // Override Global Day/Night
+         case FID(OGAC): reader.AsBool(); break; // Override Global Detail Level enable/disable
+         case FID(ARAC): reader.AsInt(); break; // Override Global Detail Level value
          case FID(REOP): reader.AsBool(); break; // Reflection on playfield (RenderProbes since 10.8)
          case FID(BREF): reader.AsInt(); break; // Enable ball reflection
          case FID(OGST): reader.AsBool(); break; // Overwrite global stereo
@@ -4817,6 +4765,13 @@ string PinTable::AuditTable(bool log) const
    }
    ss << ". Total image size: " << SizeToReadable(totalSize) << " in VPX file, at least " << SizeToReadable(totalGpuSize) << " in GPU memory when played\r\n";
 
+   // Backdrop images referenced per view mode but not present in the table would render black.
+   // An empty name or the "<None>" sentinel means no backdrop is set.
+   static const char* const bgSetNames[NUM_BG_SETS] = { "Desktop", "Cabinet", "Full Single Screen" };
+   for (unsigned int i = 0; i < NUM_BG_SETS; ++i)
+      if (const string& bg = m_BG_image[i]; !bg.empty() && !StrCompareNoCase(bg, g_szNoneSelection) && GetImage(bg) == nullptr)
+         ss << ". Warning: " << bgSetNames[i] << " backdrop image '" << bg << "' is not present in the table (renders black)\r\n";
+
    int nPrimTris = 0, primMemSize = 0;
    for (const auto part : m_vedit)
       if (part->GetItemType() == eItemPrimitive && ((Primitive *)part)->m_d.m_use3DMesh /* && ((Primitive *)part)->m_d.m_visible */ )
@@ -6589,12 +6544,19 @@ STDMETHODIMP PinTable::get_VersionRevision(int *pVal)
 std::optional<VPX::Properties::PropertyRegistry::PropId> PinTable::RegisterOption(
    BSTR optionName, float minValue, float maxValue, float step, float defaultValue, int unit, /*[optional][in]*/ VARIANT values)
 {
-   if (V_VT(&values) != VT_ERROR && V_VT(&values) != VT_EMPTY && V_VT(&values) != (VT_ARRAY | VT_VARIANT))
-      return std::nullopt;
-   if (minValue >= maxValue || step <= 0.f || defaultValue < minValue || defaultValue > maxValue)
-      return std::nullopt;
-
    const string name = MakeString(optionName);
+
+   if (V_VT(&values) != VT_ERROR && V_VT(&values) != VT_EMPTY && V_VT(&values) != (VT_ARRAY | VT_VARIANT))
+   {
+      PLOGE << "Table.Option(\"" << name << "\"): the values argument must be omitted or an Array";
+      return std::nullopt;
+   }
+   if (minValue >= maxValue || step <= 0.f || defaultValue < minValue || defaultValue > maxValue)
+   {
+      PLOGE << "Table.Option(\"" << name << "\"): invalid arguments (minValue=" << minValue << ", maxValue=" << maxValue << ", step=" << step << ", defaultValue=" << defaultValue
+            << "); require minValue < maxValue, step > 0, and minValue <= defaultValue <= maxValue";
+      return std::nullopt;
+   }
 
    // Prevent invalid characters in the option id
    string optId = trim_string(name);
@@ -6614,12 +6576,18 @@ std::optional<VPX::Properties::PropertyRegistry::PropId> PinTable::RegisterOptio
    if (V_VT(&values) == (VT_ARRAY | VT_VARIANT))
    {
       if (V_VT(&values) != (VT_ARRAY | VT_VARIANT) || step != 1.f || (minValue - (float)(int)minValue) != 0.f || (maxValue - (float)(int)maxValue) != 0.f)
+      {
+         PLOGE << "Table.Option(\"" << name << "\"): with a values Array, step must be 1 and minValue/maxValue must be integers (minValue=" << minValue << ", maxValue=" << maxValue << ", step=" << step << ")";
          return std::nullopt;
+      }
       const int nValues = 1 + (int)maxValue - (int)minValue;
       SAFEARRAY *psa = V_ARRAY(&values);
       LONG lbound, ubound;
       if (SafeArrayGetLBound(psa, 1, &lbound) != S_OK || SafeArrayGetUBound(psa, 1, &ubound) != S_OK || ubound != lbound + nValues - 1)
+      {
+         PLOGE << "Table.Option(\"" << name << "\"): the values Array must have exactly " << nValues << " entries to cover the minValue..maxValue range";
          return std::nullopt;
+      }
       VARIANT *p;
       SafeArrayAccessData(psa, (void **)&p);
       literals.reserve(nValues);
@@ -6670,6 +6638,7 @@ std::optional<VPX::Properties::PropertyRegistry::PropId> PinTable::RegisterOptio
       return propId;
    }
 
+   PLOGE << "Table.Option(\"" << name << "\"): internal error, could not register option";
    return std::nullopt;
 }
 
@@ -6704,6 +6673,7 @@ STDMETHODIMP PinTable::get_Option(BSTR optionName, float minValue, float maxValu
          return S_OK;
       }
    }
+   PLOGE << "Table.Option(\"" << MakeString(optionName) << "\"): internal error, registered option not found";
    return E_FAIL;
 }
 

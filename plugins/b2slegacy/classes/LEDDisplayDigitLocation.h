@@ -5,7 +5,7 @@ namespace B2SLegacy {
 
 class Dream7Display;
 
-class LEDDisplayDigitLocation
+class LEDDisplayDigitLocation final
 {
 public:
    LEDDisplayDigitLocation(Dream7Display* pLEDDisplay, const int digit, const int ledDisplayID);
@@ -18,9 +18,9 @@ public:
    void SetLEDDisplayID(const int ledDisplayID) { m_ledDisplayID = ledDisplayID; }
 
 private:
-   Dream7Display* m_pLEDDisplay;
-   int m_digit;
-   int m_ledDisplayID;
+   Dream7Display* m_pLEDDisplay = nullptr;
+   int m_digit = 0;
+   int m_ledDisplayID = 0;
 };
 
 }

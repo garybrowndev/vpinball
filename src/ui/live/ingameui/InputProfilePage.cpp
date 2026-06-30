@@ -10,11 +10,16 @@
 namespace VPX::InGameUI
 {
 
-InputProfilePage::InputProfilePage(const string& deviceName, const std::function<void(bool, bool, bool)>& handler)
+InputProfilePage::InputProfilePage(const string& deviceName, const std::function<void(bool, bool)>& handler)
    : InGameUIPage("Apply Device Layout"s, ""s, SaveMode::None)
+   , m_deviceName(deviceName)
    , m_handler(handler)
 {
-   AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "Device '" + deviceName + "' was detected."));
+}
+
+void InputProfilePage::BuildPage()
+{
+   AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "Device '" + m_deviceName + "' was detected."));
 
    AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Info, "Would you like the default input layout to be applied ?"s));
 
@@ -23,24 +28,17 @@ InputProfilePage::InputProfilePage(const string& deviceName, const std::function
       [this](const Settings&) { return m_dontAskAgain; }, [this](bool v) { m_dontAskAgain = v; }, [](Settings&) { /* UI state, not persisted */ },
       [](bool, Settings&, bool) { /* UI state, not persisted */ }));
 
-   AddItem(std::make_unique<InGameUIItem>("Apply (no overwrite)"s, "Apply the default input layout for this device, skipping existing sensor mapping"s,
+   AddItem(std::make_unique<InGameUIItem>("Apply"s, "Reset the input layout of this device to its default."s,
       [this]()
       {
-         m_handler(true, m_dontAskAgain, false);
-         m_player->m_liveUI->m_inGameUI.NavigateBack();
-      }));
-
-   AddItem(std::make_unique<InGameUIItem>("Apply (with overwrite)"s, "Apply the default input layout for this device, overwriting sensor mapping if needed"s,
-      [this]()
-      {
-         m_handler(true, m_dontAskAgain, true);
+         m_handler(true, m_dontAskAgain);
          m_player->m_liveUI->m_inGameUI.NavigateBack();
       }));
 
    AddItem(std::make_unique<InGameUIItem>("Discard"s, "Do not apply the default input layout for this device"s,
       [this]()
       {
-         m_handler(false, m_dontAskAgain, false);
+         m_handler(false, m_dontAskAgain);
          m_player->m_liveUI->m_inGameUI.NavigateBack();
       }));
 }

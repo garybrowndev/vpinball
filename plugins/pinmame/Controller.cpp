@@ -2,6 +2,7 @@
 
 #include "Controller.h"
 #include "Game.h"
+#include "Settings.h"
 #include <thread>
 #include <format>
 
@@ -33,6 +34,10 @@ Controller::~Controller()
    m_msgApi->ReleaseMsgID(m_getDmdSrcMsgId);
    if (m_onDestroyHandler)
       m_onDestroyHandler(this);
+   for (const auto& settings : m_gameSettings)
+      settings.second->Release();
+   if (m_settings)
+      m_settings->Release();
    delete m_pPinmameGame;
    delete m_pPinmameMechConfig;
 }
@@ -50,18 +55,37 @@ string Controller::GetVersion() const
 
 Game* Controller::GetGames(const string& name) const
 {
+   GameSettings* settings;
+   if (const auto it = m_gameSettings.find(name); it != m_gameSettings.end())
+      settings = it->second;
+   else
+   {
+      // shared settings instance so values written through one Game object
+      // are seen by later Games(name) accesses
+      settings = new GameSettings();
+      m_gameSettings[name] = settings;
+   }
    struct GameCBData
    {
       const Controller* controller;
+      GameSettings* settings;
       Game* game;
    };
-   GameCBData cbData { this, nullptr };
+   GameCBData cbData { this, settings, nullptr };
    PinmameGetGame(name.c_str(), [](PinmameGame* pPinmameGame, void* const pUserData)
       {
          GameCBData* pGame = static_cast<GameCBData*>(pUserData);
-         pGame->game = new Game(const_cast<Controller*>(pGame->controller), *pPinmameGame);
+         pGame->game = new Game(const_cast<Controller*>(pGame->controller), *pPinmameGame, pGame->settings);
       }, &cbData);
    return cbData.game;
+}
+
+Settings* Controller::GetSettings()
+{
+   if (m_settings == nullptr)
+      m_settings = new Settings();
+   m_settings->AddRef();
+   return m_settings;
 }
 
 void Controller::SetGameName(const string& name)

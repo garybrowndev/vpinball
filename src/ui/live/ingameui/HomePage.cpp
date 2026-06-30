@@ -15,14 +15,12 @@ namespace VPX::InGameUI
 HomePage::HomePage()
    : InGameUIPage("Options & Settings"s, ""s, SaveMode::None)
 {
-   BuildPage();
 }
 
 void HomePage::BuildPage()
 {
    constexpr bool hasKeyboard = !(g_isAndroid || g_isIOS);
    constexpr bool isTouch = g_isAndroid || g_isIOS;
-   ClearItems();
 
    ////////////////////////////////////////////////////////////////////////////////////////////////
    AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Header, "Table options"s));
@@ -34,12 +32,7 @@ void HomePage::BuildPage()
       AddItem(std::make_unique<InGameUIItem>("Table Options"s, ""s, "table/options"s));
 
    if (m_player->m_vrDevice)
-   {
-      #ifdef ENABLE_XR
-         // Legacy OpenVR does not support dynamic repositioning through LiveUI (especially overall scale, this would need to be rewritten but not done as this is planned for deprecation)
-         AddItem(std::make_unique<InGameUIItem>("VR Settings"s, ""s, "settings/vr"s));
-      #endif
-   }
+      AddItem(std::make_unique<InGameUIItem>("VR Settings"s, ""s, "settings/vr"s));
    else
       AddItem(std::make_unique<InGameUIItem>("Point Of View"s, ""s, "settings/pov"s));
 
@@ -76,7 +69,7 @@ void HomePage::BuildPage()
             m_player->m_liveUI->ShowTouchOverlay(showTouchOverlay);
             ImGui::GetIO().MousePos.x = 0;
             ImGui::GetIO().MousePos.y = 0;
-            BuildPage();
+            RequestRebuild();
          }));
 
    if (!hasKeyboard)
@@ -92,14 +85,12 @@ void HomePage::BuildPage()
             }
             ImGui::GetIO().MousePos.x = 0;
             ImGui::GetIO().MousePos.y = 0;
-            BuildPage();
+            RequestRebuild();
          }));
 
    if (g_isMobile)
       AddItem(std::make_unique<InGameUIItem>("Quit"s, ""s, [this]() {
-         #ifdef __LIBVPINBALL__
-            m_player->m_ptable->QuitPlayer(Player::CS_CLOSE_CAPTURE_SCREENSHOT);
-         #endif
+         m_player->m_ptable->QuitPlayer(Player::CS_CLOSE_CAPTURE_SCREENSHOT);
       }));
 
    ////////////////////////////////////////////////////////////////////////////////////////////////

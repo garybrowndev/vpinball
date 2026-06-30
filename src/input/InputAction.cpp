@@ -93,6 +93,35 @@ void InputAction::AddMapping(const vector<ButtonMapping>& mapping)
    m_inputMappings.push_back(std::move(newMapping));
 }
 
+void InputAction::UnmapDevice(uint16_t deviceId)
+{
+   for (auto it = m_inputMappings.begin(); it < m_inputMappings.end();)
+   {
+      bool unmap = false;
+      for (const ButtonMapping& exMapping : *it)
+      {
+         if (exMapping.GetDeviceId() == deviceId)
+         {
+            unmap = true;
+            break;
+         }
+      }
+      if (unmap)
+         it = m_inputMappings.erase(it);
+      else
+         ++it;
+   }
+}
+
+bool InputAction::IsMappedToDevice(uint16_t deviceId) const
+{
+   for (const auto& mappings : m_inputMappings)
+      for (const ButtonMapping& mapping : mappings)
+         if (mapping.GetDeviceId() == deviceId)
+            return true;
+   return false;
+}
+
 bool InputAction::HasMapping(const vector<ButtonMapping>& mapping) const
 {
    if (mapping.empty())
@@ -217,13 +246,13 @@ void InputAction::OnInputChanged(ButtonMapping* mapping)
 
    if (m_isPressed != wasPressed)
    {
-      m_eventManager->OnInputActionStateChanged(this);
       // Stamp SDL arrival (from the mapping that just flipped) BEFORE m_lastOnChangeUs so PerfUI's "Components"
       // line can compute SDL->Act = m_lastOnChangeUs - m_sdlArrivalUs. Direct-state path passes mapping=nullptr;
       // m_sdlArrivalUs stays 0 in that case and PerfUI shows '-'.
       m_sdlArrivalUs = mapping ? mapping->GetLastChangeArrivalUs() : 0;
       m_lastOnChangeUs = usec();
-      m_onStateChange(*this, wasPressed, m_isPressed);
+      if (m_eventManager->OnInputActionStateChanged(this))
+         m_onStateChange(*this, wasPressed, m_isPressed);
       if (m_isPressed && m_repeatPeriodUs >= 0)
          m_eventManager->RegisterOnUpdate(this);
       else if (m_repeatPeriodUs >= 0)

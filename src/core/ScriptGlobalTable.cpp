@@ -7,6 +7,7 @@
 #include "core/vpversion.h"
 #include "core/VPXPluginAPIImpl.h"
 #include "parts/ball.h"
+#include "physics/cabinet/NudgeHandler.h"
 #include "renderer/Renderer.h"
 #include "ui/win/WinEditor.h"
 
@@ -49,7 +50,7 @@ STDMETHODIMP ScriptGlobalTable::EndModal()
 STDMETHODIMP ScriptGlobalTable::Nudge(float Angle, float Force)
 {
    if (g_pplayer)
-      g_pplayer->m_physics->Nudge(Angle, Force);
+      g_pplayer->m_pininput.m_nudgeHandler->ApplyKeyboardImpulse(Angle, Force);
    return S_OK;
 }
 
@@ -158,37 +159,37 @@ STDMETHODIMP ScriptGlobalTable::get_Name(BSTR *pVal)
 
 STDMETHODIMP ScriptGlobalTable::get_LeftFlipperKey(LONG *pVal)
 {
-   *pVal = (LONG)0x10000 | (g_pplayer->m_ptable->m_tblMirrorEnabled ? g_pplayer->m_pininput.GetRightFlipperActionId() :  g_pplayer->m_pininput.GetLeftFlipperActionId());
+   *pVal = (LONG)0x10000 | (g_pplayer->m_tblMirrorEnabled ? g_pplayer->m_pininput.GetRightFlipperActionId() :  g_pplayer->m_pininput.GetLeftFlipperActionId());
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_RightFlipperKey(LONG *pVal)
 {
-   *pVal = (LONG)0x10000 | (g_pplayer->m_ptable->m_tblMirrorEnabled ? g_pplayer->m_pininput.GetLeftFlipperActionId() : g_pplayer->m_pininput.GetRightFlipperActionId());
+   *pVal = (LONG)0x10000 | (g_pplayer->m_tblMirrorEnabled ? g_pplayer->m_pininput.GetLeftFlipperActionId() : g_pplayer->m_pininput.GetRightFlipperActionId());
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_StagedLeftFlipperKey(LONG *pVal)
 {
-   *pVal = (LONG)0x10000 | (g_pplayer->m_ptable->m_tblMirrorEnabled ? g_pplayer->m_pininput.GetStagedRightFlipperActionId() : g_pplayer->m_pininput.GetStagedLeftFlipperActionId());
+   *pVal = (LONG)0x10000 | (g_pplayer->m_tblMirrorEnabled ? g_pplayer->m_pininput.GetStagedRightFlipperActionId() : g_pplayer->m_pininput.GetStagedLeftFlipperActionId());
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_StagedRightFlipperKey(LONG *pVal)
 {
-   *pVal = (LONG)0x10000 | (g_pplayer->m_ptable->m_tblMirrorEnabled ? g_pplayer->m_pininput.GetStagedLeftFlipperActionId() : g_pplayer->m_pininput.GetStagedRightFlipperActionId());
+   *pVal = (LONG)0x10000 | (g_pplayer->m_tblMirrorEnabled ? g_pplayer->m_pininput.GetStagedLeftFlipperActionId() : g_pplayer->m_pininput.GetStagedRightFlipperActionId());
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_LeftTiltKey(LONG *pVal)
 {
-   *pVal = (LONG)0x10000 | (g_pplayer->m_ptable->m_tblMirrorEnabled ? g_pplayer->m_pininput.GetRightNudgeActionId() : g_pplayer->m_pininput.GetLeftNudgeActionId());
+   *pVal = (LONG)0x10000 | (g_pplayer->m_tblMirrorEnabled ? g_pplayer->m_pininput.GetRightNudgeActionId() : g_pplayer->m_pininput.GetLeftNudgeActionId());
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_RightTiltKey(LONG *pVal)
 {
-   *pVal = (LONG)0x10000 | (g_pplayer->m_ptable->m_tblMirrorEnabled ? g_pplayer->m_pininput.GetLeftNudgeActionId() : g_pplayer->m_pininput.GetRightNudgeActionId());
+   *pVal = (LONG)0x10000 | (g_pplayer->m_tblMirrorEnabled ? g_pplayer->m_pininput.GetLeftNudgeActionId() : g_pplayer->m_pininput.GetRightNudgeActionId());
    return S_OK;
 }
 
@@ -230,13 +231,13 @@ STDMETHODIMP ScriptGlobalTable::get_MechanicalTilt(LONG *pVal)
 
 STDMETHODIMP ScriptGlobalTable::get_LeftMagnaSave(LONG *pVal)
 {
-   *pVal = (LONG)0x10000 | (g_pplayer->m_ptable->m_tblMirrorEnabled ? g_pplayer->m_pininput.GetRightMagnaActionId() : g_pplayer->m_pininput.GetLeftMagnaActionId());
+   *pVal = (LONG)0x10000 | (g_pplayer->m_tblMirrorEnabled ? g_pplayer->m_pininput.GetRightMagnaActionId() : g_pplayer->m_pininput.GetLeftMagnaActionId());
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_RightMagnaSave(LONG *pVal)
 {
-   *pVal = (LONG)0x10000 | (g_pplayer->m_ptable->m_tblMirrorEnabled ? g_pplayer->m_pininput.GetLeftMagnaActionId() : g_pplayer->m_pininput.GetRightMagnaActionId());
+   *pVal = (LONG)0x10000 | (g_pplayer->m_tblMirrorEnabled ? g_pplayer->m_pininput.GetLeftMagnaActionId() : g_pplayer->m_pininput.GetRightMagnaActionId());
    return S_OK;
 }
 
@@ -354,7 +355,10 @@ STDMETHODIMP ScriptGlobalTable::GetTextFile(BSTR FileName, BSTR *pContents)
          buffer << scriptFile.rdbuf();
          string content = buffer.str();
          if (szFileName.ends_with(".vbs"))
+         {
+            PLOGI << "Reading script: " << file.string();
             content = g_pplayer->m_pluginAPI.ApplyScriptCOMObjectOverrides(content);
+         }
          *pContents = MakeWideBSTR(content);
          return S_OK;
       }
@@ -432,19 +436,8 @@ STDMETHODIMP ScriptGlobalTable::get_PlatformBits(BSTR *pVal)
 
 STDMETHODIMP ScriptGlobalTable::put_ShowCursor(VARIANT_BOOL enable)
 {
-   /*if(VBTOb(enable)) // not needed, otherwise hides mouse cursor in windowed mode
-   {
-      while (ShowCursor(FALSE) >= 0) ;
-      while (ShowCursor(TRUE) < 0) ;
-   }
-   else
-   {
-      while (ShowCursor(TRUE) < 0) ;
-      while (ShowCursor(FALSE) >= 0) ;
-   }*/
-
-   ShowCursor(VBTOb(enable) ? TRUE : FALSE);
-
+   // Deprecated: cursor state is entirely managed by the app
+   PLOGI << "The ShowCursor property is deprecated: the cursor is managed by VPX and automatically shown/hidden when playing/paused";
    return S_OK;
 }
 

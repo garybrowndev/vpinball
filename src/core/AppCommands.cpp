@@ -4,6 +4,7 @@
 #include "AppCommands.h"
 
 #include <iostream>
+#include <fstream>
 
 #include "extern.h"
 #include "core/TournamentFile.h"
@@ -369,8 +370,6 @@ enum option_names
    OPTION_PREFPATH,
    OPTION_LESSCPUTHREADS,
 #ifndef ENABLE_BGFX
-   OPTION_DISABLETRUEFULLSCREEN,
-   OPTION_ENABLETRUEFULLSCREEN,
    OPTION_GLES,
 #endif
    OPTION_INVALID,
@@ -419,8 +418,6 @@ static const CommandLineOption options[] = {
    { OPTION_PREFPATH, "PrefPath"s, "[path]  Use a custom preferences path instead of default"s },
    { OPTION_LESSCPUTHREADS, "LessCPUthreads"s, "Limit the amount of parallel execution"s },
 #ifndef ENABLE_BGFX
-   { OPTION_DISABLETRUEFULLSCREEN, "DisableTrueFullscreen"s, "Force-disable True Fullscreen setting [Deprecated, uses ini serttings instead]"s },
-   { OPTION_ENABLETRUEFULLSCREEN, "EnableTrueFullscreen"s, "Force-enable True Fullscreen setting [Deprecated, uses ini serttings instead]"s },
    { OPTION_GLES, "GLES"s, "[value]  Overrides the global emission scale (day/night setting, value range: 0.115..0.925) [Deprecated, uses ini serttings instead]"s },
 #endif
 };
@@ -464,6 +461,25 @@ void CommandLineProcessor::OnCommandLineError(const string& title, const string&
    #endif
 }
 
+// A Visual Pinball table is an OLE compound file (CFB). Validate the signature so passing a
+// non-table file (wrong type, or a path typo resolving to something else) reports a clear error
+// instead of loading into a black screen.
+static bool IsTableFile(const std::filesystem::path& path)
+{
+   std::ifstream f(path, std::ios::binary);
+   if (!f.is_open())
+      return false;
+   unsigned char sig[8] = {};
+   f.read(reinterpret_cast<char*>(sig), sizeof(sig));
+   static constexpr unsigned char cfb[8] = { 0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1 };
+   if (f.gcount() != static_cast<std::streamsize>(sizeof(sig)))
+      return false;
+   for (size_t k = 0; k < sizeof(sig); ++k)
+      if (sig[k] != cfb[k])
+         return false;
+   return true;
+}
+
 void CommandLineProcessor::ProcessCommandLine()
 {
 #ifndef __STANDALONE__
@@ -499,15 +515,24 @@ void CommandLineProcessor::ProcessCommandLine(int nArgs, const char* szArglist[]
       switch (opt)
       {
       case OPTION_INVALID:
-         // If the only parameter passed is a vpx table, consider it as /play command
+         // If the only parameter passed is a table, consider it a /play command. Play or fail the
+         // same on every platform: a missing, directory or non-table argument is an error rather
+         // than falling back to the editor.
          if ((nArgs == 2) && (i == 1))
          {
             std::filesystem::path filename = GetPathFromArg(szArglist[i]);
-            if (lowerCase(filename.extension().string()) == ".vpx" && FileExists(filename))
+            if (!std::filesystem::exists(filename))
             {
-               commands.push_back(std::make_unique<PlayTableCommand>(filename));
-               i++;
+               OnCommandLineError("Command Line Error"s, "Table file '" + filename.string() + "' was not found");
+               exit(1);
             }
+            if (!IsTableFile(filename))
+            {
+               OnCommandLineError("Command Line Error"s, "'" + filename.string() + "' is not a Visual Pinball table (.vpx)");
+               exit(1);
+            }
+            commands.push_back(std::make_unique<PlayTableCommand>(filename));
+            i++;
             break;
          }
          // ignore stuff (directories) that is passed in via frontends (not considered as invalid)
@@ -533,16 +558,6 @@ void CommandLineProcessor::ProcessCommandLine(int nArgs, const char* szArglist[]
          break;
 
 #ifndef ENABLE_BGFX
-      // FIXME remove as this is now handled by the ini system
-      case OPTION_DISABLETRUEFULLSCREEN:
-         g_app->m_disEnableTrueFullscreen = 0;
-         break;
-
-      // FIXME remove as this is now handled by the ini system
-      case OPTION_ENABLETRUEFULLSCREEN:
-         g_app->m_disEnableTrueFullscreen = 1;
-         break;
-
       // FIXME remove as this is now handled by the ini system
       case OPTION_GLES: // global emission scale parameter handling
          if (i + 1 < nArgs)
@@ -687,6 +702,11 @@ void CommandLineProcessor::ProcessCommandLine(int nArgs, const char* szArglist[]
             OnCommandLineError("Command Line Error"s, "Table file '" + tableFileName.string() + "' was not found");
             exit(1);
          }
+         else if (!IsTableFile(tableFileName))
+         {
+            OnCommandLineError("Command Line Error"s, "'" + tableFileName.string() + "' is not a Visual Pinball table (.vpx)");
+            exit(1);
+         }
          else
          {
             switch (opt)
@@ -729,6 +749,11 @@ void CommandLineProcessor::ProcessCommandLine(int nArgs, const char* szArglist[]
             OnCommandLineError("Command Line Error"s, "Table file '" + tableFileName.string() + "' was not found");
             exit(1);
          }
+         if (!IsTableFile(tableFileName))
+         {
+            OnCommandLineError("Command Line Error"s, "'" + tableFileName.string() + "' is not a Visual Pinball table (.vpx)");
+            exit(1);
+         }
          bool captureAttractLoop = true;
          if (i + 4 < nArgs && StrCompareNoCase("noloop"s, szArglist[i + 4]))
          {
@@ -756,6 +781,11 @@ void CommandLineProcessor::ProcessCommandLine(int nArgs, const char* szArglist[]
          if (!FileExists(tableFileName))
          {
             OnCommandLineError("Command Line Error"s, "Table file '" + tableFileName.string() + "' was not found");
+            exit(1);
+         }
+         if (!IsTableFile(tableFileName))
+         {
+            OnCommandLineError("Command Line Error"s, "'" + tableFileName.string() + "' is not a Visual Pinball table (.vpx)");
             exit(1);
          }
          const std::filesystem::path tournamentFileName = GetPathFromArg(szArglist[i + 2]);
@@ -789,14 +819,16 @@ void CommandLineProcessor::ProcessCommandLine(int nArgs, const char* szArglist[]
    if (defaultToWin32Editor && commands.empty())
       commands.push_back(std::make_unique<Win32EditCommand>());
    #endif
-   
+
    if (commands.size() > 1)
    {
       OnCommandLineError("Command Line Error"s, "Multiple command options specified. Please specify only one");
       exit(1);
    }
+   // With no actionable command (and no editor was opened above), show usage instead of starting up
+   // and immediately exiting with no output.
    if (commands.empty())
-      return;
+      commands.push_back(std::make_unique<ShowInfoAndExitCommand>("Visual Pinball Usage"s, GetCommandLineHelp(), 0));
    m_command = std::move(commands[0]);
 
    #ifndef __STANDALONE__

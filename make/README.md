@@ -39,17 +39,27 @@ Note that you may need to point bash to the tools folder via `PATH`, e.g. `/c/Pr
 
 ## Building via CMake
 
-Each target/platform combination has a `CMakeLists_[target]_[platform].txt` file in the `make` directory. Copy this file to `CMakeLists.txt` at the root of the project.
-
-* `target` can be one of the following:
-  * `bgfx` (recommended) - uses [bgfx](https://github.com/bkaradzic/bgfx) to support multiple rendering backends
-  * `gl` - OpenGL
-  * `dx9` - DirectX 9
-* `platform` should be the same one as you used to build the external dependencies.
+By default the build targets the BGFX renderer for the current host platform and architecture, so from the project root a plain configure just works:
 
 ```bash
-cp make/CMakeLists_[target]_[platform].txt CMakeLists.txt
+cmake -DCMAKE_BUILD_TYPE=Release -B build
 ```
+
+To build a different backend, platform or architecture, override `-DRENDERER`, `-DPLATFORM` and/or `-DARCH`:
+
+```bash
+cmake -DRENDERER=GL -DCMAKE_BUILD_TYPE=Release -B build
+cmake -DPLATFORM=windows -DARCH=x86 -B build
+```
+
+* `RENDERER` is the renderer backend:
+  * `BGFX` (recommended) - uses [bgfx](https://github.com/bkaradzic/bgfx) to support multiple rendering backends
+  * `GL` - OpenGL
+  * `DX9` - DirectX 9
+* `PLATFORM` defaults to the host (`linux`, `macos`, `windows`, ...) and should match the one you used to build the external dependencies.
+* `ARCH` defaults to the host (`x64`, `arm64`, ...).
+
+All combinations — including the iOS/Android shared-library builds — are handled by the single root `CMakeLists.txt`; an unsupported combination prints the list of supported ones. The source manifests live in `make/CMakeLists_sources.txt` and the plugins in `make/CMakeLists_plugins.txt`.
 
 #### Supported Platforms
 
@@ -57,9 +67,8 @@ cp make/CMakeLists_[target]_[platform].txt CMakeLists.txt
 <summary>windows-x64</summary>
 
 ```
-pacman -S --noconfirm make diffutils yasm mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-zlib mingw-w64-ucrt-x86_64-libwinpthread mingw-w64-ucrt-x86_64-libiconv mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-tools
+pacman -S --noconfirm make diffutils nasm mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-zlib mingw-w64-ucrt-x86_64-libwinpthread mingw-w64-ucrt-x86_64-libiconv mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-tools
 platforms/windows-x64/external.sh
-cp make/CMakeLists_bgfx-windows-x64.txt CMakeLists.txt
 cmake -G "Visual Studio 18 2026" -A x64 -B build
 cmake --build build --config Release
 ```
@@ -69,10 +78,9 @@ cmake --build build --config Release
 <summary>windows-x86</summary>
 
 ```
-pacman -S --noconfirm make diffutils yasm mingw-w64-i686-gcc mingw-w64-i686-zlib mingw-w64-i686-libwinpthread mingw-w64-i686-libiconv mingw-w64-i686-cmake
+pacman -S --noconfirm make diffutils nasm mingw-w64-i686-gcc mingw-w64-i686-zlib mingw-w64-i686-libwinpthread mingw-w64-i686-libiconv mingw-w64-i686-cmake
 platforms/windows-x86/external.sh
-cp make/CMakeLists_bgfx-windows-x86.txt CMakeLists.txt
-cmake -G "Visual Studio 18 2026" -A Win32 -B build
+cmake -G "Visual Studio 18 2026" -A Win32 -DARCH=x86 -B build
 cmake --build build --config Release
 ```
 </details>
@@ -85,7 +93,6 @@ sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
 brew install autoconf automake libtool cmake bison curl
 export PATH="$(brew --prefix bison)/bin:$PATH"
 platforms/macos-arm64/external.sh
-cp make/CMakeLists_bgfx-macos-arm64.txt CMakeLists.txt
 cmake -DCMAKE_BUILD_TYPE=Release -B build
 cmake --build build -- -j$(sysctl -n hw.ncpu)
 
@@ -101,8 +108,7 @@ sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
 brew install autoconf automake libtool cmake nasm bison curl
 export PATH="$(brew --prefix bison)/bin:$PATH"
 platforms/macos-x64/external.sh
-cp make/CMakeLists_bgfx-macos-x64.txt CMakeLists.txt
-cmake -DCMAKE_BUILD_TYPE=Release -B build
+cmake -DARCH=x64 -DCMAKE_BUILD_TYPE=Release -B build
 cmake --build build -- -j$(sysctl -n hw.ncpu)
 
 build/VPinballX_BGFX.app/Contents/MacOS/VPinballX_BGFX -play src/assets/exampleTable.vpx
@@ -116,7 +122,6 @@ build/VPinballX_BGFX.app/Contents/MacOS/VPinballX_BGFX -play src/assets/exampleT
 sudo apt-get update
 sudo apt install git build-essential pkg-config autoconf automake libtool cmake nasm bison curl zlib1g-dev libdrm-dev libgbm-dev libglu1-mesa-dev libegl-dev libgl1-mesa-dev libwayland-dev libwayland-egl-backend-dev libudev-dev libx11-dev libxcursor-dev libxi-dev libxss-dev libxtst-dev libxkbcommon-dev libxrandr-dev libasound2-dev libpipewire-0.3-dev
 platforms/linux-x64/external.sh
-cp make/CMakeLists_bgfx-linux-x64.txt CMakeLists.txt
 cmake -DCMAKE_BUILD_TYPE=Release -B build
 cmake --build build -- -j$(nproc)
 
@@ -133,7 +138,6 @@ brew install cmake bison curl
 export PATH="$(brew --prefix bison)/bin:$PATH"
 platforms/ios-arm64/external.sh
 #platforms/ios-simulator-arm64/external.sh
-cp make/CMakeLists_bgfx_lib.txt CMakeLists.txt
 cmake -DPLATFORM=ios -DARCH=arm64 -DCMAKE_BUILD_TYPE=Release -B build/ios-arm64
 cmake --build build/ios-arm64 -- -j$(sysctl -n hw.ncpu)
 #cmake -DPLATFORM=ios-simulator -DARCH=arm64 -DCMAKE_BUILD_TYPE=Release -B build/ios-simulator-arm64
@@ -156,7 +160,6 @@ export ANDROID_HOME=/Users/jmillard/Library/Android/sdk
 export ANDROID_NDK=/Users/jmillard/Library/Android/sdk/ndk/28.2.13676358
 export ANDROID_NDK_HOME=/Users/jmillard/Library/Android/sdk/ndk/28.2.13676358
 platforms/android-arm64-v8a/external.sh
-cp make/CMakeLists_bgfx_lib.txt CMakeLists.txt
 cmake -DPLATFORM=android -DARCH=arm64-v8a -DCMAKE_BUILD_TYPE=Release -B build/android-arm64-v8a
 cmake --build build/android-arm64-v8a -- -j$(sysctl -n hw.ncpu)
 cd standalone/android
@@ -175,7 +178,6 @@ export ANDROID_HOME=/Users/jmillard/Library/Android/sdk
 export ANDROID_NDK=/Users/jmillard/Library/Android/sdk/ndk/28.2.13676358
 export ANDROID_NDK_HOME=/Users/jmillard/Library/Android/sdk/ndk/28.2.13676358
 platforms/android-arm64-v8a/external.sh
-cp make/CMakeLists_bgfx_lib.txt CMakeLists.txt
 cmake -DPLATFORM=android -DARCH=arm64-v8a -DENABLE_XR=ON -DCMAKE_BUILD_TYPE=Release -B build/android-arm64-v8a
 cmake --build build/android-arm64-v8a -- -j$(sysctl -n hw.ncpu)
 cd standalone/android
@@ -189,7 +191,7 @@ cd standalone/android
 <summary>windows-x64-mingw</summary>
 
 ```
-pacman -S --noconfirm make diffutils yasm bison git autoconf automake libtool mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-zlib mingw-w64-ucrt-x86_64-libwinpthread mingw-w64-ucrt-x86_64-libiconv mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-tools
+pacman -S --noconfirm make diffutils nasm bison git autoconf automake libtool mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-zlib mingw-w64-ucrt-x86_64-libwinpthread mingw-w64-ucrt-x86_64-libiconv mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-tools
 ```
 
 Build (entire build runs inside the MSYS2 UCRT64 shell):
@@ -198,8 +200,7 @@ Build (entire build runs inside the MSYS2 UCRT64 shell):
 MSYSTEM=UCRT64 /c/msys64/usr/bin/bash.exe -l -c "
   cd \"$(pwd)\" &&
   ./platforms/windows-mingw-x64/external.sh &&
-  cp make/CMakeLists_bgfx-windows-mingw-x64.txt CMakeLists.txt &&
-  cmake -DCMAKE_BUILD_TYPE=Release -B build &&
+  cmake -DPLATFORM=windows-mingw -DCMAKE_BUILD_TYPE=Release -B build &&
   cmake --build build -- -j\$(nproc)
 "
 ```
@@ -212,7 +213,6 @@ MSYSTEM=UCRT64 /c/msys64/usr/bin/bash.exe -l -c "
 sudo dnf install @development-tools
 sudo dnf install gcc-c++ pkg-config autoconf automake libtool cmake nasm bison curl systemd-devel mesa-libGL-devel libX11-devel libXext-devel libXcursor-devel libXi-devel libXScrnSaver-devel libXtst-devel libxkbcommon-devel libxkbcommon-x11-devel libXrandr-devel zlib-ng-compat-static zlib-ng-compat-devel wayland-devel alsa-lib-devel pipewire-devel libgpiod-devel 
 platforms/linux-x64/external.sh
-cp make/CMakeLists_bgfx-linux-x64.txt CMakeLists.txt
 cmake -DCMAKE_BUILD_TYPE=Release -B build
 cmake --build build -- -j$(nproc)
 
@@ -220,6 +220,18 @@ build/VPinballX_BGFX -play src/assets/exampleTable.vpx
 ```
 </details>
 
+<details>
+<summary>linux-x64 (CachyOS)</summary>
+
+```
+sudo pacman -Sy cmake nasm git
+platforms/linux-x64/external.sh
+cmake -DCMAKE_BUILD_TYPE=Release -B build
+cmake --build build -- -j$(nproc)
+
+build/VPinballX_BGFX -play src/assets/exampleTable.vpx
+```
+</details>
 
 <details>
 <summary>linux-aarch64 (Fedora Asahi Remix 41 - Apple silicon)</summary>
@@ -228,7 +240,6 @@ build/VPinballX_BGFX -play src/assets/exampleTable.vpx
 sudo dnf install @development-tools
 sudo dnf install gcc-c++ pkg-config autoconf automake libtool cmake nasm bison curl systemd-devel mesa-libGL-devel libX11-devel libXext-devel ibXcursor-devel libXi-devel libXScrnSaver-devel libXtst-devel libxkbcommon-devel libxkbcommon-x11-devel zlib-ng-compat-static zlib-ng-compat-devel wayland-devel
 platforms/linux-aarch64/external.sh
-cp make/CMakeLists_bgfx-linux-aarch64.txt CMakeLists.txt
 cmake -DBUILD_RK3588=ON -DCMAKE_BUILD_TYPE=Release -B build
 cmake --build build -- -j$(nproc)
 
@@ -248,8 +259,7 @@ build/VPinballX_BGFX -play src/assets/exampleTable.vpx
 sudo apt-get update
 sudo apt install git pkg-config autoconf automake libtool cmake bison zlib1g-dev libdrm-dev libgbm-dev libgles2-mesa-dev libudev-dev libx11-dev libxcursor-dev libxi-dev libxss-dev libxtst-dev libxkbcommon-dev libxrandr-dev libasound2-dev libpipewire-0.3-dev libwayland-dev autotools-dev libdrm-etnaviv1 libegl-dev libglvnd-core-dev libltdl-dev libspa-0.2-dev libxrender-dev cmake-data libdrm-freedreno1 libffi-dev libglvnd-dev libpciaccess-dev libwayland-bin m4 libcap-dev libdrm-tegra0 libgles-dev libjsoncpp26 librhash1 libxfixes-dev libgpiod-dev
 platforms/linux-aarch64/external.sh
-cp make/CMakeLists_gl-linux-aarch64.txt CMakeLists.txt
-cmake -DBUILD_RPI=ON -DCMAKE_BUILD_TYPE=Release -B build
+cmake -DRENDERER=GL -DBUILD_RPI=ON -DCMAKE_BUILD_TYPE=Release -B build
 cmake --build build -- -j$(nproc)
 
 build/VPinballX_GL -play src/assets/exampleTable.vpx
@@ -263,7 +273,6 @@ build/VPinballX_GL -play src/assets/exampleTable.vpx
 sudo apt-get update
 sudo apt install git pkg-config autoconf automake libtool cmake bison zlib1g-dev libdrm-dev libgbm-dev libgles2-mesa-dev libgles2-mesa libudev-dev libx11-dev libxcursor-dev libxi-dev libxss-dev libxtst-dev libxkbcommon-dev libxrandr-dev libasound2-dev libpipewire-0.3-dev
 platforms/linux-aarch64/external.sh
-cp make/CMakeLists_bgfx-linux-aarch64.txt CMakeLists.txt
 cmake -DBUILD_RK3588=ON -DCMAKE_BUILD_TYPE=Release -B build
 cmake --build build -- -j$(nproc)
 
@@ -277,6 +286,3 @@ build/VPinballX_BGFX -play src/assets/exampleTable.vpx
 ## Continuous Integration
 
 Inspecting the [CI workflows](../.github/workflows) is also a good way to understand how everything is built.
-
-> [!NOTE]
-> Due to the large storage requirements and build times for external dependencies, pull requests currently do not trigger continuous integration. We recommend enabling GitHub Actions on your fork.

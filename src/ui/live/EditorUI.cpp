@@ -80,12 +80,12 @@ template <class T> static std::vector<T> SortedCaseInsensitive(std::vector<T> &l
 
 EditorUI::EditorUI(LiveUI &liveUI)
    : m_liveUI(liveUI)
+   , m_player(g_pplayer)
+   , m_renderer(m_player->m_renderer)
 {
    m_StartTime_msec = msec();
-   m_player = g_pplayer;
    m_table = m_player->m_ptable;
    m_pininput = &(m_player->m_pininput);
-   m_renderer = m_player->m_renderer;
 
    m_selection.type = Selection::SelectionType::S_NONE;
 
@@ -366,10 +366,7 @@ void EditorUI::RenderUI()
       // Right Hand to Left Hand (note that RH2LH = inverse(RH2LH), so RH2LH.RH2LH is identity, which property is used below)
       const Matrix3D view = RH2LH * m_camView * YAxis;
       const Matrix3D proj = YAxis * m_camProj;
-      m_renderer->GetMVP().SetView(0, view);
-      m_renderer->GetMVP().SetView(1, view);
-      m_renderer->GetMVP().SetProj(0, proj);
-      m_renderer->GetMVP().SetProj(1, proj);
+      m_renderer->SetViewProj(view, proj);
 
       if (m_perspectiveCam)
       {

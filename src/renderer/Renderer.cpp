@@ -12,6 +12,7 @@
 #include "parts/Collection.h"
 #include "parts/light.h"
 #include "parts/pintable.h"
+#include "physics/cabinet/NudgeHandler.h"
 #include "renderer/Anaglyph.h"
 #include "renderer/Shader.h"
 #include "renderer/RenderCommand.h"
@@ -46,6 +47,7 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
    , m_stereo3D(stereo3D)
    , m_table(table)
    , m_mvp(stereo3D == STEREO_OFF ? 1 : 2)
+   , m_initialMVP(stereo3D == STEREO_OFF ? 1 : 2)
 {
    m_stereo3Denabled = true; // m_table->m_settings.GetPlayer_Stereo3DEnabled();
    m_toneMapper = (ToneMapper)m_table->m_settings.GetTableOverride_ToneMapper();
@@ -74,10 +76,6 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
       m_decalImage = BaseTexture::CreateFromFile(m_table->m_settings.GetPlayer_DecalImage(), m_table->m_settings.GetPlayer_MaxTexDimension());
    }
    m_vrApplyColorKey = m_stereo3D == STEREO_VR && m_table->m_settings.GetPlayerVR_UsePassthroughColor();
-   m_vrColorKey = convertColor(m_table->m_settings.GetPlayerVR_PassthroughColor(), 1.f);
-   m_vrColorKey.x = InvsRGB(m_vrColorKey.x);
-   m_vrColorKey.y = InvsRGB(m_vrColorKey.y);
-   m_vrColorKey.z = InvsRGB(m_vrColorKey.z);
    m_visualNudgeStrength = m_table->m_settings.GetPlayer_NudgeStrength();
 
    #if defined(ENABLE_BGFX)
@@ -140,9 +138,9 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
 
    m_ancillaryRenderContext = VPXRenderContext2D {
       VPXWindowId::VPXWINDOW_Playfield, 0.f, 0.f, 0, 0.f, 0.f,
-      DrawImage, // Draw an image
-      DrawMatrixDisplay, // Draw a display (DMD, CRT, ...)
-      DrawSegmentDisplay, // Draw a segment display element (just one digit, using max blending to allow building a complete display)
+      DrawImage, // Draw an image // -> ctx->DrawImage
+      DrawMatrixDisplay, // Draw a display (DMD, CRT, ...) // -> ctx->DrawDisplay
+      DrawSegmentDisplay, // Draw a segment display element (just one digit, using max blending to allow building a complete display) // -> ctx->DrawSegDisplay
       &m_ancillaryRenderSetup // Custom rendering data
    };
 
@@ -190,21 +188,6 @@ Renderer::Renderer(PinTable* const table, VPX::Window* wnd, VideoSyncMode& syncM
       1.5f / (float)GetPreviousBackBufferTexture()->GetHeight(),
       0.f, 0.f);
    DisableBallLighting(m_table->m_settings.GetPlayer_DisableLightingForBalls());
-
-   #ifdef ENABLE_VR
-   if (m_stereo3D == STEREO_VR) {
-      colorFormat renderBufferFormatVR; // Legacy AMD Debugging (useless now, remove)
-      switch (g_pplayer->m_ptable->m_settings.GetPlayerVR_EyeFBFormat())
-      {
-      case 0: renderBufferFormatVR = RGB8; break;
-      case 2: renderBufferFormatVR = RGB16F; break;
-      case 3: renderBufferFormatVR = RGBA16F; break;
-      default: renderBufferFormatVR = RGBA8; break;
-      }
-      m_pOffscreenVRLeft = new RenderTarget(m_renderDevice, SurfaceType::RT_DEFAULT, "VRLeft"s, m_renderWidth, m_renderHeight, renderBufferFormatVR, false, 1, "Fatal Error: unable to create left eye buffer!");
-      m_pOffscreenVRRight = new RenderTarget(m_renderDevice, SurfaceType::RT_DEFAULT, "VRRight"s, m_renderWidth, m_renderHeight, renderBufferFormatVR, false, 1, "Fatal Error: unable to create right eye buffer!");
-   }
-   #endif
 
    // alloc bloom tex at 1/4 x 1/4 res (allows for simple HQ downscale of clipped input while saving memory)
    m_pBloomBufferTexture = new RenderTarget(m_renderDevice, 
@@ -985,6 +968,9 @@ float Renderer::GetDisplayAspectRatio() const
 //
 void Renderer::InitLayout(const float xpixoff, const float ypixoff)
 {
+   // TODO We should not call this function when in VR mode in the first place
+   if (m_stereo3D == STEREO_VR)
+      return;
    TRACE_FUNCTION();
    const ViewSetup& viewSetup = m_table->GetViewSetup();
    #if defined(ENABLE_OPENGL) || defined(ENABLE_BGFX)
@@ -993,12 +979,38 @@ void Renderer::InitLayout(const float xpixoff, const float ypixoff)
    constexpr bool stereo = false;
    #endif
    viewSetup.ComputeMVP(m_table, GetDisplayAspectRatio(), stereo, m_mvp, vec3(m_cam.x, m_cam.y, m_cam.z), m_inc, xpixoff / (float)GetDisplayWidth(), ypixoff / (float)GetDisplayHeight());
-   SetupShaders();
+   m_initialMVP = m_mvp;
+}
+
+void Renderer::SetFlip(ModelViewProj::FlipMode flipMode)
+{
+   assert(m_stereo3D != STEREO_VR);
+   m_initialMVP.SetFlip(flipMode);
+   InitLayout();
+}
+
+void Renderer::SetReflection(const Matrix3D& reflectionMatrix)
+{
+   m_mvp.SetReflection(reflectionMatrix);
+   // Invalidate MVP
+   PartGroupData::SpaceReference spaceReference = m_mvpSpaceReference;
+   m_mvpSpaceReference = PartGroupData::SpaceReference::SR_INHERIT;
+   SetSpaceReference(spaceReference);
+}
+
+void Renderer::SetViewProj(const Matrix3D& view, const Matrix3D& proj)
+{
+   assert(m_stereo3D != STEREO_VR);
+   m_initialMVP.SetView(0, view);
+   m_initialMVP.SetView(1, view);
+   m_initialMVP.SetProj(0, proj);
+   m_initialMVP.SetProj(1, proj);
 }
 
 Vertex3Ds Renderer::Unproject(const int width, const int height, const Vertex3Ds& point) const
 {
-   Matrix3D invMVP = m_mvp.GetModelViewProj(0);
+   assert(m_stereo3D != STEREO_VR);
+   Matrix3D invMVP = m_initialMVP.GetModelViewProj(0);
    invMVP.Invert();
    const Vertex3Ds p(
       2.0f * point.x / static_cast<float>(width)  - 1.0f,
@@ -1618,6 +1630,50 @@ void Renderer::DrawWireframe(IEditable* const renderable, const vec4& fillColor,
    m_render_mask = prevRenderMask;
 }
 
+void Renderer::SetSpaceReference(PartGroupData::SpaceReference spaceReference)
+{
+   if (m_mvpSpaceReference == spaceReference)
+      return;
+
+#if defined(ENABLE_XR)
+   if (m_stereo3D == STEREO_VR)
+      g_pplayer->m_vrDevice->UpdateVRPosition(spaceReference, m_mvp);
+   else
+#endif
+   {
+      switch (spaceReference)
+      {
+      case PartGroupData::SpaceReference::SR_CABINET:
+      case PartGroupData::SpaceReference::SR_CABINET_FEET:
+      case PartGroupData::SpaceReference::SR_ROOM:
+         for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
+            m_mvp.SetView(eye, g_pplayer->m_ptable->GetDefaultPlayfieldToCabMatrix() * m_playfieldView[eye]);
+         break;
+
+      case PartGroupData::SpaceReference::SR_PLAYFIELD:
+      default:
+         for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
+            m_mvp.SetView(eye, m_playfieldView[eye]);
+         break;
+      }
+   }
+
+   // Apply nudge to cabinet parts (as we don't nudge the room) but only when not using static prepass (which uses a simple screen shifting)
+   if (spaceReference != PartGroupData::SpaceReference::SR_ROOM && !IsUsingStaticPrepass())
+   {
+      if (const auto nudge = g_pplayer->m_pininput.m_nudgeHandler->GetCabinetOffset(); nudge.x != 0.f || nudge.y != 0.f)
+      {
+         const Matrix3D nudgeMat = Matrix3D::MatrixTranslate(m_visualNudgeStrength * MTOVPU(nudge.x), m_visualNudgeStrength * MTOVPU(nudge.y), 0.f);
+         for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
+            m_mvp.SetView(eye, nudgeMat * m_mvp.GetView(eye));
+      }
+   }
+
+   m_mvpSpaceReference = spaceReference;
+   UpdateBasicShaderMatrix();
+   UpdateBallShaderMatrix();
+}
+
 void Renderer::RenderItem(IEditable* const editable, bool isNoBackdrop)
 {
    if (!editable->GetIRenderable()
@@ -1626,45 +1682,7 @@ void Renderer::RenderItem(IEditable* const editable, bool isNoBackdrop)
       return;
 
    const PartGroupData::SpaceReference spaceReference = editable->GetPartGroup() ? editable->GetPartGroup()->GetReferenceSpace() : PartGroupData::SpaceReference::SR_PLAYFIELD;
-   if (m_mvpSpaceReference != spaceReference)
-   {
-      #if defined(ENABLE_XR)
-      if (m_stereo3D == STEREO_VR)
-         g_pplayer->m_vrDevice->UpdateVRPosition(spaceReference, m_mvp);
-      else
-      #endif
-      {
-         switch (spaceReference)
-         {
-         case PartGroupData::SpaceReference::SR_CABINET:
-         case PartGroupData::SpaceReference::SR_CABINET_FEET:
-         case PartGroupData::SpaceReference::SR_ROOM:
-            for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
-               m_mvp.SetView(eye, g_pplayer->m_ptable->GetDefaultPlayfieldToCabMatrix() * m_playfieldView[eye]);
-            break;
-
-         case PartGroupData::SpaceReference::SR_PLAYFIELD:
-         default:
-            for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
-               m_mvp.SetView(eye, m_playfieldView[eye]);
-            break;
-         }
-      }
-      // Apply nudge to cabinet parts (as we don't nudge the room) but only when not using static prepass (which uses a simple screen shifting)
-      if (spaceReference != PartGroupData::SpaceReference::SR_ROOM && !IsUsingStaticPrepass())
-      {
-         if (const auto nudge = g_pplayer->m_physics->GetTableDisplacement(); nudge.x != 0.f || nudge.y != 0.f)
-         {
-            const Matrix3D nudgeMat = Matrix3D::MatrixTranslate(2.5f * 100.f * m_visualNudgeStrength * nudge.x, 2.5f * 100.f * m_visualNudgeStrength * nudge.y, 0.f);
-            for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
-               m_mvp.SetView(eye, nudgeMat * m_mvp.GetView(eye));
-         }
-      }
-      m_mvpSpaceReference = spaceReference;
-      UpdateBasicShaderMatrix();
-      UpdateBallShaderMatrix();
-   }
-
+   SetSpaceReference(spaceReference);
    editable->GetIRenderable()->Render(m_render_mask);
 }
 
@@ -1906,9 +1924,11 @@ void Renderer::RenderDynamics()
 
    TRACE_FUNCTION();
 
+   SetSpaceReference(PartGroupData::SpaceReference::SR_PLAYFIELD);
+
    // Mark all probes to be re-rendered for this frame (only if needed, lazily rendered)
-   for (size_t i = 0; i < m_table->m_vrenderprobe.size(); ++i)
-      m_table->m_vrenderprobe[i]->MarkDirty();
+   for (auto probe : m_table->m_vrenderprobe)
+      probe->MarkDirty();
 
    // Setup the projection matrices used for refraction
    Matrix3D matProj[2];
@@ -2262,6 +2282,8 @@ void Renderer::SetupTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapR
    m_renderDevice->AddRenderTargetDependency(renderedRT);
    m_renderDevice->m_FBShader->SetTexture(SHADER_tex_fb_unfiltered, renderedRT->GetColorSampler());
    m_renderDevice->m_FBShader->SetTexture(SHADER_tex_fb_filtered, renderedRT->GetColorSampler());
+   m_renderDevice->AddRenderTargetDependency(GetBackBufferTexture(), true);
+   m_renderDevice->m_FBShader->SetTexture(SHADER_tex_depth, GetBackBufferTexture()->GetDepthSampler());
 
    if (m_table->m_bloom_strength > 0.0f && !m_bloomOff)
    {
@@ -2319,13 +2341,8 @@ void Renderer::SetupTonemapping(RenderTarget* renderedRT, RenderTarget* tonemapR
    }
    else
    {
-      #ifdef ENABLE_VR
-         // Legacy OpenVR has hacked colorspace conversion
-         m_renderDevice->m_FBShader->SetVector(SHADER_exposure_wcg, m_exposure, 1.f, 1.f, 0.f);
-      #else
-         // VR device expects linear RGB value (for linear layer composition)
-         m_renderDevice->m_FBShader->SetVector(SHADER_exposure_wcg, m_exposure, 1.f, /*100.f*//*203.f*/350.f/10000.f, g_pplayer->m_vrDevice ? 2.f : 0.f); //!! 203 nits as SDR reference? //!! or 100 as in BT2446 spec? // but both result in too dark images for BT2446 conversion at least compared to the other mappers
-      #endif
+      // VR device expects linear RGB value (for linear layer composition)
+      m_renderDevice->m_FBShader->SetVector(SHADER_exposure_wcg, m_exposure, 1.f, /*100.f*//*203.f*/350.f/10000.f, g_pplayer->m_vrDevice ? 2.f : 0.f); //!! 203 nits as SDR reference? //!! or 100 as in BT2446 spec? // but both result in too dark images for BT2446 conversion at least compared to the other mappers
 
       // dummy values only, unused at the moment
       //m_renderDevice->m_FBShader->SetVector(SHADER_spline1, 0.f,0.f,0.f,0.f);
@@ -2432,7 +2449,7 @@ RenderTarget* Renderer::ApplyBallMotionBlur(RenderTarget* beforeTonemapRT, Rende
    Matrix3D matProj[2];
    Matrix3D matProjInv[2];
    const int nEyes = m_renderDevice->m_nEyes;
-   GetMVP().SetModel(Matrix3D::MatrixIdentity());
+   m_mvp.SetModel(Matrix3D::MatrixIdentity());
    for (int eye = 0; eye < nEyes; eye++)
    {
       matProj[eye] = GetMVP().GetProj(eye);
@@ -2445,6 +2462,8 @@ RenderTarget* Renderer::ApplyBallMotionBlur(RenderTarget* beforeTonemapRT, Rende
    std::array<Vertex3D_TexelOnly*, 16> updatedVertices;
    const float invX = static_cast<float>(1.0 / beforeTonemapRT->GetWidth());
    const float invY = static_cast<float>(1.0 / beforeTonemapRT->GetHeight());
+   const float padX = invX; // One pixel padding to account for filtering in the final copy which applies visual nudge with a non integral offset 
+   const float padY = invY;
    int nQuads = 0;
    for (size_t i = 0; i < g_pplayer->m_vball.size() && nQuads < 16; i++)
    {
@@ -2475,7 +2494,7 @@ RenderTarget* Renderer::ApplyBallMotionBlur(RenderTarget* beforeTonemapRT, Rende
       ShaderState* ss = m_renderDevice->GetCurrentPass()->m_commands.back()->GetShaderState();
       updatedVertices[nQuads] = (Vertex3D_TexelOnly*)m_renderDevice->GetCurrentPass()->m_commands.back()->GetQuadVertices();
       m_renderDevice->AddBeginOfFrameCmd(
-         [this, pball, view, ss, cmdVerts = updatedVertices[nQuads], balls, whHeight = vec4(invX, invY, 0.f, 2.f)]()
+         [this, pball, view, ss, cmdVerts = updatedVertices[nQuads], balls, invX, invY, padX, padY]()
          {
             RenderTarget* tempRT = GetMotionBlurBufferTexture();
             const vec3 posl = pball->GetPosition() + m_renderDevice->GetPredictedDisplayDelay() * pball->GetVelocity();
@@ -2495,24 +2514,23 @@ RenderTarget* Renderer::ApplyBallMotionBlur(RenderTarget* beforeTonemapRT, Rende
                Ball::m_ash.computeProjBounds(GetMVP().GetProj(eye), newPos.x, newPos.y, newPos.z, pball->m_hitBall.m_d.m_radius, xMin, xMax, yMin, yMax);
             const float fullLen = Vertex2D((xMax - xMin) * static_cast<float>(tempRT->GetWidth()), (yMax - yMin) * static_cast<float>(tempRT->GetHeight())).Length() - prevLen;
 
-            // Add a 1 pixel margin as the visual nudge may cause some sampling in here
-            xMin -= whHeight.x;
-            yMin -= whHeight.y;
-            xMax += whHeight.x;
-            yMax += whHeight.y;
+            // Add a margin as the visual nudge may cause some filtering
+            xMin -= padX;
+            yMin -= padY;
+            xMax += padX;
+            yMax += padY;
 
-            //xMin = yMin = -1.f; xMax = yMax = 1.f;
             const Vertex3D_TexelOnly verts[4] =
             {
-               { xMax, yMax, 0.0f, xMax * 0.5f + 0.5f, 0.5f - yMax * 0.5f },
-               { xMin, yMax, 0.0f, xMin * 0.5f + 0.5f, 0.5f - yMax * 0.5f },
-               { xMax, yMin, 0.0f, xMax * 0.5f + 0.5f, 0.5f - yMin * 0.5f },
-               { xMin, yMin, 0.0f, xMin * 0.5f + 0.5f, 0.5f - yMin * 0.5f }
+               { xMax, yMax, 0.0f, 0.5f + xMax * 0.5f, 0.5f - yMax * 0.5f }, //
+               { xMin, yMax, 0.0f, 0.5f + xMin * 0.5f, 0.5f - yMax * 0.5f }, //
+               { xMax, yMin, 0.0f, 0.5f + xMax * 0.5f, 0.5f - yMin * 0.5f }, //
+               { xMin, yMin, 0.0f, 0.5f + xMin * 0.5f, 0.5f - yMin * 0.5f } //
             };
             memcpy(cmdVerts, verts, sizeof(verts));
 
             const int nSamples = clamp(static_cast<int>(0.5f * fullLen), 2, 32);
-            vec4 whHeightWithNSamples(whHeight.x, whHeight.y, 0.f, static_cast<float>(nSamples));
+            vec4 whHeightWithNSamples(invX, invY, 0.f, static_cast<float>(nSamples));
             ss->SetVector(SHADER_w_h_height, &whHeightWithNSamples);
 
             pball->m_lastRenderedPos = newPos;
@@ -2534,16 +2552,18 @@ RenderTarget* Renderer::ApplyBallMotionBlur(RenderTarget* beforeTonemapRT, Rende
          m_renderDevice->DrawTexturedQuad(m_renderDevice->m_FBShader, quads.data() + i * 4);
          m_renderDevice->AddBeginOfFrameCmd(
             [vertices = static_cast<Vertex3D_TexelOnly*>(m_renderDevice->GetCurrentPass()->m_commands.back()->GetQuadVertices()), cmdVerts = updatedVertices[i],
-               screenOffset = m_screenOffset, invX, invY]()
+               screenOffset = m_screenOffset, padX, padY]()
             {
-               const Vertex2D pad[4] = { { invX, invY }, { -invX, invY }, { invX, -invY }, { -invX, -invY } }; // Remove padding added to support screenOffset filtering
+               const Vertex2D pad[4] = { { padX, padY }, { -padX, padY }, { padX, -padY }, { -padX, -padY } };
                for (int i = 0; i < 4; i++)
                {
+                  // Source in temp buffer: no screen offset, remove padding
+                  vertices[i].tu = 0.5f + (cmdVerts[i].x - pad[i].x) * 0.5f;
+                  vertices[i].tv = 0.5f - (cmdVerts[i].y - pad[i].y) * 0.5f;
+                  // Destination is the tonemapped back buffer, apply screen offset and remove padding
                   vertices[i].x = cmdVerts[i].x + screenOffset.x - pad[i].x;
                   vertices[i].y = cmdVerts[i].y + screenOffset.y - pad[i].y;
-                  vertices[i].z = cmdVerts[i].z;
-                  vertices[i].tu = vertices[i].x * 0.5f + 0.5f;
-                  vertices[i].tv = 0.5f - vertices[i].y * 0.5f;
+                  vertices[i].z = 0.0f;
                }
             });
       }
@@ -2554,13 +2574,19 @@ RenderTarget* Renderer::ApplyBallMotionBlur(RenderTarget* beforeTonemapRT, Rende
 
 RenderTarget* Renderer::ApplyPostProcessedAntialiasing(RenderTarget* renderedRT, RenderTarget* outputBackBuffer)
 {
-   const bool SMAA = m_FXAA == Quality_SMAA;
+   const bool SMAA = m_FXAA == Quality_SMAA && m_stereo3D == STEREO_OFF;
    const bool DLAA = m_FXAA == Standard_DLAA;
    const bool NFAA = m_FXAA == Fast_NFAA;
    const bool FXAA1 = m_FXAA == Fast_FXAA;
    const bool FXAA2 = m_FXAA == Standard_FXAA;
    const bool FXAA3 = m_FXAA == Quality_FXAA;
    const bool FAAA = m_FXAA == Quality_FAAA;
+
+   if (m_FXAA == Quality_SMAA && m_stereo3D != STEREO_OFF)
+   {
+      static unsigned int notifId = 0;
+      notifId = g_pplayer->m_liveUI->PushNotification("SMAA is not supported in stereo modes", 5000, notifId);
+   }
 
    m_renderDevice->ResetRenderState();
    m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
@@ -2723,53 +2749,27 @@ RenderTarget* Renderer::ApplyStereo(RenderTarget* renderedRT, RenderTarget* outp
 
    if (m_stereo3D == STEREO_VR)
    {
-   #if defined(ENABLE_XR) || defined(ENABLE_VR)
+   #if defined(ENABLE_XR)
       int w = renderedRT->GetWidth();
       int h = renderedRT->GetHeight();
 
-      #if defined(ENABLE_XR)
-         assert(outputBackBuffer == m_renderDevice->m_outputWnd[0]->GetBackBuffer()); // XR swapchain
-         // Rendering is already directly being performed to the XR swapchain image, so nothing to do except for depth buffer
-         // TODO we should directly use the swapchain depth buffer too to avoid the copy
-         // FIXME this will not work as the current backbuffer is declared as not having a depth buffer (even if it has like here), beside BGFX does not support blitting depth to the default backbuffer
-         if (g_pplayer->m_vrDevice->UseDepthBuffer())
-         {
-            // Copy depth buffer to OpenXR swapchain's current depth target
-            m_renderDevice->SetRenderTarget("OpenXR-Depth"s, outputBackBuffer, true, true);
-            m_renderDevice->AddRenderTargetDependency(GetBackBufferTexture(), true);
-            m_renderDevice->BlitRenderTarget(GetBackBufferTexture(), outputBackBuffer, false, true);
-         }
-         // FIXME no preview for Vulkan (as we are not creating the desktop swapchain)
-         if (bgfx::getRendererType() == bgfx::RendererType::Vulkan)
-            return outputBackBuffer;
-
-      #elif defined(ENABLE_VR)
-         // Copy each eye to the HMD texture
-         assert(renderedRT != outputBackBuffer);
-            
-         RenderTarget *leftTexture = GetOffscreenVR(0);
-         m_renderDevice->SetRenderTarget("Left Eye"s, leftTexture, false);
-         m_renderDevice->AddRenderTargetDependency(renderedRT);
-         m_renderDevice->BlitRenderTarget(renderedRT, leftTexture, true, false, 0, 0, w, h, 0, 0, w, h, 0, 0);
-
-         RenderTarget *rightTexture = GetOffscreenVR(1);
-         m_renderDevice->SetRenderTarget("Right Eye"s, rightTexture, false);
-         m_renderDevice->AddRenderTargetDependency(renderedRT);
-         m_renderDevice->BlitRenderTarget(renderedRT, rightTexture, true, false, 0, 0, w, h, 0, 0, w, h, 1, 0);
-      #endif
+      assert(outputBackBuffer == m_renderDevice->m_outputWnd[0]->GetBackBuffer()); // XR swapchain
+      // Rendering is already directly being performed to the XR swapchain image, so nothing to do except for depth buffer
+      // TODO we should directly use the swapchain depth buffer too to avoid the copy
+      // FIXME this will not work as the current backbuffer is declared as not having a depth buffer (even if it has like here), beside BGFX does not support blitting depth to the default backbuffer
+      if (g_pplayer->m_vrDevice->UseDepthBuffer())
+      {
+         // Copy depth buffer to OpenXR swapchain's current depth target
+         m_renderDevice->SetRenderTarget("OpenXR-Depth"s, outputBackBuffer, true, true);
+         m_renderDevice->AddRenderTargetDependency(GetBackBufferTexture(), true);
+         m_renderDevice->BlitRenderTarget(GetBackBufferTexture(), outputBackBuffer, false, true);
+      }
 
       // Blit preview
-      #if defined(ENABLE_XR)
-         assert(m_renderDevice->m_outputWnd.size() == 2); // For the time being, we rely on the fact that the First output is the VR Headset, and the second is the VR preview OS window
-         RenderTarget* previewRT = m_renderDevice->m_outputWnd[1]->GetBackBuffer();
-         m_renderDevice->SetRenderTarget("VR Preview"s, previewRT, false, true);
+      assert(m_renderDevice->m_outputWnd.size() == 2); // For the time being, we rely on the fact that the First output is the VR Headset, and the second is the VR preview OS window
+      RenderTarget* previewRT = m_renderDevice->m_outputWnd[1]->GetBackBuffer();
+      m_renderDevice->SetRenderTarget("VR Preview"s, previewRT, false, true);
 
-      #elif defined(ENABLE_VR)
-         RenderTarget* previewRT = outputBackBuffer;
-         m_renderDevice->SetRenderTarget("VR Preview"s, previewRT, false);
-         m_renderDevice->AddRenderTargetDependency(leftTexture); // To ensure blit is made
-         m_renderDevice->AddRenderTargetDependency(rightTexture); // To ensure blit is made
-      #endif
       m_renderDevice->AddRenderTargetDependency(renderedRT);
       const int previewW = m_vrPreview == VRPREVIEW_BOTH ? previewRT->GetWidth() / 2 : previewRT->GetWidth(), previewH = previewRT->GetHeight();
       const float ar = (float)w / (float)h, previewAr = (float)previewW / (float)previewH;
@@ -2790,78 +2790,56 @@ RenderTarget* Renderer::ApplyStereo(RenderTarget* renderedRT, RenderTarget* outp
       if (m_vrPreviewShrink || m_vrPreview == VRPREVIEW_DISABLED)
          m_renderDevice->Clear(clearType::TARGET | clearType::ZBUFFER, 0x00000000);
 
-      #if defined(ENABLE_XR)
-      
-         Vertex3D_TexelOnly verts[4] =
-         {
-            { -1.0f,  1.0f, 0.0f, static_cast<float>(x     ) / w, static_cast<float>(y     ) / h },
-            {  1.0f,  1.0f, 0.0f, static_cast<float>(x + fw) / w, static_cast<float>(y     ) / h },
-            { -1.0f, -1.0f, 0.0f, static_cast<float>(x     ) / w, static_cast<float>(y + fh) / h },
-            {  1.0f, -1.0f, 0.0f, static_cast<float>(x + fw) / w, static_cast<float>(y + fh) / h }
-         };
-         m_renderDevice->m_FBShader->SetTechnique(SHADER_TECHNIQUE_fb_mirror);
-         m_renderDevice->m_FBShader->SetVector(SHADER_w_h_height, 1.f, 1.f, 1.f, 1.f);
-         m_renderDevice->m_FBShader->SetTexture(SHADER_tex_fb_unfiltered, renderedRT->GetColorSampler(), SamplerFilter::SF_BILINEAR);
-         if (m_vrPreview == VRPREVIEW_LEFT || m_vrPreview == VRPREVIEW_RIGHT)
-         {
-            m_renderDevice->m_FBShader->SetInt(SHADER_layer, m_vrPreview == VRPREVIEW_LEFT ? 0 : 1);
-            m_renderDevice->DrawTexturedQuad(m_renderDevice->m_FBShader, verts);
-         }
-         else if (m_vrPreview == VRPREVIEW_BOTH)
-         {
-            verts[0].x = verts[2].x = -1.f;
-            verts[1].x = verts[3].x = 0.f;
-            m_renderDevice->m_FBShader->SetInt(SHADER_layer, 0);
-            m_renderDevice->DrawTexturedQuad(m_renderDevice->m_FBShader, verts);
-            verts[0].x = verts[2].x = 0.f;
-            verts[1].x = verts[3].x = 1.f;
-            m_renderDevice->m_FBShader->SetInt(SHADER_layer, 1);
-            m_renderDevice->DrawTexturedQuad(m_renderDevice->m_FBShader, verts);
-         }
+      Vertex3D_TexelOnly verts[4] =
+      {
+         { -1.0f,  1.0f, 0.0f, static_cast<float>(x     ) / w, static_cast<float>(y     ) / h },
+         {  1.0f,  1.0f, 0.0f, static_cast<float>(x + fw) / w, static_cast<float>(y     ) / h },
+         { -1.0f, -1.0f, 0.0f, static_cast<float>(x     ) / w, static_cast<float>(y + fh) / h },
+         {  1.0f, -1.0f, 0.0f, static_cast<float>(x + fw) / w, static_cast<float>(y + fh) / h }
+      };
+      m_renderDevice->m_FBShader->SetTechnique(SHADER_TECHNIQUE_fb_mirror);
+      m_renderDevice->m_FBShader->SetVector(SHADER_w_h_height, 1.f, 1.f, 1.f, 1.f);
+      m_renderDevice->m_FBShader->SetTexture(SHADER_tex_fb_unfiltered, renderedRT->GetColorSampler(), SamplerFilter::SF_BILINEAR);
+      if (bgfx::getRendererType() != bgfx::RendererType::Vulkan)
+      {
+         // FIXME no preview for Vulkan as we are not creating the desktop swapchain
 
-         if (m_vrApplyColorKey)
-         {
-            // Apply a color mask for color keying. For the time being, this is the only way we have to support mixed reality
-            // as HMD does not expose passthrough layers to PCVR (at least Meta Quest 3, used for development).
-            // Therefore we leverage VirtualDesktop color keying feature. This needs to be performed as a post process to avoid
-            // blending the color key with the rendered scene (alpha blending which would be kept, as it is not fullfilling the
-            // color key after blending).
-            m_renderDevice->SetRenderTarget("VR ColorKeying"s, m_renderDevice->GetOutputBackBuffer(), true, true);
-            m_renderDevice->AddRenderTargetDependency(previewRT); // Add a dependency on the preview to ensure color keying is done after preview copy
-            Matrix3D matWorldViewProj[2];
-            matWorldViewProj[0].SetIdentity();
-            matWorldViewProj[1].SetIdentity();
-            const vec4 cameraPos[2] = { { 0.f, 0.f, 0.f, 0.f }, { 0.f, 0.f, 0.f, 0.f } };
-            m_renderDevice->m_basicShader->SetVector(SHADER_cameraPosWorld, &cameraPos[0], 2);
-            m_renderDevice->m_basicShader->SetMatrix(SHADER_matRotViewProj, &matWorldViewProj[0], 2);
-            m_renderDevice->m_basicShader->SetVector(SHADER_staticColor_Alpha, &m_vrColorKey);
-            m_renderDevice->m_basicShader->SetTechnique(SHADER_TECHNIQUE_unshaded_without_texture);
-            static constexpr Vertex3D_NoTex2 ckVerts[4] =
-            {
-               { -1.0f,  1.0f, 1.0f },
-               {  1.0f,  1.0f, 1.0f },
-               { -1.0f, -1.0f, 1.0f },
-               {  1.0f, -1.0f, 1.0f }
-            };
-            m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_TRUE);
-            m_renderDevice->SetRenderState(RenderState::ZFUNC, RenderState::Z_LESSEQUAL);
-            m_renderDevice->DrawTexturedQuad(m_renderDevice->m_basicShader, ckVerts);
-            m_renderDevice->m_basicShader->SetVector(SHADER_staticColor_Alpha, 1.f, 1.f, 1.f, 1.f);
-         }
+      }
+      else if (m_vrPreview == VRPREVIEW_LEFT || m_vrPreview == VRPREVIEW_RIGHT)
+      {
+         m_renderDevice->m_FBShader->SetInt(SHADER_layer, m_vrPreview == VRPREVIEW_LEFT ? 0 : 1);
+         m_renderDevice->DrawTexturedQuad(m_renderDevice->m_FBShader, verts);
+      }
+      else if (m_vrPreview == VRPREVIEW_BOTH)
+      {
+         verts[0].x = verts[2].x = -1.f;
+         verts[1].x = verts[3].x = 0.f;
+         m_renderDevice->m_FBShader->SetInt(SHADER_layer, 0);
+         m_renderDevice->DrawTexturedQuad(m_renderDevice->m_FBShader, verts);
+         verts[0].x = verts[2].x = 0.f;
+         verts[1].x = verts[3].x = 1.f;
+         m_renderDevice->m_FBShader->SetInt(SHADER_layer, 1);
+         m_renderDevice->DrawTexturedQuad(m_renderDevice->m_FBShader, verts);
+      }
 
-      #elif defined(ENABLE_VR)
-         if (m_vrPreview == VRPREVIEW_LEFT || m_vrPreview == VRPREVIEW_RIGHT)
-         {
-            m_renderDevice->BlitRenderTarget(renderedRT, previewRT, true, false, x, y, fw, fh, 0, 0, previewW, previewH, m_vrPreview == VRPREVIEW_LEFT ? 0 : 1, 0);
-         }
-         else if (m_vrPreview == VRPREVIEW_BOTH)
-         {
-            m_renderDevice->BlitRenderTarget(renderedRT, previewRT, true, false, x, y, fw, fh, 0, 0, previewW, previewH, 0, 0);
-            m_renderDevice->BlitRenderTarget(renderedRT, previewRT, true, false, x, y, fw, fh, previewW, 0, previewW, previewH, 1, 0);
-         }
-         m_renderDevice->SubmitVR(renderedRT);
-      #endif
-   #endif
+      if (m_vrApplyColorKey)
+      {
+         // Apply a color mask for color keying. For the time being, this is the only way we have to support mixed reality
+         // as HMD does not expose passthrough layers to PCVR (at least Meta Quest 3, used for development).
+         // Therefore we leverage VirtualDesktop color keying feature. This needs to be performed as a post process to avoid
+         // blending the color key with the rendered scene (alpha blending which would be kept, as it is not fullfilling the
+         // color key after blending).
+         m_renderDevice->SetRenderTarget("VR ColorKeying"s, m_renderDevice->GetOutputBackBuffer(), true, true);
+         m_renderDevice->AddRenderTargetDependency(previewRT); // Add a dependency on the preview to ensure color keying is done after preview copy
+         m_renderDevice->AddRenderTargetDependency(renderedRT);
+         m_renderDevice->SetRenderState(RenderState::ZENABLE, RenderState::RS_TRUE);
+         m_renderDevice->SetRenderState(RenderState::ZFUNC, RenderState::Z_LESSEQUAL);
+         m_renderDevice->m_FBShader->SetTexture(SHADER_tex_depth, GetBackBufferTexture()->GetDepthSampler());
+         m_renderDevice->m_FBShader->SetTexture(SHADER_tex_fb_unfiltered, renderedRT->GetColorSampler());
+         m_renderDevice->m_FBShader->SetTechnique(SHADER_TECHNIQUE_vr_passthrough);
+         m_renderDevice->DrawFullscreenTexturedQuad(m_renderDevice->m_FBShader);
+      }
+#endif
 
       return outputBackBuffer;
    }
@@ -2898,6 +2876,21 @@ void Renderer::RenderFrame()
    // Keep previous render as a reflection probe for ball reflection and for hires motion blur
    SwapBackBufferRenderTargets();
 
+   // Setup initial MVP to setup shaders and rendering
+   m_mvpSpaceReference = PartGroupData::SpaceReference::SR_PLAYFIELD;
+#if defined(ENABLE_XR)
+   if (m_stereo3D == STEREO_VR)
+   {
+      g_pplayer->m_vrDevice->UpdateVRPosition(m_mvpSpaceReference, m_mvp);
+   }
+   else
+#endif
+   {
+      m_mvp = m_initialMVP;
+      for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
+         m_playfieldView[eye] = m_mvp.GetView(eye);
+   }
+
    // Reinitialize parts that have been modified
    SetupShaders();
    for (auto renderable : m_renderableToInit)
@@ -2931,16 +2924,11 @@ void Renderer::RenderFrame()
    // m_renderDevice->AddRenderTargetDependency(m_renderDevice->GetPreviousBackBufferTexture());
    m_renderDevice->m_ballShader->SetTexture(SHADER_tex_ball_playfield, GetPreviousBackBufferTexture()->GetColorSampler());
 
-   // Update camera point of view
-   // FIXME this may lead to view drift if nudging and the mvp has not been initialized per frame
-   for (unsigned int eye = 0; eye < m_mvp.m_nEyes; eye++)
-      m_playfieldView[eye] = m_mvp.GetView(eye);
-   m_mvpSpaceReference = PartGroupData::SpaceReference::SR_INHERIT; // Force update
-
    // If using static prerendering, apply nudging by shaking the screen (otherwise, apply table displacement)
    if (!m_disableStaticPrepass && m_visualNudgeStrength > 0.0f && g_pplayer->m_playMode != Player::PlayMode::CaptureAttract)
    {
-      const Vertex2D offset = m_visualNudgeStrength * g_pplayer->m_physics->GetTableDisplacement();
+      // FIXME Screen offset is applied in clip space (-1..1, -1..1) independently of the output resolution resulting in non uniform scaling of nudge
+      const Vertex2D offset = m_visualNudgeStrength * g_pplayer->m_pininput.m_nudgeHandler->GetCabinetOffset() * 2.f;
       SetScreenOffset(offset.x, offset.y);
    }
    else
@@ -3037,7 +3025,7 @@ void Renderer::RenderFrame()
    const bool hasUpscalerPass = m_renderWidth < GetBackBufferTexture()->GetWidth();
    // OpenXR directly renders to the XR render target view without any postprocess needs
    #ifdef ENABLE_XR
-   const bool hasStereoPass = m_stereo3Denabled && (m_stereo3D != STEREO_OFF) && (m_stereo3D != STEREO_VR);
+   const bool hasStereoPass = (m_stereo3Denabled && (m_stereo3D != STEREO_OFF) && (m_stereo3D != STEREO_VR)) || ((m_stereo3D == STEREO_VR) && m_vrApplyColorKey);
    #else
    const bool hasStereoPass = m_stereo3Denabled && (m_stereo3D != STEREO_OFF);
    #endif
@@ -3061,11 +3049,7 @@ void Renderer::RenderFrame()
    // If using OpenVR, render LiveUI before pushing eyes to headset
    // If using 3D TV stereo mode, render LiveUI before stereo as it must be duplicated per view to be correct
    // For other modes, render UI after all other steps (otherwise it would break the calibration process for stereo anaglyph, and breaks XR passthrough color keying)
-   const bool uiBeforeStero = false
-#ifdef ENABLE_VR
-      || m_stereo3D == STEREO_VR
-#endif
-      || m_stereo3D == STEREO_SBS || m_stereo3D == STEREO_INT || m_stereo3D == STEREO_TB || m_stereo3D == STEREO_FLIPPED_INT;
+   const bool uiBeforeStero = m_stereo3D == STEREO_SBS || m_stereo3D == STEREO_INT || m_stereo3D == STEREO_TB || m_stereo3D == STEREO_FLIPPED_INT;
    if (uiBeforeStero)
    {
       m_renderDevice->SetRenderTarget("LiveUI"s, renderedRT, true, true);
@@ -3263,6 +3247,8 @@ RenderTarget* Renderer::SetupAncillaryRenderTarget(
    else if (output.GetMode() == VPX::RenderOutput::OM_WINDOW)
    {
       outputRT = output.GetWindow()->GetBackBuffer();
+      if (outputRT == nullptr) // The swapchain is being recreated (see Window::OnResized), skip rendering this window
+         return nullptr;
       outputW = outputRT->GetWidth();
       outputH = outputRT->GetHeight();
       outputX = 0;
@@ -3337,17 +3323,12 @@ RenderTarget* Renderer::SetupAncillaryRenderTarget(
    return rd->GetCurrentRenderTarget();
 }
 
-void Renderer::ClearEmbeddedAncillaryWindow(VPXWindowId window, const VPX::RenderOutput& output, RenderTarget* embedRT)
+// Pages of the in game UI adjusting the displays, indexed by VPXWindowId
+static const string s_displaySettingsPages[]
+   = { "settings/display_playfield"s, "settings/display_backglass"s, "settings/display_scoreview"s, "settings/display_topper"s, "settings/display_vr_preview"s };
+
+void Renderer::DrawEmbeddedQuad(RenderTarget* outputRT, int x, int y, int w, int h, float r, float g, float b)
 {
-   if (output.GetMode() != VPX::RenderOutput::OM_EMBEDDED)
-      return;
-
-   bool isOutputLinear;
-   int m_outputX, m_outputY, m_outputW, m_outputH;
-   RenderTarget* outputRT = SetupAncillaryRenderTarget(window, output, embedRT, m_outputX, m_outputY, m_outputW, m_outputH, isOutputLinear);
-   if (outputRT == nullptr)
-      return;
-
    Vertex3D_NoTex2 vertices[4] = { { 1.f, 1.f, 0.f, 0.f, 0.f, 1.f, 1.f, 1.f }, //
       { 0.f, 1.f, 0.f, 0.f, 0.f, 1.f, 0.f, 1.f }, //
       { 1.f, 0.f, 0.f, 0.f, 0.f, 1.f, 1.f, 0.f }, //
@@ -3356,19 +3337,41 @@ void Renderer::ClearEmbeddedAncillaryWindow(VPXWindowId window, const VPX::Rende
    const float sy = 1.f / static_cast<float>(outputRT->GetHeight());
    for (unsigned int i = 0; i < 4; ++i)
    {
-      vertices[i].x = sx * (vertices[i].x * static_cast<float>(m_outputW) + static_cast<float>(m_outputX)) * 2.0f - 1.0f;
-      vertices[i].y = 1.0f - sy * (vertices[i].y * static_cast<float>(m_outputH) + static_cast<float>(m_outputY)) * 2.0f;
+      vertices[i].x = sx * (vertices[i].x * static_cast<float>(w) + static_cast<float>(x)) * 2.0f - 1.0f;
+      vertices[i].y = 1.0f - sy * (vertices[i].y * static_cast<float>(h) + static_cast<float>(y)) * 2.0f;
    }
    RenderDevice* const rd = m_renderDevice;
-   rd->ResetRenderState();
-   rd->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
-   rd->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_TRUE); // Also clear depth to avoid AO artefacts
-   rd->m_DMDShader->SetVector(SHADER_vColor_Intensity, 0.f, 0.f, 0.f, 1.f);
+   rd->m_DMDShader->SetVector(SHADER_vColor_Intensity, r, g, b, 1.f);
    rd->m_DMDShader->SetTechnique(SHADER_TECHNIQUE_basic_noDMD_notex);
    rd->m_DMDShader->SetVector(SHADER_glassArea, 0.f, 0.f, 1.f, 1.f);
    rd->DrawTexturedQuad(rd->m_DMDShader, vertices);
    rd->GetCurrentPass()->m_commands.back()->SetTransparent(true);
    rd->GetCurrentPass()->m_commands.back()->SetDepth(-10000.f);
+}
+
+void Renderer::ClearEmbeddedAncillaryWindow(VPXWindowId window, const VPX::RenderOutput& output, RenderTarget* embedRT)
+{
+   if (output.GetMode() != VPX::RenderOutput::OM_EMBEDDED)
+      return;
+
+   // No renderer claimed this window on the last frame: leave the playfield visible
+   // instead of showing an empty black area, except while a display is being adjusted
+   // in the in game UI where all regions must be visible so the user can align them
+   const bool adjustingDisplays = std::ranges::any_of(s_displaySettingsPages, [](const string& page) { return g_pplayer->m_liveUI->m_inGameUI.IsOpened(page); });
+   if (!m_ancillaryWndRendered[window] && !adjustingDisplays)
+      return;
+
+   bool isOutputLinear;
+   int m_outputX, m_outputY, m_outputW, m_outputH;
+   RenderTarget* outputRT = SetupAncillaryRenderTarget(window, output, embedRT, m_outputX, m_outputY, m_outputW, m_outputH, isOutputLinear);
+   if (outputRT == nullptr)
+      return;
+
+   RenderDevice* const rd = m_renderDevice;
+   rd->ResetRenderState();
+   rd->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
+   rd->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_TRUE); // Also clear depth to avoid AO artefacts
+   DrawEmbeddedQuad(outputRT, m_outputX, m_outputY, m_outputW, m_outputH, 0.f, 0.f, 0.f);
 
    UpdateBasicShaderMatrix();
 }
@@ -3396,6 +3399,12 @@ void Renderer::RenderAncillaryWindow(VPXWindowId window, const VPX::RenderOutput
    if (outputRT == nullptr)
       return;
 
+   // Keep the embedded ancillary content ordered after bloom: it writes the back buffer that bloom
+   // already sampled with this region cleared, so without this dependency the sorter may run it before
+   // the bloom sample and bloom bleeds the content into the region. No-op if bloom did not run.
+   if (output.GetMode() == VPX::RenderOutput::OM_EMBEDDED)
+      rd->AddRenderTargetDependency(GetBloomBufferTexture());
+
    rd->ResetRenderState();
    if (output.GetMode() == VPX::RenderOutput::OM_WINDOW)
       rd->Clear(clearType::TARGET | clearType::ZBUFFER, 0x00000000);
@@ -3408,6 +3417,22 @@ void Renderer::RenderAncillaryWindow(VPXWindowId window, const VPX::RenderOutput
       if (rendered)
          break;
    }
+   m_ancillaryWndRendered[window] = rendered;
+
+   // Highlight the display selected in the in game UI with a colored frame, drawn on top
+   // of the window content
+   if (output.GetMode() == VPX::RenderOutput::OM_EMBEDDED && g_pplayer->m_liveUI->m_inGameUI.IsOpened(s_displaySettingsPages[window]))
+   {
+      constexpr int border = 10;
+      constexpr float fr = 0.f, fg = 1.f, fb = 0.2f;
+      rd->ResetRenderState();
+      rd->SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
+      DrawEmbeddedQuad(outputRT, m_outputX, m_outputY, m_outputW, border, fr, fg, fb); // Top
+      DrawEmbeddedQuad(outputRT, m_outputX, m_outputY + m_outputH - border, m_outputW, border, fr, fg, fb); // Bottom
+      DrawEmbeddedQuad(outputRT, m_outputX, m_outputY + border, border, m_outputH - 2 * border, fr, fg, fb); // Left
+      DrawEmbeddedQuad(outputRT, m_outputX + m_outputW - border, m_outputY + border, border, m_outputH - 2 * border, fr, fg, fb); // Right
+      UpdateBasicShaderMatrix();
+   }
 
    if (output.GetMode() == VPX::RenderOutput::OM_WINDOW)
    {
@@ -3418,10 +3443,7 @@ void Renderer::RenderAncillaryWindow(VPXWindowId window, const VPX::RenderOutput
       else
       {
          if (!output.GetWindow()->IsVisible())
-         {
             output.GetWindow()->Show();
-            m_renderDevice->m_outputWnd[0]->RaiseAndFocus(); // Keep focus on playfield when showing an ancillary window
-         }
 
          if (isOutputLinear)
          {

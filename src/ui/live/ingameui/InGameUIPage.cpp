@@ -33,6 +33,7 @@ void InGameUIPage::Open(bool isBackwardAnimation)
    m_openAnimStart = m_openAnimPos;
    m_selectedItem = 0;
    m_pressedItemLabel.clear();
+   RequestRebuild();
 }
 
 void InGameUIPage::Close(bool isBackwardAnimation)
@@ -42,10 +43,15 @@ void InGameUIPage::Close(bool isBackwardAnimation)
    m_openAnimStart = m_openAnimPos;
 }
 
-void InGameUIPage::ClearItems() { m_items.clear(); }
+void InGameUIPage::ClearItems()
+{
+   assert(m_isBuildingPage);
+   m_items.clear();
+}
 
 InGameUIItem& InGameUIPage::AddItem(std::unique_ptr<InGameUIItem> item)
 {
+   assert(m_isBuildingPage);
    m_items.push_back(std::move(item));
    return *m_items.back();
 }
@@ -125,6 +131,12 @@ public:
               : "This table was not saved yet, therefore the changes can only be saved globally."s,
            SaveMode::None)
       , m_page(page)
+      , m_canSaveTableOverrides(canSaveTableOverrides)
+   {
+   }
+
+private:
+   void BuildPage()
    {
       AddItem(std::make_unique<InGameUIItem>("Save Globally"s, "Your changes will be saved as the new default for all tables."s,
          [this]()
@@ -132,7 +144,7 @@ public:
             m_page->SaveGlobally();
             m_player->m_liveUI->m_inGameUI.NavigateBack();
          }));
-      if (canSaveTableOverrides)
+      if (m_canSaveTableOverrides)
          AddItem(std::make_unique<InGameUIItem>("Save as Table Override"s, "The settings adjusted for this specific table will be persisted for the next time you play this table."s,
             [this]()
             {
@@ -148,6 +160,7 @@ public:
    };
 
    InGameUIPage* m_page;
+   bool m_canSaveTableOverrides;
 };
 
 void InGameUIPage::Save()
@@ -223,7 +236,7 @@ void InGameUIPage::SelectPrevItem()
 
 void InGameUIPage::AdjustItem(float direction, bool isInitialPress)
 {
-   if (m_selectedItem < 0 || m_selectedItem > (int)m_items.size())
+   if (m_selectedItem < 0 || m_selectedItem >= (int)m_items.size())
       return;
    const auto& item = m_items[m_selectedItem];
    const uint32_t now = msec();
@@ -303,21 +316,6 @@ void InGameUIPage::AdjustItem(float direction, bool isInitialPress)
       }
       break;
 
-   case InGameUIItem::Type::PhysicsSensorMapping:
-      if (isInitialPress)
-      {
-         if (direction < 0.f)
-         {
-            item->m_physicsSensor->ClearMapping();
-         }
-         else
-         {
-            m_player->m_liveUI->m_inGameUI.AddPage("popup/sensor_setup"s, [this, ptr = item.get()]() { return std::make_unique<SensorSetupPage>(*ptr); });
-            m_player->m_liveUI->m_inGameUI.Navigate("popup/sensor_setup"s);
-         }
-      }
-      break;
-
    case InGameUIItem::Type::Property:
       switch (item->m_property->m_type)
       {
@@ -371,6 +369,17 @@ void InGameUIPage::AdjustItem(float direction, bool isInitialPress)
 
 void InGameUIPage::Render(float elapsedS)
 {
+   if (m_needsRebuild)
+   {
+      // Pages are always built here, before rendering and interaction handling, to avoid item lifecycle issues (for example when changing a setting may result in other settings being added/removed).
+      assert(!m_isBuildingPage);
+      m_needsRebuild = false;
+      m_isBuildingPage = true;
+      ClearItems();
+      BuildPage();
+      m_isBuildingPage = false;
+   }
+
    ImGuiIO& io = ImGui::GetIO();
    const ImGuiStyle& style = ImGui::GetStyle();
 
@@ -620,6 +629,13 @@ void InGameUIPage::Render(float elapsedS)
    const float circleTextWidth = ImGui::CalcTextSize(ICON_FK_CIRCLE, nullptr, true).x + style.FramePadding.x * 2.0f;
    for (int i = 0; i < (int)m_items.size(); i++)
    {
+      // A value change handled while rendering a previous item may have requested a page rebuild (e.g.
+      // switching a window output to embedded destroys the window that the following items query). The
+      // rebuild is deferred to the next frame, so stop here to avoid evaluating the now-stale items
+      // (their live getters would dereference freed state).
+      if (m_needsRebuild)
+         break;
+
       using enum InGameUIItem::Type;
       const auto& item = m_items[i];
 
@@ -645,6 +661,10 @@ void InGameUIPage::Render(float elapsedS)
             else if (ImGui::GetCursorPosY() - ImGui::GetScrollY() > ImGui::GetWindowHeight() - itemHeight)
                ImGui::SetScrollY(ImGui::GetCursorPosY() - ImGui::GetWindowHeight() + itemHeight);
          }
+      }
+      else if (!m_player->m_liveUI->m_inGameUI.IsFlipperNav() && isMouseOver)
+      {
+         hoveredItem = item.get();
       }
 
       switch (item->m_type)
@@ -719,7 +739,7 @@ void InGameUIPage::Render(float elapsedS)
          if (item->m_inputAction->IsMapped())
          {
             ImGui::SameLine(labelEndScreenX - ImGui::GetCursorScreenPos().x);
-            if (ImGui::Button((ICON_FK_TIMES + "##"s + item->m_label).c_str(), ImVec2(closeButtonWidth, 0)))
+            if (ImGui::Button(std::format("{}##Item{:d}", ICON_FK_TIMES, i).c_str(), ImVec2(closeButtonWidth, 0)))
             {
                item->m_inputAction->ClearMapping();
                if (item->m_inputAction->IsNavigationAction())
@@ -736,7 +756,7 @@ void InGameUIPage::Render(float elapsedS)
          }
          const string mappingLabel = item->m_inputAction->GetMappingLabel();
          const float mapButtonWidth = itemEndScreenX - ImGui::GetCursorScreenPos().x - circleTextWidth - style.ItemSpacing.x;
-         if (ImGui::Button((mappingLabel + "##" + item->m_label).c_str(), ImVec2(mapButtonWidth, 0)))
+         if (ImGui::Button(std::format("{}##Item{}", mappingLabel, i).c_str(), ImVec2(mapButtonWidth, 0)))
          {
             m_defineActionPopup = true;
             m_defineActionItem = item.get();
@@ -756,30 +776,6 @@ void InGameUIPage::Render(float elapsedS)
          break;
       }
 
-      case PhysicsSensorMapping:
-      {
-         ImGui::Text("%s", item->m_label.c_str());
-         if (!item->m_physicsSensor->IsMapped())
-            ImGui::SameLine(labelEndScreenX - ImGui::GetCursorScreenPos().x + closeButtonWidth + style.ItemSpacing.x);
-         else
-         {
-            ImGui::SameLine(labelEndScreenX - ImGui::GetCursorScreenPos().x);
-            if (ImGui::Button((ICON_FK_TIMES + "##"s + item->m_label).c_str(), ImVec2(closeButtonWidth, 0)))
-               item->m_physicsSensor->ClearMapping();
-            ImGui::SameLine();
-         }
-         const string mappingLabel = item->m_physicsSensor->GetMappingLabel();
-         const float mapButtonWidth = itemEndScreenX - ImGui::GetCursorScreenPos().x - closeButtonWidth;
-         if (ImGui::Button((mappingLabel + "##" + item->m_label).c_str(), ImVec2(mapButtonWidth, 0)))
-         {
-            m_selectedItem = i;
-            AdjustItem(1.f, true);
-         }
-         if (ImGui::CalcTextSize(mappingLabel.c_str()).x >= mapButtonWidth - style.ItemSpacing.x * 2.f)
-            ImGui::SetItemTooltip("%s", mappingLabel.c_str());
-         break;
-      }
-
       case Property:
          switch (item->m_property->m_type)
          {
@@ -790,7 +786,8 @@ void InGameUIPage::Render(float elapsedS)
             ImGui::SameLine(labelEndScreenX - ImGui::GetCursorScreenPos().x);
             float v = item->GetFloatValue() * item->m_floatValueDisplayScale;
             ImGui::SetNextItemWidth(itemEndScreenX - ImGui::GetCursorScreenPos().x);
-            ImGui::SliderFloat(("##" + prop->m_label).c_str(), &v, prop->m_min * item->m_floatValueDisplayScale, prop->m_max * item->m_floatValueDisplayScale, item->m_format.c_str(),
+            ImGui::SliderFloat(std::format("##Item{}", i).c_str(), &v, prop->m_min * item->m_floatValueDisplayScale,
+               prop->m_max * item->m_floatValueDisplayScale, item->m_format.c_str(),
                ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoRoundToFormat);
             if (item->IsModified())
             {
@@ -819,7 +816,7 @@ void InGameUIPage::Render(float elapsedS)
                // Special handling for editing main window size as mouse interaction would break (since the control is moved/resized while interacted)
                const float butWidth = ImGui::CalcTextSize(ICON_FK_ARROWS_H, nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2.0f;
                ImGui::SetNextItemWidth(itemEndScreenX - ImGui::GetCursorScreenPos().x - ImGui::GetStyle().ItemSpacing.x - butWidth);
-               ImGui::InputInt(("##" + prop->m_label).c_str(), &v, 1, 100, ImGuiInputTextFlags_CharsDecimal | ImGuiInputTextFlags_CharsNoBlank);
+               ImGui::InputInt(std::format("##Item{}", i).c_str(), &v, 1, 100, ImGuiInputTextFlags_CharsDecimal | ImGuiInputTextFlags_CharsNoBlank);
                ImGui::SameLine();
                if (ImGui::Button((Settings::m_propPlayer_PlayfieldWidth.index == id.value().index) ? ICON_FK_ARROWS_H : ICON_FK_ARROWS_V))
                   v = prop->m_max;
@@ -827,7 +824,7 @@ void InGameUIPage::Render(float elapsedS)
             else
             {
                ImGui::SetNextItemWidth(itemEndScreenX - ImGui::GetCursorScreenPos().x);
-               ImGui::SliderInt(("##" + prop->m_label).c_str(), &v, prop->m_min, prop->m_max, item->m_format.c_str(), ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoRoundToFormat);
+               ImGui::SliderInt(std::format("##Item{}", i).c_str(), &v, prop->m_min, prop->m_max, item->m_format.c_str(), ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_NoRoundToFormat);
             }
             if (item->IsModified())
             {
@@ -850,7 +847,7 @@ void InGameUIPage::Render(float elapsedS)
             ImGui::SameLine(labelEndScreenX - ImGui::GetCursorScreenPos().x);
             int v = item->GetIntValue() - prop->m_min;
             ImGui::SetNextItemWidth(itemEndScreenX - ImGui::GetCursorScreenPos().x);
-            ImGui::Combo(("##" + prop->m_label).c_str(), &v,
+            ImGui::Combo(std::format("##Item{}", i).c_str(), &v,
                [](void* data, int idx)
                {
                   const auto* vec = static_cast<const vector<string>*>(data);
@@ -880,7 +877,7 @@ void InGameUIPage::Render(float elapsedS)
             ImGui::Text("%s", prop->m_label.c_str());
             ImGui::SameLine(labelEndScreenX - ImGui::GetCursorScreenPos().x);
             bool v = item->GetBoolValue();
-            RenderToggle(prop->m_label, ImVec2(itemEndScreenX - ImGui::GetCursorScreenPos().x, ImGui::GetFrameHeight()), v);
+            RenderToggle(std::format("{}##Item{}", prop->m_label, i), ImVec2(itemEndScreenX - ImGui::GetCursorScreenPos().x, ImGui::GetFrameHeight()), v);
             if (item->IsModified())
             {
                ImGui::SameLine(itemEndScreenX - ImGui::GetCursorScreenPos().x);
@@ -903,7 +900,7 @@ void InGameUIPage::Render(float elapsedS)
             ImGui::SameLine(labelEndScreenX - ImGui::GetCursorScreenPos().x);
             string v = item->GetStringValue();
             ImGui::SetNextItemWidth(itemEndScreenX - ImGui::GetCursorScreenPos().x);
-            ImGui::InputText(("##" + prop->m_label).c_str(), &v);
+            ImGui::InputText(std::format("##Item{}", i).c_str(), &v);
             if (item->IsModified())
             {
                ImGui::SameLine(itemEndScreenX - ImGui::GetCursorScreenPos().x);

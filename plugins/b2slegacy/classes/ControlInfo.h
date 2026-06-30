@@ -9,7 +9,7 @@ class Dream7Display;
 class B2SReelBox;
 class B2SReelDisplay;
 
-class ControlInfo
+class ControlInfo final
 {
 public:
    ControlInfo(int startDigit, int digits, eControlType type, B2SLEDBox* pLEDBox);
@@ -34,13 +34,13 @@ public:
    void SetReelDisplay(B2SReelDisplay* pReelDisplay) { m_pReelDisplay = pReelDisplay; }
 
 private:
-   int m_startDigit;
-   int m_digits;
-   eControlType m_type;
-   B2SLEDBox* m_pLEDBox;
-   Dream7Display* m_pLEDDisplay;
-   B2SReelBox* m_pReelBox;
-   B2SReelDisplay* m_pReelDisplay;
+   int m_startDigit = 0;
+   int m_digits = 0;
+   eControlType m_type = eControlType_Undefined;
+   B2SLEDBox* m_pLEDBox = nullptr;
+   Dream7Display* m_pLEDDisplay = nullptr;
+   B2SReelBox* m_pReelBox = nullptr;
+   B2SReelDisplay* m_pReelDisplay = nullptr;
 };
 
 }

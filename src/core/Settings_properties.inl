@@ -18,87 +18,98 @@ PropEnum(Player, Sound3D, "Playfield Output Mode"s, "Select how playfield sound 
 // Output (windows) settings
 // Main window (a.k.a. playfield)
 PropStringDyn(Player, PlayfieldDisplay, "Display"s, "Display used for the main Playfield window"s, ""s);
+#ifdef ENABLE_BGFX
+PropEnumDyn(Player, PlayfieldFullScreen, "Display Mode"s, "Select between windowed or borderless fullscreen mode"s, int, 0, "Windowed"s, "Borderless Fullscreen"s);
+#else
+PropEnumDyn(Player, PlayfieldFullScreen, "Display Mode"s, "Select between windowed, borderless fullscreen or fullscreen mode"s, int, 0, "Windowed"s, "Borderless Fullscreen"s, "Fullscreen"s);
+#endif
 PropIntDyn(Player, PlayfieldWndX, "X Position"s, "Horizontal position of the window on the selected display"s, 0, 16384, 0);
 PropIntDyn(Player, PlayfieldWndY, "Y Position"s, "Vertical position of the window on the selected display"s, 0, 16384, 0);
 PropIntDyn(Player, PlayfieldWidth, "Width"s, "Width of the window"s, 0, 16384, 16384);
 PropIntDyn(Player, PlayfieldHeight, "Height"s, "Height of the window"s, 0, 16384, 16384);
-#ifndef ENABLE_BGFX
-PropBoolDyn(Player, PlayfieldFullScreen, "Fullscreen"s, "Use fullscreen exclusive mode\nThis should be avoided unless you need to change the display resolution"s, false);
 PropIntDyn(Player, PlayfieldFSWidth, "Width"s, "Fullscreen display mode width"s, 0, 16384, 16384);
 PropIntDyn(Player, PlayfieldFSHeight, "Height"s, "Fullscreen display mode height"s, 0, 16384, 16384);
 PropFloatDyn(Player, PlayfieldRefreshRate, "Refresh Rate"s, "Fullscreen display mode refresh rate"s, 0.f, 1000.f, 0.f);
 PropIntDyn(Player, PlayfieldColorDepth, "Color Depth"s, "Fullscreen display mode color depth"s, 0, 64, 32);
-#endif
 // Backglass Window
 PropEnumDyn(Backglass, BackglassOutput, "Output Mode"s, "Select between disabled, floating, or embedded in another window mode"s, int /* OutputMode */, 0 /* OM_DISABLED */, "Disabled"s,
    "Floating"s, "Embedded in playfield"s);
 PropStringDyn(Backglass, BackglassDisplay, "Display"s, "Display used for the main Backglass window"s, ""s);
+#ifdef ENABLE_BGFX
+PropEnumDyn(Backglass, BackglassFullScreen, "Display Mode"s, "Select between windowed or borderless fullscreen mode"s, int, 0, "Windowed"s, "Borderless Fullscreen"s);
+#else
+PropEnumDyn(
+   Backglass, BackglassFullScreen, "Display Mode"s, "Select between windowed, borderless fullscreen or fullscreen mode"s, int, 0, "Windowed"s, "Borderless Fullscreen"s, "Fullscreen"s);
+#endif
 PropIntDyn(Backglass, BackglassWndX, "X Position"s, "Horizontal position of the window on the selected display"s, 0, 16384, 0);
 PropIntDyn(Backglass, BackglassWndY, "Y Position"s, "Vertical position of the window on the selected display"s, 0, 16384, 0);
 PropIntDyn(Backglass, BackglassWidth, "Width"s, "Width of the window"s, 0, 16384, 16384);
 PropIntDyn(Backglass, BackglassHeight, "Height"s, "Height of the window"s, 0, 16384, 16384);
-#ifndef ENABLE_BGFX
-PropBoolDyn(Backglass, BackglassFullScreen, "Fullscreen"s, "Use fullscreen exclusive mode\nThis should be avoided unless you need to change the display resolution"s, false);
 PropIntDyn(Backglass, BackglassFSWidth, "Width"s, "Fullscreen display mode width"s, 0, 16384, 16384);
 PropIntDyn(Backglass, BackglassFSHeight, "Height"s, "Fullscreen display mode height"s, 0, 16384, 16384);
 PropFloatDyn(Backglass, BackglassRefreshRate, "Fullscreen Refresh Rate"s, "Fullscreen display mode refresh rate"s, 0.f, 1000.f, 0.f);
 PropIntDyn(Backglass, BackglassColorDepth, "Color Depth"s, "Fullscreen display mode color depth"s, 0, 64, 32);
-#endif
 // ScoreView Window
 PropEnumDyn(ScoreView, ScoreViewOutput, "Output Mode"s, "Select between disabled, floating, or embedded in another window mode"s, int /* OutputMode */, 0 /* OM_DISABLED */, "Disabled"s,
    "Floating"s, "Embedded in playfield"s);
 PropStringDyn(ScoreView, ScoreViewDisplay, "Display"s, "Display used for the main ScoreView window"s, ""s);
+#ifdef ENABLE_BGFX
+PropEnumDyn(ScoreView, ScoreViewFullScreen, "Display Mode"s, "Select between windowed or borderless fullscreen mode"s, int, 0, "Windowed"s, "Borderless Fullscreen"s);
+#else
+PropEnumDyn(
+   ScoreView, ScoreViewFullScreen, "Display Mode"s, "Select between windowed, borderless fullscreen or fullscreen mode"s, int, 0, "Windowed"s, "Borderless Fullscreen"s, "Fullscreen"s);
+#endif
 PropIntDyn(ScoreView, ScoreViewWndX, "X Position"s, "Horizontal position of the window on the selected display"s, 0, 16384, 0);
 PropIntDyn(ScoreView, ScoreViewWndY, "Y Position"s, "Vertical position of the window on the selected display"s, 0, 16384, 0);
 PropIntDyn(ScoreView, ScoreViewWidth, "Width"s, "Width of the window"s, 0, 16384, 16384);
 PropIntDyn(ScoreView, ScoreViewHeight, "Height"s, "Height of the window"s, 0, 16384, 16384);
-#ifndef ENABLE_BGFX
-PropBoolDyn(ScoreView, ScoreViewFullScreen, "Fullscreen"s, "Use fullscreen exclusive mode\nThis should be avoided unless you need to change the display resolution"s, false);
 PropIntDyn(ScoreView, ScoreViewFSWidth, "Width"s, "Fullscreen display mode width"s, 0, 16384, 16384);
 PropIntDyn(ScoreView, ScoreViewFSHeight, "Height"s, "Fullscreen display mode height"s, 0, 16384, 16384);
 PropFloatDyn(ScoreView, ScoreViewRefreshRate, "Fullscreen Refresh Rate"s, "Fullscreen display mode refresh rate"s, 0.f, 1000.f, 0.f);
 PropIntDyn(ScoreView, ScoreViewColorDepth, "Color Depth"s, "Fullscreen display mode color depth"s, 0, 64, 32);
-#endif
 // Topper Window
 PropEnumDyn(Topper, TopperOutput, "Output Mode"s, "Select between disabled, floating, or embedded in another window mode"s, int /* OutputMode */, 0 /* OM_DISABLED */, "Disabled"s, "Floating"s,
    "Embedded in playfield"s);
 PropStringDyn(Topper, TopperDisplay, "Display"s, "Display used for the Topper window"s, ""s);
+#ifdef ENABLE_BGFX
+PropEnumDyn(Topper, TopperFullScreen, "Display Mode"s, "Select between windowed or borderless fullscreen mode"s, int, 0, "Windowed"s, "Borderless Fullscreen"s);
+#else
+PropEnumDyn(Topper, TopperFullScreen, "Display Mode"s, "Select between windowed, borderless fullscreen or fullscreen mode"s, int, 0, "Windowed"s, "Borderless Fullscreen"s, "Fullscreen"s);
+#endif
 PropIntDyn(Topper, TopperWndX, "X Position"s, "Horizontal position of the Topper window on the selected display"s, 0, 16384, 0);
 PropIntDyn(Topper, TopperWndY, "Y Position"s, "Vertical position of the Topper window on the selected display"s, 0, 16384, 0);
 PropIntDyn(Topper, TopperWidth, "Width"s, "Width of the Topper window"s, 0, 16384, 16384);
 PropIntDyn(Topper, TopperHeight, "Height"s, "Height of the Topper window"s, 0, 16384, 16384);
-#ifndef ENABLE_BGFX
-PropBoolDyn(Topper, TopperFullScreen, "Fullscreen"s, "Use fullscreen exclusive mode for the Topper window\nThis should be avoided unless you need to change the display resolution"s, false);
 PropIntDyn(Topper, TopperFSWidth, "Width"s, "Fullscreen display mode width for the Topper window"s, 0, 16384, 16384);
 PropIntDyn(Topper, TopperFSHeight, "Height"s, "Fullscreen display mode height for the Topper window"s, 0, 16384, 16384);
 PropFloatDyn(Topper, TopperRefreshRate, "Fullscreen Refresh Rate"s, "Fullscreen display mode refresh rate"s, 0.f, 1000.f, 0.f);
 PropIntDyn(Topper, TopperColorDepth, "Color Depth"s, "Fullscreen display mode color depth"s, 0, 64, 32);
-#endif
 // VR Preview Window
 PropStringDyn(PlayerVR, PreviewDisplay, "Display"s, "Display used for the VR Preview window"s, ""s);
+#ifdef ENABLE_BGFX
+PropEnumDyn(PlayerVR, PreviewFullScreen, "Display Mode"s, "Select between windowed or borderless fullscreen mode"s, int, 0, "Windowed"s, "Borderless Fullscreen"s);
+#else
+PropEnumDyn(PlayerVR, PreviewFullScreen, "Display Mode"s, "Select between windowed, borderless fullscreen or fullscreen mode"s, int, 0, "Windowed"s, "Borderless Fullscreen"s, "Fullscreen"s);
+#endif
 PropIntDyn(PlayerVR, PreviewWndX, "X Position"s, "Horizontal position of the window on the selected display"s, 0, 16384, 0);
 PropIntDyn(PlayerVR, PreviewWndY, "Y Position"s, "Vertical position of the window on the selected display"s, 0, 16384, 0);
 PropIntDyn(PlayerVR, PreviewWidth, "Width"s, "Width of the window"s, 0, 16384, 16384);
 PropIntDyn(PlayerVR, PreviewHeight, "Height"s, "Height of the window"s, 0, 16384, 16384);
-#ifndef ENABLE_BGFX
-PropBoolDyn(PlayerVR, PreviewFullScreen, "Fullscreen"s, "Use fullscreen exclusive mode\nThis should be avoided unless you need to change the display resolution."s, false);
 PropIntDyn(PlayerVR, PreviewFSWidth, "Width"s, "Fullscreen display mode width"s, 0, 16384, 16384);
 PropIntDyn(PlayerVR, PreviewFSHeight, "Height"s, "Fullscreen display mode height"s, 0, 16384, 16384);
 PropFloatDyn(PlayerVR, PreviewRefreshRate, "Fullscreen Refresh Rate"s, "Fullscreen display mode refresh rate"s, 0.f, 1000.f, 0.f);
 PropIntDyn(PlayerVR, PreviewColorDepth, "Color Depth"s, "Fullscreen display mode color depth"s, 0, 64, 32);
-#endif
 // Array access (using VPXWindowId)
 PropArray(Window, Mode, int, Enum, Int, m_propInvalid, m_propBackglass_BackglassOutput, m_propScoreView_ScoreViewOutput, m_propTopper_TopperOutput, m_propInvalid);
 PropArray(Window, Display, string, String, String, m_propPlayer_PlayfieldDisplay, m_propBackglass_BackglassDisplay, m_propScoreView_ScoreViewDisplay, m_propTopper_TopperDisplay,
    m_propPlayerVR_PreviewDisplay);
+PropArray(Window, FullScreen, int, Enum, Int, m_propPlayer_PlayfieldFullScreen, m_propBackglass_BackglassFullScreen, m_propScoreView_ScoreViewFullScreen, m_propTopper_TopperFullScreen,
+   m_propPlayerVR_PreviewFullScreen);
 PropArray(Window, WndX, int, Int, Int, m_propPlayer_PlayfieldWndX, m_propBackglass_BackglassWndX, m_propScoreView_ScoreViewWndX, m_propTopper_TopperWndX, m_propPlayerVR_PreviewWndX);
 PropArray(Window, WndY, int, Int, Int, m_propPlayer_PlayfieldWndY, m_propBackglass_BackglassWndY, m_propScoreView_ScoreViewWndY, m_propTopper_TopperWndY, m_propPlayerVR_PreviewWndY);
 PropArray(Window, Width, int, Int, Int, m_propPlayer_PlayfieldWidth, m_propBackglass_BackglassWidth, m_propScoreView_ScoreViewWidth, m_propTopper_TopperWidth, m_propPlayerVR_PreviewWidth);
 PropArray(
    Window, Height, int, Int, Int, m_propPlayer_PlayfieldHeight, m_propBackglass_BackglassHeight, m_propScoreView_ScoreViewHeight, m_propTopper_TopperHeight, m_propPlayerVR_PreviewHeight);
-#ifndef ENABLE_BGFX
-PropArray(Window, FullScreen, bool, Bool, Int, m_propPlayer_PlayfieldFullScreen, m_propBackglass_BackglassFullScreen, m_propScoreView_ScoreViewFullScreen, m_propTopper_TopperFullScreen,
-   m_propPlayerVR_PreviewFullScreen);
 PropArray(Window, FSWidth, int, Int, Int, m_propPlayer_PlayfieldFSWidth, m_propBackglass_BackglassFSWidth, m_propScoreView_ScoreViewFSWidth, m_propTopper_TopperFSWidth,
    m_propPlayerVR_PreviewFSWidth);
 PropArray(Window, FSHeight, int, Int, Int, m_propPlayer_PlayfieldFSHeight, m_propBackglass_BackglassFSHeight, m_propScoreView_ScoreViewFSHeight, m_propTopper_TopperFSHeight,
@@ -107,7 +118,6 @@ PropArray(Window, FSRefreshRate, float, Float, Float, m_propPlayer_PlayfieldRefr
    m_propTopper_TopperRefreshRate, m_propPlayerVR_PreviewRefreshRate);
 PropArray(Window, FSColorDepth, int, Int, Int, m_propPlayer_PlayfieldColorDepth, m_propBackglass_BackglassColorDepth, m_propScoreView_ScoreViewColorDepth, m_propTopper_TopperColorDepth,
    m_propPlayerVR_PreviewColorDepth);
-#endif
 
 // Graphics synchronisation and latency reduction
 PropEnum(Player, SyncMode, "Synchronization"s,
@@ -201,26 +211,23 @@ PropBool(Player, asenable, "AutostartEnable"s, ""s, false);
 PropInt(Player, Exitconfirm, "Direct Exit Length"s, "Length of a long ESC press that directly closes the app, (sadly) expressed in seconds * 60"s, 0, 30 * 60, 120);
 PropString(Input, Devices, "Devices"s, "List of known devices"s, ""s);
 
-// Nudge & Plumb settings
-PropFloat(Player, NudgeOrientation0, "Sensor 1 - Orientation"s, "Define sensor orientation"s, 0.f, 360.f, 0.f);
-PropFloat(Player, NudgeOrientation1, "Sensor 2 - Orientation"s, "Define sensor orientation"s, 0.f, 360.f, 0.f);
-PropBool(Player, NudgeFilter0, "Sensor 1 - Use Filter"s, "Enable/Disable filtering acquired value to prevent noise"s, false);
-PropBool(Player, NudgeFilter1, "Sensor 2 - Use Filter"s, "Enable/Disable filtering acquired value to prevent noise"s, false);
-PropBool(Player, SimulatedPlumb, "Plumb simulation"s, "Enable/Disable mechanical Tilt plumb simulation"s, true);
-PropFloat(Player, PlumbInertia, "Plumb Inertia"s, ""s, 0.001f, 1.f, 0.35f);
-PropFloat(Player, PlumbThresholdAngle, "Plumb Threshold"s, "Define threshold angle at which a Tilt is caused"s, 5.0f, 60.f, 35.f);
-PropBool(Player, EnableLegacyNudge, "Legacy Keyboard nudge"s, "Enable/Disable legacy keyboard nudge mode"s, false);
-PropFloat(Player, LegacyNudgeStrength, "Legacy Nudge Strength"s, "Changes the visual effect/screen shaking when using the legacy keyboard nudging mode"s, 0.f, 90.f, 1.f);
-PropFloat(Player, NudgeStrength, "Visual Nudge Strength"s, "Changes the visual effect/screen shaking when nudging the table"s, 0.f, 0.25f, 0.02f);
-PropArray(Player, NudgeOrientation, float, Float, Float, m_propPlayer_NudgeOrientation0, m_propPlayer_NudgeOrientation1);
-PropArray(Player, NudgeFilter, bool, Bool, Int, m_propPlayer_NudgeFilter0, m_propPlayer_NudgeFilter1);
+// Plumb settings
+PropBool(Player, SimulatedPlumb, "Plumb Simulation"s, "Enable/Disable mechanical Tilt plumb simulation"s, true);
+PropFloat(Player, PlumbDamping, "Plumb Damping"s, "Adjust plumb damping (how fast the pumb gets back to rest)"s, 0.f, 2.f, 1.f);
+PropFloat(Player, PlumbThresholdAngle, "Plumb Threshold"s, "Define threshold angle at which a Tilt is triggered"s, 0.5f, 4.f, 2.f);
+
+// Nudge settings
+PropEnum(Player, KeyboardNudgeMode, "Keyboard Nudge Mode"s, "Select how nudge is simulated when triggered from the keyboard."s, int, 2, "VP9 (simple push/retract)"s, "VPX 10.8 (cabinet model)"s, "VPX 10.9 (improved cabinet)"s);
+PropFloat(Player, KeyboardNudgeStrength, "Keyboard Nudge Strength"s, "Strength of the keyboard nudging mode"s, 0.f, 2.f, 1.f);
+PropFloat(Player, NudgeStrength, "Visual Nudge Strength"s, "Changes the visual effect/screen shaking when nudging the table"s, 0.f, 2.f, 1.f);
+PropInt(Input, NudgeSensorCount, "Nudge Sensor Count"s, "Number of hardware nudge sensors defined"s, 0, 100, 0);
 
 // Plunger settings
 PropBool(Player, PlungerRetract, "One Second Retract"s, "Enable retracting the plunger after a 1 second press when using the digital plunger emulation through keyboard or joystick button"s,
    false);
-PropBool(Player, PlungerLinearSensor, "Linear Sensor"s, "Select between symmetric (linear) and assymetric sensor"s, false);
 PropInt(Player, PlungerNormalize, "Plunger normalize override"s, "This value may be defined to override the table's plunger normalization"s, 0, 100,
    100); // Hacky: This should be a table override, not a player property as it overrides table data
+PropInt(Input, PlungerSensorCount, "Plunger Sensor Count"s, "Number of hardware plunger sensor defined"s, 0, 100, 0);
 
 // VR settings
 #if SDL_PLATFORM_ANDROID && defined(ENABLE_XR)
@@ -234,21 +241,14 @@ PropFloatDyn(PlayerVR, TableX, "View Offset X"s, "VR view X offset"s, -100.f, 10
 PropFloatDyn(PlayerVR, TableY, "View Offset Y"s, "VR view Y offset"s, -100.f, 100.f, 0.f);
 PropFloatDyn(PlayerVR, TableZ, "View Offset Z"s, "VR view Z offset"s, -100.f, 100.f, 0.f);
 PropBool(
-   PlayerVR, UsePassthroughColor, "Color Keyed Passthrough"s, "Replace VR background by a user defined color, to allow color keyed passthrough (for example using Virtual Desktop)"s, false);
-PropInt(PlayerVR, PassthroughColor, "Color Keyed Passthrough color"s, "Color that will replace the background"s, 0x000000, 0xFFFFFF, 0xBB4700);
+   PlayerVR, UsePassthroughColor, "Color Keyed Passthrough"s, "Replace VR background by full black to allow color keyed passthrough (for example using Virtual Desktop, setting passthrough to sharp full black)"s, false);
 PropEnum(Player, VRPreview, "Preview mode"s, "Select VR preview mode"s, int, 1, "Disabled"s, "Left Eye"s, "Right Eye"s, "Both Eyes"s);
 PropBool(PlayerVR, ShrinkPreview, "Shrink preview"s, "Shrink VR preview"s, false);
 PropBool(PlayerVR, AddBackglass, "Add Backglass"s, "Add a default backglass display to the scene"s, false);
 PropFloatDyn(PlayerVR, ControllerCabYOffset, "Cabinet Y Offset"s, "Y offset to apply when using controller view centering"s, -150.f, 50.f, 0.f);
 PropFloatDyn(PlayerVR, ControllerLockbarScale, "Lockbar size ratio"s, "Lockbar size ratio to apply when using controller view centering"s, 0.5f, 2.0f, 1.f);
 PropFloatUnbounded(PlayerVR, ResFactor, "ResFactor"s, ""s, -1.f);
-// Legacy OpenVR settings (to be removed)
-PropEnum(PlayerVR, EyeFBFormat, "EyeFBFormat"s, "VR frame buffer format"s, int, 1, "RGB 8"s, "RGBA 8 (Recommended)"s, "RGB 16F"s, "RGBA 16F"s);
-PropFloatUnbounded(PlayerVR, Slope, "Slope"s, "VR view slope"s, 6.5f);
-PropBool(PlayerVR, ScaleToFixedWidth, "ScaleToFixedWidth"s, ""s, false);
-PropFloatUnbounded(PlayerVR, ScaleAbsolute, "ScaleAbsolute"s, ""s, 55.f);
-PropFloatUnbounded(PlayerVR, ScaleRelative, "ScaleRelative"s, ""s, 1.f);
-PropFloatUnbounded(PlayerVR, NearPlane, "NearPlane"s, "VR near plane offset"s, 5.f);
+PropBool(PlayerVR, LockFeetToGround, "Lock Feet to Ground"s, "Lock cabinet feet to ground. This usually feels more natural (avoid floating cabinet) but may be deactivated for example for playing mini flipper seated at a desk."s, true);
 
 // Physics override profiles
 PropFloatUnbounded(Player, FlipperPhysicsMass0, "FlipperPhysicsMass0"s, ""s, 1.f);

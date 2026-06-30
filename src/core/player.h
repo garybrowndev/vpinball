@@ -74,6 +74,8 @@ public:
    bool m_step = false; // If set to true, the physics engine will do a single physic step and stop simulation (turning this flag to false)
 
    PinTable *const m_ptable; // The played table (which can eventually be a shallow copy of a table to allow being modified by the script without changing the original table)
+   bool m_tblMirrorEnabled = false; // Mirror tables left to right.  This is activated by a cheat during table selection.
+
    bool IsEditorMode() const { return m_playMode == PlayMode::FullEdit; }
    const PlayMode m_playMode;
 
@@ -123,7 +125,10 @@ private:
    unsigned int m_onPrepareFrameMsgId;
    const std::thread::id m_osThreadId;
 
+#ifdef ENABLE_BGFX
+   bool CallbackSteppedGameLoop();
    void MultithreadedGameLoop();
+#endif
    void FramePacingGameLoop();
    void GPUQueueStuffingGameLoop();
 #pragma endregion
@@ -189,9 +194,11 @@ public:
    VPX::RenderOutput m_backglassOutput;
    VPX::RenderOutput m_scoreViewOutput;
    VPX::RenderOutput m_topperOutput;
-   Renderer *m_renderer = nullptr;
+   std::unique_ptr<Renderer> m_renderer;
    VRDevice *m_vrDevice = nullptr;
    vector<AncillaryRendererDef> m_ancillaryWndRenderers[VPXWindowId::VPXWINDOW_Topper + 1];
+   int GetAncillaryRendererPriority(VPXWindowId window, const string& id) const;
+   void SetAncillaryRendererPriority(VPXWindowId window, const string& id, int priority);
 
    bool IsVR() const { return m_vrDevice != nullptr; }
 
@@ -207,6 +214,8 @@ private:
 
    static void OnAuxRendererChanged(const unsigned int msgId, void *userData, void *msgData);
    unsigned int m_getAuxRendererId = 0, m_onAuxRendererChgId = 0;
+   // Live (unsaved) renderer priorities, seeded from settings when renderers are collected
+   std::map<string, int, std::less<>> m_ancillaryWndRendererPriorities[VPXWindowId::VPXWINDOW_Topper + 1];
 
    int m_cabinetAutoFitMode = 0;
    float m_cabinetAutoFitPos = 0.05f;
@@ -216,11 +225,7 @@ private:
 #pragma region Input
 public:
    InputManager m_pininput;
-   void ShowMouseCursor(const bool show) { m_drawCursor = show; UpdateCursorState(); }
 
-private:
-   bool m_drawCursor = false;
-   void UpdateCursorState() const;
 #pragma endregion
 
 
@@ -262,9 +267,7 @@ public:
       CS_CLOSE_APP = 3,  // Close the application and get back to operating system
       CS_FORCE_STOP = 4, // Force close the application and get back to operating system
       CS_CLOSED = 5,     // Closing (or closed is called from another thread, but g_pplayer is null when closed)
-#ifdef __LIBVPINBALL__
       CS_CLOSE_CAPTURE_SCREENSHOT = 6 // Close and capture screenshot for table image
-#endif
    };
    void SetCloseState(CloseState state) { if (m_closing != CS_CLOSED) m_closing = state; }
    CloseState GetCloseState() const { return m_closing; }
