@@ -1467,6 +1467,12 @@ void Player::LockForegroundWindow(const bool enable)
 
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
+// DIAGNOSTIC: input-pump cadence probe. g_diagLastPumpGapUs = wall-clock interval between consecutive main-thread
+// ProcessOSMessages calls. InputAction stamps it at flip time so PerfUI's CSV reveals whether SDL->Act latency comes
+// from infrequent pumping (thread blocked -> large gap) or late SDL delivery (frequent pumping -> small gap).
+uint64_t g_diagLastPumpEntryUs = 0;
+uint64_t g_diagLastPumpGapUs = 0;
+
 void Player::ProcessOSMessages(const bool isInitialized)
 {
    // SDL_PollEvent is main-thread only. SubmitRenderFrame (BGFX) intentionally calls
@@ -1481,6 +1487,10 @@ void Player::ProcessOSMessages(const bool isInitialized)
    // deref a null ImGui context or dangling m_liveUI. Matches the isInitialized=false path.
    const bool dispatch = isInitialized && (m_closing != CS_CLOSED);
    const uint64_t startTick = usec();
+   // DIAGNOSTIC: interval since the previous main-thread pump (input-pump cadence probe).
+   if (g_diagLastPumpEntryUs != 0)
+      g_diagLastPumpGapUs = startTick - g_diagLastPumpEntryUs;
+   g_diagLastPumpEntryUs = startTick;
    SDL_Event e;
    bool isPFWnd = true;
    static Vertex2D dragStart;

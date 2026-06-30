@@ -155,7 +155,7 @@ void PerfUI::RenderFPS()
 
                   // DIAGNOSTIC: one CSV row per press to validate SDL->Act / the clock conversion.
                   LogLatencyDiag(sdlArrivalUs, lastLeftFlipChange, leftAction->GetSdlNowAtChange(), flipper->GetLastRotateTime(),
-                     m_flipLatchGpuMs, 1e-3 * static_cast<double>(m_player->m_renderProfiler->GetPrev(FrameProfiler::PROFILE_FRAME)), m_flipLatchHasSdl);
+                     m_flipLatchGpuMs, 1e-3 * static_cast<double>(m_player->m_renderProfiler->GetPrev(FrameProfiler::PROFILE_FRAME)), m_flipLatchHasSdl, leftAction->GetPumpGap());
                   break;
                }
             }
@@ -208,7 +208,7 @@ void PerfUI::RenderFPS()
    ImGui::End();
 }
 
-void PerfUI::LogLatencyDiag(uint64_t sdlArrivalUs, uint64_t dispatchUs, uint64_t sdlNowUs, uint64_t rotateUs, double gpuMs, double frameMs, bool hasSdl)
+void PerfUI::LogLatencyDiag(uint64_t sdlArrivalUs, uint64_t dispatchUs, uint64_t sdlNowUs, uint64_t rotateUs, double gpuMs, double frameMs, bool hasSdl, uint64_t pumpGapUs)
 {
    // Resolve <exe-dir>/perfui_latency.csv once. On the cabinet that is C:\visual pinball\ (== Z:\visual pinball\ from dev).
    static string s_csvPath;
@@ -231,7 +231,7 @@ void PerfUI::LogLatencyDiag(uint64_t sdlArrivalUs, uint64_t dispatchUs, uint64_t
       return;
    if (!s_headerWritten)
    {
-      f << "idx,A_sdlArrival_us,B_dispatch_us,C_sdlNow_us,rotate_us,skew_BminusC_us,sdlElapsed_CminusA_us,SDLtoAct_ms,ActToPhys_ms,GPU_ms,frame_ms,hasSdl\n";
+      f << "idx,A_sdlArrival_us,B_dispatch_us,C_sdlNow_us,rotate_us,skew_BminusC_us,sdlElapsed_CminusA_us,SDLtoAct_ms,ActToPhys_ms,GPU_ms,frame_ms,hasSdl,pumpGap_us\n";
       s_headerWritten = true;
    }
 
@@ -243,7 +243,7 @@ void PerfUI::LogLatencyDiag(uint64_t sdlArrivalUs, uint64_t dispatchUs, uint64_t
    const double sdlToActMs = 1e-3 * static_cast<double>(static_cast<int64_t>(dispatchUs) - static_cast<int64_t>(sdlArrivalUs));
    const double actToPhysMs = 1e-3 * static_cast<double>(static_cast<int64_t>(rotateUs) - static_cast<int64_t>(dispatchUs));
    f << s_idx++ << ',' << sdlArrivalUs << ',' << dispatchUs << ',' << sdlNowUs << ',' << rotateUs << ',' << skew << ',' << sdlElapsed << ',' << sdlToActMs << ',' << actToPhysMs << ','
-     << gpuMs << ',' << frameMs << ',' << (hasSdl ? 1 : 0) << '\n';
+     << gpuMs << ',' << frameMs << ',' << (hasSdl ? 1 : 0) << ',' << pumpGapUs << '\n';
 }
 
 void PerfUI::RenderStats() const
