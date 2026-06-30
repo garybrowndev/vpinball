@@ -24,10 +24,10 @@ public:
 
 private:
    vector<vector<SDL_FPoint>> m_currentSeg;
-   uint32_t m_litLEDSegmentColor;
-   uint32_t m_darkLEDSegmentColor;
-   eLEDType m_ledType;
-   int m_value;
+   uint32_t m_litLEDSegmentColor = 0;
+   uint32_t m_darkLEDSegmentColor = 0;
+   eLEDType m_ledType = eLEDType_Undefined;
+   int m_value = 0;
    string m_text;
 };
 

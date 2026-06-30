@@ -6,36 +6,12 @@
 namespace B2SLegacy {
 
 Dream7Display::Dream7Display(VPXPluginAPI* vpxApi)
-   : Control(vpxApi),
-     m_hidden{false},
-     m_mirrored{false},
-     //m_szText{},
-     m_scaleMode{ScaleMode_Stretch},
-     m_spacing{20.0f},
-     m_transparentBackground{false},
-     m_type{SegmentNumberType_SevenSegment},
-     m_offColor{RGB(20, 20, 20)},
-     m_lightColor{RGB(254, 90, 50)},
-     m_glassColor{RGB(254, 50, 25)},
-     m_glassColorCenter{RGB(254, 50, 25)},
-     m_glassAlpha{140},
-     m_glassAlphaCenter{255},
-     m_glow{10.0f},
-     m_bulbSize{0.0f, 0.0f, 0.0f, 0.0f},
-     m_wireFrame{false},
-     m_shear{0.1f},
-     m_thickness{16.0f},
-     m_scaleFactor{0.5f},
-     m_offsetWidth{0},
-     m_angle{0.0f},
-     m_pMatrix{nullptr}
+   : Control(vpxApi)
 {
 }
 
 Dream7Display::~Dream7Display()
 {
-   delete m_pMatrix;
-
    for (auto& pSegmentNumber : m_segmentNumbers)
       delete pSegmentNumber;
 }
@@ -43,15 +19,18 @@ Dream7Display::~Dream7Display()
 void Dream7Display::OnPaint(VPXRenderContext2D* const ctx)
 {
    if (IsVisible()) {
-      if (!m_pGraphics && GetWidth() > 0 && GetHeight() > 0)
+      if (!m_pGraphics && GetWidth() > 0 && GetHeight() > 0) {
          m_pGraphics = std::make_unique<VPXGraphics>(m_vpxApi, GetWidth(), GetHeight());
-
-      Control::OnPaint(ctx);
+         Invalidate();
+      }
 
       if (m_pGraphics) {
-         for (auto& pSegmentNumber : m_segmentNumbers)
-            pSegmentNumber->Draw(m_pGraphics.get());
-         m_pGraphics->ResetTransform();
+         if (IsInvalidated()) {
+            Control::OnPaint(ctx);
+            for (auto& pSegmentNumber : m_segmentNumbers)
+               pSegmentNumber->Draw(m_pGraphics.get());
+            m_pGraphics->ResetTransform();
+         }
          m_pGraphics->DrawToContext(ctx, GetLeft(), GetTop());
       }
    }
@@ -212,8 +191,7 @@ void Dream7Display::SetExtraSpacing(int segment, float value)
 
 void Dream7Display::InitMatrix(float shear, float scaleFactor, bool mirrored)
 {
-   delete m_pMatrix;
-   m_pMatrix = new Matrix();
+   m_matrix.Reset();
    shear = clamp(shear, 0.0f, 2.0f);
    scaleFactor = clamp(scaleFactor, 0.01f, 10.0f);
    Matrix styleMatrix;
@@ -235,11 +213,11 @@ void Dream7Display::InitMatrix(float shear, float scaleFactor, bool mirrored)
             scaleX = scaleY;
          }
          if (scaleX > 0.0f && scaleY > 0.0f)
-            m_pMatrix->Scale(scaleX, scaleY);
+            m_matrix.Scale(scaleX, scaleY);
       }
-      m_pMatrix->Translate(-bounds.x, -bounds.y);
+      m_matrix.Translate(-bounds.x, -bounds.y);
    }
-   m_pMatrix->Multiply(styleMatrix);
+   m_matrix.Multiply(styleMatrix);
 }
 
 SDL_FRect Dream7Display::GetBounds(const Matrix* const pMatrix)
@@ -273,10 +251,10 @@ void Dream7Display::InitSegments()
    InitSegments(m_digits, m_type, m_shear);
 }
 
-void Dream7Display::SegmentNumberInvalidated(SegmentNumber* pNumber)
+void Dream7Display::SegmentNumberInvalidated(SegmentNumber* /*pNumber*/)
 {
-   GraphicsPath* pPath = pNumber->GetBounds();
-   delete pPath;
+   //GraphicsPath* pPath = pNumber->GetBounds();
+   //delete pPath;
 
    Invalidate();
 }
@@ -305,7 +283,7 @@ void Dream7Display::InitSegmentsStyle()
    float distance = 154.0f + m_spacing;
    float xPos = 0.0f;
    for (auto& pNumber : m_segmentNumbers) {
-      pNumber->Init( { xPos, 0.0f }, m_type, m_pMatrix, m_thickness);
+      pNumber->Init( { xPos, 0.0f }, m_type, &m_matrix, m_thickness);
       xPos += distance;
       const auto itr = m_extraSpacings.find(number);
       if (itr != m_extraSpacings.end())

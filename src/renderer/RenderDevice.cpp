@@ -35,11 +35,10 @@
 #pragma push_macro("_WIN64")
 #undef _WIN64
 #endif
-#include "bx/platform.h"
-#include "bx/string.h"
-#include "bgfx/platform.h"
-#include "bgfx/bgfx.h"
-#include "bimg/bimg.h"
+#include <bx/platform.h>
+#include <bx/string.h>
+#include <bgfx/bgfx.h>
+#include <bimg/bimg.h>
 #ifdef __STANDALONE__
 #pragma pop_macro("_WIN64")
 #endif
@@ -120,63 +119,84 @@ void RenderDevice::tBGFXCallback::screenShot(
 {
    // Note that BGFX has a few bugs regarding screenshots:
    // - DX11 applies an image swizzle to BGRA (like the doc state) but not accounting for the real backbuffer format, hence failing on anything but a RGBA backbuffer (for example HDR)
-   // - Metal & DX12 do not implement the framebuffer selection and always capture from the base swapchain and return data on the swapchain format
+   // - DX12 does not implement the framebuffer selection and always captures from the base swapchain and returns data on the swapchain format
+   // - Metal implements per-window framebuffer selection and returns data on the (per-window) swapchain format
    // - OpenGL & Vulkan seems to be ok (always returning 4 byte BGRA, eventually after conversion if backbuffer format is not BGRA)
-   int index = -1;
-   std::filesystem::path path(_filePath);
-   for (int i = 0; i < (int)m_rd.m_screenshotFilename.size(); i++)
-      if (m_rd.m_screenshotFilename[i] == path)
-      {
-         index = i;
-         break;
-      }
-   m_rd.m_screenshotFilename.erase(m_rd.m_screenshotFilename.begin() + index);
-   bool success = false;
-   if (auto tex = BaseTexture::Create(_width, _height, BaseTexture::SRGBA); tex)
+   std::function<void(bool)> callback;
+   bool fireCallback = false;
+   bool callbackSuccess = false;
    {
-      switch (_format)
-      {
-      case bgfx::TextureFormat::RGBA8:
-         if (_pitch == _width * 4)
-            memcpy(tex->data(), _data, _size);
-         else
-         {
-            for (unsigned int i = 0; i < _height; i++)
-               bx::memCopy(static_cast<uint8_t*>(tex->data()) + i * (_width * 4), static_cast<const uint8_t*>(_data) + i * _pitch, _width * 4);
-         }
-         success = true;
-         break;
+      // The screenshot state is concurrently written by the logic thread in CaptureScreenshot
+      std::lock_guard lock(m_rd.m_screenshotMutex);
 
-      case bgfx::TextureFormat::BGRA8:
-         if (_pitch == _width * 4)
-            copy_bgra_rgba<false>(static_cast<uint32_t*>(tex->data()), static_cast<const uint32_t*>(_data), (size_t)_width * _height);
-         else
+      const std::filesystem::path path(_filePath);
+      int index = -1;
+      for (int i = 0; i < (int)m_rd.m_screenshotFilename.size(); i++)
+         if (m_rd.m_screenshotFilename[i] == path)
          {
-            for (unsigned int i = 0; i < _height; i++)
+            index = i;
+            break;
+         }
+      // Drop stale/duplicate captures that are no longer pending (e.g. a late delivery of a request
+      // that was already re-issued by the timeout path), instead of saving them again or double-firing.
+      if (index < 0)
+         return;
+      m_rd.m_screenshotFilename.erase(m_rd.m_screenshotFilename.begin() + index);
+
+      bool success = false;
+      if (auto tex = BaseTexture::Create(_width, _height, BaseTexture::SRGBA); tex)
+      {
+         switch (_format)
+         {
+         case bgfx::TextureFormat::RGBA8:
+            if (_pitch == _width * 4)
+               memcpy(tex->data(), _data, _size);
+            else
             {
-               const uint32_t* src = reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(_data) + i * _pitch);
-               uint32_t* dst = static_cast<uint32_t*>(tex->data()) + i * _width;
-               copy_bgra_rgba<false>(dst, src, _width);
+               for (unsigned int i = 0; i < _height; i++)
+                  bx::memCopy(static_cast<uint8_t*>(tex->data()) + i * (_width * 4), static_cast<const uint8_t*>(_data) + i * _pitch, _width * 4);
             }
+            success = true;
+            break;
+
+         case bgfx::TextureFormat::BGRA8:
+            if (_pitch == _width * 4)
+               copy_bgra_rgba<false>(static_cast<uint32_t*>(tex->data()), static_cast<const uint32_t*>(_data), (size_t)_width * _height);
+            else
+            {
+               for (unsigned int i = 0; i < _height; i++)
+               {
+                  const uint32_t* src = reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(_data) + i * _pitch);
+                  uint32_t* dst = static_cast<uint32_t*>(tex->data()) + i * _width;
+                  copy_bgra_rgba<false>(dst, src, _width);
+               }
+            }
+            success = true;
+            break;
+
+         case bgfx::TextureFormat::RGB8: // Unsupported yet
+         default: // HDR, ... are not supported either
+            break;
          }
-         success = true;
-         break;
 
-      case bgfx::TextureFormat::RGB8: // Unsupported yet
-      default: // HDR, ... are not supported either
-         break;
+         if (success)
+         {
+            if (_yflip)
+               tex->FlipY();
+            success = tex->Save(_filePath);
+         }
       }
-
-      if (success)
+      m_rd.m_screenshotSuccess &= success;
+      if (m_rd.m_screenshotFilename.empty())
       {
-         if (_yflip)
-            tex->FlipY();
-         success = tex->Save(_filePath);
+         fireCallback = true;
+         callbackSuccess = m_rd.m_screenshotSuccess;
+         callback = m_rd.m_screenshotCallback;
       }
    }
-   m_rd.m_screenshotSuccess &= success;
-   if (m_rd.m_screenshotFilename.empty())
-      m_rd.m_screenshotCallback(m_rd.m_screenshotSuccess);
+   // Fire outside the lock: the callback may take other locks (e.g. the capture mutex) or re-enter CaptureScreenshot
+   if (fireCallback)
+      callback(callbackSuccess);
 }
 
 bgfx::TextureFormat::Enum RenderDevice::SelectBackBufferFormat(const VPX::Window* wnd, bgfx::TextureFormat::Enum defaultFormat, bool allowHDR10) const
@@ -298,6 +318,8 @@ colorFormat RenderDevice::BGFXtoVPXTextureFormat(bgfx::TextureFormat::Enum forma
 }
 
 
+static const string& bgfxRendererName(const bgfx::RendererType::Enum type);
+
 void RenderDevice::RenderThread(RenderDevice* rd, bgfx::Init init)
 {
    SetThreadName("RenderThread"s);
@@ -344,11 +366,9 @@ void RenderDevice::RenderThread(RenderDevice* rd, bgfx::Init init)
    init.resolution.reset |= BGFX_RESET_MAXANISOTROPY;
    //init.resolution.reset |= BGFX_RESET_FLUSH_AFTER_RENDER; // Not really needed as we are doing a present after submit which in turn triger sending the commands to the GPU
    init.resolution.reset |= BGFX_RESET_FLIP_AFTER_RENDER;
-   // Fullscreen is mostly deprecated since Windows 10 (BGFX offers a reset flag, but it is not internally implemented). The clean solution is to use a window
-   // covering the entire screen and relying on Windows FSO (fullscreen optimization) which in turn, rely on GPU multiplane overlay capabilities to actually 
-   // achieve zero-overhead backbuffer flips.
-   //if (rd->m_outputWnd[0]->IsFullScreen())
-   //   init.resolution.reset |= BGFX_RESET_FULLSCREEN;
+   // BGFX despite proposing a reset flag (BGFX_RESET_FULLSCREEN) does not implement exclusive fullscreen, so we do not support it on this backend (exclusive fullscreen is
+   // somewhat deprecated anyway as some OS do not offer it at all, and others implement it through GPU multiplane overlay to actually achieve zero-overhead backbuffer flips)
+   assert(rd->m_outputWnd[0]->GetWindowMode() != VPX::Window::WindowMode::ExclusiveFullscreen);
 
    const bool allowHDR10ColorSpace = true //
       && g_pplayer->m_playMode != Player::PlayMode::CaptureAttract // Disable WCG colorspace as it causes issues with video recording for the time being
@@ -422,6 +442,14 @@ void RenderDevice::RenderThread(RenderDevice* rd, bgfx::Init init)
       exit(-1);
    }
 
+   // A specific backend was requested but BGFX created a different one (init.fallback let it fall back to
+   // the next best because the requested backend failed to initialize), so make that explicit.
+   if (init.type != bgfx::RendererType::Count && bgfx::getRendererType() != init.type)
+   {
+      PLOGW << "Requested graphics backend " << bgfxRendererName(init.type) << " is unavailable; BGFX fell back to "
+            << bgfx::getRendererName(bgfx::getRendererType());
+   }
+
    if (init.platformData.nwh)
    {
       // Validate the backbuffer format now that we have a swapchain (handles buggy platforms like Linux/Vulkan where capabilities of the swapchain is only reported after creation of the swapchain...)
@@ -486,6 +514,10 @@ void RenderDevice::RenderThread(RenderDevice* rd, bgfx::Init init)
 #endif
       rd->BGFXDesktopRenderLoop(init);
 
+   // Signal that the render loop has fully exited (no more rendering) so the destructor can free render
+   // resources without racing an in-flight frame still using them
+   rd->m_renderThreadStopped.release();
+
    // Wait until main thread has released all native resources
    rd->m_rendererInitialized.acquire();
    bgfx::shutdown();
@@ -543,12 +575,16 @@ void RenderDevice::BGFXOpenXRRenderLoop(const bgfx::Init& init)
             g_pplayer->m_renderProfiler->EnterProfileSection(FrameProfiler::PROFILE_RENDER_FLIP);
             Flip();
             m_frameIndex++;
-            if (m_screenshotFrameDelay > 0)
             {
-               m_screenshotFrameDelay--;
-               if (m_screenshotFrameDelay == 0)
-                  for (size_t i = 0; i < m_screenshotWindow.size(); i++)
-                     bgfx::requestScreenShot(m_screenshotWindow[i]->GetBackBuffer()->GetCoreFrameBuffer(), m_screenshotFilename[i].string().c_str());
+               // Screenshot state is concurrently written by the logic thread in CaptureScreenshot
+               std::lock_guard lock(m_screenshotMutex);
+               if (m_screenshotFrameDelay > 0)
+               {
+                  m_screenshotFrameDelay--;
+                  if (m_screenshotFrameDelay == 0)
+                     for (size_t i = 0; i < m_screenshotWindow.size(); i++)
+                        bgfx::requestScreenShot(m_screenshotWindow[i]->GetBackBuffer()->GetCoreFrameBuffer(), m_screenshotFilename[i].string().c_str());
+               }
             }
             const bgfx::Stats* stats = bgfx::getStats();
             const uint64_t bgfxSubmit = (stats->cpuTimeEnd - stats->cpuTimeBegin) * 1000000ull / stats->cpuTimerFreq;
@@ -564,8 +600,6 @@ void RenderDevice::BGFXOpenXRRenderLoop(const bgfx::Init& init)
 
 void RenderDevice::BGFXDesktopRenderLoop(const bgfx::Init& init)
 {
-   int backBufferWidth = static_cast<int>(init.resolution.width);
-   int backBufferHeight = static_cast<int>(init.resolution.height);
    uint64_t lastSubmitTimestamp = 0;
    uint64_t lastSyncTimestamp = 0;
    bool bgfxVSync = false; // Is VSync requested on BGFX's Present operation (note that the VSync on Present will only block if the present queue is filled)
@@ -685,16 +719,11 @@ void RenderDevice::BGFXDesktopRenderLoop(const bgfx::Init& init)
          if (nwh == nullptr)
             continue;
 #endif
-         const int windowWidth = m_outputWnd[0]->GetPixelWidth();
-         const int windowHeight = m_outputWnd[0]->GetPixelHeight();
-         if ((bgfxVSync != needsVSync) || (windowWidth != backBufferWidth) || (windowHeight != backBufferHeight))
+         if (bgfxVSync != needsVSync)
          {
-            //PLOGI << "Switched VSYNC to " << needsVSync;
             bgfxVSync = needsVSync;
-            backBufferWidth = windowWidth;
-            backBufferHeight = windowHeight;
-            bgfx::reset(backBufferWidth, backBufferHeight, init.resolution.reset | (bgfxVSync ? BGFX_RESET_VSYNC : BGFX_RESET_NONE), init.resolution.formatColor);
-            m_outputWnd[0]->GetBackBuffer()->SetSize(backBufferWidth, backBufferHeight);
+            bgfx::reset(m_outputWnd[0]->GetBackBuffer()->GetWidth(), m_outputWnd[0]->GetBackBuffer()->GetHeight(), init.resolution.reset | (bgfxVSync ? BGFX_RESET_VSYNC : BGFX_RESET_NONE),
+               init.resolution.formatColor);
          }
       }
 
@@ -739,6 +768,35 @@ void RenderDevice::BGFXDesktopRenderLoop(const bgfx::Init& init)
          g_pplayer->m_renderProfiler->EnterProfileSection(FrameProfiler::PROFILE_RENDER_SUBMIT);
          std::lock_guard lock(m_frameMutex);
          SubmitRenderFrame();
+
+         // Handle swapchain resize while we hold the mutex on the render frame and before the backbuffer rendertarget are used for rendering
+         for (VPX::Window* wnd : m_outputWnd)
+         {
+            const int windowWidth = wnd->GetPixelWidth();
+            const int windowHeight = wnd->GetPixelHeight();
+            const bool isMainSwpachain = wnd == m_outputWnd[0];
+            if ((windowWidth != wnd->GetBackBuffer()->GetWidth()) || (windowHeight != wnd->GetBackBuffer()->GetHeight()))
+            {
+               // Request BGFX to process the submitted render frame before reseting / deleting the swapchain it rely on
+               Flip();
+               if (isMainSwpachain)
+               {
+                  bgfx::reset(windowWidth, windowHeight, init.resolution.reset | (bgfxVSync ? BGFX_RESET_VSYNC : BGFX_RESET_NONE), init.resolution.formatColor);
+                  m_outputWnd[0]->GetBackBuffer()->SetSize(windowWidth, windowHeight);
+               }
+               else
+               {
+                  auto backbuffer = wnd->GetBackBuffer();
+                  wnd->SetBackBuffer(nullptr);
+                  RemoveWindow(wnd);
+                  delete backbuffer;
+                  bgfx::frame(BGFX_FRAME_FLUSH); // We must destroy the swapchain before attaching a new swapchain
+                  AddWindow(wnd);
+               }
+               break;
+            }
+         }
+
          m_framePending = false;
          g_pplayer->m_renderProfiler->ExitProfileSection();
          END_SPAN(tagSpan)
@@ -861,19 +919,22 @@ void RenderDevice::BGFXDesktopRenderLoop(const bgfx::Init& init)
          }
       }
 
-      // Screenshot handling
-      if (!m_screenshotWindow.empty())
+      // Screenshot handling (state is concurrently written by the logic thread in CaptureScreenshot)
       {
-         m_screenshotFrameDelay--;
-         if (m_screenshotFrameDelay == 0)
-            for (size_t i = 0; i < m_screenshotWindow.size(); i++)
-               bgfx::requestScreenShot(m_screenshotWindow[i]->GetBackBuffer()->GetCoreFrameBuffer(), m_screenshotFilename[i].string().c_str());
-         else if (m_screenshotFrameDelay < -60)
+         std::lock_guard lock(m_screenshotMutex);
+         if (!m_screenshotWindow.empty())
          {
-            // Sadly BGFX will silently fails screenshot capture, so if after 60 frames we did not get it, we try again
-            PLOGE << "Screenshot capture timed out. Requesting it again";
-            for (size_t i = 0; i < m_screenshotWindow.size(); i++)
-               bgfx::requestScreenShot(m_screenshotWindow[i]->GetBackBuffer()->GetCoreFrameBuffer(), m_screenshotFilename[i].string().c_str());
+            m_screenshotFrameDelay--;
+            if (m_screenshotFrameDelay == 0)
+               for (size_t i = 0; i < m_screenshotWindow.size(); i++)
+                  bgfx::requestScreenShot(m_screenshotWindow[i]->GetBackBuffer()->GetCoreFrameBuffer(), m_screenshotFilename[i].string().c_str());
+            else if (m_screenshotFrameDelay < -60)
+            {
+               // Sadly BGFX will silently fails screenshot capture, so if after 60 frames we did not get it, we try again
+               PLOGE << "Screenshot capture timed out. Requesting it again";
+               for (size_t i = 0; i < m_screenshotWindow.size(); i++)
+                  bgfx::requestScreenShot(m_screenshotWindow[i]->GetBackBuffer()->GetCoreFrameBuffer(), m_screenshotFilename[i].string().c_str());
+            }
          }
       }
    }
@@ -1078,6 +1139,39 @@ RenderDeviceState::~RenderDeviceState()
 
 ////////////////////////////////////////////////////////////////////
 
+#if defined(ENABLE_BGFX)
+// Human-readable name for a bgfx renderer type. Index bgfx::RendererType::Count maps to "Default"
+// (let bgfx auto-select the platform default). Keep aligned with the bgfx::RendererType enum.
+static const string& bgfxRendererName(const bgfx::RendererType::Enum type)
+{
+   // One entry per bgfx::RendererType, plus a trailing "Default" for RendererType::Count (auto-select).
+   static const string names[]
+      = { "Noop"s, "Agc"s, "Direct3D11"s, "Direct3D12"s, "Gnm"s, "Metal"s, "Nvn"s, "OpenGLES"s, "OpenGL"s, "Vulkan"s, "WebGPU"s, "Default"s };
+   static_assert(std::size(names) == bgfx::RendererType::Count + 1,
+      "bgfxRendererName is out of sync with bgfx::RendererType - add/remove a name when bgfx changes its renderer list");
+   return names[type];
+}
+
+std::vector<std::string> RenderDevice::GetSelectableBackendNames()
+{
+   bgfx::RendererType::Enum supported[bgfx::RendererType::Count];
+   const int n = bgfx::getSupportedRenderers(bgfx::RendererType::Count, supported);
+   std::vector<std::string> result;
+   for (int i = 0; i < n; ++i)
+   {
+      const bgfx::RendererType::Enum renderer = supported[i];
+      if (renderer == bgfx::RendererType::Noop || renderer == bgfx::RendererType::WebGPU)
+         continue; // no-op / web backend, not a usable desktop choice
+      #if !defined(_DEBUG) && !defined(ENABLE_BGFX_DX12)
+      if (renderer == bgfx::RendererType::Direct3D12)
+         continue;
+      #endif
+      result.push_back(bgfxRendererName(renderer));
+   }
+   return result;
+}
+#endif
+
 RenderDevice::RenderDevice(
    VPX::Window* const wnd, const bool isStereo, const bool isAnaglyph, const bool isVR, const bool useNvidiaApi, const bool compressTextures, int nMSAASamples, VideoSyncMode& syncMode)
    : m_texMan(*this)
@@ -1140,17 +1234,26 @@ RenderDevice::RenderDevice(
       syncMode = VideoSyncMode::VSM_VSYNC;
    
    // Select backend
-   static const string bgfxRendererNames[bgfx::RendererType::Count + 1] = { "Noop"s, "Agc"s, "Direct3D11"s, "Direct3D12"s, "Gnm"s, "Metal"s, "Nvn"s, "OpenGLES"s, "OpenGL"s, "Vulkan"s, "Default"s };
    const string& gfxBackend = g_pplayer->m_ptable->m_settings.GetPlayer_GfxBackend();
    bgfx::RendererType::Enum supportedRenderers[bgfx::RendererType::Count];
    const int nRendererSupported = bgfx::getSupportedRenderers(bgfx::RendererType::Count, supportedRenderers);
-   string supportedRendererLog;
    init.type = bgfx::RendererType::Count; // Tells BGFX to select the default backend for the running platform
+   bool backendMatched = false;
    for (int i = 0; i < nRendererSupported; ++i)
-   {
-      supportedRendererLog += (i == 0 ? "" : ", ") + bgfxRendererNames[supportedRenderers[i]];
-      if (gfxBackend == bgfxRendererNames[supportedRenderers[i]])
+      if (gfxBackend == bgfxRendererName(supportedRenderers[i]))
+      {
          init.type = supportedRenderers[i];
+         backendMatched = true;
+      }
+   // Valid GfxBackend values: 'Default' (let BGFX auto-select the platform default) plus the backends
+   // usable on this platform (same list as the in-game graphics settings).
+   string validBackends = "Default"s;
+   for (const string& name : GetSelectableBackendNames())
+      validBackends += ", " + name;
+   // The setting is case sensitive and an unknown/unsupported value silently falls back to the platform
+   // default, so warn rather than leave the user guessing (e.g. 'opengl' instead of 'OpenGL').
+   if (!backendMatched && !gfxBackend.empty() && gfxBackend != "Default"s) {
+      PLOGW << "Ignoring unknown or unsupported graphics backend '" << gfxBackend << "' (case sensitive), using platform default. Valid values: " << validBackends;
    }
 #if !defined(_DEBUG) && !defined(ENABLE_BGFX_DX12)
    if (init.type == bgfx::RendererType::Direct3D12)
@@ -1160,7 +1263,11 @@ RenderDevice::RenderDevice(
       init.type = bgfx::RendererType::Count;
    if (g_pplayer->m_vrDevice == nullptr)
    {
-      PLOGI << "Using graphics backend: " << bgfxRendererNames[init.type] << " (available: " << supportedRendererLog << ')';
+      // Requested only: BGFX may fall back to another backend if the requested one cannot initialize. The
+      // backend actually selected is logged from the render thread once BGFX is initialized ("BGFX
+      // initialized using ... backend").
+      PLOGI << "Requested graphics backend: " << (init.type == bgfx::RendererType::Count ? "Default (auto-selected by BGFX)"s : bgfxRendererName(init.type))
+            << " (valid values: " << validBackends << ')';
    }
 
    #ifndef __LIBVPINBALL__
@@ -1255,7 +1362,7 @@ RenderDevice::RenderDevice(
    int channelDepth = m_outputWnd[0]->GetBitDepth() == 32 ?  8 :
                       m_outputWnd[0]->GetBitDepth() == 30 ? 10 :
                                                              5;
-   if (m_outputWnd[0]->IsFullScreen())
+   if (m_outputWnd[0]->GetWindowMode() == VPX::Window::WindowMode::ExclusiveFullscreen)
    {
       SDL_GL_SetAttribute(SDL_GL_RED_SIZE, channelDepth);
       SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, channelDepth);
@@ -1291,13 +1398,6 @@ RenderDevice::RenderDevice(
    m_sdl_context = SDL_GL_CreateContext(m_outputWnd[0]->GetCore());
 
    SDL_GL_MakeCurrent(m_outputWnd[0]->GetCore(), m_sdl_context);
-
-   #if defined(ENABLE_OPENGL)
-   int drawableWidth, drawableHeight, windowWidth, windowHeight;
-   SDL_GetWindowSizeInPixels(m_outputWnd[0]->GetCore(), &drawableWidth, &drawableHeight); // Size in pixels
-   SDL_GetWindowSize(m_outputWnd[0]->GetCore(), &windowWidth, &windowHeight); // Size in screen coordinates (taking in account HiDPI)
-   PLOGI << "SDL drawable size: " << drawableWidth << 'x' << drawableHeight << " (window size: " << windowWidth << 'x' << windowHeight << ')';
-   #endif
 
    #ifndef __OPENGLES__
    if (!gladLoadGL((GLADloadfunc)SDL_GL_GetProcAddress))
@@ -1440,7 +1540,7 @@ RenderDevice::RenderDevice(
 
     // get the current display format
     D3DFORMAT format;
-    if (!m_outputWnd[0]->IsFullScreen())
+    if (m_outputWnd[0]->GetWindowMode() != VPX::Window::WindowMode::ExclusiveFullscreen)
     {
        D3DDISPLAYMODE mode;
        CHECKD3D(m_pD3D->GetAdapterDisplayMode(adapterId, &mode));
@@ -1475,12 +1575,12 @@ RenderDevice::RenderDevice(
     params.MultiSampleQuality = 0;
     params.SwapEffect = D3DSWAPEFFECT_DISCARD;
     params.hDeviceWindow = m_outputWnd[0]->GetNativeHWND();
-    params.Windowed = !m_outputWnd[0]->IsFullScreen();
+    params.Windowed = m_outputWnd[0]->GetWindowMode() != VPX::Window::WindowMode::ExclusiveFullscreen;
     params.EnableAutoDepthStencil = FALSE;
     params.AutoDepthStencilFormat = D3DFMT_UNKNOWN; // ignored
     params.Flags = /*fullscreen ? D3DPRESENTFLAG_LOCKABLE_BACKBUFFER :*/ /*(stereo3D ?*/ 0 /*: D3DPRESENTFLAG_DISCARD_DEPTHSTENCIL)*/
        ; // D3DPRESENTFLAG_LOCKABLE_BACKBUFFER only needed for SetDialogBoxMode() below, but makes rendering slower on some systems :/
-    params.FullScreen_RefreshRateInHz = m_outputWnd[0]->IsFullScreen() ? (UINT)m_outputWnd[0]->GetRefreshRate() : 0;
+    params.FullScreen_RefreshRateInHz = m_outputWnd[0]->GetWindowMode() == VPX::Window::WindowMode::ExclusiveFullscreen ? (UINT)m_outputWnd[0]->GetRefreshRate() : 0;
     params.PresentationInterval = syncMode == VideoSyncMode::VSM_VSYNC ? D3DPRESENT_INTERVAL_ONE : D3DPRESENT_INTERVAL_IMMEDIATE;
 
    // check if our HDR texture format supports/does sRGB conversion on texture reads, which must NOT be the case as we always set SRGBTexture=true independent of the format!
@@ -1528,7 +1628,7 @@ RenderDevice::RenderDevice(
    {
       D3DDISPLAYMODEEX mode;
       mode.Size = sizeof(D3DDISPLAYMODEEX);
-      if (m_outputWnd[0]->IsFullScreen())
+      if (m_outputWnd[0]->GetWindowMode() == VPX::Window::WindowMode::ExclusiveFullscreen)
       {
          mode.Format = params.BackBufferFormat;
          mode.Width = params.BackBufferWidth;
@@ -1542,11 +1642,11 @@ RenderDevice::RenderDevice(
          devtype, m_outputWnd[0]->GetNativeHWND(),
          flags /*| D3DCREATE_PUREDEVICE*/,
          &params,
-         m_outputWnd[0]->IsFullScreen() ? &mode : nullptr,
+         m_outputWnd[0]->GetWindowMode() == VPX::Window::WindowMode::ExclusiveFullscreen ? &mode : nullptr,
          &m_pD3DDeviceEx);
       if (FAILED(hr))
       {
-         if (m_outputWnd[0]->IsFullScreen())
+         if (m_outputWnd[0]->GetWindowMode() == VPX::Window::WindowMode::ExclusiveFullscreen)
          {
             const int result = GetSystemMetrics(SM_REMOTESESSION);
             const bool isRemoteSession = (result != 0);
@@ -1572,7 +1672,7 @@ RenderDevice::RenderDevice(
    // Retrieve a reference to the back buffer.
    wnd->SetBackBuffer(new RenderTarget(this, SurfaceType::RT_DEFAULT, wnd->GetWidth(), wnd->GetHeight(), back_buffer_format));
 
-   /*if (m_outputWnd[0]->IsFullScreen())
+   /*if (m_outputWnd[0]->GetWindowMode() == WindowMode::ExclusiveFullscreen)
        hr = m_pD3DDevice->SetDialogBoxMode(TRUE);*/ // needs D3DPRESENTFLAG_LOCKABLE_BACKBUFFER, but makes rendering slower on some systems :/
 #endif
 
@@ -1710,6 +1810,9 @@ RenderDevice::~RenderDevice()
       // Suspend rendering before deleting anything that could be used
       m_renderDeviceAlive = false;
       m_frameReadySem.release();
+      // Wait for the render thread to actually leave its render loop: it may still be mid-frame (using the
+      // shaders, meshes and textures freed below) since it only re-checks m_renderDeviceAlive between frames
+      m_renderThreadStopped.acquire();
    #endif
 
    m_quadMeshBuffer = nullptr;
@@ -1921,17 +2024,22 @@ bool RenderDevice::DepthBufferReadBackAvailable() const
 void RenderDevice::CaptureScreenshot(const vector<VPX::Window*>& wnd, const vector<std::filesystem::path>& filename, const std::function<void(bool)>& callback, int frameDelay)
 {
    assert(frameDelay >= 1);
-   if (!m_screenshotFilename.empty())
    {
-      PLOGE << "Screenshot capture already in progress.";
-      callback(false);
-      return;
+      // The render thread concurrently reads this state in its screenshot request loop and BGFX callback
+      std::lock_guard lock(m_screenshotMutex);
+      if (m_screenshotFilename.empty())
+      {
+         m_screenshotSuccess = true;
+         m_screenshotWindow = wnd;
+         m_screenshotFilename = filename;
+         m_screenshotCallback = callback;
+         m_screenshotFrameDelay = frameDelay;
+         return;
+      }
    }
-   m_screenshotSuccess = true;
-   m_screenshotWindow = wnd;
-   m_screenshotFilename = filename;
-   m_screenshotCallback = callback;
-   m_screenshotFrameDelay = frameDelay;
+   // Fire outside the lock as the callback may re-enter CaptureScreenshot or take other locks
+   PLOGE << "Screenshot capture already in progress.";
+   callback(false);
 }
 
 float RenderDevice::GetVisualLatency() const
@@ -2543,16 +2651,6 @@ void RenderDevice::BlitRenderTarget(RenderTarget* source, RenderTarget* destinat
    AddRenderTargetDependency(source);
    RenderCommand* cmd = m_renderFrame->NewCommand();
    cmd->SetCopy(source, destination, copyColor, copyDepth, x1, y1, w1, h1, x2, y2, w2, h2, srcLayer, dstLayer);
-   cmd->m_dependency = m_nextRenderCommandDependency;
-   m_nextRenderCommandDependency = nullptr;
-   m_currentPass->Submit(cmd);
-}
-
-void RenderDevice::SubmitVR(RenderTarget* source)
-{
-   AddRenderTargetDependency(source);
-   RenderCommand* cmd = m_renderFrame->NewCommand();
-   cmd->SetSubmitVR(source);
    cmd->m_dependency = m_nextRenderCommandDependency;
    m_nextRenderCommandDependency = nullptr;
    m_currentPass->Submit(cmd);

@@ -203,6 +203,10 @@ void PUPManager::LoadConfig(const string& szRomName)
 
 void PUPManager::Unload()
 {
+   // Run any still-queued trigger invokes (see QueueDOFEvent) while the triggers
+   // and screens they point to are still alive.
+   m_msgApi->FlushPendingCallbacks(m_endpointId);
+
    if (IsRunning())
       Stop();
 
@@ -616,6 +620,30 @@ int PUPManager::Render(VPXRenderContext2D* const renderCtx, void* context)
          screen->SetMainVolume(volume);
    }
 
+   // A usable root must exist, must be a canvas rather than a positioned element (a childless
+   // screen positioned on another screen; a screen whose custom position references itself has
+   // no parent and stays a canvas), and its screen tree must contain something that can render.
+   // Ancillary window renderers are exclusive (the first one that renders claims the window), so
+   // claiming a window for a dead tree would blank it and starve lower priority renderers (e.g.
+   // the B2S backglass behind an Off backglass screen 2). Skipping dead candidates also routes
+   // content to the fallback screen (e.g. videos on DMD screen 1 when screen 5 is Off).
+   auto isUsableRoot = [me](const std::shared_ptr<PUPScreen>& root) -> bool
+   {
+      if (root == nullptr || (root->GetParent() != nullptr && !root->HasChildren()))
+         return false;
+      for (const auto& screen : me->m_screenOrder)
+      {
+         if (screen->GetMode() == PUPScreen::Mode::Off || screen->GetMode() == PUPScreen::Mode::MusicOnly)
+            continue;
+         const PUPScreen* parent = screen.get();
+         while (parent && parent != root.get())
+            parent = parent->GetParent();
+         if (parent)
+            return true;
+      }
+      return false;
+   };
+
    int padLeft = 0;
    int padRight = 0;
    int padTop = 0;
@@ -631,8 +659,8 @@ int PUPManager::Render(VPXRenderContext2D* const renderCtx, void* context)
       padBottom = pupTopperPadBottom_Get();
       break;
    case VPXWindowId::VPXWINDOW_Backglass:
-      rootScreen = me->GetScreen(2); // select 2 or 6 (user settings ?)
-      if (rootScreen == nullptr || rootScreen->GetCustomPos() != nullptr)
+      rootScreen = me->GetScreen(2);
+      if (!isUsableRoot(rootScreen))
          rootScreen = me->GetScreen(6);
       padLeft = pupBGPadLeft_Get();
       padRight = pupBGPadRight_Get();
@@ -640,8 +668,8 @@ int PUPManager::Render(VPXRenderContext2D* const renderCtx, void* context)
       padBottom = pupBGPadBottom_Get();
       break;
    case VPXWindowId::VPXWINDOW_ScoreView:
-      rootScreen = me->GetScreen(5); // select 1 or 5 (user settings ?)
-      if (rootScreen == nullptr || rootScreen->GetCustomPos() != nullptr)
+      rootScreen = me->GetScreen(5);
+      if (!isUsableRoot(rootScreen))
          rootScreen = me->GetScreen(1);
       padLeft = pupSVPadLeft_Get();
       padRight = pupSVPadRight_Get();
@@ -650,7 +678,7 @@ int PUPManager::Render(VPXRenderContext2D* const renderCtx, void* context)
       break;
    default: break;
    }
-   if (rootScreen == nullptr || rootScreen->GetCustomPos() != nullptr)
+   if (!isUsableRoot(rootScreen))
       return false;
 
    if (!LibAV::LibAV::GetInstance().isLoaded)
@@ -680,7 +708,9 @@ int PUPManager::Render(VPXRenderContext2D* const renderCtx, void* context)
          screens.push_back(screen);
    }
    // Render order - two tiers (non-topmost, topmost) mirroring Win32 HWND_TOPMOST behavior.
-   // Within each tier: non-popup video, non-popup overlay, popups.
+   // In the back (non-topmost) tier the popup video is drawn before the non-popup overlay so that
+   // a full-window frame/overlay (e.g. a decorative backglass border) stays above the background
+   // videos. In the front (topmost) tier popups are drawn last so callouts stay on top.
    auto renderScreens = [&renderCtx, &screens](bool popup, bool topmost, int startPass, int endPass)
    {
       for (int pass = startPass; pass <= endPass; pass++)
@@ -693,8 +723,8 @@ int PUPManager::Render(VPXRenderContext2D* const renderCtx, void* context)
    };
 
    renderScreens(false, false, 0, 1);
-   renderScreens(false, false, 2, 3);
    renderScreens(true, false, 0, 3);
+   renderScreens(false, false, 2, 3);
    renderScreens(false, true, 0, 1);
    renderScreens(false, true, 2, 3);
    renderScreens(true, true, 0, 3);

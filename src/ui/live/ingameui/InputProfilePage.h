@@ -10,11 +10,13 @@ namespace VPX::InGameUI
 class InputProfilePage final : public InGameUIPage
 {
 public:
-   InputProfilePage(const string& deviceName, const std::function<void(bool, bool, bool)>& handler);
+   InputProfilePage(const string& deviceName, const std::function<void(bool, bool)>& handler);
 
 private:
+   void BuildPage() override;
    bool m_dontAskAgain = false;
-   std::function<void(bool, bool, bool)> m_handler;
+   string m_deviceName;
+   std::function<void(bool, bool)> m_handler;
 };
 
 }

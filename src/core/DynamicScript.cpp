@@ -659,6 +659,30 @@ void DynamicTypeLibrary::ScriptToCOMVariant(const ScriptTypeNameDef& type, Scrip
          case TypeID::TYPEID_UINT16: COPY_ARRAY(uint16_t,     UI2); break;
          case TypeID::TYPEID_UINT32: COPY_ARRAY(uint32_t,     UI4); break;
          case TypeID::TYPEID_UINT64: COPY_ARRAY(uint64_t,     UI8); break;
+         case TypeID::TYPEID_STRING:
+         {
+            const ScriptString* const pSrc = reinterpret_cast<const ScriptString*>(&sv.vArray->lengths[1]);
+            for (unsigned int i = 0; i < sv.vArray->lengths[0]; i++)
+            {
+               VariantInit(&pData[i]);
+               V_VT(&pData[i]) = VT_BSTR;
+               const int len = MultiByteToWideChar(CP_ACP, 0, pSrc[i].string, -1, nullptr, 0);
+               V_BSTR(&pData[i]) = SysAllocStringLen(nullptr, len - 1);
+               MultiByteToWideChar(CP_ACP, 0, pSrc[i].string, -1, V_BSTR(&pData[i]), len);
+            }
+            break;
+         }
+         case TypeID::TYPEID_BOOL:
+         {
+            const char* pSrc = reinterpret_cast<const char*>(&sv.vArray->lengths[1]);
+            for (unsigned int i = 0; i < sv.vArray->lengths[0]; i++)
+            {
+               VariantInit(&pData[i]);
+               V_VT(&pData[i]) = VT_BOOL;
+               V_BOOL(&pData[i]) = pSrc[i] ? VARIANT_TRUE : VARIANT_FALSE;
+            }
+            break;
+         }
          default: assert(false); // not yet implemented
          }
          #undef COPY_ARRAY
@@ -702,6 +726,39 @@ void DynamicTypeLibrary::ScriptToCOMVariant(const ScriptTypeNameDef& type, Scrip
          case TypeID::TYPEID_UINT16: COPY_ARRAY(uint16_t,     UI2); break;
          case TypeID::TYPEID_UINT32: COPY_ARRAY(uint32_t,     UI4); break;
          case TypeID::TYPEID_UINT64: COPY_ARRAY(uint64_t,     UI8); break;
+         case TypeID::TYPEID_STRING:
+         {
+            const ScriptString* const pSrc = reinterpret_cast<const ScriptString*>(&sv.vArray->lengths[2]);
+            for (ix[0] = 0; ix[0] < static_cast<LONG>(sv.vArray->lengths[0]); ix[0]++)
+            {
+               for (ix[1] = 0; ix[1] < static_cast<LONG>(sv.vArray->lengths[1]); ix[1]++)
+               {
+                  VariantInit(&varValue);
+                  V_VT(&varValue) = VT_BSTR;
+                  const char* str = pSrc[ix[0] * sv.vArray->lengths[1] + ix[1]].string;
+                  const int len = MultiByteToWideChar(CP_ACP, 0, str, -1, nullptr, 0);
+                  V_BSTR(&varValue) = SysAllocStringLen(nullptr, len - 1);
+                  MultiByteToWideChar(CP_ACP, 0, str, -1, V_BSTR(&varValue), len);
+                  SafeArrayPutElement(psa, ix, &varValue);
+                  VariantClear(&varValue);
+               }
+            }
+            break;
+         }
+         case TypeID::TYPEID_BOOL:
+         {
+            V_VT(&varValue) = VT_BOOL;
+            const char* pSrc = reinterpret_cast<const char*>(&sv.vArray->lengths[2]);
+            for (ix[0] = 0; ix[0] < static_cast<LONG>(sv.vArray->lengths[0]); ix[0]++)
+            {
+               for (ix[1] = 0; ix[1] < static_cast<LONG>(sv.vArray->lengths[1]); ix[1]++)
+               {
+                  V_BOOL(&varValue) = pSrc[ix[0] * sv.vArray->lengths[1] + ix[1]] ? VARIANT_TRUE : VARIANT_FALSE;
+                  SafeArrayPutElement(psa, ix, &varValue);
+               }
+            }
+            break;
+         }
          default: assert(false); // not yet implemented
          }
          #undef COPY_ARRAY
@@ -737,7 +794,20 @@ void DynamicTypeLibrary::ReleaseScriptVariant(const ScriptTypeNameDef& type, Scr
          PSC_RELEASE(typeDef.classDef->classDef, sv.vObject);
       break;
 
-   case TypeDef::TD_ARRAY: sv.vArray->Release(sv.vArray); break;
+   case TypeDef::TD_ARRAY:
+      // String elements carry a per-element lifecycle (ScriptString::Release), mirroring the
+      // scalar string convention. Release each element before freeing the array block itself.
+      if (typeDef.arrayDef->type.id == TypeID::TYPEID_STRING)
+      {
+         unsigned int count = sv.vArray->lengths[0];
+         for (unsigned int d = 1; d < typeDef.arrayDef->nDimensions; d++)
+            count *= sv.vArray->lengths[d];
+         ScriptString* pData = reinterpret_cast<ScriptString*>(&sv.vArray->lengths[typeDef.arrayDef->nDimensions]);
+         for (unsigned int i = 0; i < count; i++)
+            pData[i].Release(&pData[i]);
+      }
+      sv.vArray->Release(sv.vArray);
+      break;
 
    default: assert(false);
    }

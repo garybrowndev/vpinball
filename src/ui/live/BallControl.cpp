@@ -48,9 +48,7 @@ void BallControl::Update(const int width, const int height)
 {
    using enum Mode;
    const Player *const player = g_pplayer;
-   const InputManager::ActionState &inputState = player->m_pininput.GetActionState();
-   const bool leftFlipperPressed = inputState.IsKeyPressed(player->m_pininput.GetLeftFlipperActionId(), m_prevActionState);
-   m_prevActionState = inputState;
+   const bool leftFlipperPressed = player->m_pininput.IsPressed(player->m_pininput.GetLeftFlipperActionId());
 
    switch (m_mode)
    {
@@ -78,7 +76,7 @@ void BallControl::Update(const int width, const int height)
 void BallControl::HandleDragBall(const int width, const int height)
 {
    Player * const player = g_pplayer;
-   Renderer * const m_renderer = player->m_renderer;
+   const std::unique_ptr<Renderer> & m_renderer = player->m_renderer;
    const PinTable *const live_table = player->m_ptable;
 
    // Note that ball control release is handled by pininput
@@ -100,7 +98,7 @@ void BallControl::HandleDragBall(const int width, const int height)
 void BallControl::HandleDestroyBall(const int width, const int height) const
 {
    Player * const player = g_pplayer;
-   Renderer * const renderer = player->m_renderer;
+   const std::unique_ptr<Renderer> & renderer = player->m_renderer;
 
    const ImVec2 mousePos = ImGui::GetMousePos();
    const Vertex3Ds vertex = renderer->Get3DPointFrom2D(width, height, Vertex2D(mousePos.x, mousePos.y), DEFAULT_BALL_SIZE);
@@ -120,7 +118,7 @@ void BallControl::HandleDestroyBall(const int width, const int height) const
 void BallControl::HandleThrowBalls(const int width, const int height)
 {
    Player * const player = g_pplayer;
-   Renderer * const renderer = player->m_renderer;
+   const std::unique_ptr<Renderer> & renderer = player->m_renderer;
    const PinTable * const live_table = player->m_ptable;
 
    const ImVec2 mouseDrag = ImGui::GetMouseDragDelta();

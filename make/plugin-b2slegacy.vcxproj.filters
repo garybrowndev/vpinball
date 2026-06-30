@@ -130,9 +130,6 @@
     <ClCompile Include="..\..\plugins\b2slegacy\dream7\SegmentNumber.cpp">
       <Filter>source\dream7</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\plugins\b2slegacy\dream7\SegmentStyle.cpp">
-      <Filter>source\dream7</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\plugins\b2slegacy\forms\Form.cpp">
       <Filter>source\forms</Filter>
     </ClCompile>
@@ -298,6 +295,9 @@
       <Filter>source\forms</Filter>
     </ClInclude>
     <ClInclude Include="..\..\plugins\b2slegacy\utils\DMDOverlay.h">
+      <Filter>source\utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\plugins\b2slegacy\utils\Brush.h">
       <Filter>source\utils</Filter>
     </ClInclude>
     <ClInclude Include="..\..\plugins\b2slegacy\utils\GraphicsPath.h">

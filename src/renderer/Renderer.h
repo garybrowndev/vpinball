@@ -27,8 +27,10 @@ public:
    int GetDisplayWidth() const; // Playfield display width, taking in consideration stretching applied by some stereo modes
    int GetDisplayHeight() const; // Playfield display width, taking in consideration stretching applied by some stereo modes
    float GetDisplayAspectRatio() const;
-   void InitLayout(const float xpixoff = 0.f, const float ypixoff = 0.f);
-   ModelViewProj& GetMVP() { return m_mvp; }
+   void InitLayout(const float xpixoff = 0.f, const float ypixoff = 0.f); // Reset both the base and the current MVP to the default view setup, with an optional pixel offset for AA
+   void SetFlip(ModelViewProj::FlipMode flipMode); // Flip the rendered image horizontally and/or vertically (e.g. for rear projection setups), applied to base MVP
+   void SetViewProj(const Matrix3D& view, const Matrix3D& proj); // Override the MVP, applied to the base MVP
+   void SetReflection(const Matrix3D& reflectionMatrix); // Set a reflection matrix to be applied to the view matrix, used for mirror reflections, applied to current MVP, NOT the base MVP
    const ModelViewProj& GetMVP() const { return m_mvp; }
    Vertex3Ds Unproject(const int width, const int height, const Vertex3Ds& point) const;
    Vertex3Ds Get3DPointFrom2D(const int width, const int height, const Vertex2D& p, float z);
@@ -201,6 +203,7 @@ public:
    VPXRenderContext2D& GetAncillaryRenderContext(VPXWindowId window, float width, float height, bool is2D, bool isOutputLinear, float depthbias);
 
 private:
+   void SetSpaceReference(PartGroupData::SpaceReference spaceReference);
    void RenderItem(IEditable* const renderable, bool isNoBackdrop);
    void RenderStaticPrepass();
    void RenderDynamics();
@@ -235,8 +238,10 @@ private:
       const float srcH);
    RenderTarget* SetupAncillaryRenderTarget(VPXWindowId window, const VPX::RenderOutput& output, RenderTarget* embedRT, int& outputX, int& outputY, int& outputW, int& outputH, bool& isOutputLinear);
    void ClearEmbeddedAncillaryWindow(VPXWindowId window, const VPX::RenderOutput& output, RenderTarget* embedRT);
+   void DrawEmbeddedQuad(RenderTarget* outputRT, int x, int y, int w, int h, float r, float g, float b);
    void RenderAncillaryWindow(VPXWindowId window, const VPX::RenderOutput& output, RenderTarget* embedRT, const vector<AncillaryRendererDef>& ancillaryWndRenderers);
    std::unique_ptr<RenderTarget> m_ancillaryWndHdrRT[VPXWindowId::VPXWINDOW_Topper + 1];
+   bool m_ancillaryWndRendered[VPXWindowId::VPXWINDOW_Topper + 1] = {}; // Whether a renderer claimed the window on the last frame
    struct
    {
       bool isOutputLinear;
@@ -285,9 +290,10 @@ private:
 
    PinTable* const m_table;
 
-   ModelViewProj m_mvp; // Store the active Model / View / Projection
-   Matrix3D m_playfieldView[2]; // Store the base playfield view matrix computed at beginning of frame render
+   ModelViewProj m_mvp; // Active Model / View / Projection (includes visual nudge)
    PartGroupData::SpaceReference m_mvpSpaceReference = PartGroupData::SpaceReference::SR_PLAYFIELD;
+   ModelViewProj m_initialMVP; // Base playfield MVP in desktop mode (unused in VR)
+   Matrix3D m_playfieldView[2]; // Base playfield view matrices of m_initialMVP from which all views are derived in desktop mode (unused in VR)
 
    bool m_isStaticPrepassDirty = true;
    int m_disableStaticPrepass = 0;
@@ -312,7 +318,6 @@ private:
 public:
    bool m_vrApplyColorKey = false;
    bool m_vrPreviewShrink = false;
-   vec4 m_vrColorKey = vec4(0.f, 0.f, 0.f, 0.f);
 
 private:
    float m_visualNudgeStrength; // whether to shake the table/screen during nudges and how much

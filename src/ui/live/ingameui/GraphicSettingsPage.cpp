@@ -12,7 +12,6 @@ namespace VPX::InGameUI
 GraphicSettingsPage::GraphicSettingsPage()
    : InGameUIPage("Graphics Settings"s, ""s, SaveMode::Both)
 {
-   BuildPage();
 }
 
 void GraphicSettingsPage::OnStaticRenderDirty()
@@ -27,8 +26,6 @@ void GraphicSettingsPage::OnStaticRenderDirty()
 
 void GraphicSettingsPage::BuildPage()
 {
-   ClearItems();
-
 #if defined(ENABLE_DX9)
    constexpr bool isDX9 = true;
    constexpr bool isOpenGL = false;
@@ -57,7 +54,7 @@ void GraphicSettingsPage::BuildPage()
          m_player->SetCabinetAutoFitMode(m_player->m_ptable->m_settings.GetPlayer_CabinetAutofitMode());
          m_player->SetCabinetAutoFitPos(m_player->m_ptable->m_settings.GetPlayer_CabinetAutofitPos());
          OnStaticRenderDirty();
-         BuildPage();
+         RequestRebuild();
       },
       [](Settings& settings) { settings.ResetPlayer_BGSet(); }, //
       [this](int v, Settings& settings, bool asTableOverride)
@@ -97,19 +94,11 @@ void GraphicSettingsPage::BuildPage()
 
 #ifdef ENABLE_BGFX
    // TODO this property is directly persisted. It does not follow the overall UI design: App/Table/Live state => Implement live state (will also enable table override)
-   bgfx::RendererType::Enum supportedRenderers[bgfx::RendererType::Count];
-   if (const int nRendererSupported = bgfx::getSupportedRenderers(bgfx::RendererType::Count, supportedRenderers); nRendererSupported > 1)
+   if (vector<string> renderers = RenderDevice::GetSelectableBackendNames(); !renderers.empty())
    {
-      static const string bgfxRendererNames[bgfx::RendererType::Count + 1]
-         = { "Noop"s, "Agc"s, "Direct3D11"s, "Direct3D12"s, "Gnm"s, "Metal"s, "Nvn"s, "OpenGLES"s, "OpenGL"s, "Vulkan"s, "Default"s };
-      vector<string> renderers;
-      for (int i = 0; i < nRendererSupported; i++)
-         #if defined(_DEBUG) || defined(ENABLE_BGFX_DX12)
-         if (supportedRenderers[i] != bgfx::RendererType::Noop)
-         #else
-         if (supportedRenderers[i] != bgfx::RendererType::Noop && supportedRenderers[i] != bgfx::RendererType::Direct3D12)
-         #endif
-            renderers.push_back(bgfxRendererNames[supportedRenderers[i]]);
+      // "Default" first: an unset or unknown GfxBackend resolves to index 0 below (max(0, -1)), so without
+      // it the dialog would show the first backend as selected.
+      renderers.insert(renderers.begin(), "Default"s);
       AddItem(std::make_unique<InGameUIItem>(
          VPX::Properties::EnumPropertyDef(""s, ""s, "Graphics Backend"s, ""s, false, 0, 0, renderers),
          [this, renderers]() { return max(0, FindIndexOf(renderers, m_player->m_ptable->m_settings.GetPlayer_GfxBackend())); }, // Live
@@ -211,7 +200,7 @@ void GraphicSettingsPage::BuildPage()
             m_player->SetTargetRefreshRate(10000.f);
             break;
          }
-         BuildPage();
+         RequestRebuild();
          if (isDX9 || isOpenGL)
             m_notificationId = m_player->m_liveUI->PushNotification("Note that some changes will only be applied after restarting the player."s, 3000, m_notificationId);
       },
@@ -462,7 +451,7 @@ void GraphicSettingsPage::BuildPage()
             m_player->m_renderer->m_ballImage = BaseTexture::CreateFromFile(m_player->m_ptable->m_settings.GetPlayer_BallImage(), m_player->m_ptable->m_settings.GetPlayer_MaxTexDimension());
             m_player->m_renderer->m_decalImage = BaseTexture::CreateFromFile(m_player->m_ptable->m_settings.GetPlayer_DecalImage(), m_player->m_ptable->m_settings.GetPlayer_MaxTexDimension());
          }
-         BuildPage();
+         RequestRebuild();
       }));
 
    if (m_player->m_renderer->m_overwriteBallImages)

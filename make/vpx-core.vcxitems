@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Label="Globals">
     <MSBuildAllProjects Condition="'$(MSBuildVersion)' == '' Or '$(MSBuildVersion)' &lt; '16.0'">$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
@@ -41,7 +41,6 @@
       <HeaderFileName>$(SolutionDir)../gen/vpinball.h</HeaderFileName>
     </Midl>
   </ItemDefinitionGroup>
-
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
@@ -62,7 +61,7 @@
       <FloatingPointModel>Fast</FloatingPointModel>
       <FloatingPointExceptions>false</FloatingPointExceptions>
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
-      <AdditionalOptions>/Zc:__cplusplus /Zc:preprocessor %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Zc:__cplusplus /Zc:preprocessor /we4172 %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <ResourceCompile>
@@ -100,7 +99,6 @@
       <EnableDpiAwareness>PerMonitorHighDPIAware</EnableDpiAwareness>
     </Manifest>
   </ItemDefinitionGroup>
-
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_GL|Win32'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
@@ -121,7 +119,7 @@
       <FloatingPointModel>Fast</FloatingPointModel>
       <FloatingPointExceptions>false</FloatingPointExceptions>
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
-      <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Zc:__cplusplus /we4172 %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
@@ -131,7 +129,7 @@
       <AdditionalIncludeDirectories>$(SolutionDir)../gen;$(SolutionDir)../../src;$(SolutionDir)../../plugins;$(SolutionDir)../../plugins;$(SolutionDir)../../third-party/include/win32xx/include</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>SDL3.lib;opengl32.lib;openvr_api.lib;comctl32.lib;dxguid.lib;freeimage.lib;winmm.lib;dinput8.lib;nvapi.lib;odbc32.lib;odbccp32.lib;imm32.lib;setupapi.lib;hid.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SDL3.lib;opengl32.lib;comctl32.lib;dxguid.lib;freeimage.lib;winmm.lib;dinput8.lib;nvapi.lib;odbc32.lib;odbccp32.lib;imm32.lib;setupapi.lib;hid.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <AdditionalLibraryDirectories>$(SolutionDir)../../third-party/build-libs/windows-x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreAllDefaultLibraries>
@@ -159,7 +157,6 @@
       <EnableDpiAwareness>PerMonitorHighDPIAware</EnableDpiAwareness>
     </Manifest>
   </ItemDefinitionGroup>
-
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_BGFX|Win32'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
@@ -180,7 +177,7 @@
       <FloatingPointModel>Fast</FloatingPointModel>
       <FloatingPointExceptions>false</FloatingPointExceptions>
       <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
-      <AdditionalOptions>/Zc:__cplusplus /Zc:preprocessor %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Zc:__cplusplus /Zc:preprocessor /we4172 %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
@@ -218,7 +215,6 @@
       <EnableDpiAwareness>PerMonitorHighDPIAware</EnableDpiAwareness>
     </Manifest>
   </ItemDefinitionGroup>
-
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
@@ -235,7 +231,7 @@
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <CompileAs>Default</CompileAs>
-      <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Zc:__cplusplus /we4172 %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
@@ -270,7 +266,6 @@
       <EnableDpiAwareness>PerMonitorHighDPIAware</EnableDpiAwareness>
     </Manifest>
   </ItemDefinitionGroup>
-
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_GL|x64'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
@@ -287,7 +282,7 @@
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <CompileAs>Default</CompileAs>
-      <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Zc:__cplusplus /we4172 %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
@@ -297,7 +292,7 @@
       <AdditionalIncludeDirectories>$(SolutionDir)../gen;$(SolutionDir)../../src;$(SolutionDir)../../plugins;$(SolutionDir)../../plugins;$(SolutionDir)../../third-party/include/win32xx/include</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>SDL364.lib;opengl32.lib;openvr_api.lib;comctl32.lib;dxguid.lib;freeimage64.lib;winmm.lib;dinput8.lib;nvapi.lib;odbc32.lib;odbccp32.lib;imm32.lib;setupapi.lib;hid.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SDL364.lib;opengl32.lib;comctl32.lib;dxguid.lib;freeimage64.lib;winmm.lib;dinput8.lib;nvapi.lib;odbc32.lib;odbccp32.lib;imm32.lib;setupapi.lib;hid.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <AdditionalLibraryDirectories>$(SolutionDir)../../third-party/build-libs/windows-x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreAllDefaultLibraries>false</IgnoreAllDefaultLibraries>
@@ -322,7 +317,6 @@
       <EnableDpiAwareness>PerMonitorHighDPIAware</EnableDpiAwareness>
     </Manifest>
   </ItemDefinitionGroup>
-
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_BGFX|x64'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
@@ -339,7 +333,7 @@
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <CompileAs>Default</CompileAs>
-      <AdditionalOptions>/Zc:__cplusplus /Zc:preprocessor %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Zc:__cplusplus /Zc:preprocessor /we4172 %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
@@ -374,7 +368,6 @@
       </Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
-
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
@@ -403,7 +396,7 @@
       <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
       <ControlFlowGuard>false</ControlFlowGuard>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Zc:__cplusplus /we4172 %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <ResourceCompile>
@@ -436,7 +429,6 @@
       <EnableDpiAwareness>PerMonitorHighDPIAware</EnableDpiAwareness>
     </Manifest>
   </ItemDefinitionGroup>
-
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_GL|Win32'">
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
@@ -465,7 +457,7 @@
       <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
       <ControlFlowGuard>false</ControlFlowGuard>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Zc:__cplusplus /we4172 %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <ResourceCompile>
@@ -474,7 +466,7 @@
       <AdditionalIncludeDirectories>$(SolutionDir)../gen;$(SolutionDir)../../src;$(SolutionDir)../../plugins;$(SolutionDir)../../plugins;$(SolutionDir)../../third-party/include/win32xx/include</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>SDL3.lib;opengl32.lib;openvr_api.lib;comctl32.lib;dxguid.lib;freeimage.lib;winmm.lib;dinput8.lib;nvapi.lib;odbc32.lib;odbccp32.lib;imm32.lib;setupapi.lib;hid.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SDL3.lib;opengl32.lib;comctl32.lib;dxguid.lib;freeimage.lib;winmm.lib;dinput8.lib;nvapi.lib;odbc32.lib;odbccp32.lib;imm32.lib;setupapi.lib;hid.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <AdditionalLibraryDirectories>$(SolutionDir)../../third-party/build-libs/windows-x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreSpecificDefaultLibraries>LIBC;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
@@ -499,7 +491,6 @@
       <EnableDpiAwareness>PerMonitorHighDPIAware</EnableDpiAwareness>
     </Manifest>
   </ItemDefinitionGroup>
-
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_BGFX|Win32'">
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
@@ -528,7 +519,7 @@
       <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
       <ControlFlowGuard>false</ControlFlowGuard>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/Zc:__cplusplus /Zc:preprocessor %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Zc:__cplusplus /Zc:preprocessor /we4172 %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <ResourceCompile>
@@ -562,7 +553,6 @@
       <EnableDpiAwareness>PerMonitorHighDPIAware</EnableDpiAwareness>
     </Manifest>
   </ItemDefinitionGroup>
-
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
@@ -591,7 +581,7 @@
       <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
       <ControlFlowGuard>false</ControlFlowGuard>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Zc:__cplusplus /we4172 %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <ResourceCompile>
@@ -624,7 +614,6 @@
       <EnableDpiAwareness>PerMonitorHighDPIAware</EnableDpiAwareness>
     </Manifest>
   </ItemDefinitionGroup>
-
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_GL|x64'">
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
@@ -653,7 +642,7 @@
       <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
       <ControlFlowGuard>false</ControlFlowGuard>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Zc:__cplusplus /we4172 %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <ResourceCompile>
@@ -662,7 +651,7 @@
       <AdditionalIncludeDirectories>$(SolutionDir)../gen;$(SolutionDir)../../src;$(SolutionDir)../../plugins;$(SolutionDir)../../plugins;$(SolutionDir)../../third-party/include/win32xx/include</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>SDL364.lib;opengl32.lib;openvr_api.lib;comctl32.lib;dxguid.lib;freeimage64.lib;winmm.lib;dinput8.lib;nvapi.lib;odbc32.lib;odbccp32.lib;imm32.lib;setupapi.lib;hid.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SDL364.lib;opengl32.lib;comctl32.lib;dxguid.lib;freeimage64.lib;winmm.lib;dinput8.lib;nvapi.lib;odbc32.lib;odbccp32.lib;imm32.lib;setupapi.lib;hid.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <AdditionalLibraryDirectories>$(SolutionDir)../../third-party/build-libs/windows-x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreSpecificDefaultLibraries>LIBC;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
@@ -686,7 +675,6 @@
       <EnableDpiAwareness>PerMonitorHighDPIAware</EnableDpiAwareness>
     </Manifest>
   </ItemDefinitionGroup>
-
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_BGFX|x64'">
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
@@ -715,7 +703,7 @@
       <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
       <ControlFlowGuard>false</ControlFlowGuard>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/Zc:__cplusplus /Zc:preprocessor %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Zc:__cplusplus /Zc:preprocessor /we4172 %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <ResourceCompile>
@@ -748,12 +736,52 @@
       <EnableDpiAwareness>PerMonitorHighDPIAware</EnableDpiAwareness>
     </Manifest>
   </ItemDefinitionGroup>
-
-
   <ItemGroup>
     <ProjectCapability Include="SourceItemsFromImports" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="$(MSBuildThisFileDirectory)..\..\third-party\include\miniaudio\extras\stb_vorbis.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_BGFX|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_BGFX|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_GL|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_GL|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_BGFX|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_BGFX|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_GL|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_GL|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)..\..\third-party\include\miniaudio\extras\stb_vorbis_static.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_BGFX|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_BGFX|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_GL|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_GL|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_BGFX|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_BGFX|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_GL|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_GL|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)..\..\third-party\include\miniaudio\miniaudio.c">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_BGFX|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_BGFX|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_GL|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_GL|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_BGFX|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_BGFX|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug_GL|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release_GL|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="$(SolutionDir)/../../plugins/plugins/MsgPluginManager.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -784,11 +812,12 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="$(SolutionDir)/../../src/input/InputAction.cpp" />
-    <ClCompile Include="$(SolutionDir)/../../src/input/SensorFilter.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/input/InputManager.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/input/OpenPinDevHandler.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/input/PhysicsSensor.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/input/PlungerHandler.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/input/SensorMapping.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/math/HighPassFilter.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/math/math.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/math/matrix.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/math/Mesh.cpp" />
@@ -828,6 +857,13 @@
     <ClCompile Include="$(SolutionDir)/../../src/physics/hittimer.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/physics/PhysicsEngine.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/physics/quadtree.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/physics/cabinet/CabinetNudgeSensor.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/physics/cabinet/CabinetPhysics.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/physics/cabinet/GamepadNudge.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/physics/cabinet/KeyboardNudge.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/physics/cabinet/NudgeHandler.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/physics/cabinet/NudgeIntentHandler.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/physics/cabinet/PlumbHandler.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/renderer/Anaglyph.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/renderer/IndexBuffer.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/renderer/MeshBuffer.cpp" />
@@ -886,10 +922,13 @@
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/ingameui/HomePage.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/ingameui/InGameUIItem.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/ingameui/InGameUIPage.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/ui/live/ingameui/InputDevicePage.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/ingameui/InputProfilePage.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/ingameui/InputSettingsPage.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/ingameui/MiscSettingsPage.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/ui/live/ingameui/NudgeSensorSettingsPage.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/ingameui/NudgeSettingsPage.cpp" />
+    <ClCompile Include="$(SolutionDir)/../../src/ui/live/ingameui/PlungerSensorSettingsPage.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/ingameui/PlungerSettingsPage.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/ingameui/PluginSettingsPage.cpp" />
     <ClCompile Include="$(SolutionDir)/../../src/ui/live/ingameui/PointOfViewSettingsPage.cpp" />
@@ -1505,6 +1544,9 @@
     <Image Include="$(SolutionDir)/../../src/ui/win/res/ball.ico" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="$(MSBuildThisFileDirectory)..\..\third-party\include\miniaudio\extras\miniaudio_libopus.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)..\..\third-party\include\miniaudio\extras\miniaudio_libvorbis.h" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)..\..\third-party\include\miniaudio\miniaudio.h" />
     <ClInclude Include="$(SolutionDir)/../../plugins/plugins/MsgPlugin.h" />
     <ClInclude Include="$(SolutionDir)/../../plugins/plugins/ControllerPlugin.h" />
     <ClInclude Include="$(SolutionDir)/../../plugins/plugins/ScriptablePlugin.h" />
@@ -1545,15 +1587,17 @@
     <ClInclude Include="$(SolutionDir)/../../src/core/VPXPluginAPIImpl.h" />
     <ClInclude Include="$(SolutionDir)/../../src/input/ButtonMapping.h" />
     <ClInclude Include="$(SolutionDir)/../../src/input/InputAction.h" />
-    <ClInclude Include="$(SolutionDir)/../../src/input/SensorFilter.h" />
     <ClInclude Include="$(SolutionDir)/../../src/input/InputManager.h" />
     <ClInclude Include="$(SolutionDir)/../../src/input/OpenPinDevHandler.h" />
     <ClInclude Include="$(SolutionDir)/../../src/input/PhysicsSensor.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/input/PlungerHandler.h" />
     <ClInclude Include="$(SolutionDir)/../../src/input/ScanCodes.h" />
     <ClInclude Include="$(SolutionDir)/../../src/input/SensorMapping.h" />
     <ClInclude Include="$(SolutionDir)/../../src/input/SDLInputHandler.h" />
     <ClInclude Include="$(SolutionDir)/../../src/input/XRInputHandler.h" />
     <ClInclude Include="$(SolutionDir)/../../src/math/bbox.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/math/ExponentialMovingAverage.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/math/HighPassFilter.h" />
     <ClInclude Include="$(SolutionDir)/../../src/math/math.h" />
     <ClInclude Include="$(SolutionDir)/../../src/math/matrix.h" />
     <ClInclude Include="$(SolutionDir)/../../src/math/Mesh.h" />
@@ -1618,17 +1662,27 @@
     <ClInclude Include="$(SolutionDir)/../../src/parts/light.h" />
     <ClInclude Include="$(SolutionDir)/../../src/parts/lightseq.h" />
     <ClInclude Include="$(SolutionDir)/../../src/physics/AsyncDynamicQuadTree.h" />
-    <ClInclude Include="$(SolutionDir)/../../src/physics/physconst.h" />
-    <ClInclude Include="$(SolutionDir)/../../src/physics/kdtree.h" />
-    <ClInclude Include="$(SolutionDir)/../../src/physics/hitball.h" />
     <ClInclude Include="$(SolutionDir)/../../src/physics/collide.h" />
     <ClInclude Include="$(SolutionDir)/../../src/physics/collideex.h" />
     <ClInclude Include="$(SolutionDir)/../../src/physics/hitable.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/physics/hitball.h" />
     <ClInclude Include="$(SolutionDir)/../../src/physics/hitflipper.h" />
     <ClInclude Include="$(SolutionDir)/../../src/physics/hitplunger.h" />
     <ClInclude Include="$(SolutionDir)/../../src/physics/hittimer.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/physics/kdtree.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/physics/physconst.h" />
     <ClInclude Include="$(SolutionDir)/../../src/physics/PhysicsEngine.h" />
     <ClInclude Include="$(SolutionDir)/../../src/physics/quadtree.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/physics/cabinet/CabinetNudgeSensor.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/physics/cabinet/CabinetPhysics.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/physics/cabinet/DampedHarmonicOscillator.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/physics/cabinet/GamepadNudge.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/physics/cabinet/KeyboardNudge.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/physics/cabinet/MotionGainCalibratorAxis.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/physics/cabinet/MotionKalmanAxis.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/physics/cabinet/NudgeHandler.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/physics/cabinet/NudgeIntentHandler.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/physics/cabinet/PlumbHandler.h" />
     <ClInclude Include="$(SolutionDir)/../../src/renderer/DXGIRegistry.h" />
     <ClInclude Include="$(SolutionDir)/../../src/renderer/AreaTex.h" />
     <ClInclude Include="$(SolutionDir)/../../src/renderer/Anaglyph.h" />
@@ -1698,10 +1752,13 @@
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/ingameui/HomePage.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/ingameui/InGameUIItem.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/ingameui/InGameUIPage.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/ui/live/ingameui/InputDevicePage.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/ingameui/InputProfilePage.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/ingameui/InputSettingsPage.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/ingameui/MiscSettingsPage.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/ui/live/ingameui/NudgeSensorSettingsPage.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/ingameui/NudgeSettingsPage.h" />
+    <ClInclude Include="$(SolutionDir)/../../src/ui/live/ingameui/PlungerSensorSettingsPage.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/ingameui/PlungerSettingsPage.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/ingameui/PluginSettingsPage.h" />
     <ClInclude Include="$(SolutionDir)/../../src/ui/live/ingameui/PointOfViewSettingsPage.h" />
@@ -2060,10 +2117,6 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>%(Filename)%(Extension)</TargetPath>
     </ContentWithTargetPath>
-    <ContentWithTargetPath Include="$(SolutionDir)/../../third-party\runtime-libs\windows-x86\openvr_api.dll" Condition="'$(Platform)'=='Win32'">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <TargetPath>%(Filename)%(Extension)</TargetPath>
-    </ContentWithTargetPath>
     <ContentWithTargetPath Include="$(SolutionDir)/../../third-party\runtime-libs\windows-x86\openxr_loader.dll" Condition="'$(Platform)'=='Win32'">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>%(Filename)%(Extension)</TargetPath>
@@ -2083,10 +2136,6 @@
   </ItemGroup>
   <ItemGroup>
     <ContentWithTargetPath Include="$(SolutionDir)/../../third-party\runtime-libs\windows-x64\freeimage64.dll" Condition="'$(Platform)'=='x64'">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <TargetPath>%(Filename)%(Extension)</TargetPath>
-    </ContentWithTargetPath>
-    <ContentWithTargetPath Include="$(SolutionDir)/../../third-party\runtime-libs\windows-x64\openvr_api64.dll" Condition="'$(Platform)'=='x64'">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <TargetPath>%(Filename)%(Extension)</TargetPath>
     </ContentWithTargetPath>

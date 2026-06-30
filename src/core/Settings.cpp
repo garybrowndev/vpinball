@@ -60,7 +60,8 @@ void Settings::Set(VPX::Properties::PropertyRegistry::PropId propId, float v, bo
 
 void Settings::Set(VPX::Properties::PropertyRegistry::PropId propId, int v, bool asTableOverride)
 {
-   assert(GetRegistry().GetProperty(propId)->m_type == VPX::Properties::PropertyDef::Type::Int || GetRegistry().GetProperty(propId)->m_type == VPX::Properties::PropertyDef::Type::Enum);
+   assert(GetRegistry().GetProperty(propId)->m_type == VPX::Properties::PropertyDef::Type::Int || GetRegistry().GetProperty(propId)->m_type == VPX::Properties::PropertyDef::Type::Enum
+      || GetRegistry().GetProperty(propId)->m_type == VPX::Properties::PropertyDef::Type::Bool);
    if (asTableOverride)
    {
       assert(m_parent != nullptr);
@@ -149,12 +150,10 @@ void Settings::UpdateDefaults()
             break;
 
          const auto& conf = VPX::Window::GetDisplayConfig(GetWindow_Display(i));
-         #ifndef ENABLE_BGFX
-         reg.Register(GetWindow_FSWidth_Property(i)->WithDefault(conf.width));
-         reg.Register(GetWindow_FSHeight_Property(i)->WithDefault(conf.height));
-         #endif
-         reg.Register(GetWindow_Width_Property(i)->WithDefault(i == 0 ? conf.width : (conf.width / 4)));
-         reg.Register(GetWindow_Height_Property(i)->WithDefault(i == 0 ? conf.height : min(conf.width * 4 / 9, conf.height)));
+         reg.Register(GetWindow_FSWidth_Property(i)->WithDefault(conf.videomode.GetPixelWidth()));
+         reg.Register(GetWindow_FSHeight_Property(i)->WithDefault(conf.videomode.GetPixelHeight()));
+         reg.Register(GetWindow_Width_Property(i)->WithDefault(i == 0 ? conf.videomode.GetPixelWidth() : (conf.videomode.GetPixelWidth() / 4)));
+         reg.Register(GetWindow_Height_Property(i)->WithDefault(i == 0 ? conf.videomode.GetPixelWidth() : min(conf.videomode.GetPixelWidth() * 4 / 9, conf.videomode.GetPixelHeight())));
          break;
       }
       case VPX::RenderOutput::OutputMode::OM_EMBEDDED:

@@ -56,25 +56,44 @@ public:
    Window(const int width, const int height); // VR Output
    ~Window();
 
-   void GetPos(int& x, int& y) const;
-   int GetWidth() const { return m_width; }
-   int GetHeight() const { return m_height; }
-   int GetPixelWidth() const { return m_pixelWidth; }
-   int GetPixelHeight() const { return m_pixelHeight; }
+   enum WindowMode
+   {
+      Windowed,
+      BorderlessFullscreen, // Broderless window, covering the entire display, including operating system decorations
+      ExclusiveFullscreen // Not supported on all systems
+   };
+
    float GetAspectRatio() const { return static_cast<float>(m_width) / static_cast<float>(m_height); }
    float GetRefreshRate() const { return m_refreshrate; } // Refresh rate of the device displaying the window. Window spread over multiple devices are not supported.
-   bool IsFullScreen() const { return m_fullscreen; }
+   WindowMode GetWindowMode() const { return m_windowMode; }
    int GetBitDepth() const { return m_bitdepth; }
    bool IsWCGDisplay() const { return m_wcgDisplay; } // Whether this window is on a WCG enabled display
    float GetSDRWhitePoint() const { return m_sdrWhitePoint; } // Selected SDR White Point of display in multiple of 80nits (so 3 gives 240nits for SDR white)
    float GetHDRHeadRoom() const { return m_hdrHeadRoom; } // Maximum luminance of display expressed in multiple of SDRWhitePoint (so 6 means 6 times the SDR whitepoint)
+   // Logical units
+   void GetPos(int& x, int& y) const;
+   int GetWidth() const { return m_width; }
+   int GetHeight() const { return m_height; }
+   // Pixel units
+   void GetPixelPos(int& x, int& y) const;
+   int GetPixelWidth() const { return m_pixelWidth; }
+   int GetPixelHeight() const { return m_pixelHeight; }
+   float GetPixelDensity() const { return m_pixelDensity; } // Logical size to pixels (e.g. a 1920x1080 logical size with 2.0 pixel density would have 3840x2160 pixels)
+   int LogicalToPixel(int v) const { return static_cast<int>(roundf(static_cast<float>(v) * m_pixelDensity)); }
+   int PixelToLogical(int v) const { return static_cast<int>(roundf(static_cast<float>(v) / m_pixelDensity)); }
 
    void SetPos(const int x, const int y);
-   void SetSize(const int w, const int h); // This only changes the window size, without adjusting its backbuffer
+   void SetPixelPos(const int x, const int y); // Position will be rounded
+   void SetSize(const int w, const int h); // performed asynchronously
+   void SetPixelSize(const int w, const int h); // Performed asynchronously, size will be rounded
+   void OnResized(); // To be called when the window manager resized the window
    void Show(const bool show = true);
    bool IsVisible() const;
    void RaiseAndFocus();
    bool IsFocused() const;
+   void SetFocusable(const bool focusable);
+
+   bool IsPositioningSupported() const { return m_isPositioningSupported; } // If false, GetPos/GetPixelPos/SetPos/SetPixelPos will all fail, thanks Wayland
 
    void SetBackBuffer(RenderTarget* rt, const bool wcgBackbuffer = false);
    RenderTarget* GetBackBuffer() const { return m_backBuffer; }
@@ -88,20 +107,22 @@ public:
 
    struct VideoMode
    {
-      int width;
-      int height;
+      int width; // Logical units
+      int height; // Logical units
+      float pixelDensity; // Scale converting logical size to pixels (e.g. a 1920x1080 mode with 2.0 scale would have 3840x2160 pixels)
       int depth;
       float refreshrate;
+
+      bool operator==(const VideoMode& o) { return o.width == width && o.height == height && o.depth == depth && o.refreshrate == refreshrate; }
+      int GetPixelWidth() const { return static_cast<int>(roundf(static_cast<float>(width) * pixelDensity)); }
+      int GetPixelHeight() const { return static_cast<int>(roundf(static_cast<float>(height) * pixelDensity)); }
    };
 
    struct DisplayConfig
    {
-      int top;
-      int left;
-      int width;
-      int height;
-      int depth;
-      float refreshrate;
+      int top; // Logical position
+      int left; // Logical position
+      VideoMode videomode;
       bool isPrimary; // Default display (used when no display is selected in the settings)
       string displayName; // User friendly display name, should be stable accross runs, therefore used for settings
       SDL_DisplayID display; // SDL display identifier (only valid for the lifetime of the SDL session)
@@ -112,10 +133,13 @@ public:
    static DisplayConfig GetDisplayConfig(const string& displayName);
 
 private:
-   int m_width, m_height;
-   int m_pixelWidth, m_pixelHeight;
-   int m_screenwidth, m_screenheight;
-   bool m_fullscreen;
+   static VideoMode SDLtoVPXVideoMode(const SDL_DisplayMode* mode);
+   
+   int m_width, m_height; // Logical units
+   float m_pixelDensity; // Scale converting logical size to pixels (e.g. a 1920x1080 mode with 2.0 scale would have 3840x2160 pixels)
+   int m_pixelWidth, m_pixelHeight; // Pixels
+   int m_screenwidth, m_screenheight; // Pixels
+   WindowMode m_windowMode;
    float m_refreshrate;
    int m_bitdepth;
    const VPXWindowId m_windowId;
@@ -123,6 +147,7 @@ private:
    float m_hdrHeadRoom = 1.f;
    bool m_wcgDisplay = false;
    bool m_wcgBackbuffer = false;
+   bool m_isPositioningSupported = true;
    const bool m_isVR;
 
    class RenderTarget* m_backBuffer = nullptr;
@@ -148,6 +173,7 @@ public:
    Window* GetWindow() const;
    EmbeddedWindow* GetEmbeddedWindow() const;
 
+   // Unit depends on output type: logical for floating window, pixel for embedded
    int GetWidth() const;
    void SetWidth(int v) const;
    int GetHeight() const;

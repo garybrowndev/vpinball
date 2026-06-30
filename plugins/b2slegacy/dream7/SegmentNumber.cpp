@@ -8,14 +8,11 @@ namespace B2SLegacy {
 
 SegmentNumber::SegmentNumber(Dream7Display* pDisplay)
    : m_pDisplay(pDisplay)
-   , m_thickness(16.0f)
-   , m_pNumberMatrix(nullptr)
 {
 }
 
 SegmentNumber::~SegmentNumber()
 {
-   delete m_pNumberMatrix;
 }
 
 void SegmentNumber::OnInvalidated()
@@ -41,39 +38,23 @@ void SegmentNumber::AssignStyle()
 
 void SegmentNumber::Draw(VPXGraphics* pRenderer)
 {
-   int onCount = 0, offCount = 0;
-   for (const auto& pSegment : m_segments) {
-      if (pSegment->IsOn()) onCount++; else offCount++;
-   }
-
-   // First draw OFF segments (if any)
-   for (auto& pSegment : m_segments) {
-      if (!pSegment->IsOn())
-         pSegment->Draw(pRenderer);
-   }
-
-   // Handle glow effect for ON segments
-   if (m_pStyle.GetGlow() > 0.0f) {
-      for (auto& pSegment : m_segments) {
-         if (pSegment->IsOn())
-            pSegment->DrawLight(pRenderer);
-      }
-   }
-
-   // Draw ON segments
    for (auto& pSegment : m_segments) {
       if (pSegment->IsOn())
-         pSegment->Draw(pRenderer);
+         continue;
+      pSegment->Draw(pRenderer);
    }
-}
-
-GraphicsPath* SegmentNumber::GetBounds()
-{
-   constexpr SDL_FRect bounds = {-14.0f, -14.0f, 173.0f, 272.f};
-   GraphicsPath* pRegion = new GraphicsPath();
-   pRegion->AddRectangle(bounds);
-   pRegion->Transform(m_pNumberMatrix);
-   return pRegion;
+   if (m_pStyle.GetGlow() > 0) {
+      for (auto& pSegment : m_segments) {
+         if (!pSegment->IsOn())
+            continue;
+         pSegment->DrawLight(pRenderer);
+      }
+   }
+   for (auto& pSegment : m_segments) {
+      if (!pSegment->IsOn())
+         continue;
+      pSegment->Draw(pRenderer);
+   }
 }
 
 void SegmentNumber::SetCharacter(const string& szCharacter)
@@ -152,10 +133,9 @@ void SegmentNumber::InitSegments(const SegmentNumberType type, const float thick
 
 void SegmentNumber::InitMatrix(const SDL_FPoint& location, const Matrix* pMatrix)
 {
-   delete m_pNumberMatrix;
-   m_pNumberMatrix = pMatrix->Clone();
-   m_pNumberMatrix->Translate(location.x, location.y);
-   m_segments.Transform(m_pNumberMatrix);
+   m_numberMatrix = *pMatrix;
+   m_numberMatrix.Translate(location.x, location.y);
+   m_segments.Transform(&m_numberMatrix);
 }
 
 bool SegmentNumber::SetSegmentState(Segment* pSegment, const bool isOn)
@@ -166,15 +146,6 @@ bool SegmentNumber::SetSegmentState(Segment* pSegment, const bool isOn)
    pSegment->SetOn(isOn);
 
    return true;
-}
-
-void SegmentNumber::GetSegmentRegions()
-{
-   for (auto& pSegment : m_segments) {
-      GraphicsPath* pPath = pSegment->GetGlassPathTransformed();
-      pPath->Transform(m_pNumberMatrix);
-      delete pPath;
-   }
 }
 
 void SegmentNumber::DisplayCharacter(const string& szCharacter)
