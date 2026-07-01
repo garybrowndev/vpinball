@@ -30,10 +30,6 @@ private:
    void RenderStats() const;
    void RenderPlots();
 
-   // DIAGNOSTIC: append one CSV row per latched LEFT-flipper press to <exe-dir>/perfui_latency.csv, for validating
-   // that SDL->Act / the clock conversion are sound. Truncates the file on the first call of the session.
-   void LogLatencyDiag(uint64_t sdlArrivalUs, uint64_t dispatchUs, uint64_t sdlNowUs, uint64_t rotateUs, double gpuMs, double frameMs, bool hasSdl, uint64_t pumpGapUs);
-
    Player* const m_player;
    float m_uiScale = 1.0f;
 

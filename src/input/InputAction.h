@@ -40,13 +40,6 @@ public:
    // SDL event arrival time (in VPX usec()) for the mapping that caused the most recent state change. 0 if unknown
    // (e.g. direct-state path with no SDL origin, or pre-event startup).
    uint64_t GetSdlArrival() const { return m_sdlArrivalUs; }
-   // DIAGNOSTIC: the SDL clock (converted to usec() timebase) sampled at the same instant as m_lastOnChangeUs.
-   // Lets PerfUI cross-check the clock conversion (should equal m_lastOnChangeUs within microseconds) and tell
-   // whether SDL stamps events at hardware-arrival vs pump-time (m_sdlNowAtChangeUs - m_sdlArrivalUs == real queue delay).
-   uint64_t GetSdlNowAtChange() const { return m_sdlNowAtChangeUs; }
-   // DIAGNOSTIC: wall-clock interval since the previous input pump, captured at the most recent state change.
-   // Small (~sub-ms) => pumps run often (delay is upstream in SDL/OS delivery); large (~frame) => thread was blocked.
-   uint64_t GetPumpGap() const { return m_pumpGapUs; }
 
    void SetActionId(unsigned int id) { m_actionId = id; }
    unsigned int GetActionId() const { return m_actionId; }
@@ -74,8 +67,6 @@ private:
    bool m_isPressed = false;
    uint64_t m_lastOnChangeUs = 0;
    uint64_t m_sdlArrivalUs = 0;
-   uint64_t m_sdlNowAtChangeUs = 0; // DIAGNOSTIC: SDL clock (usec() base) sampled alongside m_lastOnChangeUs
-   uint64_t m_pumpGapUs = 0; // DIAGNOSTIC: interval since previous input pump, captured at the last state change
    int64_t m_repeatPeriodUs = -1;
    unsigned int m_actionId = 0xFFFFFFFF;
 };

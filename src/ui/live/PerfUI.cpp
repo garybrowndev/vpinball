@@ -13,7 +13,6 @@
 #include "imgui/imgui_internal.h"
 #include "implot/implot.h"
 
-#include <fstream> // DIAGNOSTIC: latency CSV logging
 
 
 PerfUI::PerfUI(Player *const player)
@@ -154,10 +153,6 @@ void PerfUI::RenderFPS()
                   m_flipLatchTotalMs = m_flipLatchSdlToActMs + m_flipLatchAcqToAction + m_flipLatchGpuMs;
                   m_flipLatchCapturedLeftChange = lastLeftFlipChange; // mark this press captured (refresh on next press)
                   m_flipLatchActive = true;
-
-                  // DIAGNOSTIC: one CSV row per press to validate SDL->Act / the clock conversion.
-                  LogLatencyDiag(sdlArrivalUs, lastLeftFlipChange, leftAction->GetSdlNowAtChange(), flipper->GetLastRotateTime(),
-                     m_flipLatchGpuMs, 1e-3 * static_cast<double>(m_player->m_renderProfiler->GetPrev(FrameProfiler::PROFILE_FRAME)), m_flipLatchHasSdl, leftAction->GetPumpGap());
                   break;
                }
             }
@@ -208,44 +203,6 @@ void PerfUI::RenderFPS()
       ImGui::PopStyleVar();
 
    ImGui::End();
-}
-
-void PerfUI::LogLatencyDiag(uint64_t sdlArrivalUs, uint64_t dispatchUs, uint64_t sdlNowUs, uint64_t rotateUs, double gpuMs, double frameMs, bool hasSdl, uint64_t pumpGapUs)
-{
-   // Resolve <exe-dir>/perfui_latency.csv once. On the cabinet that is C:\visual pinball\ (== Z:\visual pinball\ from dev).
-   static string s_csvPath;
-   static bool s_resolved = false;
-   if (!s_resolved)
-   {
-      char exePath[MAX_PATH] = {};
-      GetModuleFileNameA(nullptr, exePath, MAX_PATH);
-      const string p(exePath);
-      const size_t slash = p.find_last_of("\\/");
-      s_csvPath = (slash == string::npos ? string() : p.substr(0, slash + 1)) + "perfui_latency.csv";
-      s_resolved = true;
-   }
-
-   // Truncate (and write header) on the first row of the session, then append.
-   static bool s_headerWritten = false;
-   static uint64_t s_idx = 0;
-   std::ofstream f(s_csvPath, s_headerWritten ? std::ios::app : std::ios::trunc);
-   if (!f)
-      return;
-   if (!s_headerWritten)
-   {
-      f << "idx,A_sdlArrival_us,B_dispatch_us,C_sdlNow_us,rotate_us,skew_BminusC_us,sdlElapsed_CminusA_us,SDLtoAct_ms,ActToPhys_ms,GPU_ms,frame_ms,hasSdl,pumpGap_us\n";
-      s_headerWritten = true;
-   }
-
-   // skew_BminusC: clock-soundness (usec() vs SDL clock at the same instant — should be ~0 if both QPC-backed).
-   // sdlElapsed_CminusA: arrival->pump delay measured purely in the SDL clock (if ~= SDLtoAct, the conversion is sound;
-   //                     if it is large, SDL preserved an earlier hardware-arrival timestamp -> the latency is real).
-   const int64_t skew = static_cast<int64_t>(dispatchUs) - static_cast<int64_t>(sdlNowUs);
-   const int64_t sdlElapsed = static_cast<int64_t>(sdlNowUs) - static_cast<int64_t>(sdlArrivalUs);
-   const double sdlToActMs = 1e-3 * static_cast<double>(static_cast<int64_t>(dispatchUs) - static_cast<int64_t>(sdlArrivalUs));
-   const double actToPhysMs = 1e-3 * static_cast<double>(static_cast<int64_t>(rotateUs) - static_cast<int64_t>(dispatchUs));
-   f << s_idx++ << ',' << sdlArrivalUs << ',' << dispatchUs << ',' << sdlNowUs << ',' << rotateUs << ',' << skew << ',' << sdlElapsed << ',' << sdlToActMs << ',' << actToPhysMs << ','
-     << gpuMs << ',' << frameMs << ',' << (hasSdl ? 1 : 0) << ',' << pumpGapUs << '\n';
 }
 
 void PerfUI::RenderStats() const

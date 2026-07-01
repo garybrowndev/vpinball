@@ -65,10 +65,9 @@ The "always-attached cdb" stance is the key idea. It costs almost nothing (one e
 
 ### Step 1 (once per session): Build and deploy
 
-Build via **CMake** — the old `create_vs_solution.bat` / VS-solution path is deprecated and no longer compiles merged trees (upstream's import-cleanup broke the PCH; see CLAUDE.md). One-time per clean `build/` dir, copy the BGFX template and configure; after that CMake reconfigures itself on each build:
+Build via **CMake** — the old `create_vs_solution.bat` / VS-solution path is deprecated and no longer compiles merged trees (upstream's import-cleanup broke the PCH; see CLAUDE.md). Upstream ships a single tracked root `CMakeLists.txt` selected by cache vars (the old `make/CMakeLists_<flavor>-*.txt` templates were removed) — configure once per clean `build/` dir; after that CMake reconfigures itself on each build:
 ```powershell
-Copy-Item make\CMakeLists_bgfx-windows-x64.txt CMakeLists.txt -Force
-cmake -G "Visual Studio 17 2022" -A x64 -B build
+cmake -G "Visual Studio 17 2022" -A x64 -B build -DRENDERER=BGFX -DPLATFORM=windows -DARCH=x64
 ```
 
 Debug builds need the **Debug-flavor** prebuilt deps present (download the `dev-third-party-windows-x64-Debug` artifact alongside Release — see CLAUDE.md step 1). Only Debug configs emit the PDBs cdb needs for resolved stacks.
