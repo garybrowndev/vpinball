@@ -1,0 +1,22 @@
+[
+  {"query": "ok the integration CI just went green, get my VPM up to date with it", "should_trigger": true},
+  {"query": "deploy all the release permutations to my cabinet", "should_trigger": true},
+  {"query": "propagate the flipper fix to GL and DX and push them to virtualpin", "should_trigger": true},
+  {"query": "push the latest build to the VPM", "should_trigger": true},
+  {"query": "my cabinet is running an old build, can you update it to the newest development branch", "should_trigger": true},
+  {"query": "ship this to the cabinet so I can play-test it", "should_trigger": true},
+  {"query": "GL and DX9 on the cabinet still have ball history stubbed out — get the fixed builds onto them", "should_trigger": true},
+  {"query": "we just finished the sync round, now land it on virtualpin for real play", "should_trigger": true},
+  {"query": "redeploy all three renderers to Z drive with the _BH names", "should_trigger": true},
+  {"query": "grab the windows-x64 release exes from the green run and copy them to the cabinet", "should_trigger": true},
+  {"query": "VPX crashed on the cabinet when I hit the left flipper, can you attach cdb and find out why", "should_trigger": false},
+  {"query": "let's do a debug cycle on Black Pyramid — I want to watch the trainer state machine", "should_trigger": false},
+  {"query": "run a status check on my repo, where does the branch stack stand", "should_trigger": false},
+  {"query": "sync master with upstream and merge down through integration", "should_trigger": false},
+  {"query": "build the Debug config and deploy it to the debug folder so I can attach the debugger", "should_trigger": false},
+  {"query": "the cabinet hangs after loading a VPinMAME table, dump the threads", "should_trigger": false},
+  {"query": "bundle these three tables into a pinup popper package", "should_trigger": false},
+  {"query": "commit my working changes and open a PR from development to integration", "should_trigger": false},
+  {"query": "why is CI red on the x86 debug job", "should_trigger": false},
+  {"query": "remap my Z drive to the cabinet, it dropped after a reboot", "should_trigger": false}
+]
