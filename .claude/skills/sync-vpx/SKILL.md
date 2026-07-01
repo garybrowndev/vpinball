@@ -157,8 +157,7 @@ deps** (upstream's won't — the merged tree has different dep SHAs).
 2. **Build via CMake** (NOT `create_vs_solution.bat` — that path is deprecated/broken;
    see CLAUDE.md). Cap parallelism at `/m:9` on Gary's 12-core laptop to avoid C1076:
    ```powershell
-   Copy-Item make\CMakeLists_bgfx-windows-x64.txt CMakeLists.txt -Force
-   cmake -G "Visual Studio 17 2022" -A x64 -B build           # reconfigures itself after first run
+   cmake -G "Visual Studio 17 2022" -A x64 -B build -DRENDERER=BGFX -DPLATFORM=windows -DARCH=x64  # single tracked root CMakeLists; no template copy. Reconfigures itself after first run
    cmake --build build --config Release -- /m:9 /p:CL_MPCount=9
    ```
    Output: `build/Release/VPinballX_BGFX64.exe`.
