@@ -150,7 +150,8 @@ foreach ($w in $want) {
   $dst = Join-Path $CabinetDir $w.dst
   Copy-Item $w.src $dst -Force -ErrorAction Stop
   $now = Get-Item $dst
-  Info "  {0,-5} -> {1}  ({2} MB, {3})" -f $w.key, $dst, [math]::Round($now.Length/1MB,1), $now.LastWriteTime
+  # Wrap the -f expression in parens: `Info "..." -f ...` mis-parses ('-f' binds to the function call, not the string).
+  Info ("  {0,-5} -> {1}  ({2} MB, {3})" -f $w.key, $dst, [math]::Round($now.Length/1MB,1), $now.LastWriteTime)
 }
 Info ""
 Info "Deployed. Default launcher (VPinballX.exe symlink) points at whatever renderer it was set to;"
