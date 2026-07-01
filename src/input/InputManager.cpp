@@ -14,7 +14,6 @@
 
 #include "ScanCodes.h"
 
-#include <fstream> // DIAGNOSTIC: per-event input delivery latency CSV
 
 #ifdef __LIBVPINBALL__
    #include "lib/src/VPinballLib.h"
@@ -531,35 +530,6 @@ void InputManager::ProcessInput()
 
 void InputManager::HandleSDLEvent(const SDL_Event& e) { m_sdlHandler->HandleSDLEvent(e); }
 
-// DIAGNOSTIC: append per-event input delivery latency (SDL event timestamp -> VPX dispatch), tagged by device, to
-// <exe-dir>/input_delivery.csv. A single arcade-button press fires BOTH a joystick button event and (via JoyToKey)
-// a keyboard event, so this records both for the same press -> direct keyboard(WM_KEYDOWN) vs joystick(HID) comparison.
-static void LogInputDelivery(uint16_t deviceId, uint16_t buttonId, bool isKeyboard, int64_t deliveryUs)
-{
-   static string s_path;
-   static bool s_resolved = false;
-   if (!s_resolved)
-   {
-      char p[MAX_PATH] = {};
-      GetModuleFileNameA(nullptr, p, MAX_PATH);
-      const string s(p);
-      const size_t sl = s.find_last_of("\\/");
-      s_path = (sl == string::npos ? string() : s.substr(0, sl + 1)) + "input_delivery.csv";
-      s_resolved = true;
-   }
-   static bool s_hdr = false;
-   static uint64_t s_idx = 0;
-   std::ofstream f(s_path, s_hdr ? std::ios::app : std::ios::trunc);
-   if (!f)
-      return;
-   if (!s_hdr)
-   {
-      f << "idx,deviceId,isKeyboard,buttonId,delivery_us,delivery_ms\n";
-      s_hdr = true;
-   }
-   f << s_idx++ << ',' << deviceId << ',' << (isKeyboard ? 1 : 0) << ',' << buttonId << ',' << deliveryUs << ',' << (1e-3 * static_cast<double>(deliveryUs)) << '\n';
-}
-
 void InputManager::PushButtonEvent(uint16_t deviceId, uint16_t buttonId, uint64_t timestampNs, bool isPressed)
 {
    // Discard keyboard events when the UI is capturing the keyboard (e.g. for control input)
@@ -570,10 +540,6 @@ void InputManager::PushButtonEvent(uint16_t deviceId, uint16_t buttonId, uint64_
    // OpenPinDev callers pass a firmware clock (not SDL) — converted value is meaningless for that path,
    // but it's a debug-only display and OpenPinDev isn't Gary's primary input route.
    const uint64_t sdlArrivalUs = sdl_ns_to_usec(timestampNs);
-
-   // DIAGNOSTIC: record delivery latency for each button-down (keyboard vs joystick path comparison).
-   if (isPressed && timestampNs != 0)
-      LogInputDelivery(deviceId, buttonId, deviceId == m_keyboardDeviceId, static_cast<int64_t>(usec()) - static_cast<int64_t>(sdlArrivalUs));
 
    uint32_t id = deviceId << 16 | buttonId;
    if (auto it = m_buttonMappings.find(id); it != m_buttonMappings.end())

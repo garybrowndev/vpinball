@@ -5,9 +5,6 @@
 
 #include <sstream>
 
-// DIAGNOSTIC: input-pump cadence probe (defined in player.cpp); stamped at flip time below.
-extern uint64_t g_diagLastPumpGapUs;
-
 
 void InputAction::ClearMapping()
 {
@@ -254,8 +251,6 @@ void InputAction::OnInputChanged(ButtonMapping* mapping)
       // m_sdlArrivalUs stays 0 in that case and PerfUI shows '-'.
       m_sdlArrivalUs = mapping ? mapping->GetLastChangeArrivalUs() : 0;
       m_lastOnChangeUs = usec();
-      m_sdlNowAtChangeUs = sdl_ns_to_usec(SDL_GetTicksNS()); // DIAGNOSTIC: SDL clock sampled adjacent to usec() for cross-check
-      m_pumpGapUs = g_diagLastPumpGapUs; // DIAGNOSTIC: input-pump cadence (interval since previous pump) at this flip
       if (m_eventManager->OnInputActionStateChanged(this))
          m_onStateChange(*this, wasPressed, m_isPressed);
       if (m_isPressed && m_repeatPeriodUs >= 0)
