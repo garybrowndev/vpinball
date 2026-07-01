@@ -22,30 +22,35 @@ Upstream builds Windows via **CMake** (`cmake -G "Visual Studio …" && cmake --
    robocopy "$env:TEMP\vpx-deps\runtime-libs" third-party\runtime-libs /E
    git checkout -- third-party/   # revert tracked-file changes; gitignored binaries keep the fresh versions
    ```
-2. **Copy the CMake template to the repo root** (re-do if you switch flavor, e.g. GL):
+2. **Configure** (one-time per clean build dir; reconfigures automatically after that). Upstream now
+   ships a **single tracked root `CMakeLists.txt`** selected by cache vars — there is **no template to
+   copy** (the old `make/CMakeLists_<flavor>-<platform>-<arch>.txt` files were **removed upstream**; only
+   the per-plugin `make/CMakeLists_plugin_*.txt` and `make/CMakeLists_sources.txt` remain):
    ```powershell
-   Copy-Item make\CMakeLists_bgfx-windows-x64.txt CMakeLists.txt -Force
+   cmake -G "Visual Studio 17 2022" -A x64 -B build -DRENDERER=BGFX -DPLATFORM=windows -DARCH=x64
    ```
-3. **Configure** (one-time per clean build dir; reconfigures automatically after that):
-   ```powershell
-   cmake -G "Visual Studio 17 2022" -A x64 -B build
-   ```
-4. **Build** (cap file-parallelism to avoid C1076 heap errors):
+   - `RENDERER` = `BGFX` (default) | `GL` | `DX9`. `PLATFORM`/`ARCH` auto-detect from the host, so on a
+     Windows x64 box `cmake -G "Visual Studio 17 2022" -A x64 -B build` alone yields a BGFX build — but
+     passing the vars explicitly is clearer and is **required** to select GL/DX9.
+   - Switch renderer by configuring a **separate build dir** with a different `-DRENDERER` (e.g.
+     `-B buildgl -DRENDERER=GL`) — no file copy, no repo-root mutation.
+3. **Build** (cap file-parallelism to avoid C1076 heap errors):
    ```powershell
    cmake --build build --config Release -- /m:9 /p:CL_MPCount=9                       # full: vpx + all plugins
    cmake --build build --config Release --target vpinball -- /m:9 /p:CL_MPCount=9      # just the exe (faster; skips plugin post-build DLL copies)
    ```
-   Output: **`build/Release/VPinballX_BGFX64.exe`** (CMake `RUNTIME_OUTPUT_NAME`); plugins land in `build/Release/plugins/`.
+   Output exe by renderer (CMake `RUNTIME_OUTPUT_NAME`): **BGFX → `build/Release/VPinballX_BGFX64.exe`**,
+   GL → `VPinballX_GL64.exe`, DX9 → `VPinballX64.exe`; plugins land in `build/Release/plugins/`.
 
 - **Deploy convention**: `build/Release/VPinballX_BGFX64.exe` → cabinet `Z:\visual pinball\VPinballX_BGFX64_BH.exe` (rename adds `_BH`). **Close VPX on the cabinet first** or the copy fails with "file in use".
-- **After an upstream merge**: re-download fresh `dev-third-party` deps (versions bump) and re-`Copy-Item` the CMakeLists; CMake reconfigures itself — no `create_vs_solution.bat`. If a plugin post-build fails on a missing DLL (e.g. `libserialport64-0.dll`), your deps are stale → refresh them.
+- **After an upstream merge**: re-download fresh `dev-third-party` deps (versions bump); CMake reconfigures itself from the tracked root `CMakeLists.txt` — no template copy, no `create_vs_solution.bat`. If a plugin post-build fails on a missing DLL (e.g. `libserialport64-0.dll`), your deps are stale → refresh them.
 - **Never run `platforms/windows-x64/external.sh`** unless rebuilding all 12 deps from source: it needs **VS2026 + MSYS2 (`/c/msys64` UCRT64) + nasm**. The prebuilt-deps download replaces it.
 
 ### Build tips (CMake)
 - **Header changes rebuild automatically** — CMake/MSBuild tracks header dependencies, so the old VS-solution "delete all `.obj`" ritual isn't needed. For a fully clean build, delete the `build/` dir and re-run the configure step.
 - **Build just the exe** (faster; also dodges plugin post-build DLL-copy failures when deps are slightly stale): `cmake --build build --config Release --target vpinball -- /m:9 /p:CL_MPCount=9`. The cabinet keeps its existing plugins.
 - **Cap file parallelism** with `/p:CL_MPCount=9` (75% of 12 cores) to avoid C1076 heap-limit errors (`/m:9` caps project-level parallelism).
-- **GL instead of BGFX**: `Copy-Item make\CMakeLists_gl-windows-x64.txt CMakeLists.txt`, then configure into a separate `build` dir.
+- **GL/DX9 instead of BGFX**: configure a separate build dir with `-DRENDERER=GL` (or `DX9`), e.g. `cmake -G "Visual Studio 17 2022" -A x64 -B buildgl -DRENDERER=GL -DPLATFORM=windows -DARCH=x64`. Caveat: VS2022 builds **BGFX** cleanly, but **GL/DX9 may fail locally with DXGI header errors** — CI (VS2026 generator) builds them fine, so pull the GL/DX exes from a green CI run (see `deploy-vpx`) rather than fighting the local toolchain.
 - **Fork vs upstream deps**: on pure `master` the `dev-third-party` zips from `vpinball/vpinball` match; on `integration`/`development` (Ball History + upstream merged) only **our fork's** run for that commit has matching dep SHAs — pull from `garybrowndev/vpinball` (CMake build, step 1).
 - **gh account**: writes/artifact pulls on the fork need the personal account active — `gh auth switch --user garybrowndev` (the `gary-brown_bplogix` EMU account can't access `garybrowndev/vpinball`).
 
