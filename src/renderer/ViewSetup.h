@@ -83,10 +83,4 @@ public:
    // Magic Window mode properties
    float mWindowTopZOfs = CMTOVPU(20.0f); // Upper window border Z coordinate, relative to table playfield Z
    float mWindowBottomZOfs = CMTOVPU(7.5f); // Lower window border Z coordinate, relative to table playfield Z
-
-   // True once SetWindowAutofit has evaluated the glass plane (i.e. autofit is active). False in
-   // Manual mode, where the author's baked WindowTop/Bot are used directly. Gates the fork-local
-   // Scale/Cap calibration knobs in ApplyTableOverrideSettings so they only adjust autofit-derived
-   // glass, never a table the user is positioning by hand.
-   bool mGlassWasEvaluated = false;
 };

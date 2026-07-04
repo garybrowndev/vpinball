@@ -48,7 +48,7 @@ vec3 ViewSetup::GetPlayerPositionFromViewPos(const PinTable* const table, const 
 
 void ViewSetup::SetWindowAutofit(const PinTable* const table, const vec3& playerPos, const float aspect, const float flipperPos, const bool allowNonUniformStretch, const std::function<void(string)>& glassNotification)
 {
-   const Settings& settings = table->m_settings;
+   const Settings& settings = table->m_settings; 
    const float screenWidth = settings.GetPlayer_ScreenWidth();
    const float screenHeight = settings.GetPlayer_ScreenHeight();
    if (screenWidth <= 1.f || screenHeight <= 1.f)
@@ -57,21 +57,26 @@ void ViewSetup::SetWindowAutofit(const PinTable* const table, const vec3& player
       return;
    }
 
-   // Custom Fit-Screen autofit (fork-local, default on): EvaluateGlassHeight runs the walk-down
-   // pass that locates the top of real geometry while ignoring phantom 3D-backbox decoration, and
-   // below we apply a max-tilt clamp. With the toggle on "Standard", EvaluateGlassHeight returns
-   // vanilla raw max-Z and the tilt clamp is skipped — i.e. the unmodified upstream Fit-Screen
-   // result. The Scale/Cap calibration knobs in ApplyTableOverrideSettings layer on in both modes.
-   const bool useCustomAutofit = settings.GetInt(Settings::m_propTableOverride_ViewCabUseCustomAutofit) != 0;
-   const Vertex2D glass = table->EvaluateGlassHeight(useCustomAutofit);
-   const float bottomHeight = glass.x;
-   const float topHeight = glass.y;
+   // Evaluate glass heights by analyzing table elements bounds, eventually reporting discrepancies
+   Vertex2D glass = table->EvaluateGlassHeight();
+   float bottomHeight = glass.x;
+   float topHeight = glass.y;
    if (table->m_glassTopHeight != table->m_glassBottomHeight)
-      glassNotification(std::format("Author baked glass {:.2f}/{:.2f} cm; using evaluated {:.2f}/{:.2f} cm",
-         VPUTOCM(table->m_glassBottomHeight), VPUTOCM(table->m_glassTopHeight), VPUTOCM(bottomHeight), VPUTOCM(topHeight)));
+   {
+      // If table already define a glass height, use it  (detected by the glass not being horizontal which was the default in previous version),
+      // We compare and propose the value to the user if there is a large enough difference
+      if (VPUTOINCHES(fabs(topHeight - table->m_glassTopHeight)) > 1.f || VPUTOINCHES(fabs(bottomHeight - table->m_glassBottomHeight)) > 1.f)
+      {
+         glassNotification(std::format("Glass height was evaluated to {:.2f}cm / {:.2f}cm\nIt differs from the defined glass position {:.2f}cm / {:.2f}cm", VPUTOCM(bottomHeight),
+            VPUTOCM(topHeight), VPUTOCM(table->m_glassBottomHeight), VPUTOCM(table->m_glassTopHeight)));
+      }
+      topHeight = table->m_glassTopHeight;
+      bottomHeight = table->m_glassBottomHeight;
+   }
    else
-      glassNotification(std::format("No author glass baked; evaluated {:.2f}/{:.2f} cm", VPUTOCM(bottomHeight), VPUTOCM(topHeight)));
-   mGlassWasEvaluated = true;
+   {
+      glassNotification(std::format("Missing glass position guessed to be {:.2f}cm / {:.2f}cm", VPUTOCM(bottomHeight), VPUTOCM(topHeight)));
+   }
 
    mMode = VLM_WINDOW;
    mViewHOfs = 0.f;
@@ -80,17 +85,6 @@ void ViewSetup::SetWindowAutofit(const PinTable* const table, const vec3& player
    mSceneScaleY = allowNonUniformStretch ? 1.f : mSceneScaleX;
    mWindowBottomZOfs = bottomHeight;
    mWindowTopZOfs = topHeight;
-
-   if (useCustomAutofit)
-   {
-      // Universal max-tilt clamp: cap the glass slope so a tall evaluated top can't tip the back of
-      // the playfield away from the player. tan(2°) leaves naturally-shallow tables untouched while
-      // pulling steep ones down.
-      constexpr float kMaxTiltRad = 0.0349f; // tan(2°)
-      const float maxTopForTilt = mWindowBottomZOfs + kMaxTiltRad * table->m_bottom;
-      if (mWindowTopZOfs > maxTopForTilt)
-         mWindowTopZOfs = maxTopForTilt;
-   }
 
    SetViewPosFromPlayerPosition(table, playerPos, table->m_settings.GetPlayer_ScreenInclination());
 
@@ -191,30 +185,8 @@ void ViewSetup::ApplyTableOverrideSettings(const Settings& settings, const ViewS
    mFOV = getFloat(mFOV, Settings::m_propTableOverride_ViewDTFOV, Settings::m_propTableOverride_ViewFSSFOV, Settings::m_propTableOverride_ViewCabFOV);
    mViewHOfs = getFloat(mViewHOfs, Settings::m_propTableOverride_ViewDTHOfs, Settings::m_propTableOverride_ViewFSSHOfs, Settings::m_propTableOverride_ViewCabHOfs);
    mViewVOfs = getFloat(mViewVOfs, Settings::m_propTableOverride_ViewDTVOfs, Settings::m_propTableOverride_ViewFSSVOfs, Settings::m_propTableOverride_ViewCabVOfs);
-   // WindowTop/Bot layering:
-   //   - INI overrides (or live F12 changes) come through getFloat below.
-   //   - The fork-local Scale/Cap calibration knobs apply ONLY when the glass came from autofit
-   //     (mGlassWasEvaluated == true, set by SetWindowAutofit). In Manual mode the author's baked
-   //     WindowTop/Bot are used as-is and the knobs are skipped, so they never touch a table the
-   //     user is positioning by hand.
-   //   - Scale trims the top proportionally, then Cap clips it at an absolute ceiling.
-   //   - Bottom is clamped to top so the glass stays flat-or-sloped-up, never inverted.
-   {
-      const float autofitOrOverrideTop = getFloat(mWindowTopZOfs, Settings::m_propTableOverride_ViewDTWindowTop, Settings::m_propTableOverride_ViewFSSWindowTop, Settings::m_propTableOverride_ViewCabWindowTop);
-      const float autofitOrOverrideBot = getFloat(mWindowBottomZOfs, Settings::m_propTableOverride_ViewDTWindowBot, Settings::m_propTableOverride_ViewFSSWindowBot, Settings::m_propTableOverride_ViewCabWindowBot);
-      if (mGlassWasEvaluated)
-      {
-         const float cap = getFloat(CMTOVPU(50.f), Settings::m_propTableOverride_ViewDTWindowTopCap, Settings::m_propTableOverride_ViewFSSWindowTopCap, Settings::m_propTableOverride_ViewCabWindowTopCap);
-         const float scale = getFloat(1.f, Settings::m_propTableOverride_ViewDTWindowTopScale, Settings::m_propTableOverride_ViewFSSWindowTopScale, Settings::m_propTableOverride_ViewCabWindowTopScale);
-         mWindowTopZOfs = std::min(autofitOrOverrideTop * scale, cap);
-         mWindowBottomZOfs = std::min(autofitOrOverrideBot, mWindowTopZOfs);
-      }
-      else
-      {
-         mWindowTopZOfs = autofitOrOverrideTop;
-         mWindowBottomZOfs = autofitOrOverrideBot;
-      }
-   }
+   mWindowTopZOfs = getFloat(mWindowTopZOfs, Settings::m_propTableOverride_ViewDTWindowTop, Settings::m_propTableOverride_ViewFSSWindowTop, Settings::m_propTableOverride_ViewCabWindowTop);
+   mWindowBottomZOfs = getFloat(mWindowBottomZOfs, Settings::m_propTableOverride_ViewDTWindowBot, Settings::m_propTableOverride_ViewFSSWindowBot, Settings::m_propTableOverride_ViewCabWindowBot);
    mLayback = getFloat(mLayback, Settings::m_propTableOverride_ViewDTLayback, Settings::m_propTableOverride_ViewFSSLayback, Settings::m_propTableOverride_ViewCabLayback);
 }
 

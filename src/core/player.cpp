@@ -1289,10 +1289,6 @@ void Player::SetCabinetAutoFitMode(int mode)
    {
       Vertex3Ds playerPos(m_ptable->m_settings.GetPlayer_ScreenPlayerX(), m_ptable->m_settings.GetPlayer_ScreenPlayerY(), m_ptable->m_settings.GetPlayer_ScreenPlayerZ());
       m_ptable->GetViewSetup().SetWindowAutofit(m_ptable, playerPos, m_renderer->GetDisplayAspectRatio(), m_cabinetAutoFitPos, m_cabinetAutoFitMode == 2, [](string) { });
-      m_ptable->GetViewSetup().ApplyTableOverrideSettings(m_ptable->m_settings, m_ptable->GetViewMode());
-      // ApplyTableOverrideSettings can mutate mWindowTopZOfs/Bot via cap/scale; recompute view
-      // position so mViewZ reflects the post-cap glass plane (otherwise camera drifts).
-      m_ptable->GetViewSetup().SetViewPosFromPlayerPosition(m_ptable, playerPos, m_ptable->m_settings.GetPlayer_ScreenInclination());
    }
 }
 
@@ -1303,8 +1299,6 @@ void Player::SetCabinetAutoFitPos(float pos)
    {
       Vertex3Ds playerPos(m_ptable->m_settings.GetPlayer_ScreenPlayerX(), m_ptable->m_settings.GetPlayer_ScreenPlayerY(), m_ptable->m_settings.GetPlayer_ScreenPlayerZ());
       m_ptable->GetViewSetup().SetWindowAutofit(m_ptable, playerPos, m_renderer->GetDisplayAspectRatio(), m_cabinetAutoFitPos, m_cabinetAutoFitMode == 2, [](string) { });
-      m_ptable->GetViewSetup().ApplyTableOverrideSettings(m_ptable->m_settings, m_ptable->GetViewMode());
-      m_ptable->GetViewSetup().SetViewPosFromPlayerPosition(m_ptable, playerPos, m_ptable->m_settings.GetPlayer_ScreenInclination());
    }
 }
 
