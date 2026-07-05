@@ -99,6 +99,13 @@ Player::Player(PinTable *const table, const PlayMode playMode)
    g_pplayer = this;
    m_ptable->AddRef();
 
+   constexpr float progressStartupLength = 5.f;
+   constexpr float progressRendererLength = 30.f;
+   constexpr float progressPhysicLength = 10.f;
+   constexpr float progressTextureLength = 40.f;
+   constexpr float progressVisualLength = 5.f;
+   constexpr float progressScriptLength = 10.f;
+
    // Initialize the SDL video subsystem before anything that needs a display. This is done here
    // (rather than at application startup) so headless commands, which never create a Player, run
    // without a working video driver. It must happen before the Win32 SDL_RegisterApp / window
@@ -211,7 +218,7 @@ Player::Player(PinTable *const table, const PlayMode playMode)
    }
    #endif
 
-   m_progressDialog.SetProgress("Creating Player..."s, 1);
+   m_progressDialog.SetProgress("Creating Player..."s, 0.f);
 
 #if !(defined(_M_IX86) || defined(_M_X64) || defined(_M_AMD64) || defined(__i386__) || defined(__i386) || defined(__i486__) || defined(__i486) || defined(i386) || defined(__ia64__) || defined(__x86_64__))
    constexpr int denormalBitMask = 1 << 24;
@@ -350,7 +357,7 @@ Player::Player(PinTable *const table, const PlayMode playMode)
 
    set_lowest_possible_win_timer_resolution();
 
-   m_progressDialog.SetProgress("Initializing Visuals..."s, 10);
+   m_progressDialog.SetProgress("Initializing Renderer..."s, m_progressDialog.GetProgress() + progressStartupLength);
 
    m_PlayMusic = m_ptable->m_settings.GetPlayer_PlayMusic();
    m_PlaySound = m_ptable->m_settings.GetPlayer_PlaySound();
@@ -486,7 +493,7 @@ Player::Player(PinTable *const table, const PlayMode playMode)
    }
 
    PLOGI << "Initializing physics"; // For profiling
-   m_progressDialog.SetProgress("Initializing Physics..."s, 30);
+   m_progressDialog.SetProgress("Initializing Physics..."s, m_progressDialog.GetProgress() + progressRendererLength);
    // Need to set timecur here, for init functions that set timers
    m_physics = new PhysicsEngine(m_ptable);
    const float minSlope = (m_ptable->m_overridePhysics ? m_ptable->m_fOverrideMinSlope : m_ptable->m_angletiltMin);
@@ -540,7 +547,18 @@ Player::Player(PinTable *const table, const PlayMode playMode)
       m_renderer->SetFlip(rotation == 0 || rotation == 2 ? ModelViewProj::FLIPX : ModelViewProj::FLIPY);
    }
 
-   m_progressDialog.SetProgress("Loading Textures..."s, 50);
+   #ifdef ENABLE_BGFX
+   auto LockFrameMutex = [this]()
+   {
+      while (!m_renderer->m_renderDevice->m_frameMutex.try_lock())
+      {
+         ProcessOSMessages();
+         Sleep(0);
+      }
+   };
+   #else
+   auto LockFrameMutex = []() { };
+   #endif
 
    {
       tinyxml2::XMLDocument xmlDoc;
@@ -569,10 +587,12 @@ Player::Player(PinTable *const table, const PlayMode playMode)
       }
 
       std::mutex mutex;
+      int nLoadPerformed = 0;
       int nLoadInProgress = 0;
       vector<Texture *> failedPreloads;
       const unsigned int maxTexDim = static_cast<unsigned int>(m_ptable->m_settings.GetPlayer_MaxTexDimension());
-      auto loadImage = [maxTexDim, &mutex, &nLoadInProgress, preloadCache, this, &failedPreloads](Texture *image, bool resizeOnLowMem)
+      auto loadImage = [progressPos = m_progressDialog.GetProgress() + progressPhysicLength, maxTexDim, &mutex, &nLoadInProgress, &nLoadPerformed, preloadCache, this, &failedPreloads](
+                          Texture *image, bool resizeOnLowMem)
       {
          bool readyToLoad = false;
          while (!readyToLoad)
@@ -651,6 +671,8 @@ Player::Player(PinTable *const table, const PlayMode playMode)
                {
                   failedPreloads.push_back(image);
                }
+               nLoadPerformed++;
+               m_progressDialog.SetProgress("Loading Textures..."s, progressPos + progressTextureLength * static_cast<float>(nLoadPerformed) / (static_cast<float>(m_ptable->m_vimage.size()) - 1.f));
             }
          }
          {
@@ -666,15 +688,14 @@ Player::Player(PinTable *const table, const PlayMode playMode)
       ThreadPool pool(g_app->GetLogicalNumberOfProcessors());
       for (auto image : m_ptable->m_vimage)
          pool.enqueue(loadImage, image, false);
-      pool.wait_until_empty();
-      pool.wait_until_nothing_in_flight();
-      #ifdef ENABLE_BGFX
-      while (!m_renderer->m_renderDevice->m_frameMutex.try_lock())
+      while (pool.has_work_in_flight())
       {
          ProcessOSMessages();
          Sleep(0);
       }
-      #endif
+      pool.wait_until_empty();
+      pool.wait_until_nothing_in_flight();
+      LockFrameMutex();
 
       // Due to multithreaded loading and pre-allocation, check if some images could not be loaded, and perform a retry since more memory is available now
       for (auto image : failedPreloads)
@@ -684,7 +705,7 @@ Player::Player(PinTable *const table, const PlayMode playMode)
    //----------------------------------------------------------------------------------
 
    PLOGI << "Initializing renderer"; // For profiling
-   m_progressDialog.SetProgress("Initializing Renderer..."s, 60);
+   m_progressDialog.SetProgress("Initializing Visuals..."s);
 
    // Setup rendering and timers
    RenderState state;
@@ -692,7 +713,6 @@ Player::Player(PinTable *const table, const PlayMode playMode)
    m_renderer->m_renderDevice->CopyRenderStates(false, state);
    m_renderer->m_renderDevice->SetDefaultRenderState();
    m_renderer->SetAnisoFiltering(m_ptable->m_settings.GetPlayer_ForceAnisotropicFiltering());
-   m_renderer->InitLayout();
    for (RenderProbe *probe : m_ptable->m_vrenderprobe)
       probe->RenderSetup(m_renderer.get());
    for (auto editable : m_ptable->GetParts())
@@ -709,7 +729,7 @@ Player::Player(PinTable *const table, const PlayMode playMode)
    if (!IsEditorMode())
    {
       PLOGI << "Starting script"; // For profiling
-      m_progressDialog.SetProgress("Starting Game Scripts..."s);
+      m_progressDialog.SetProgress("Starting Game Scripts..."s, m_progressDialog.GetProgress() + progressVisualLength);
 
       // Setup script interpreter and run the main script
       CComObject<ScriptInterpreter>::CreateInstance(&m_scriptInterpreter);
@@ -730,7 +750,6 @@ Player::Player(PinTable *const table, const PlayMode playMode)
              editable->GetEventProxyBase()->FireVoidEvent(DISPID_AnimateEvents_Animate);
       }
       m_ptable->FireOptionEvent(PinTable::OptionEventType::Initialized);
-      m_ptable->FireVoidEvent(DISPID_GameEvents_Paused);
 
 #ifndef __STANDALONE__
       if (m_detectScriptHang && g_pvp)
@@ -738,9 +757,13 @@ Player::Player(PinTable *const table, const PlayMode playMode)
 #endif
    }
 
+   // Suspend play if started
+   SetPlayState(false);
+
    // Apply cabinet autofit (after script startup as the script may change what is visible and therefore taken in account, like a VR cabinet model)
    SetCabinetAutoFitMode(m_ptable->m_settings.GetPlayer_CabinetAutofitMode());
    SetCabinetAutoFitPos(m_ptable->m_settings.GetPlayer_CabinetAutofitPos());
+   m_renderer->InitLayout();
 
    // Initialize stereo rendering
    m_renderer->UpdateStereoShaderState();
@@ -776,19 +799,40 @@ Player::Player(PinTable *const table, const PlayMode playMode)
       m_liveUI->OpenEditorUI();
    }
 
+   m_progressDialog.SetProgress("Starting..."s, 100);
+
+   if (m_renderer->IsUsingStaticPrepass())
+   {
+      // Perform a quick render to avoid displaying a blank screen while the static prerendering will be performed
+      m_renderer->DisableStaticPrePass(true);
+      PrepareFrame();
+      SubmitFrame();
+      FinishFrame();
+      LockFrameMutex();
+      m_renderer->DisableStaticPrePass(false);
+   }
+
+#ifndef __STANDALONE__
+   m_progressDialog.Destroy();
+#endif
+
+   // Show the window (before rendering static part to avoid delaying too long)
+   m_playfieldWnd->Show();
+   m_playfieldWnd->RaiseAndFocus();
+
    // Pre-render all non-changing elements such as static walls, rails, backdrops, etc. and also static playfield reflections
    // This is done after starting the script and firing the Init event to allow script to adjust static parts on startup
-   wintimer_init();
-   m_physics->StartPhysics();
-   m_renderer->RenderFrame();
+   if (m_renderer->IsUsingStaticPrepass())
+   {
+      PrepareFrame();
+      SubmitFrame();
+      FinishFrame();
+      LockFrameMutex();
+   }
 
    // Reset the perf counter to start time when physics starts
    wintimer_init();
    m_physics->StartPhysics();
-
-   m_progressDialog.SetProgress("Starting..."s, 100);
-   if (!IsEditorMode())
-      m_ptable->FireVoidEvent(DISPID_GameEvents_UnPaused);
 
    PLOGI << "Startup done"; // For profiling
 
@@ -796,21 +840,11 @@ Player::Player(PinTable *const table, const PlayMode playMode)
    VPinballLib::VPinballLib::SendEvent(VPINBALL_EVENT_PLAYER_STARTED, nullptr);
 #endif
 
-#ifndef __STANDALONE__
-   m_progressDialog.Destroy();
-   LockForegroundWindow(true);
-#endif
-
-   // Broadcast a message to notify front-ends that it is 
-   // time to reveal the playfield. 
 #ifdef _MSC_VER
-   UINT nMsgID = RegisterWindowMessage(_T("VPTableStart"));
-   ::PostMessage(HWND_BROADCAST, nMsgID, NULL, NULL);
+   LockForegroundWindow(true);
+   // Broadcast a message to notify front-ends that it is time to reveal the playfield. 
+   ::PostMessage(HWND_BROADCAST, RegisterWindowMessage(_T("VPTableStart")), NULL, NULL);
 #endif
-
-   // Show the window 
-   m_playfieldWnd->Show();
-   m_playfieldWnd->RaiseAndFocus();
 
    // Popup notification on startup
    if (m_renderer->m_stereo3D != STEREO_OFF && m_renderer->m_stereo3D != STEREO_VR && !m_renderer->m_stereo3Denabled)
@@ -822,6 +856,8 @@ Player::Player(PinTable *const table, const PlayMode playMode)
       m_liveUI->PushNotification("You can use Touch controls on this display: bottom left area to Start Game, bottom right area to use the Plunger\n"
                                  "lower left/right for Flippers, upper left/right for Magna buttons, top left for Credits and (hold) top right to Exit"s, 12000);
    }
+
+   SetPlayState(true);
 }
 
 Player::~Player()
@@ -1130,93 +1166,82 @@ bool Player::ShowStats() const
    return mode == IF_FPS || mode == IF_PROFILING;
 }
 
-void Player::SetPlayState(const bool isPlaying, const uint32_t delayBeforePauseMs)
-{
-   const bool wasPlaying = IsPlaying();
-   if (isPlaying || delayBeforePauseMs == 0)
-   {
-      m_pauseTimeTarget = 0;
-      const bool willPlay = isPlaying && m_playfieldWnd->IsFocused();
-      if (wasPlaying != willPlay)
-      {
-         ApplyPlayingState(willPlay);
-         m_playing = isPlaying;
-      }
-   }
-   else if (wasPlaying)
-      m_pauseTimeTarget = m_time_msec + delayBeforePauseMs;
-}
-
 void Player::OnFocusChanged()
 {
    // A lost focus event happens during player destruction when the main window is destroyed
    if (m_closing == CS_CLOSED)
       return;
-   const bool wasPlaying = IsPlaying();
-   const bool willPlay = m_playing && m_playfieldWnd->IsFocused();
-   if (wasPlaying != willPlay)
-   {
-      ApplyPlayingState(willPlay);
-      if (m_playfieldWnd->IsFocused())
-      {
-         PLOGI << "Playfield window gained focus";
-      }
-      else
-      {
-#ifdef _MSC_VER
-         HWND foregroundWnd = GetForegroundWindow();
-         if (foregroundWnd)
-         {
-            string focusedWnd = "undefined"s;
-            DWORD foregroundProcessId;
-            const DWORD foregroundThreadId = GetWindowThreadProcessId(foregroundWnd, &foregroundProcessId);
-            char tmp[MAXSTRING];
-            if (foregroundProcessId)
-            {
-               HANDLE foregroundProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION /* PROCESS_QUERY_INFORMATION | PROCESS_VM_READ */, FALSE, foregroundProcessId);
-               if (foregroundProcess)
-               {
-                  if (GetProcessImageFileName(foregroundProcess, tmp, std::size(tmp)))
-                     focusedWnd = tmp;
-               }
-            }
-            GetWindowText(foregroundWnd, tmp, std::size(tmp));
-            PLOGI << "Playfield window lost focus to window with title: '" << tmp << "' created by application: " << focusedWnd;
-         }
-         else
-         {
-            PLOGI << "Playfield window lost focus.";
-         }
 
-#else
-         PLOGI << "Playfield window lost focus.";
-#endif
-      }
-   }
-}
+   SetPlayState(m_wantsToPlay);
 
-void Player::ApplyPlayingState(const bool play)
-{
-   #ifndef __STANDALONE__
-   if(m_debuggerDialog.IsWindow())
-      m_debuggerDialog.SendMessage(RECOMPUTEBUTTONCHECK, 0, 0);
-   #endif
-   if (play)
+   if (m_playfieldWnd->IsFocused())
    {
-      m_lastKnownGoodCounter++; // Reset hang script detection
-      m_noTimeCorrect = true;   // Disable physics engine time correction on next physic update
-      UnpauseMusic();
-      PLOGI << "Unpausing Game";
-      if (!IsEditorMode())
-         m_ptable->FireVoidEvent(DISPID_GameEvents_UnPaused); // signal the script that the game is now running again
+      PLOGI << "Playfield window gained focus";
    }
    else
    {
       m_BallHistory.ResetTrainerRunStartTime();
-      PauseMusic();
-      PLOGI << "Pausing Game";
-      if (!IsEditorMode())
-         m_ptable->FireVoidEvent(DISPID_GameEvents_Paused); // signal the script that the game is now paused
+#ifdef _MSC_VER
+      HWND foregroundWnd = GetForegroundWindow();
+      if (foregroundWnd)
+      {
+         string focusedWnd = "undefined"s;
+         DWORD foregroundProcessId;
+         const DWORD foregroundThreadId = GetWindowThreadProcessId(foregroundWnd, &foregroundProcessId);
+         char tmp[MAXSTRING];
+         if (foregroundProcessId)
+         {
+            HANDLE foregroundProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION /* PROCESS_QUERY_INFORMATION | PROCESS_VM_READ */, FALSE, foregroundProcessId);
+            if (foregroundProcess)
+            {
+               if (GetProcessImageFileName(foregroundProcess, tmp, std::size(tmp)))
+                  focusedWnd = tmp;
+            }
+         }
+         GetWindowText(foregroundWnd, tmp, std::size(tmp));
+         PLOGI << "Playfield window lost focus to window with title: '" << tmp << "' created by application: " << focusedWnd;
+      }
+      else
+      {
+         PLOGI << "Playfield window lost focus.";
+      }
+#else
+      PLOGI << "Playfield window lost focus.";
+#endif
+   }
+}
+
+void Player::SetPlayState(const bool isPlaying, const uint32_t delayBeforePauseMs)
+{
+   m_wantsToPlay = isPlaying;
+   m_pauseTimeTarget = (!isPlaying || delayBeforePauseMs == 0.f) ? 0 : (m_time_msec + delayBeforePauseMs);
+
+   const bool willPlay = IsPlaying(m_playfieldWnd->IsVisible());
+   if (m_playing != willPlay)
+   {
+      m_playing = willPlay;
+
+#ifndef __STANDALONE__
+      if (m_debuggerDialog.IsWindow())
+         m_debuggerDialog.SendMessage(RECOMPUTEBUTTONCHECK, 0, 0);
+#endif
+
+      if (m_playing)
+      {
+         m_lastKnownGoodCounter++; // Reset hang script detection
+         m_noTimeCorrect = true; // Disable physics engine time correction on next physic update
+         UnpauseMusic();
+         PLOGI << "Unpausing Game";
+         if (!IsEditorMode())
+            m_ptable->FireVoidEvent(DISPID_GameEvents_UnPaused); // signal the script that the game is now running again
+      }
+      else
+      {
+         PauseMusic();
+         PLOGI << "Pausing Game";
+         if (!IsEditorMode())
+            m_ptable->FireVoidEvent(DISPID_GameEvents_Paused); // signal the script that the game is now paused
+      }
    }
 }
 
@@ -1844,9 +1869,12 @@ void Player::UpdateGameLogic()
    else if (!IsEditorMode())
    {
       m_pininput.ProcessInput(); // Trigger key events to sync with controller
-      m_physics->UpdatePhysics(usec()); // Update physics (also triggering events, syncing with controller)
-      // TODO These updates should also be done directly in the physics engine after collision events
-      FireTimers(-2); // Trigger script sync event (to sync solenoids back)
+      if (IsPlaying())
+      {
+         m_physics->UpdatePhysics(usec()); // Update physics (also triggering events, syncing with controller)
+         // TODO These updates should also be done directly in the physics engine after collision events
+         FireTimers(-2); // Trigger script sync event (to sync solenoids back)
+      }
    }
 
    m_pluginManager.ProcessAsyncCallbacks();
@@ -1904,9 +1932,7 @@ bool Player::CallbackSteppedGameLoop()
       m_lastFrameSyncOnFPS
          = (m_videoSyncMode != VideoSyncMode::VSM_NONE) && ((m_renderProfiler->GetSlidingAvg(FrameProfiler::PROFILE_FRAME) - 100) * m_playfieldWnd->GetRefreshRate() < 1000000);
       PrepareFrame();
-      m_renderer->m_renderDevice->m_framePending = true;
-      m_renderer->m_renderDevice->m_frameReadySem.release();
-      m_renderer->m_renderDevice->m_frameMutex.unlock();
+      SubmitFrame();
       return true;
    }
 
@@ -2171,15 +2197,21 @@ void Player::PrepareFrame()
 
 void Player::SubmitFrame()
 {
-   #ifdef MSVC_CONCURRENCY_VIEWER
-   span* tagSpan = new span(series, 1, _T("Submit"));
-   #endif
-   m_renderProfiler->EnterProfileSection(FrameProfiler::PROFILE_RENDER_SUBMIT);
-   m_renderer->m_renderDevice->SubmitRenderFrame();
-   m_renderProfiler->ExitProfileSection();
-
-   #ifdef MSVC_CONCURRENCY_VIEWER
-   delete tagSpan;
+   #ifdef ENABLE_BGFX
+      // We must own m_renderer->m_renderDevice->m_frameMutex
+      m_renderer->m_renderDevice->m_framePending = true;
+      m_renderer->m_renderDevice->m_frameReadySem.release();
+      m_renderer->m_renderDevice->m_frameMutex.unlock();
+   #else
+      #ifdef MSVC_CONCURRENCY_VIEWER
+         span *tagSpan = new span(series, 1, _T("Submit"));
+      #endif
+      m_renderProfiler->EnterProfileSection(FrameProfiler::PROFILE_RENDER_SUBMIT);
+      m_renderer->m_renderDevice->SubmitRenderFrame();
+      m_renderProfiler->ExitProfileSection();
+      #ifdef MSVC_CONCURRENCY_VIEWER
+         delete tagSpan;
+      #endif
    #endif
 }
 

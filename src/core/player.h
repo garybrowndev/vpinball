@@ -67,7 +67,7 @@ public:
    string GetPerfInfo();
 
    void SetPlayState(const bool isPlaying, const uint32_t delayBeforePauseMs = 0); // Allow to play/pause during UI interaction or to perform timed simulation steps (still needs the player window to be focused).
-   bool IsPlaying(const bool applyWndFocus = true) const { return (m_playMode == PlayMode::CaptureAttract) || (m_playing && (applyWndFocus ? m_playfieldWnd->IsFocused() : true) && !IsEditorMode()); }
+   bool IsPlaying(const bool applyWndFocus = true) const { return (m_playMode == PlayMode::CaptureAttract) || (m_wantsToPlay && (applyWndFocus ? m_playfieldWnd->IsFocused() : true) && !IsEditorMode()); }
    void OnFocusChanged(); // On focus lost, pause player and show mouse cursor
 
    uint32_t m_pauseTimeTarget = 0;
@@ -78,8 +78,6 @@ public:
 
    bool IsEditorMode() const { return m_playMode == PlayMode::FullEdit; }
    const PlayMode m_playMode;
-
-   ProgressDialog m_progressDialog;
 
    uint64_t m_timeUpdateTimeStamp = 0; // Timestamp in computer time that correspond to last update of game time
    double m_time_sec = 0.0; // current physics time
@@ -95,8 +93,10 @@ public:
    VPXPluginAPIImpl m_pluginAPI;
 
 private:
-   bool m_playing = true;
-   void ApplyPlayingState(const bool play);
+   bool m_wantsToPlay = true; // If we want the player to play beside the player focus state
+   bool m_playing = true; // If the player is actually playing or not
+
+   ProgressDialog m_progressDialog;
 
 #pragma region Main Loop
 public:
