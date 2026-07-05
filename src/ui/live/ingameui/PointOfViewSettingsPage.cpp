@@ -15,7 +15,7 @@ namespace VPX::InGameUI
 {
 
 PointOfViewSettingsPage::PointOfViewSettingsPage()
-   : InGameUIPage("Point of View Table Override"s, "Point of view's settings page:\nOptions to override the table's rendering's point of view"s, SaveMode::Both)
+   : InGameUIPage("Point of View Table Override"s, "Point of view's settings page:\nOptions to override the table's rendering's point of view"s, SaveMode::Table)
 {
 }
 
@@ -402,101 +402,6 @@ void PointOfViewSettingsPage::BuildPage()
          RequestRebuild();
       });
 
-   // Custom Fit-Screen Autofit toggle: "Custom" applies walk-down + max-tilt + sparse-fallback
-   // (fork-local algorithm tuned for landscape cabinets). "Standard" disables those — vanilla
-   // upstream Fit-Screen autofit. Cap and Scale knobs apply in both modes.
-   auto useCustomAutofit = std::make_unique<InGameUIItem>(
-      SelectProp(Settings::m_propTableOverride_ViewDTUseCustomAutofit,
-                 Settings::m_propTableOverride_ViewFSSUseCustomAutofit,
-                 Settings::m_propTableOverride_ViewCabUseCustomAutofit),
-      [this]() {
-         return m_player->m_ptable->m_settings.GetInt(SelectProp(
-            Settings::m_propTableOverride_ViewDTUseCustomAutofit,
-            Settings::m_propTableOverride_ViewFSSUseCustomAutofit,
-            Settings::m_propTableOverride_ViewCabUseCustomAutofit));
-      },
-      [this](int, int v) {
-         m_player->m_ptable->m_settings.Set(SelectProp(
-            Settings::m_propTableOverride_ViewDTUseCustomAutofit,
-            Settings::m_propTableOverride_ViewFSSUseCustomAutofit,
-            Settings::m_propTableOverride_ViewCabUseCustomAutofit), v, false);
-         // Re-run autofit so the new mode takes effect live without reload.
-         if (m_player->m_ptable->GetViewSetup().mMode == VLM_WINDOW && m_player->GetCabinetAutoFitMode() != 0)
-         {
-            m_player->m_ptable->GetViewSetup().SetWindowAutofit(m_player->m_ptable, m_playerPos,
-               m_player->m_renderer->GetDisplayAspectRatio(), m_player->GetCabinetAutoFitPos(),
-               m_player->GetCabinetAutoFitMode() == 2, [](string){});
-         }
-         m_player->m_ptable->GetViewSetup().ApplyTableOverrideSettings(m_player->m_ptable->m_settings, m_player->m_ptable->GetViewMode());
-         const float screenInclination = m_player->m_ptable->m_settings.GetPlayer_ScreenInclination();
-         m_player->m_ptable->GetViewSetup().SetViewPosFromPlayerPosition(m_player->m_ptable, m_playerPos, screenInclination);
-         OnPointOfViewChanged();
-         BuildPage();
-      });
-
-   // Window Top Z Scale — multiplier applied to autofit-computed top glass height. Acts as a
-   // cabinet-wide calibration knob: 0.85 trims every table's top glass by 15% (proportionally),
-   // preserving per-table variation. The multiplier is applied during ApplyTableOverrideSettings
-   // on table load (see ViewSetup.cpp ApplyTableOverrideSettings). During live drag we apply the
-   // change incrementally to mWindowTopZOfs via the (new/prev) ratio — touching ONLY that one
-   // field and leaving every other slider's transient state alone (no autofit re-run).
-   auto wndTopZScale = std::make_unique<InGameUIItem>(
-      SelectProp(Settings::m_propTableOverride_ViewDTWindowTopScale, Settings::m_propTableOverride_ViewFSSWindowTopScale, Settings::m_propTableOverride_ViewCabWindowTopScale),
-      100.f, "%4.1f %%"s,
-      [this]() {
-         return m_player->m_ptable->m_settings.GetFloat(SelectProp(Settings::m_propTableOverride_ViewDTWindowTopScale,
-            Settings::m_propTableOverride_ViewFSSWindowTopScale, Settings::m_propTableOverride_ViewCabWindowTopScale));
-      },
-      [this](float prev, float v)
-      {
-         m_player->m_ptable->m_settings.Set(SelectProp(Settings::m_propTableOverride_ViewDTWindowTopScale,
-            Settings::m_propTableOverride_ViewFSSWindowTopScale, Settings::m_propTableOverride_ViewCabWindowTopScale), v, false);
-         // Incremental ratio: WindowTop_new = WindowTop_now * (v/prev). Only touches the one field.
-         if (prev > 0.f)
-            m_player->m_ptable->GetViewSetup().mWindowTopZOfs *= (v / prev);
-         // Recompute mViewZ — realToVirtual depends on mWindowTopZOfs, so the camera Z drifts
-         // one-directionally on drag without this. Same fix as the WindowTop manual slider.
-         const float screenInclination = m_player->m_ptable->m_settings.GetPlayer_ScreenInclination();
-         m_player->m_ptable->GetViewSetup().SetViewPosFromPlayerPosition(m_player->m_ptable, m_playerPos, screenInclination);
-         OnPointOfViewChanged();
-         BuildPage();
-      });
-
-   // Window Top Z Cap — hard maximum on the autofit-computed top glass height. Clips structural
-   // mesh outliers (e.g. modern remakes that bake a 3D cabinet shell into the playfield mesh)
-   // that push autofit to 20-28 cm when a flat-TV cabinet wants ~7 cm. Set to a high value
-   // (50 cm slider max) to effectively disable. Setter re-runs autofit so the cap takes effect
-   // live in both directions (raising and lowering); only safe in autofit modes where no other
-   // F12 slider has transient unsaved state.
-   auto wndTopZCap = std::make_unique<InGameUIItem>(
-      SelectProp(Settings::m_propTableOverride_ViewDTWindowTopCap, Settings::m_propTableOverride_ViewFSSWindowTopCap, Settings::m_propTableOverride_ViewCabWindowTopCap),
-      VPUTOCM(1.f), "%4.1f cm"s,
-      [this]() {
-         return m_player->m_ptable->m_settings.GetFloat(SelectProp(Settings::m_propTableOverride_ViewDTWindowTopCap,
-            Settings::m_propTableOverride_ViewFSSWindowTopCap, Settings::m_propTableOverride_ViewCabWindowTopCap));
-      },
-      [this](float, float v)
-      {
-         m_player->m_ptable->m_settings.Set(SelectProp(Settings::m_propTableOverride_ViewDTWindowTopCap,
-            Settings::m_propTableOverride_ViewFSSWindowTopCap, Settings::m_propTableOverride_ViewCabWindowTopCap), v, false);
-         // Re-run autofit + apply so cap takes effect both directions. Mirrors Gary's pattern in
-         // Player::SetCabinetAutoFitMode/Pos. Safe in autofit modes (only place this slider is visible).
-         if (m_player->m_ptable->GetViewSetup().mMode == VLM_WINDOW && m_player->GetCabinetAutoFitMode() != 0)
-         {
-            m_player->m_ptable->GetViewSetup().SetWindowAutofit(m_player->m_ptable, m_playerPos,
-               m_player->m_renderer->GetDisplayAspectRatio(), m_player->GetCabinetAutoFitPos(),
-               m_player->GetCabinetAutoFitMode() == 2, [](string){});
-         }
-         m_player->m_ptable->GetViewSetup().ApplyTableOverrideSettings(m_player->m_ptable->m_settings, m_player->m_ptable->GetViewMode());
-         // Recompute mViewZ from the now-capped mWindowBottomZOfs. Without this, mViewZ retains
-         // the autofit-raw value baked in during SetWindowAutofit, so camera position drifts
-         // away from the capped glass plane (visual: table flies/zooms one-directionally on drag).
-         const float screenInclination = m_player->m_ptable->m_settings.GetPlayer_ScreenInclination();
-         m_player->m_ptable->GetViewSetup().SetViewPosFromPlayerPosition(m_player->m_ptable, m_playerPos, screenInclination);
-         OnPointOfViewChanged();
-         BuildPage();
-      });
-
    AddItem(std::move(viewMode));
    switch (viewSetup.mMode)
    {
@@ -540,15 +445,6 @@ void PointOfViewSettingsPage::BuildPage()
                OnPointOfViewChanged();
             RequestRebuild();
          }));
-      // Visible only when autofit is on — the multiplier calibrates the autofit-computed top
-      // glass height proportionally across all tables. Hidden in Manual mode (where direct
-      // WindowTop slider does the same job).
-      if (m_player->GetCabinetAutoFitMode() != 0)
-      {
-         AddItem(std::move(useCustomAutofit));
-         AddItem(std::move(wndTopZScale));
-         AddItem(std::move(wndTopZCap));
-      }
       if (m_player->GetCabinetAutoFitMode() == 0)
       {
          AddItem(std::move(hOfs));

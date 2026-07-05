@@ -2992,16 +2992,13 @@ const wstring& PinTable::GetCollectionNameByElement(const ISelect * const elemen
     return emptyString;
 }
 
-Vertex2D PinTable::EvaluateGlassHeight(bool useWalkDown) const
+Vertex2D PinTable::EvaluateGlassHeight() const
 {
    Vertex2D result(0.f, 0.f);
    constexpr float marginX = INCHESTOVPU(1.0f);
    constexpr float marginY = INCHESTOVPU(0.1f);
    constexpr float marginZ = INCHESTOVPU(0.1f);
-   // Collect every accepted back-band vertex Z so the walk-down pass below can locate the top of
-   // real playable geometry while ignoring phantom 3D-backbox decoration sitting above an air gap.
-   std::vector<float> backBandZ; // every accepted back-edge v.z (in VPU)
-   auto submitVertex = [this, &result, &backBandZ](const Vertex3Ds &v)
+   auto submitVertex = [this, &result](const Vertex3Ds &v)
    {
       // Reject vertices below, or outside left and right limits
       if (v.z < -marginZ || v.x < m_left - marginX || v.x > m_right + marginX)
@@ -3011,10 +3008,7 @@ Vertex2D PinTable::EvaluateGlassHeight(bool useWalkDown) const
          result.x = max(result.x, v.z);
       // Top area (y = 0)
       if (v.y >= m_top - marginY && v.y <= m_top + marginY && v.z <= INCHESTOVPU(12.f))
-      {
          result.y = max(result.y, v.z);
-         backBandZ.push_back(v.z);
-      }
    };
    auto intersect2D = [](const RenderVertex &v1, const RenderVertex &v2, float y)
    {
@@ -3130,47 +3124,6 @@ Vertex2D PinTable::EvaluateGlassHeight(bool useWalkDown) const
    {
       PLOGI << "Evaluated glass height to " << VPUTOINCHES(result.x) << "\" (" << upperEditableX->GetName() << ") - " << VPUTOINCHES(result.y) << "\" (" << upperEditableY->GetName() << ')';
    }
-
-   // Walk-down pass (fork-local): raw max-Z is fooled by phantom 3D-backbox decoration that modern
-   // table meshes bake well above the real playfield (e.g. a lighting-variant primitive cluster
-   // sitting ~15 cm above the highest real ramp). Bucket the back-band vertices into 0.5 cm bins,
-   // drop sparse bins, then walk from the highest significant bin downward and stop at the first one
-   // whose next-lower significant bin is within kGapThresholdCm — i.e. the top of a continuous body
-   // of real geometry. A lone significant bin is taken as-is.
-   constexpr float kGapThresholdCm = 10.0f; // air gap above which a higher bin is treated as decoration
-   constexpr int kMinClusterVerts = 5;      // min vertices for a 0.5 cm bin to count as real geometry
-   const float maxZTopVPU = result.y;
-   float walkDownTopVPU = maxZTopVPU;
-   if (!backBandZ.empty())
-   {
-      std::map<int, int, std::greater<int>> buckets;
-      for (float z : backBandZ)
-         buckets[(int)std::round(VPUTOCM(z) * 2.0f)]++; // 0.5 cm buckets
-      std::vector<float> sig_cm;
-      for (const auto& [bin, count] : buckets)
-         if (count >= kMinClusterVerts) sig_cm.push_back(bin * 0.5f);
-      if (sig_cm.size() == 1)
-         walkDownTopVPU = CMTOVPU(sig_cm[0]);
-      else if (sig_cm.size() >= 2)
-      {
-         walkDownTopVPU = CMTOVPU(sig_cm.back()); // fallback if no anchored cluster found
-         for (size_t i = 0; i + 1 < sig_cm.size(); i++)
-         {
-            if (sig_cm[i] - sig_cm[i + 1] <= kGapThresholdCm)
-            {
-               walkDownTopVPU = CMTOVPU(sig_cm[i]);
-               break;
-            }
-         }
-      }
-   }
-   // Sparse-table fallback: if the walk-down collapsed to near the floor (a back wall with fewer
-   // than kMinClusterVerts vertices per bin) but raw max-Z found real geometry higher up, trust the
-   // raw max-Z so the back of sparse tables is not clipped.
-   if (VPUTOCM(walkDownTopVPU) < 3.0f && VPUTOCM(maxZTopVPU) > 5.0f)
-      walkDownTopVPU = maxZTopVPU;
-   // Custom mode returns the walk-down result; Standard mode returns vanilla upstream raw max-Z.
-   result.y = useWalkDown ? walkDownTopVPU : maxZTopVPU;
    return result;
 }
 

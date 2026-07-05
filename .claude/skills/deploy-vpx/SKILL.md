@@ -67,8 +67,13 @@ one-time provisioning. The essentials:
 deploy-vpx ships **only** from a green run — a red or still-running build has no trustworthy
 artifacts, and shipping a broken exe means the cabinet won't boot tables. Confirm with Gary:
 
-1. **Which branch/commit?** Normally `integration` (the build/test branch) or `development` after a
-   sync round. A specific `-RunId` if deploying an exact known-green run.
+1. **Which branch/commit?** **Default = `integration`** — it is the canonical release/deploy source,
+   and the standing `_BH` builds the cabinet runs for real gameplay always come from a green
+   `integration` CI run. `development` is **test/debug only**: deploy it during an iteration loop
+   (play-test gate, debug-vpx) but never leave development as the standing cabinet build — finished
+   WIP must graduate `development → integration` (the ship PR) first, then deploy `integration`. A
+   specific `-RunId` if deploying an exact known-green run. If asked to "deploy development" for
+   anything other than a test/iteration, confirm that's really intended before shipping it as `_BH`.
 2. **Is that run green?** The helper below refuses anything not `completed + success`. Never
    hand-wave this — if CI is still running, wait (watch it per sync-vpx's CI-gating pattern).
 3. **gh account** on `garybrowndev`, **cabinet reachable**, **`Z:` mapped**.

@@ -681,11 +681,6 @@ PropFloatDyn(TableOverride, ViewDTVOfs, "Vertical Offset"s, "Vertical offset of 
 PropFloatDyn(TableOverride, ViewDTWindowTop, "Window Top Z Ofs."s, "Distance between the 'window' (i.e. the screen) at the top of the playfield"s, CMTOVPU(0.f), CMTOVPU(50.f), CMTOVPU(0.f));
 PropFloatDyn(
    TableOverride, ViewDTWindowBot, "Window Bottom Z Ofs."s, "Distance between the 'window' (i.e. the screen) at the bottom of the playfield"s, CMTOVPU(0.f), CMTOVPU(50.f), CMTOVPU(0.f));
-PropFloatDyn(TableOverride, ViewDTWindowTopScale, "Window Top Z Scale"s, "Multiplier applied to the computed top glass height (calibration for autofit bias)"s, 0.5f, 1.5f, 1.f);
-PropFloatDyn(TableOverride, ViewDTWindowTopCap, "Window Top Z Cap"s, "Hard maximum on the autofit-computed top glass height; values above are clipped. Set high to disable."s, CMTOVPU(1.f), CMTOVPU(50.f), CMTOVPU(50.f));
-PropEnumDyn(TableOverride, ViewDTUseCustomAutofit, "Custom Fit-Screen Autofit"s,
-   "When 'Custom' (default), apply walk-down + max-tilt algorithm tuned for landscape cabinets. When 'Standard', use vanilla upstream Fit-Screen autofit."s,
-   int, 1, "Standard"s, "Custom"s);
 PropFloatSteppedDyn(TableOverride, ViewDTRotation, "Viewport Rotation"s, ""s, 0.f, 360.f, 90.0f, 0.f);
 
 PropEnumDyn(TableOverride, ViewFSSMode, "View mode"s,
@@ -706,11 +701,6 @@ PropFloatDyn(
    TableOverride, ViewFSSWindowTop, "Window Top Z Ofs."s, "Distance between the 'window' (i.e. the screen) at the top of the playfield"s, CMTOVPU(0.f), CMTOVPU(50.f), CMTOVPU(0.f));
 PropFloatDyn(
    TableOverride, ViewFSSWindowBot, "Window Bottom Z Ofs."s, "Distance between the 'window' (i.e. the screen) at the bottom of the playfield"s, CMTOVPU(0.f), CMTOVPU(50.f), CMTOVPU(0.f));
-PropFloatDyn(TableOverride, ViewFSSWindowTopScale, "Window Top Z Scale"s, "Multiplier applied to the computed top glass height (calibration for autofit bias)"s, 0.5f, 1.5f, 1.f);
-PropFloatDyn(TableOverride, ViewFSSWindowTopCap, "Window Top Z Cap"s, "Hard maximum on the autofit-computed top glass height; values above are clipped. Set high to disable."s, CMTOVPU(1.f), CMTOVPU(50.f), CMTOVPU(50.f));
-PropEnumDyn(TableOverride, ViewFSSUseCustomAutofit, "Custom Fit-Screen Autofit"s,
-   "When 'Custom' (default), apply walk-down + max-tilt algorithm tuned for landscape cabinets. When 'Standard', use vanilla upstream Fit-Screen autofit."s,
-   int, 1, "Standard"s, "Custom"s);
 PropFloatSteppedDyn(TableOverride, ViewFSSRotation, "Viewport Rotation"s, ""s, 0.f, 360.f, 90.0f, 0.f);
 
 PropEnumDyn(TableOverride, ViewCabMode, "View mode"s,
@@ -731,11 +721,6 @@ PropFloatDyn(
    TableOverride, ViewCabWindowTop, "Window Top Z Ofs."s, "Distance between the 'window' (i.e. the screen) at the top of the playfield"s, CMTOVPU(0.f), CMTOVPU(50.f), CMTOVPU(0.f));
 PropFloatDyn(
    TableOverride, ViewCabWindowBot, "Window Bottom Z Ofs."s, "Distance between the 'window' (i.e. the screen) at the bottom of the playfield"s, CMTOVPU(0.f), CMTOVPU(50.f), CMTOVPU(0.f));
-PropFloatDyn(TableOverride, ViewCabWindowTopScale, "Window Top Z Scale"s, "Multiplier applied to the computed top glass height (calibration for autofit bias)"s, 0.5f, 1.5f, 1.f);
-PropFloatDyn(TableOverride, ViewCabWindowTopCap, "Window Top Z Cap"s, "Hard maximum on the autofit-computed top glass height; values above are clipped. Set high to disable."s, CMTOVPU(1.f), CMTOVPU(50.f), CMTOVPU(50.f));
-PropEnumDyn(TableOverride, ViewCabUseCustomAutofit, "Custom Fit-Screen Autofit"s,
-   "When 'Custom' (default), apply walk-down + max-tilt algorithm tuned for landscape cabinets. When 'Standard', use vanilla upstream Fit-Screen autofit (raw max-Z, no tilt clamp). Cap and Scale knobs apply in both modes."s,
-   int, 1, "Standard"s, "Custom"s);
 PropFloatSteppedDyn(TableOverride, ViewCabRotation, "Viewport Rotation"s, ""s, 0.f, 360.f, 90.0f, 0.f);
 
 PropFloatDyn(TableOverride, Difficulty, "Difficulty"s, "Overall difficulty (affects slope, flipper size, ball trajectories scattering,...)"s, 0.f, 1.f, 1.f);
