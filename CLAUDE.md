@@ -172,8 +172,8 @@ Don't promote any of these to `platforms/android-x86_64/` — the rule is: **onl
 ## Branch Strategy & Update Workflow
 
 - `master` — tracks upstream `vpinball/vpinball` **plus one cherry-picked patch** (see "Master is not pure upstream" below).
-- `integration` — `master` + Ball History changes merged together. This is the build/test branch.
-- `development` — active Ball History development work.
+- `integration` — `master` + Ball History changes merged together. This is the build/test branch **and the canonical deploy-to-cabinet source**: the standing `_BH` builds on the VPM come from a green `integration` CI run. Finished WIP graduates here via the ship PR (below) before it becomes the cabinet's real build.
+- `development` — active Ball History development work. **Test/debug only** — development builds may be deployed to the cabinet during an iteration loop (play-test gate, debug-vpx), but development is never the standing cabinet build. Real gameplay runs `integration`.
 - Remotes: `origin` = `garybrowndev/vpinball`, `upstream` = `vpinball/vpinball`
 
 ### ⚠️ Master is not pure upstream — carries one patch
