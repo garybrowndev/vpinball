@@ -81,8 +81,10 @@ if (-not $RunId) {
 $sha = $run.headSha.Substring(0,9)
 
 # --- Enumerate the 3 windows-x64 Release app artifacts ----------------------------------------
-# DX9 prefix 'VPinballX-<digit>' (bare); BGFX 'VPinballX_BGFX-'; GL 'VPinballX_GL-'. Exclude deps.
-$allArts = (gh api "repos/$Repo/actions/runs/$RunId/artifacts" --paginate -q '.artifacts[].name' 2>$null) -split "`n" | Where-Object { $_ }
+# DX9 prefix 'VPinballX-<digit>' (bare); BGFX 'VPinballX_BGFX-'; GL 'VPinballX_GL-'.
+# Drop the 'dev-third-party' deps zips up front: they also end in 'windows-x64-Release.zip', so the
+# bare-prefix DX9 pattern's '.*' would otherwise match a deps zip when the API returns it first.
+$allArts = (gh api "repos/$Repo/actions/runs/$RunId/artifacts" --paginate -q '.artifacts[].name' 2>$null) -split "`n" | Where-Object { $_ -and $_ -notmatch 'dev-third-party' }
 $want = @(
   @{ key='DX9';  pat='^VPinballX-\d.*windows-x64-Release\.zip$';   exe='VPinballX64.exe';      dst='VPinballX64_BH.exe' },
   @{ key='BGFX'; pat='^VPinballX_BGFX-.*windows-x64-Release\.zip$'; exe='VPinballX_BGFX64.exe'; dst='VPinballX_BGFX64_BH.exe' },
