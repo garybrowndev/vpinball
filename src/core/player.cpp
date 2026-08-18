@@ -91,7 +91,7 @@ Player::Player(PinTable *const table, const PlayMode playMode)
    , m_pininput(this)
    , m_audioPlayer(std::make_unique<VPX::AudioPlayer>(
         table->m_settings.GetPlayer_SoundDeviceBG(), table->m_settings.GetPlayer_SoundDevice(), static_cast<VPX::SoundConfigTypes>(table->m_settings.GetPlayer_Sound3D())))
-   , m_resURIResolver(m_pluginManager.GetMsgAPI(), m_pluginAPI.GetVPXEndPointId(), true, true, true, true)
+   , m_resURIResolver(m_pluginManager.GetMsgAPI(), m_pluginAPI.GetVPXEndPointId(), true, true, true)
    , m_BallHistory(*m_ptable)
 {
    // For the time being, lots of access are made through the global singleton, so ensure we are unique, and define it as soon as needed
@@ -359,10 +359,8 @@ Player::Player(PinTable *const table, const PlayMode playMode)
 
    m_progressDialog.SetProgress("Initializing Renderer..."s, m_progressDialog.GetProgress() + progressStartupLength);
 
-   m_PlayMusic = m_ptable->m_settings.GetPlayer_PlayMusic();
-   m_PlaySound = m_ptable->m_settings.GetPlayer_PlaySound();
-   m_MusicVolume = m_ptable->m_settings.GetPlayer_MusicVolume();
-   m_SoundVolume = m_ptable->m_settings.GetPlayer_SoundVolume();
+   m_backglassVolume = dequantizeUnsignedPercent(m_ptable->m_settings.GetPlayer_MusicVolume());
+   m_playfieldVolume = dequantizeUnsignedPercent(m_ptable->m_settings.GetPlayer_SoundVolume());
    UpdateVolume();
 
    //
@@ -550,7 +548,7 @@ Player::Player(PinTable *const table, const PlayMode playMode)
    #ifdef ENABLE_BGFX
    auto LockFrameMutex = [this]()
    {
-      while (!m_renderer->m_renderDevice->m_frameMutex.try_lock())
+      while (m_renderer->m_renderDevice->m_framePending || !m_renderer->m_renderDevice->m_frameMutex.try_lock())
       {
          ProcessOSMessages();
          Sleep(0);
@@ -781,6 +779,7 @@ Player::Player(PinTable *const table, const PlayMode playMode)
    m_getAudioSrcMsgId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_AUDIO_GET_SRC_MSG);
    msgApi->SubscribeMsg(m_pluginAPI.GetVPXEndPointId(), m_onAudioUpdatedMsgId, OnAudioUpdated, this);
    msgApi->SubscribeMsg(m_pluginAPI.GetVPXEndPointId(), m_onAudioSrcChangedMsgId, OnAudioSrcChanged, this);
+   OnAudioSrcChanged(m_onAudioSrcChangedMsgId, this, nullptr);
 
    m_getAuxRendererId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_AUX_RENDERER);
    m_onAuxRendererChgId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_AUX_RENDERER_CHG);
@@ -830,8 +829,6 @@ Player::Player(PinTable *const table, const PlayMode playMode)
       LockFrameMutex();
    }
 
-   // Reset the perf counter to start time when physics starts
-   wintimer_init();
    m_physics->StartPhysics();
 
    PLOGI << "Startup done"; // For profiling
@@ -1303,8 +1300,7 @@ void Player::DestroyBall(Ball *pBall)
       m_pactiveball = m_vball.empty() ? nullptr : m_vball.front();
    if (m_pactiveballDebug == pBall)
       m_pactiveballDebug = m_vball.empty() ? nullptr : m_vball.front();
-   if (m_liveUI->m_ballControl.GetDraggedBall() == pBall)
-      m_liveUI->m_ballControl.SetDraggedBall(nullptr);
+   m_liveUI->m_ballControl.ClearDraggedBall(pBall);
 }
 
 void Player::SetCabinetAutoFitMode(int mode)
@@ -2344,7 +2340,7 @@ void Player::OnAuxRendererChanged(const unsigned int msgId, void* userData, void
       for (const auto& renderer : me->m_ancillaryWndRenderers[window])
       {
          Settings::GetRegistry().Register(std::make_unique<VPX::Properties::IntPropertyDef>(section, "Priority."s.append(renderer.id), renderer.name,
-            "A value that will be used to select if the '"s + renderer.name + "' renderer should be used on the "s + section + " display. Higher values are priorized other lower ones."s,
+            "A value that will be used to select if the '"s + renderer.name + "' renderer should be used on the " + section + " display. Higher values are priorized other lower ones.",
             false, 0, 100, 0));
          // Seed the live priority from settings, keeping any live (unsaved) adjustment made through the in game UI
          priorities.try_emplace(renderer.id, me->m_ptable->m_settings.GetInt(Settings::GetRegistry().GetPropertyId(section, "Priority."s.append(renderer.id)).value()));
@@ -2372,114 +2368,124 @@ void Player::SetAncillaryRendererPriority(VPXWindowId window, const string& id, 
    OnAuxRendererChanged(0, this, nullptr);
 }
 
-void Player::UpdateVolume()
+void Player::OnAudioSrcChanged(const unsigned int msgId, void *userData, void *msgData)
 {
-   m_audioPlayer->SetMainVolume(m_PlayMusic ? dequantizeSignedPercent(m_MusicVolume) : 0.f, m_PlaySound ? dequantizeSignedPercent(m_SoundVolume) : 0.f);
+   Player *me = static_cast<Player *>(userData);
+   me->m_pluginManager.AssertAPIThread();
+   std::lock_guard lock(me->m_audioSourceMutex);
+
+   ankerl::unordered_dense::set<uint64_t> seenIds;
+   for (const auto &audioSrc : GetCtrlItems<AudioSrcId>(&me->m_pluginManager.GetMsgAPI(), me->m_pluginAPI.GetVPXEndPointId(), me->m_getAudioSrcMsgId))
+   {
+      if (audioSrc.target != CTLPI_AUDIO_TARGET_BACKGLASS)
+         continue;
+      seenIds.insert(audioSrc.id.id);
+      if (!me->m_audioLanes.contains(audioSrc.id.id))
+      {
+         MsgEndpointInfo info { };
+         me->m_pluginManager.GetMsgAPI().GetEndpointInfo(audioSrc.id.endpointId, &info);
+         const string endpointId = info.id ? info.id : std::to_string(audioSrc.id.endpointId);
+         const string endpointName = audioSrc.name ? audioSrc.name : info.name ? info.name : endpointId;
+         const string propId = std::format("AudioSource.{}.Gain", endpointId);
+         const auto propPropId = Settings::GetRegistry().Register(std::make_unique<VPX::Properties::FloatPropertyDef>(
+            "Player"s, propId, std::format("{} Gain", endpointName), std::format("Volume gain applied to audio from '{}'.", endpointName), true, 0.f, 2.f, 0.f, 1.f));
+         const float persistedVolume = me->m_ptable->m_settings.GetFloat(propPropId);
+         me->m_audioLanes[audioSrc.id.id] = { audioSrc, false, persistedVolume };
+      }
+
+   }
+   for (auto it = me->m_audioLanes.begin(); it != me->m_audioLanes.end();)
+   {
+      if (!seenIds.contains(it->first))
+      {
+         for (const auto &[streamId, stream] : it->second.streams)
+            me->m_audioPlayer->CloseAudioStream(stream, false);
+         it->second.streams.clear();
+         it = me->m_audioLanes.erase(it);
+      }
+      else
+      {
+         ++it;
+      }
+   }
+
+   // Note that we do not handle the seldom situations where a source would be overriden twice (needs user interaction)
+   for (auto &[_, source] : me->m_audioLanes)
+      source.overriden = false;
+   for (const auto &[_, source] : me->m_audioLanes)
+      if (source.source.overrideId.id != 0)
+         if (auto laneIt = me->m_audioLanes.find(source.source.overrideId.id); laneIt != me->m_audioLanes.end())
+            laneIt->second.overriden = true;
 }
 
-void Player::OnAudioUpdated(const unsigned int msgId, void* userData, void* msgData)
+void Player::OnAudioUpdated(const unsigned int msgId, void *userData, void *msgData)
 {
    Player *me = static_cast<Player *>(userData);
    AudioUpdateMsg &msg = *static_cast<AudioUpdateMsg *>(msgData);
+   std::lock_guard lock(me->m_audioSourceMutex);
 
-   if (me->m_activeAudioSourceId == 0)
-      me->UpdateActiveAudioSource();
-
-   if (me->m_activeAudioSourceId != 0 && msg.id.id != me->m_activeAudioSourceId)
+   auto laneIt = me->m_audioLanes.find(msg.sourceId.id);
+   if (laneIt == me->m_audioLanes.end() || laneIt->second.overriden)
       return;
+   AudioLane &lane = laneIt->second;
 
-   const auto &entry = me->m_audioStreams.find(msg.id.id);
-   if (entry != me->m_audioStreams.end() && me->m_audioPlayer->IsOpened(entry->second))
+   auto entry = lane.streams.find(msg.streamId.id);
+   if (entry != lane.streams.end() && me->m_audioPlayer->IsOpened(entry->second))
    {
       VPX::AudioPlayer::AudioStreamID const stream = entry->second;
       if (msg.buffer != nullptr && msg.bufferSize != 0)
       {
-         me->m_audioPlayer->SetStreamVolume(stream, msg.volume);
+         me->m_audioPlayer->SetStreamVolume(stream, msg.volume * laneIt->second.mixerVolume);
          me->m_audioPlayer->EnqueueStream(stream, msg.buffer, msg.bufferSize);
       }
       else
       {
          me->m_audioPlayer->CloseAudioStream(stream, false);
-         me->m_audioStreams.erase(entry);
+         lane.streams.erase(entry);
       }
    }
    else if (msg.buffer != nullptr)
    {
-      MsgEndpointInfo info;
-      me->m_pluginManager.GetMsgAPI().GetEndpointInfo(msg.id.endpointId, &info);
-      const int nChannels = (msg.type == CTLPI_AUDIO_SRC_BACKGLASS_MONO) ? 1 : 2;
-      VPX::AudioPlayer::AudioStreamID const stream = me->m_audioPlayer->OpenAudioStream("Plugin."s + info.name + '.' + std::to_string(msg.id.resId), static_cast<int>(msg.sampleRate), nChannels, msg.format == CTLPI_AUDIO_FORMAT_SAMPLE_FLOAT);
+      int nChannels;
+      switch (msg.channelFormat)
+      {
+      case CTLPI_AUDIO_FORMAT_CHANNEL_MONO: nChannels = 1; break;
+      case CTLPI_AUDIO_FORMAT_CHANNEL_STEREO: nChannels = 2; break;
+      default: return;
+      }
+      bool isFloat;
+      switch (msg.sampleFormat)
+      {
+      case CTLPI_AUDIO_FORMAT_SAMPLE_INT16: isFloat = false; break;
+      case CTLPI_AUDIO_FORMAT_SAMPLE_FLOAT: isFloat = true; break;
+      default: return;
+      }
+      const auto stream = me->m_audioPlayer->OpenAudioStream(std::format("{}.{:04X}", laneIt->second.source.name, msg.streamId.resId), static_cast<int>(msg.sampleRate), nChannels, isFloat);
       if (stream)
       {
-         me->m_audioStreams[msg.id.id] = stream;
-         me->m_audioPlayer->SetStreamVolume(stream, msg.volume);
+         lane.streams[msg.streamId.id] = stream;
+         me->m_audioPlayer->SetStreamVolume(stream, msg.volume * laneIt->second.mixerVolume);
          me->m_audioPlayer->EnqueueStream(stream, msg.buffer, msg.bufferSize);
       }
    }
 }
 
-void Player::OnAudioSrcChanged(const unsigned int msgId, void* userData, void* msgData)
+float Player::GetAudioLaneMixerVolume(uint64_t laneId) const
 {
-   Player *me = static_cast<Player *>(userData);
-   me->UpdateActiveAudioSource();
+   std::lock_guard lock(m_audioSourceMutex);
+   const auto it = m_audioLanes.find(laneId);
+   return it != m_audioLanes.end() ? it->second.mixerVolume : 1.f;
 }
 
-void Player::UpdateActiveAudioSource()
+void Player::SetAudioLaneMixerVolume(uint64_t laneId, float volume)
 {
-   const MsgPluginAPI &msgApi = m_pluginManager.GetMsgAPI();
-
-   GetAudioSrcMsg getSrcMsg = { 0, 0, nullptr };
-   msgApi.BroadcastMsg(m_pluginAPI.GetVPXEndPointId(), m_getAudioSrcMsgId, &getSrcMsg);
-
-   if (getSrcMsg.count == 0)
-   {
-      m_activeAudioSourceId = 0;
-      return;
-   }
-
-   vector<AudioSrcId> sources(getSrcMsg.count);
-   getSrcMsg = { getSrcMsg.count, 0, sources.data() };
-   msgApi.BroadcastMsg(m_pluginAPI.GetVPXEndPointId(), m_getAudioSrcMsgId, &getSrcMsg);
-
-   uint64_t activeId = 0;
-   for (const auto& src : sources)
-   {
-      if (src.overrideId.id == 0)
-      {
-         activeId = src.id.id;
-         break;
-      }
-   }
-
-   bool walkDownOverrides = (activeId != 0);
-   while (walkDownOverrides)
-   {
-      walkDownOverrides = false;
-      for (const auto& src : sources)
-      {
-         if (src.overrideId.id == activeId)
-         {
-            activeId = src.id.id;
-            walkDownOverrides = true;
-            break;
-         }
-      }
-   }
-
-   if (m_activeAudioSourceId != activeId)
-   {
-      if (m_activeAudioSourceId != 0)
-      {
-         const auto &entry = m_audioStreams.find(m_activeAudioSourceId);
-         if (entry != m_audioStreams.end() && m_audioPlayer->IsOpened(entry->second))
-         {
-            m_audioPlayer->CloseAudioStream(entry->second, false);
-            m_audioStreams.erase(entry);
-         }
-      }
-      m_activeAudioSourceId = activeId;
-   }
+   std::lock_guard lock(m_audioSourceMutex);
+   const auto it = m_audioLanes.find(laneId);
+   if (it != m_audioLanes.end())
+      it->second.mixerVolume = volume;
 }
+
+void Player::UpdateVolume() { m_audioPlayer->SetMainVolume(m_backglassVolume, m_playfieldVolume); }
 
 void Player::PauseMusic()
 {

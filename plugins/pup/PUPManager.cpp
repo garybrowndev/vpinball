@@ -34,6 +34,12 @@ PUPManager::PUPManager(const MsgPluginAPI* msgApi, uint32_t endpointId, const st
    : m_szRootPath(rootPath)
    , m_endpointId(endpointId)
    , m_msgApi(msgApi)
+   , m_getVpxApiId(m_msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_API))
+   , m_getAuxRendererId(m_msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_AUX_RENDERER))
+   , m_onAuxRendererChgId(m_msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_AUX_RENDERER_CHG))
+   , m_getAudioSrcId(m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_AUDIO_GET_SRC_MSG))
+   , m_onAudioSrcChangedId(m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_AUDIO_ON_SRC_CHG_MSG))
+   , m_audioSrcDef({ .id = { endpointId, 0 }, .overrideId = { 0, 0 }, .name = "PUP Player", .desc = "PinUp Player audio stream", .target = CTLPI_AUDIO_TARGET_BACKGLASS })
 {
    msgApi->RegisterSetting(endpointId, &pupMainVolume);
    m_mainVolume = pupMainVolume_Get();
@@ -52,29 +58,41 @@ PUPManager::PUPManager(const MsgPluginAPI* msgApi, uint32_t endpointId, const st
    msgApi->RegisterSetting(endpointId, &pupTopperPadTop);
    msgApi->RegisterSetting(endpointId, &pupTopperPadBottom);
    //msgApi->RegisterSetting(endpointId, &pupTopperFrameOverlayPath);
-   m_msgApi->SubscribeMsg(m_endpointId, m_getAuxRendererId = m_msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_AUX_RENDERER), OnGetRenderer, this);
-   m_msgApi->BroadcastMsg(m_endpointId, m_onAuxRendererChgId = m_msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_AUX_RENDERER_CHG), nullptr);
 
-   m_msgApi->BroadcastMsg(m_endpointId, m_getVpxApiId = m_msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_API), &m_vpxApi);
+   m_msgApi->SubscribeMsg(m_endpointId, m_getAudioSrcId, OnGetAudioSrc, this);
+   m_msgApi->BroadcastMsg(m_endpointId, m_onAudioSrcChangedId, nullptr);
+
+   m_msgApi->SubscribeMsg(m_endpointId, m_getAuxRendererId, OnGetRenderer, this);
+   m_msgApi->BroadcastMsg(m_endpointId, m_onAuxRendererChgId, nullptr);
+
+   m_msgApi->BroadcastMsg(m_endpointId, m_getVpxApiId, &m_vpxApi);
 }
 
 PUPManager::~PUPManager()
 {
    Unload();
+
+   m_msgApi->UnsubscribeMsg(m_getAudioSrcId, OnGetAudioSrc, this);
+   m_msgApi->BroadcastMsg(m_endpointId, m_onAudioSrcChangedId, nullptr);
+   m_msgApi->ReleaseMsgID(m_getAudioSrcId);
+   m_msgApi->ReleaseMsgID(m_onAudioSrcChangedId);
+
    m_msgApi->UnsubscribeMsg(m_getAuxRendererId, OnGetRenderer, this);
    m_msgApi->BroadcastMsg(m_endpointId, m_onAuxRendererChgId, nullptr);
    m_msgApi->ReleaseMsgID(m_getAuxRendererId);
    m_msgApi->ReleaseMsgID(m_onAuxRendererChgId);
-   m_msgApi->FlushPendingCallbacks(m_endpointId);
+
    m_msgApi->ReleaseMsgID(m_getVpxApiId);
+
+   m_msgApi->FlushPendingCallbacks(m_endpointId);
 }
 
 void PUPManager::Start()
 {
    LOGI("PUP Manager start"s);
    assert(!IsRunning());
-   m_dofEventStream = std::make_unique<DOFEventStream>(m_msgApi, m_endpointId, [this](char c, int id, int value) { QueueDOFEvent(c, id, value); });
-   m_dofEventStream->SetDMDHandler(
+   m_B2SPluginEventStream = std::make_unique<B2SPluginEventStream>(m_msgApi, m_endpointId, [this](char c, int id, int value) { QueueDOFEvent(c, id, value); });
+   m_B2SPluginEventStream->SetDMDHandler(
       [](const GetDisplaySrcMsg& sources)
       {
          DisplaySrcId selected {};
@@ -96,7 +114,7 @@ void PUPManager::Stop()
 {
    LOGI("PUP Manager stop"s);
    assert(IsRunning());
-   m_dofEventStream = nullptr;
+   m_B2SPluginEventStream = nullptr;
 }
 
 void PUPManager::SetGameDir(const string& szRomName)
@@ -754,6 +772,15 @@ void PUPManager::OnGetRenderer(const unsigned int eventId, void* context, void* 
       }
       msg->count++;
    }
+}
+
+void PUPManager::OnGetAudioSrc(const unsigned int eventId, void* context, void* msgData)
+{
+   auto me = static_cast<PUPManager*>(context);
+   auto msg = static_cast<GetAudioSrcMsg*>(msgData);
+   if (msg->count < msg->maxEntryCount) 
+      msg->entries[msg->count] = me->m_audioSrcDef;
+   msg->count++;
 }
 
 const string& PlayActionToString(PlayAction value)

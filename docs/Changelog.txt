@@ -69,6 +69,12 @@ FEATURES:
 
 - add support to visual screen nudge to sensor based nudge (strength/disabling is available in the 'Nudge/Tilt Settings' page).
 
+- plunger sensor support was refactored:
+  . the position is continuously evaluated at the physics engine pace from the position sensor
+  . the hit speed is either taken from a hit speed sensor (e.g. Pinscape), or derived with a logic matching the one of the keyboard plunger
+  . the legacy asymetric sensor calibration was removed (this was removed from joystick calibration before Windows 10 and always gave worse results compared to the default symetric calibration)
+  . the legacy (optional) position filter was removed
+
 - the BGFX library employs all the latest rendering backends (Vulkan, Metal, DirectX11, OpenGL, ...) with some unique benefits: (note that DX11 should be preferred on Windows) (DX12 currently disabled)
   . it supports Variable Refresh Rate display (when VSync is switched off)
   . it uses multiple CPU cores to separately process the rendering from the game simulation, allowing for lower input/physics/controller latency,
@@ -159,6 +165,7 @@ FEATURES:
   . DMDUtil: supports rendering to physical DMDs (ZeDMD,...)
   . DOF: a preliminary port of the Direct Output Framework which allows to drive all kinds of physical feedback hardware (lights, shaker, fan,...)
   . FlexDMD: a port of FlexDMD & UltraDMD, which are tools to render and animate DMDs for original/homebrew tables
+  . Inspector: opens a local web server that shows dynamic played machine game states
   . PinMAME: a direct interface to PinMAME with some exclusive bonus features like full alphanumeric segment fading
   . PinUp: a preliminary port of PinUp Player that renders and animates video backglass, topper and fullDMD display
   . Remote Control: a plugin that allows to control an instance of VPX from another running instance. For example running VPX on a little controller PC that communicates with a more powerful computer that runs VPX driving a VR headset

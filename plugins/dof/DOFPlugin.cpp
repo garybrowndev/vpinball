@@ -1,25 +1,31 @@
 // license:GPLv3+
 
-#include <cassert>
-#include <cstdlib>
-#include <chrono>
-#include <cstring>
-#include <charconv>
-#include <thread>
-#include <mutex>
-#include <format>
-#if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
-#include <pthread.h>
-#endif
-
 #include "plugins/VPXPlugin.h"
+#include "plugins/B2SPluginEventStream.h"
 #include "plugins/ControllerPlugin.h"
 #include "plugins/LoggingPlugin.h"
+#include "pinmame/PinMAMEPlugin.h"
 
 #pragma warning(push)
 #pragma warning(disable : 4251) // xxx needs dll-interface
 #include "DOF/DOF.h"
 #pragma warning(pop)
+
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <queue>
+#include <atomic>
+#include <cstdio>
+#include <cassert>
+#include <cstdlib>
+#include <chrono>
+#include <cstring>
+#include <charconv>
+#include <format>
+#if defined(__APPLE__) || defined(__linux__) || defined(__ANDROID__)
+#include <pthread.h>
+#endif
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -38,7 +44,6 @@ using namespace std;
 //
 // Direct Output Framework plugin
 //
-// TODO the polling system needs to be extended to also listen for B2S controller
 
 namespace DOFPlugin {
 
@@ -46,25 +51,13 @@ static const MsgPluginAPI* msgApi = nullptr;
 static VPXPluginAPI* vpxApi = nullptr;
 static uint32_t endpointId;
 
-static unsigned int onControllerGameStartId;
-static unsigned int onControllerGameEndId;
+static unsigned int onControllersChangedId;
+static unsigned int getControllersId;
+static string currentGameId;
 
-static unsigned int getDevSrcId;
-static unsigned int onDevSrcChangedId;
-static unsigned int getInputSrcId;
-static unsigned int onInputSrcChangedId;
+static std::unique_ptr<B2SPluginEventStream> b2sPluginEventStream;
 
-static std::mutex sourceMutex;
-static bool isRunning = false;
-static DevSrcId pinmameDevSrc = {};
-static InputSrcId pinmameInputSrc = {};
-static DevSrcId b2sDevSrc = {};
-
-static std::thread pollThread;
-
-static DOF::DOF* pDOF = nullptr;
-
-static void OnPollStates(void* userData);
+static std::unique_ptr<DOF::DOF> pDOF;
 
 LPI_USE_CPP();
 #define LOGD DOFPlugin::LPI_LOGD_CPP
@@ -100,213 +93,144 @@ void LIBDOFCALLBACK OnDOFLog(DOF_LogLevel logLevel, const char* format, va_list 
    }
 }
 
-#ifdef _WIN32
-static void SetThreadName(const std::string& name)
+class DOFEventConsumer
 {
-   const int size_needed = MultiByteToWideChar(CP_UTF8, 0, name.c_str(), -1, nullptr, 0);
-   if (size_needed <= 1)
-      return;
-   std::wstring wstr(size_needed - 1, L'\0');
-   if (MultiByteToWideChar(CP_UTF8, 0, name.c_str(), -1, wstr.data(), size_needed) == 0)
-      return;
-   HRESULT hr = SetThreadDescription(GetCurrentThread(), wstr.c_str());
-}
-#else
-static void SetThreadName(const std::string& name)
-{
-#ifdef __APPLE__
-   pthread_setname_np(name.c_str());
-#elif defined(__linux__) || defined(__ANDROID__)
-   pthread_setname_np(pthread_self(), name.c_str());
-#endif
-}
-#endif
+public:
+   DOFEventConsumer(const string& tablePath, const string& gameId)
+      : m_tablePath(tablePath)
+      , m_gameId(gameId)
+   {
+      m_thread = std::thread(&DOFEventConsumer::Run, this);
+   }
 
-static void PollThread(const string& tablePath, const string& gameId)
-{
-   assert(pDOF != nullptr);
-   SetThreadName("DOF.PollThread"s);
-   pDOF->Init(tablePath.c_str(), gameId.c_str());
-   bool isInitialState = true;
-   vector<bool> wireStates;
-   vector<bool> pinmameDeviceStates;
-   while (isRunning)
+   ~DOFEventConsumer()
    {
       {
-         std::lock_guard lock(sourceMutex);
-
-         isInitialState |= wireStates.size() != pinmameInputSrc.nInputs;
-         isInitialState |= pinmameDeviceStates.size() != pinmameDevSrc.nDevices;
-
-         wireStates.resize(pinmameInputSrc.nInputs);
-         for (unsigned int i = 0; i < pinmameInputSrc.nInputs; i++)
-         {
-            if (pinmameInputSrc.inputDefs[i].id.groupId == 0x0001)
-            {
-               bool state = pinmameInputSrc.GetInputState(i);
-               if (isInitialState || (wireStates[i] != state))
-               {
-                  pDOF->DataReceive('W', pinmameInputSrc.inputDefs[i].id.deviceId, state ? 1 : 0); // Switches
-                  wireStates[i] = state;
-               }
-            }
-         }
-
-         pinmameDeviceStates.resize(pinmameDevSrc.nDevices);
-         for (unsigned int i = 0; i < pinmameDevSrc.nDevices; i++)
-         {
-            char type;
-            switch (pinmameDevSrc.deviceDefs[i].id.groupId & 0xFF00)
-            {
-            case 0x0000: type = 'S'; break; // Solenoids
-            case 0x0100: type = 'G'; break; // GI
-            case 0x0200: type = 'L'; break; // Lamps
-            default: type = '\0'; break; // Unsupported
-            }
-            if (type != '\0')
-            {
-               float state = pinmameDevSrc.GetFloatState(i);
-               if (isInitialState || (pinmameDeviceStates[i] && state < 0.25f) || (!pinmameDeviceStates[i] && state > 0.75f))
-               {
-                  pDOF->DataReceive(type, pinmameDevSrc.deviceDefs[i].id.deviceId, state > 0.5f ? 1 : 0);
-                  pinmameDeviceStates[i] = state > 0.5f;
-               }
-            }
-         }
-
-         isInitialState = false;
+         std::lock_guard lock(m_mutex);
+         m_stopRequested = true;
       }
-      
-      // Fixed update at 60 FPS
-      std::this_thread::sleep_for(std::chrono::microseconds(16666));
+      m_cv.notify_one();
+
+      if (m_thread.joinable())
+         m_thread.join();
    }
-   pDOF->Finish();
-}
 
-static void MSGPIAPI OnB2SStateChg(unsigned int index, void* context)
-{
-   std::lock_guard lock(sourceMutex);
-   if (index < b2sDevSrc.nDevices && pDOF != nullptr)
+   // Non-copyable, non-movable (owns a thread + sync primitives)
+   DOFEventConsumer(const DOFEventConsumer&) = delete;
+   DOFEventConsumer& operator=(const DOFEventConsumer&) = delete;
+
+   struct B2SPluginEvent
    {
-      float state = b2sDevSrc.GetFloatState(index);
-      // LOGD(std::format("B2S state change E{:d} = {:f}", b2sDevSrc.deviceDefs[index].id.deviceId, state));
-      pDOF->DataReceive('E', b2sDevSrc.deviceDefs[index].id.deviceId, state > 0.5f ? 1 : 0);
+      uint8_t type;
+      int32_t index;
+      int32_t value;
+   };
+
+   void PostEvent(const B2SPluginEvent& ev)
+   {
+      {
+         std::lock_guard<std::mutex> lock(m_mutex);
+         m_queue.push(ev);
+      }
+      m_cv.notify_one();
    }
-}
 
-static void OnControllerGameStart(const unsigned int eventId, void* userData, void* msgData)
-{
-   const CtlOnGameStartMsg* msg = static_cast<const CtlOnGameStartMsg*>(msgData);
-   assert(msg != nullptr && msg->gameId != nullptr);
-
-   // FIXME: Temp fix for issues 3298, 3309, and maybe 3322?
-   if (isRunning)
+private:
+   void Run()
    {
-      LOGW("Ignoring game start, already running"s);
+      SetThreadName("DOF.EventQueue"s);
+      pDOF->Init(m_tablePath.c_str(), m_gameId.c_str());
+      while (!m_stopRequested)
+      {
+         std::unique_lock lock(m_mutex);
+
+         m_cv.wait(lock, [this] { return !m_queue.empty() || m_stopRequested; });
+
+         if (m_stopRequested)
+            break;
+
+         while (!m_queue.empty())
+         {
+            B2SPluginEvent ev = m_queue.front();
+            m_queue.pop();
+            lock.unlock();
+            pDOF->DataReceive(ev.type, ev.index, ev.value);
+            lock.lock();
+         }
+      }
+      pDOF->Finish();
+   }
+
+#ifdef _WIN32
+   static void SetThreadName(const std::string& name)
+   {
+      const int size_needed = MultiByteToWideChar(CP_UTF8, 0, name.c_str(), -1, nullptr, 0);
+      if (size_needed <= 1)
+         return;
+      std::wstring wstr(size_needed - 1, L'\0');
+      if (MultiByteToWideChar(CP_UTF8, 0, name.c_str(), -1, wstr.data(), size_needed) == 0)
+         return;
+      HRESULT hr = SetThreadDescription(GetCurrentThread(), wstr.c_str());
+   }
+#else
+   static void SetThreadName(const std::string& name)
+   {
+#ifdef __APPLE__
+      pthread_setname_np(name.c_str());
+#elif defined(__linux__) || defined(__ANDROID__)
+      pthread_setname_np(pthread_self(), name.c_str());
+#endif
+   }
+#endif
+
+   const string m_tablePath;
+   const string m_gameId;
+
+   std::queue<B2SPluginEvent> m_queue;
+   std::mutex m_mutex;
+   std::condition_variable m_cv;
+   bool m_stopRequested = false;
+   std::thread m_thread;
+};
+
+static std::unique_ptr<DOFEventConsumer> dofThread;
+
+static void OnControllersChanged(const unsigned int eventId, void* userData, void* msgData)
+{
+   // Enumerate and select the first controller exposing a PinMAME compatible game
+   string selectedGameId;
+   GetControllersMsg getControllersMsg = { 0, 0, nullptr };
+   msgApi->BroadcastMsg(endpointId, getControllersId, &getControllersMsg);
+   if (getControllersMsg.count > 0)
+   {
+      const string pinmamePrefix(PMPI_GAMEID_PREFIX);
+      vector<ControllerDef> controllers(getControllersMsg.count);
+      getControllersMsg = { getControllersMsg.count, 0, controllers.data() };
+      msgApi->BroadcastMsg(endpointId, getControllersId, &getControllersMsg);
+      for (const auto& controller : controllers)
+      {
+         string gameId = controller.gameId;
+         if (gameId.starts_with(pinmamePrefix))
+         {
+            selectedGameId = gameId.substr(pinmamePrefix.length());
+            if (!selectedGameId.empty())
+               break;
+         }
+      }
+   }
+   if (currentGameId == selectedGameId)
       return;
-   }
 
-   if (pDOF) {
-      LOGI("OnControllerGameStart: gameId="s + msg->gameId);
-      isRunning = true;
+   // Setup on the selected game if any
+   currentGameId = selectedGameId;
+   dofThread = nullptr;
+   if (!currentGameId.empty() && pDOF) {
+      LOGI("New PinMAME game started: gameId="s + currentGameId);
       VPXTableInfo tableInfo;
       vpxApi->GetTableInfo(&tableInfo);
       string path = tableInfo.path;
-      string gameId = msg->gameId;
-      pollThread = std::thread(PollThread, path, gameId);
+      dofThread = std::make_unique<DOFEventConsumer>(path, currentGameId);
    }
-}
-
-static void OnControllerGameEnd(const unsigned int eventId, void* userData, void* msgData)
-{
-   if (pDOF) {
-      LOGI("OnControllerGameEnd"s);
-      isRunning = false;
-      if (pollThread.joinable())
-         pollThread.join();
-   }
-}
-
-static void ClearDevices()
-{
-   delete[] pinmameDevSrc.deviceDefs;
-   memset(&pinmameDevSrc, 0, sizeof(pinmameDevSrc));
-   for (unsigned int i = 0; i < b2sDevSrc.nDevices; i++)
-      if (b2sDevSrc.SetChangeCallback)
-         b2sDevSrc.SetChangeCallback(i, 0, OnB2SStateChg, nullptr);
-   memset(&b2sDevSrc, 0, sizeof(b2sDevSrc));
-}
-
-static void OnDevSrcChanged(const unsigned int eventId, void* userData, void* msgData)
-{
-   std::lock_guard lock(sourceMutex);
-   ClearDevices();
-
-   GetDevSrcMsg getSrcMsg = { 0, 0, nullptr };
-   msgApi->BroadcastMsg(endpointId, getDevSrcId, &getSrcMsg);
-   if (getSrcMsg.count == 0)
-   {
-      LOGI("OnDevSrcChanged - No source"s);
-      return;
-   }
-
-   getSrcMsg = { getSrcMsg.count, 0, new DevSrcId[getSrcMsg.count] };
-   msgApi->BroadcastMsg(endpointId, getDevSrcId, &getSrcMsg);
-   MsgEndpointInfo info;
-   for (unsigned int i = 0; i < getSrcMsg.count; i++)
-   {
-      memset(&info, 0, sizeof(info));
-      msgApi->GetEndpointInfo(getSrcMsg.entries[i].id.endpointId, &info);
-      if (info.id != nullptr && info.id == "PinMAME"sv)
-      {
-         pinmameDevSrc = getSrcMsg.entries[i];
-         if (pinmameDevSrc.deviceDefs)
-         {
-            pinmameDevSrc.deviceDefs = new DeviceDef[pinmameDevSrc.nDevices];
-            memcpy(pinmameDevSrc.deviceDefs, getSrcMsg.entries[i].deviceDefs, getSrcMsg.entries[i].nDevices * sizeof(DeviceDef));
-         }
-      }
-      else if (info.id != nullptr && (info.id == "B2S"sv || info.id == "B2SLegacy"sv))
-      {
-         b2sDevSrc = getSrcMsg.entries[i];
-         for (unsigned int i = 0; i < b2sDevSrc.nDevices; i++)
-            if (b2sDevSrc.SetChangeCallback)
-               b2sDevSrc.SetChangeCallback(i, 1, OnB2SStateChg, nullptr);
-      }
-   }
-   delete[] getSrcMsg.entries;
-
-   LOGI(std::format("OnDevSrcChanged - Found {} PinMAME devices and {} B2S devices", pinmameDevSrc.nDevices, b2sDevSrc.nDevices));
-}
-
-static void OnInputSrcChanged(const unsigned int eventId, void* userData, void* msgData)
-{
-   std::lock_guard lock(sourceMutex);
-   delete[] pinmameInputSrc.inputDefs;
-   memset(&pinmameInputSrc, 0, sizeof(pinmameInputSrc));
-
-   GetInputSrcMsg getSrcMsg = { 1024, 0, new InputSrcId[1024] };
-   msgApi->BroadcastMsg(endpointId, getInputSrcId, &getSrcMsg);
-
-   MsgEndpointInfo info;
-   for (unsigned int i = 0; i < getSrcMsg.count; i++)
-   {
-      memset(&info, 0, sizeof(info));
-      msgApi->GetEndpointInfo(getSrcMsg.entries[i].id.endpointId, &info);
-      if (info.id != nullptr && info.id == "PinMAME"sv)
-      {
-         pinmameInputSrc = getSrcMsg.entries[i];
-         if (pinmameInputSrc.inputDefs)
-         {
-            pinmameInputSrc.inputDefs = new DeviceDef[pinmameInputSrc.nInputs];
-            memcpy(pinmameInputSrc.inputDefs, getSrcMsg.entries[i].inputDefs, getSrcMsg.entries[i].nInputs * sizeof(DeviceDef));
-         }
-         break;
-      }
-   }
-   delete[] getSrcMsg.entries;
-
-   LOGI(std::format("OnInputSrcChanged - Found {} PinMAME inputs", pinmameInputSrc.nInputs));
 }
 
 }
@@ -320,26 +244,14 @@ MSGPI_EXPORT void MSGPIAPI DOFPluginLoad(const uint32_t sessionId, const MsgPlug
 
    LPISetup(endpointId, msgApi);
 
-   memset(&pinmameDevSrc, 0, sizeof(pinmameDevSrc));
-   ClearDevices();
-
    unsigned int getVpxApiId = msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_API);
    msgApi->BroadcastMsg(endpointId, getVpxApiId, &vpxApi);
    msgApi->ReleaseMsgID(getVpxApiId);
 
-   msgApi->SubscribeMsg(endpointId, onControllerGameStartId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_EVT_ON_GAME_START), OnControllerGameStart, nullptr);
-   msgApi->SubscribeMsg(endpointId, onControllerGameEndId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_EVT_ON_GAME_END), OnControllerGameEnd, nullptr);
-
-   getDevSrcId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DEVICE_GET_SRC_MSG);
-   onDevSrcChangedId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DEVICE_ON_SRC_CHG_MSG);
-   getInputSrcId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_INPUT_GET_SRC_MSG);
-   onInputSrcChangedId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_INPUT_ON_SRC_CHG_MSG);
-
-   msgApi->SubscribeMsg(endpointId, onDevSrcChangedId, OnDevSrcChanged, nullptr);
-   msgApi->SubscribeMsg(endpointId, onInputSrcChangedId, OnInputSrcChanged, nullptr);
-
-   OnDevSrcChanged(onDevSrcChangedId, nullptr, nullptr);
-   OnInputSrcChanged(onInputSrcChangedId, nullptr, nullptr);
+   b2sPluginEventStream = std::make_unique<B2SPluginEventStream>(msgApi, endpointId, [](char type, int index, int value) {
+      if (DOFEventConsumer* consumer = dofThread.get())
+         consumer->PostEvent({ static_cast<uint8_t>(type), index, value });
+   });
 
    VPXInfo vpxInfo;
    vpxApi->GetVpxInfo(&vpxInfo);
@@ -348,33 +260,25 @@ MSGPI_EXPORT void MSGPIAPI DOFPluginLoad(const uint32_t sessionId, const MsgPlug
    pConfig->SetLogCallback(OnDOFLog);
    pConfig->SetBasePath(vpxInfo.prefPath);
 
-   pDOF = new DOF::DOF();
+   pDOF = std::make_unique<DOF::DOF>();
+
+   onControllersChangedId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_CONTROLLERS_ON_CHG_MSG);
+   getControllersId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_CONTROLLERS_GET_MSG);
+   msgApi->SubscribeMsg(endpointId, onControllersChangedId, OnControllersChanged, nullptr);
+   OnControllersChanged(onControllersChangedId, nullptr, nullptr);
 }
 
 MSGPI_EXPORT void MSGPIAPI DOFPluginUnload()
 {
-   isRunning = false;
-   if (pollThread.joinable())
-      pollThread.join();
-
-   ClearDevices();
-   delete[] pinmameInputSrc.inputDefs;
-   memset(&pinmameInputSrc, 0, sizeof(pinmameInputSrc));
-
-   delete pDOF;
+   dofThread = nullptr;
    pDOF = nullptr;
+   b2sPluginEventStream = nullptr;
+   currentGameId.clear();
 
-   msgApi->UnsubscribeMsg(onControllerGameStartId, OnControllerGameStart, nullptr);
-   msgApi->UnsubscribeMsg(onControllerGameEndId, OnControllerGameEnd, nullptr);
-   msgApi->UnsubscribeMsg(onDevSrcChangedId, OnDevSrcChanged, nullptr);
-   msgApi->UnsubscribeMsg(onInputSrcChangedId, OnInputSrcChanged, nullptr);
-
-   msgApi->ReleaseMsgID(onControllerGameStartId);
-   msgApi->ReleaseMsgID(onControllerGameEndId);
-   msgApi->ReleaseMsgID(getDevSrcId);
-   msgApi->ReleaseMsgID(onDevSrcChangedId);
-   msgApi->ReleaseMsgID(getInputSrcId);
-   msgApi->ReleaseMsgID(onInputSrcChangedId);
+   msgApi->UnsubscribeMsg(onControllersChangedId, OnControllersChanged, nullptr);
+   msgApi->ReleaseMsgID(onControllersChangedId);
+   msgApi->ReleaseMsgID(getControllersId);
 
    msgApi = nullptr;
+   vpxApi = nullptr;
 }

@@ -3,7 +3,8 @@
 #include "common.h"
 
 #include <algorithm>
-#include <charconv>
+#include <cmath>
+#include <climits>
 
 #include <cstddef> // for size_t, ptrdiff_t
 // Define ssize_t for Windows
@@ -21,7 +22,7 @@ typedef int ssize_t;
 namespace B2SLegacy
 {
 
-static string trim_string(const string& str)
+string trim_string(const string& str)
 {
    size_t start = 0;
    size_t end = str.length();
@@ -32,18 +33,17 @@ static string trim_string(const string& str)
    return str.substr(start, end - start);
 }
 
-// trims leading whitespace or similar
-static bool try_parse_int(const string& str, int& value)
-{
-   const string tmp = trim_string(str);
-   return (std::from_chars(tmp.c_str(), tmp.c_str() + tmp.length(), value).ec == std::errc{});
-}
-
 bool StrCompareNoCase(const string& strA, const string& strB)
 {
    return strA.length() == strB.length()
       && std::equal(strA.begin(), strA.end(), strB.begin(),
          [](char a, char b) { return cLower(a) == cLower(b); });
+}
+
+string string_to_lower(string str)
+{
+   std::ranges::transform(str.begin(), str.end(), str.begin(), cLower);
+   return str;
 }
 
 std::filesystem::path find_case_insensitive_file_path(const std::filesystem::path& searchedFile)
@@ -108,17 +108,18 @@ bool string_starts_with_case_insensitive(const string& str, const string& prefix
 // trims leading whitespace or similar, this is needed as e.g. B2S reels feature leading whitespace(s)
 int string_to_int(const string& str, int defaultValue)
 {
-   int value;
-   return try_parse_int(str, value) ? value : defaultValue;
+   if (!is_string_numeric(str))
+      return defaultValue;
+   return static_cast<int>(std::nearbyint(std::strtod(trim_string(str).c_str(), nullptr)));
 }
 
 bool is_string_numeric(const string& str)
 {
-   if (str.empty()) return false;
-   for (char c : str) {
-      if (!std::isdigit(c)) return false;
-   }
-   return true;
+   const string tmp = trim_string(str);
+   if (tmp.empty()) return false;
+   char* end = nullptr;
+   const double value = std::strtod(tmp.c_str(), &end);
+   return (end == tmp.c_str() + tmp.length()) && std::isfinite(value) && (value >= INT_MIN) && (value <= INT_MAX);
 }
 
 }

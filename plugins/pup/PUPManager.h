@@ -2,10 +2,9 @@
 
 #pragma once
 
-#include "DOFStreamEvent.h"
-
 #include "common.h"
 
+#include "plugins/B2SPluginEventStream.h"
 #include "plugins/ControllerPlugin.h"
 #include "plugins/VPXPlugin.h"
 
@@ -94,7 +93,7 @@ public:
    void SetGameDir(const string& szRomName);
    void LoadConfig(const string& szRomName);
    void Unload();
-   bool IsRunning() const { return m_dofEventStream != nullptr; }
+   bool IsRunning() const { return m_B2SPluginEventStream != nullptr; }
    const std::filesystem::path& GetPath() const { return m_szPath; }
    bool AddScreen(std::shared_ptr<PUPScreen> pScreen);
    bool AddScreen(int screenNum);
@@ -136,14 +135,20 @@ private:
    std::array<uint8_t, 128 * 32> m_idFrame;
    int ProcessDmdFrame(const DisplaySrcId& src, const uint8_t* frame);
    
-   unsigned int m_getAuxRendererId = 0;
-   unsigned int m_onAuxRendererChgId = 0;
-   unsigned int m_getVpxApiId = 0;
+   const unsigned int m_getVpxApiId;
+
+   const unsigned int m_getAuxRendererId;
+   const unsigned int m_onAuxRendererChgId;
    static int Render(VPXRenderContext2D* const renderCtx, void* context);
    static void OnGetRenderer(const unsigned int eventId, void* context, void* msgData);
 
+   const unsigned int m_getAudioSrcId;
+   const unsigned int m_onAudioSrcChangedId;
+   const AudioSrcId m_audioSrcDef;
+   static void OnGetAudioSrc(const unsigned int msgId, void* userData, void* msgData);
+
    std::mutex m_eventMutex;
-   std::unique_ptr<DOFEventStream> m_dofEventStream;
+   std::unique_ptr<B2SPluginEventStream> m_B2SPluginEventStream;
 
    int m_duckMasterScreen = -1;
    ankerl::unordered_dense::map<int, float> m_preDuckVolumes;

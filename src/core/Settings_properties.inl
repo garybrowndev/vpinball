@@ -8,8 +8,6 @@ PropBool(Editor, DisableHash, "Disable File Validation"s, "Disable file integrit
 // Audio settings
 PropInt(Player, MusicVolume, "Backglass Volume"s, "Main volume for music and sound played from the backglass speakers"s, 0, 100, 100);
 PropInt(Player, SoundVolume, "Playfield Volume"s, "Main volume for mechanical sounds coming from the playfield"s, 0, 100, 100);
-PropBool(Player, PlayMusic, "Enable Backglass"s, "Enable/Disable backglass game sound & music"s, true);
-PropBoolBase(Player, PlaySound, "Enable Playfield"s, "Enable/Disable playfield mechanical sounds"s, false, true); // We use the complete macro as Win32 global PlaySound would conflict otherwise
 PropStringDyn(Player, SoundDeviceBG, "Backglass Sound Device"s, "Select backglass sound device"s, ""s);
 PropStringDyn(Player, SoundDevice, "Playfield Sound Device"s, "Select playfield sound device"s, ""s);
 PropEnum(Player, Sound3D, "Playfield Output Mode"s, "Select how playfield sound is output to a speaker configuration"s, int /* VPX::SoundConfigTypes*/, 0 /* VPX::SoundConfigTypes::SNDCFG_SND3D2CH */,
@@ -214,7 +212,7 @@ PropString(Input, Devices, "Devices"s, "List of known devices"s, ""s);
 // Plumb settings
 PropBool(Player, SimulatedPlumb, "Plumb Simulation"s, "Enable/Disable mechanical Tilt plumb simulation"s, true);
 PropFloat(Player, PlumbDamping, "Plumb Damping"s, "Adjust plumb damping (how fast the pumb gets back to rest)"s, 0.f, 2.f, 1.f);
-PropFloat(Player, PlumbThresholdAngle, "Plumb Threshold"s, "Define threshold angle at which a Tilt is triggered"s, 0.5f, 4.f, 2.f);
+PropFloat(Player, PlumbThresholdAngle, "Plumb Threshold"s, "Define threshold angle at which a Tilt is triggered"s, 0.15f, 4.f, 1.f);
 
 // Nudge settings
 PropEnum(Player, KeyboardNudgeMode, "Keyboard Nudge Mode"s, "Select how nudge is simulated when triggered from the keyboard."s, int, 2, "VP9 (simple push/retract)"s, "VPX 10.8 (cabinet model)"s, "VPX 10.9 (improved cabinet)"s);

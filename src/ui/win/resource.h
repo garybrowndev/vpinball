@@ -632,7 +632,6 @@
 #define IDD_PROPHITTARGET_VISUALS       620
 #define IDD_PROPHITTARGET_PHYSICS       622
 #define IDC_BG_FSS                      625
-#define IDC_ENABLE_CAMERA_FLY_AROUND    626
 #define IDD_SOUND_POSITION_DIALOG       629
 #define IDD_TOOLBAR                     630
 #define IDD_PROPERTY_DIALOG             647
@@ -803,8 +802,6 @@
 #define IDC_SCRIPT_STOP                 871
 #define IDC_SUPPRESS_ERRORS_CHECK       872
 #define ID_SCRIPT_TOGGLE_LAST_ERROR_VISIBILITY 873
-#define IDC_COMBO_RUMBLE                876
-#define IDC_LABEL_RUMBLE                877
 #define IDC_RESET_WINDOW_POS            878
 #define IDC_GLASS_DOT_LIGHT             881
 #define IDC_GLASS_PAD_TOP               882
@@ -939,7 +936,6 @@
 #define ID_WALLMENU_ADDPOINT            32801
 #define ID_HELP_ABOUT                   32802
 #define ID_EDIT_SCRIPT                  32803
-#define ID_EDIT_PLAYEROPTIONS           32804
 #define ID_TABLE_FONTMANAGER            32805
 #define ID_WALLMENU_TRANSLATE           32807
 #define ID_EDIT_COPY                    32811

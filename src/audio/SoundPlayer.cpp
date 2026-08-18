@@ -170,11 +170,10 @@ static ma_node_vtable vpx_node_vtable = { vpx_node_process_pcm_frames, nullptr, 
 
 MA_API ma_result vpx_node_init(ma_node_graph* pNodeGraph, const vpx_node_config* pConfig, const ma_allocation_callbacks* pAllocationCallbacks, vpx_node* pNode)
 {
-   ma_node_config baseConfig;
    if (pNode == nullptr)
       return MA_INVALID_ARGS;
    memset(pNode, 0, sizeof(vpx_node));
-   baseConfig = pConfig->nodeConfig;
+   ma_node_config baseConfig = pConfig->nodeConfig;
    baseConfig.vtable = &vpx_node_vtable;
    baseConfig.pInputChannels = &pConfig->inChannels;
    baseConfig.pOutputChannels = &pConfig->outChannels;
@@ -220,6 +219,8 @@ SoundPlayer::SoundPlayer(const AudioPlayer* audioPlayer, const string& filename)
       SetThreadName("VPX.SoundPlayer ["s.append(filename).append(1, ']'));
 
       ma_engine* engine = m_audioPlayer->GetEngine(m_outputTarget);
+      if (engine == nullptr)
+         return;
 
       // Add custom node for channel mixing
       m_vpxMixNode = std::make_unique<vpx_node>();
@@ -272,6 +273,8 @@ SoundPlayer::SoundPlayer(const AudioPlayer* audioPlayer, Sound* sound)
       SetThreadName("VPX.SoundPlayer ["s.append(sound->GetName()).append(1, ']'));
 
       ma_engine* engine = m_audioPlayer->GetEngine(m_outputTarget);
+      if (engine == nullptr)
+         return;
 
       // Add custom node for channel mixing
       m_vpxMixNode = std::make_unique<vpx_node>();

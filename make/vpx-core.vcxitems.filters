@@ -690,9 +690,6 @@
     <ClCompile Include="$(SolutionDir)/../../src/ui/win/dialogs/PhysicsOptionsDialog.cpp">
       <Filter>ui\win\dialogs</Filter>
     </ClCompile>
-    <ClCompile Include="$(SolutionDir)/../../src/ui/win/dialogs/PlayerOptionsDialog.cpp">
-      <Filter>ui\win\dialogs</Filter>
-    </ClCompile>
     <ClCompile Include="$(SolutionDir)/../../src/ui/win/dialogs/ScriptErrorDialog.cpp">
       <Filter>ui\win\dialogs</Filter>
     </ClCompile>
@@ -1644,9 +1641,6 @@
       <Filter>ui\win\dialogs</Filter>
     </ClInclude>
     <ClInclude Include="$(SolutionDir)/../../src/ui/win/dialogs/MaterialDialog.h">
-      <Filter>ui\win\dialogs</Filter>
-    </ClInclude>
-    <ClInclude Include="$(SolutionDir)/../../src/ui/win/dialogs/PlayerOptionsDialog.h">
       <Filter>ui\win\dialogs</Filter>
     </ClInclude>
     <ClInclude Include="$(SolutionDir)/../../src/ui/win/dialogs/WhereUsedDialog.h">
@@ -3092,9 +3086,6 @@
       <Filter>shaders\hlsl_glsl</Filter>
     </None>
     <None Include="$(SolutionDir)/../../src/shaders/hlsl_glsl/DMDShader.glfx">
-      <Filter>shaders\hlsl_glsl</Filter>
-    </None>
-    <None Include="$(SolutionDir)/../../src/shaders/hlsl_glsl/DMDShaderVR.glfx">
       <Filter>shaders\hlsl_glsl</Filter>
     </None>
     <None Include="$(SolutionDir)/../../src/shaders/hlsl_glsl/FAAA.fxh">

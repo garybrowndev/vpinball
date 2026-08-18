@@ -1,22 +1,22 @@
 // license:GPLv3+
 
-#include <cassert>
-#include <cstdlib>
-#include <chrono>
-#include <cstring>
-#include <mutex>
-#include <thread>
-#include <random>
-
 #include "plugins/MsgPlugin.h"
 #include "plugins/VPXPlugin.h"
 #include "plugins/ControllerPlugin.h"
+#include "plugins/LoggingPlugin.h"
+#include "pinmame/PinMAMEPlugin.h"
 #include "common.h"
 #include "serum-decode.h"
 
+#include <cassert>
+#include <chrono>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
-
-#include "plugins/LoggingPlugin.h"
+#include <mutex>
+#include <random>
+#include <thread>
+#include <vector>
 
 using namespace std::string_literals;
 using namespace std::string_view_literals;
@@ -37,8 +37,12 @@ static const MsgPluginAPI* msgApi = nullptr;
 static VPXPluginAPI* vpxApi = nullptr;
 
 static uint32_t endpointId;
-static unsigned int onControllerGameStartId, onControllerGameEndId;
-static unsigned int onDmdSrcChangedId, getDmdSrcId, onDmdTrigger;
+static unsigned int onControllersChangedId;
+static unsigned int getControllersId;
+static string currentGameId;
+static unsigned int onDmdSrcChangedId;
+static unsigned int getDmdSrcId;
+static unsigned int onDmdTrigger;
 
 static bool isRunning = false;
 static std::mutex sourceMutex;
@@ -48,6 +52,8 @@ static DisplaySrcId dmdId = {};
 
 static Serum_Frame_Struc* pSerum = nullptr;
 static unsigned int lastRawFrameId = 0;
+
+static constexpr uint32_t SERUM_MAX_ROTATION_DELAY_MS = 2048;
 
 static std::minstd_rand std_rand;
 
@@ -144,7 +150,7 @@ static void ColorizeThread()
          // We received a new identify frame to match & colorize
          lastFrameId = frame.frameId;
          const uint32_t firstrot = Serum_Colorize(const_cast<uint8_t*>(static_cast<const uint8_t*>(frame.frame)));
-         if (firstrot != IDENTIFY_NO_FRAME)
+         if (firstrot != IDENTIFY_NO_FRAME && firstrot != IDENTIFY_SAME_FRAME)
          {
             // New frame, eventually starting a new animation
             std::lock_guard<std::mutex> lock2(stateMutex);
@@ -161,11 +167,12 @@ static void ColorizeThread()
                newState = true;
             }
             
-            state->m_hasAnimation = firstrot != 0;
+            const uint32_t firstDelayMs = firstrot & 0x0000ffff;
+            state->m_hasAnimation = (firstDelayMs != 0) && (firstDelayMs < SERUM_MAX_ROTATION_DELAY_MS);
             if (state->m_hasAnimation)
             {
                state->m_animationTick = std::chrono::high_resolution_clock::now();
-               state->m_animationNextTick = state->m_animationTick + std::chrono::milliseconds(firstrot);
+               state->m_animationNextTick = state->m_animationTick + std::chrono::milliseconds(firstDelayMs);
             }
             if (pSerum->SerumVersion == SERUM_V1)
                state->UpdateFrameV1();
@@ -185,7 +192,7 @@ static void ColorizeThread()
                msgApi->RunOnMainThread(endpointId, 0, [](void* userData) { msgApi->BroadcastMsg(endpointId, onDmdSrcChangedId, nullptr); }, nullptr);
          }
       }
-      else if (state && state->m_hasAnimation)
+      if (state && state->m_hasAnimation)
       {
          // Perform current animation (catching up to the current time point)
          const auto now = std::chrono::high_resolution_clock::now();
@@ -193,19 +200,19 @@ static void ColorizeThread()
          {
             const uint32_t nextrot = Serum_Rotate();
             const uint32_t delayMs = nextrot & 0x0000ffff;
-            if (delayMs == 0)
-            {
-               state->m_hasAnimation = false;
-               break;
-            }
-            state->m_animationTick = state->m_animationNextTick;
-            state->m_animationNextTick = state->m_animationNextTick + std::chrono::milliseconds(delayMs);
             if ((pSerum->SerumVersion == SERUM_V1) && (nextrot & FLAG_RETURNED_V1_ROTATED))
                state->UpdateFrameV1();
             if ((pSerum->SerumVersion == SERUM_V2) && (nextrot & FLAG_RETURNED_V2_ROTATED32))
                state->UpdateFrame32V2();
             if ((pSerum->SerumVersion == SERUM_V2) && (nextrot & FLAG_RETURNED_V2_ROTATED64))
                state->UpdateFrame64V2();
+            if (delayMs == 0 || delayMs >= SERUM_MAX_ROTATION_DELAY_MS)
+            {
+               state->m_hasAnimation = false;
+               break;
+            }
+            state->m_animationTick = state->m_animationNextTick;
+            state->m_animationNextTick = state->m_animationNextTick + std::chrono::milliseconds(delayMs);
          }
       }
    }
@@ -319,54 +326,73 @@ static void StopColorization()
    dmdId.id.id = 0;
 }
 
-static void OnControllerGameStart(const unsigned int eventId, void* userData, void* msgData)
+static void OnControllersChanged(const unsigned int eventId, void* userData, void* msgData)
 {
-   // FIXME: Temp fix for issues 3298, 3309, and maybe 3322?
-   if (isRunning)
+   // Enumerate and select the first controller exposing a PinMAME compatible game
+   string selectedGameId;
+   GetControllersMsg getControllersMsg = { 0, 0, nullptr };
+   msgApi->BroadcastMsg(endpointId, getControllersId, &getControllersMsg);
+   if (getControllersMsg.count > 0)
    {
-      LOGW("Ignoring game start, already running"s);
-      return;
+      const string pinmamePrefix(PMPI_GAMEID_PREFIX);
+      std::vector<ControllerDef> controllers(getControllersMsg.count);
+      getControllersMsg = { getControllersMsg.count, 0, controllers.data() };
+      msgApi->BroadcastMsg(endpointId, getControllersId, &getControllersMsg);
+      for (const auto& controller : controllers)
+      {
+         string gameId = controller.gameId;
+         if (gameId.starts_with(pinmamePrefix))
+         {
+            selectedGameId = gameId.substr(pinmamePrefix.length());
+            if (!selectedGameId.empty())
+               break;
+         }
+      }
    }
+   if (currentGameId == selectedGameId)
+      return;
+
+   // Setup on the selected game if any
    StopColorization();
-   // Setup Serum on the selected DMD
-   const CtlOnGameStartMsg* msg = static_cast<const CtlOnGameStartMsg*>(msgData);
-   assert(msg != nullptr && msg->gameId != nullptr);
+   currentGameId = selectedGameId;
+   if (currentGameId.empty())
+      return;
 
    VPXTableInfo tableInfo;
    vpxApi->GetTableInfo(&tableInfo);
    std::filesystem::path tablePath = tableInfo.path;
 
    std::filesystem::path serumPath = serumPathProp_Get();
-   const std::filesystem::path cromc = msg->gameId + ".cROMc"s;
-   const std::filesystem::path crz = msg->gameId + ".cRZ"s;
+   const std::filesystem::path cromc = currentGameId + ".cROMc"s;
+   const std::filesystem::path crz = currentGameId + ".cRZ"s;
 
    // Priority 1: serum/rom/rom.cromc or .crz
-   if (auto path1 = find_case_insensitive_file_path(tablePath.parent_path() / "serum"sv / msg->gameId / cromc); !path1.empty())
+   if (auto path1 = find_case_insensitive_file_path(tablePath.parent_path() / "serum"sv / currentGameId / cromc); !path1.empty())
       serumPath = path1.parent_path().parent_path();
-   else if (auto path2 = find_case_insensitive_file_path(tablePath.parent_path() / "serum"sv / msg->gameId / crz); !path2.empty())
+   else if (auto path2 = find_case_insensitive_file_path(tablePath.parent_path() / "serum"sv / currentGameId / crz); !path2.empty())
       serumPath = path2.parent_path().parent_path();
    // Priority 2: pinmame/altcolor/rom/rom.cromc or .crz
-   else if (auto path3 = find_case_insensitive_file_path(tablePath.parent_path() / "pinmame"sv / "altcolor"sv / msg->gameId / cromc); !path3.empty())
+   else if (auto path3 = find_case_insensitive_file_path(tablePath.parent_path() / "pinmame"sv / "altcolor"sv / currentGameId / cromc); !path3.empty())
       serumPath = path3.parent_path().parent_path();
-   else if (auto path4 = find_case_insensitive_file_path(tablePath.parent_path() / "pinmame"sv / "altcolor"sv / msg->gameId / crz); !path4.empty())
+   else if (auto path4 = find_case_insensitive_file_path(tablePath.parent_path() / "pinmame"sv / "altcolor"sv / currentGameId / crz); !path4.empty())
       serumPath = path4.parent_path().parent_path();
    // Priority 3: global setting path
    else if (!serumPath.empty())
    {
-      if (find_case_insensitive_file_path(serumPath / msg->gameId / cromc).empty()
-         && find_case_insensitive_file_path(serumPath / msg->gameId / crz).empty())
+      if (find_case_insensitive_file_path(serumPath / currentGameId / cromc).empty()
+         && find_case_insensitive_file_path(serumPath / currentGameId / crz).empty())
          serumPath.clear();
    }
 
    if (serumPath.empty())
    {
-      LOGI("No colorization file found for "s + msg->gameId);
+      LOGI("No colorization file found for "s + currentGameId);
       return;
    }
 
-   LOGI("Loading from " + serumPath.string() + " for " + msg->gameId);
+   LOGI("Loading from " + serumPath.string() + " for " + currentGameId);
 
-   pSerum = Serum_Load(serumPath.string().c_str(), msg->gameId, FLAG_REQUEST_32P_FRAMES | FLAG_REQUEST_64P_FRAMES);
+   pSerum = Serum_Load(serumPath.string().c_str(), currentGameId.c_str(), FLAG_REQUEST_32P_FRAMES | FLAG_REQUEST_64P_FRAMES);
    OnDmdSrcChanged(onDmdSrcChangedId, nullptr, nullptr);
    if (pSerum)
    {
@@ -377,11 +403,6 @@ static void OnControllerGameStart(const unsigned int eventId, void* userData, vo
    {
       LOGE("Failed to load colorization data");
    }
-}
-
-static void OnControllerGameEnd(const unsigned int eventId, void* userData, void* msgData)
-{
-   StopColorization();
 }
 
 }
@@ -403,10 +424,13 @@ MSGPI_EXPORT void MSGPIAPI SerumPluginLoad(const uint32_t sessionId, const MsgPl
    msgApi->ReleaseMsgID(getVpxApiId);
 
    onDmdTrigger = msgApi->GetMsgID("Serum", "OnDmdTrigger");
-   msgApi->SubscribeMsg(endpointId, onControllerGameStartId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_EVT_ON_GAME_START), OnControllerGameStart, nullptr);
-   msgApi->SubscribeMsg(endpointId, onControllerGameEndId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_EVT_ON_GAME_END), OnControllerGameEnd, nullptr);
    msgApi->SubscribeMsg(endpointId, onDmdSrcChangedId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DISPLAY_ON_SRC_CHG_MSG), OnDmdSrcChanged, nullptr);
    msgApi->SubscribeMsg(endpointId, getDmdSrcId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DISPLAY_GET_SRC_MSG), OnGetRenderDMDSrc, nullptr);
+
+   onControllersChangedId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_CONTROLLERS_ON_CHG_MSG);
+   getControllersId = msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_CONTROLLERS_GET_MSG);
+   msgApi->SubscribeMsg(endpointId, onControllersChangedId, OnControllersChanged, nullptr);
+   OnControllersChanged(onControllersChangedId, nullptr, nullptr);
 }
 
 MSGPI_EXPORT void MSGPIAPI SerumPluginUnload()
@@ -414,10 +438,9 @@ MSGPI_EXPORT void MSGPIAPI SerumPluginUnload()
    StopColorization();
    msgApi->UnsubscribeMsg(getDmdSrcId, OnGetRenderDMDSrc, nullptr);
    msgApi->UnsubscribeMsg(onDmdSrcChangedId, OnDmdSrcChanged, nullptr);
-   msgApi->UnsubscribeMsg(onControllerGameStartId, OnControllerGameStart, nullptr);
-   msgApi->UnsubscribeMsg(onControllerGameEndId, OnControllerGameEnd, nullptr);
-   msgApi->ReleaseMsgID(onControllerGameStartId);
-   msgApi->ReleaseMsgID(onControllerGameEndId);
+   msgApi->UnsubscribeMsg(onControllersChangedId, OnControllersChanged, nullptr);
+   msgApi->ReleaseMsgID(onControllersChangedId);
+   msgApi->ReleaseMsgID(getControllersId);
    msgApi->ReleaseMsgID(onDmdTrigger);
    msgApi->ReleaseMsgID(onDmdSrcChangedId);
    msgApi->ReleaseMsgID(getDmdSrcId);

@@ -3,23 +3,42 @@
 #include "Controller.h"
 #include "Game.h"
 #include "Settings.h"
+#include "pinmame/PinMAMEPlugin.h"
+
+#include "nlohmann/json.hpp"
+
 #include <thread>
 #include <format>
+#include <fstream>
 
 #include "plugins/VPXPlugin.h" // Only used for optional feature (visual feedback on error)
+#include <climits>
 
-namespace PinMAME {
+using json = nlohmann::json;
 
-Controller::Controller(const MsgPluginAPI* api, unsigned int endpointId, const PinmameConfig& config)
-   : m_msgApi(api)
-   , m_endpointId(endpointId)
+namespace PinMAME
 {
-   PinmameSetConfig(&config);
-   // PinmameSetDmdMode(PINMAME_DMD_MODE_RAW); // Unneeded as we use libpinmame controller messages
+
+__forceinline uint8_t saturatedByte(float v) { return (uint8_t)(255.0f * (v < 0.0f ? 0.0f : v > 1.0f ? 1.0f : v)); }
+
+Controller::Controller(const MsgPluginAPI* api, unsigned int endpointId, const PinmameConfig& config, const std::filesystem::path& memmapPath)
+   : m_vpmPath(config.vpmPath)
+   , m_memmapPath(memmapPath)
+   , m_msgApi(api)
+   , m_endpointId(endpointId)
+   , m_threadLock(std::this_thread::get_id())
+   , m_pinmameConfig({ })
+{
+   memcpy(&m_pinmameConfig, &config, sizeof(m_pinmameConfig));
+   memcpy(const_cast<char*>(m_pinmameConfig.vpmPath), config.vpmPath, sizeof(m_pinmameConfig.vpmPath));
+
+   PinmameSetConfig(&m_pinmameConfig);
    PinmameSetHandleKeyboard(0);
    PinmameSetHandleMechanics(0xFF);
 
-   m_vpmPath = config.vpmPath;
+   m_getStateSrcMsgId = m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_STATE_GET_SRC_MSG);
+   m_onStateSrcChangedMsgId = m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_STATE_ON_SRC_CHG_MSG);
+   m_msgApi->SubscribeMsg(m_endpointId, m_onStateSrcChangedMsgId, OnStateSrcChanged, this);
 
    m_getDmdSrcMsgId = m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DISPLAY_GET_SRC_MSG);
    m_onDmdChangedMsgId = m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DISPLAY_ON_SRC_CHG_MSG);
@@ -28,17 +47,24 @@ Controller::Controller(const MsgPluginAPI* api, unsigned int endpointId, const P
 
 Controller::~Controller()
 {
+   assert(m_threadLock == std::this_thread::get_id());
+
    Stop();
+
+   m_msgApi->UnsubscribeMsg(m_onStateSrcChangedMsgId, OnStateSrcChanged, this);
+   m_msgApi->ReleaseMsgID(m_onStateSrcChangedMsgId);
+   m_msgApi->ReleaseMsgID(m_getStateSrcMsgId);
+
    m_msgApi->UnsubscribeMsg(m_onDmdChangedMsgId, OnDmdSrcChanged, this);
    m_msgApi->ReleaseMsgID(m_onDmdChangedMsgId);
    m_msgApi->ReleaseMsgID(m_getDmdSrcMsgId);
+
    if (m_onDestroyHandler)
       m_onDestroyHandler(this);
    for (const auto& settings : m_gameSettings)
       settings.second->Release();
    if (m_settings)
       m_settings->Release();
-   delete m_pPinmameGame;
    delete m_pPinmameMechConfig;
 }
 
@@ -72,11 +98,14 @@ Game* Controller::GetGames(const string& name) const
       Game* game;
    };
    GameCBData cbData { this, settings, nullptr };
-   PinmameGetGame(name.c_str(), [](PinmameGame* pPinmameGame, void* const pUserData)
+   PinmameGetGame(
+      name.c_str(),
+      [](PinmameGame* pPinmameGame, void* const pUserData)
       {
          GameCBData* pGame = static_cast<GameCBData*>(pUserData);
          pGame->game = new Game(const_cast<Controller*>(pGame->controller), *pPinmameGame, pGame->settings);
-      }, &cbData);
+      },
+      &cbData);
    return cbData.game;
 }
 
@@ -91,16 +120,18 @@ Settings* Controller::GetSettings()
 void Controller::SetGameName(const string& name)
 {
    m_szGameName = name;
-   delete m_pPinmameGame;
-   m_pPinmameGame = nullptr;
-   PINMAME_STATUS status = PinmameGetGame(name.c_str(), [](PinmameGame* pPinmameGame, void* const pUserData) {
-      Controller* me = static_cast<Controller*>(pUserData);
-      me->m_pPinmameGame = new PinmameGame();
-      memcpy(me->m_pPinmameGame, pPinmameGame, sizeof(PinmameGame));
-   }, this);
+   m_szRomName.clear();
+   PINMAME_STATUS status = PinmameGetGame(
+      name.c_str(),
+      [](PinmameGame* pPinmameGame, void* const pUserData)
+      {
+         Controller* me = static_cast<Controller*>(pUserData);
+         me->m_szRomName = pPinmameGame->name;
+         LOGI(std::format("Game found: name={}, description={}, manufacturer={}, year={}", pPinmameGame->name, pPinmameGame->description, pPinmameGame->manufacturer, pPinmameGame->year));
+      },
+      this);
    if (status == PINMAME_STATUS_OK)
    {
-      LOGI(std::format("Game found: name={}, description={}, manufacturer={}, year={}", m_pPinmameGame->name, m_pPinmameGame->description, m_pPinmameGame->manufacturer, m_pPinmameGame->year));
       //m_hidden = false;
    }
    else if (status == PINMAME_STATUS_GAME_ALREADY_RUNNING)
@@ -119,31 +150,111 @@ void Controller::SetGameName(const string& name)
 
 void Controller::Run(long hParentWnd, int nMinVersion)
 {
-   if (m_pPinmameGame == nullptr)
+   if (m_szRomName.empty())
       return;
 
    PinmameSetCheat(m_cheat);
 
-   // Trigger startup, status will be either 2 (staring), 1 (running), 0 (stopped, likely after failure)
-   PINMAME_STATUS status = PinmameRun(m_pPinmameGame->name);
-   while (PinmameIsRunning() == 2) // Wait until the machine is either running or stopped
-      std::this_thread::sleep_for(std::chrono::milliseconds(75)); 
+   // Disable sound if requested through game's settings object
+   Game* game = GetGames(m_szGameName);
+   if (game)
+   {
+      GameSettings* settings = game->GetSettings();
+      int sound = settings->GetValue("sound");
+      if (sound == 0)
+      {
+         PinmameConfig* pinmameConfig = new PinmameConfig({ });
+         memcpy(pinmameConfig, &m_pinmameConfig, sizeof(m_pinmameConfig));
+         memcpy(const_cast<char*>(pinmameConfig->vpmPath), m_pinmameConfig.vpmPath, sizeof(m_pinmameConfig.vpmPath));
+         *const_cast<int*>(&pinmameConfig->sampleRate) = 0;
+         PinmameSetConfig(pinmameConfig);
+         delete pinmameConfig;
+      }
+      settings->Release();
+      game->Release();
+   }
 
-   if ((PinmameIsRunning() == 1) && status == PINMAME_STATUS_OK) {
+   // Search and load a memory map with its platform if provided (see https://github.com/tomlogic/pinmame-nvram-maps)
+   if (std::error_code ec; std::filesystem::exists(m_memmapPath, ec))
+   {
+      std::filesystem::recursive_directory_iterator it(m_memmapPath, std::filesystem::directory_options::skip_permission_denied);
+      std::filesystem::recursive_directory_iterator end;
+      for (; it != end; ++it)
+      {
+         if (!it->is_regular_file(ec) || ec)
+            continue;
+         if (it->path().filename() == "index.json")
+         {
+            std::ifstream indexFile(it->path());
+            if (indexFile.is_open())
+            {
+               json index;
+               try
+               {
+                  indexFile >> index;
+                  if (index.is_object() && index.contains(m_szRomName) && index[m_szRomName].is_string())
+                  {
+                     // Load memmap
+                     const std::filesystem::path subPath(index[m_szRomName].get<string>());
+                     std::ifstream memmapFile(m_memmapPath / subPath, std::ios::binary | std::ios::ate);
+                     std::streamsize memmapSize = memmapFile.tellg();
+                     memmapFile.seekg(0, std::ios::beg);
+                     vector<uint8_t> memmap(memmapSize);
+                     memmapFile.read(reinterpret_cast<char*>(memmap.data()), memmapSize);
+
+                     // Find platform reference and loads it (if any)
+                     vector<uint8_t> platform;
+                     string memmapString(memmap.data(), memmap.data() + memmapSize);
+                     json memMapDef = json::parse(memmapString);
+                     if (memMapDef.is_object() && memMapDef.contains("_metadata") && memMapDef["_metadata"].is_object() && memMapDef["_metadata"].contains("platform")
+                        && memMapDef["_metadata"]["platform"].is_string())
+                     {
+                        string platformFilename = memMapDef["_metadata"]["platform"].get<string>() + ".json";
+                        if (!platformFilename.empty() && std::filesystem::exists(m_memmapPath / "platforms" / platformFilename))
+                        {
+                           std::ifstream platformFile(m_memmapPath / "platforms" / platformFilename, std::ios::binary | std::ios::ate);
+                           std::streamsize platformSize = platformFile.tellg();
+                           platformFile.seekg(0, std::ios::beg);
+                           platform.resize(platformSize);
+                           platformFile.read(reinterpret_cast<char*>(platform.data()), platformSize);
+                        }
+                     }
+
+                     PinmameSetMemMap(platform.data(), platform.size(), memmap.data(), memmap.size());
+                  }
+               }
+               catch (const json::parse_error& e)
+               {
+                  LOGE("JSON parse error while parsing memmap in "s + it->path().string() + ": " + e.what());
+               }
+            }
+            break;
+         }
+      }
+   }
+
+   // Trigger startup, status will be either 2 (starting), 1 (running), 0 (stopped, likely after failure)
+   PINMAME_STATUS status = PinmameRun(m_szGameName.c_str());
+   while (PinmameIsRunning() == 2) // Wait until the machine is either running or stopped
+      std::this_thread::sleep_for(std::chrono::milliseconds(75));
+
+   if ((PinmameIsRunning() == 1) && status == PINMAME_STATUS_OK)
+   {
       if (m_onGameStartHandler)
          m_onGameStartHandler(this);
    }
    else
    {
-      LOGE("Failed to start emulation of rom '"s + m_pPinmameGame->name + '\'');
+      LOGE("Failed to start emulation of rom '"s + m_szRomName + '\'');
       VPXPluginAPI* vpxApi = nullptr;
       unsigned int getVpxApiId = m_msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_API);
       m_msgApi->BroadcastMsg(m_endpointId, getVpxApiId, &vpxApi);
       m_msgApi->ReleaseMsgID(getVpxApiId);
       if (vpxApi)
-         vpxApi->PushNotification(("Failed to start emulation of rom '"s + m_pPinmameGame->name + '\'').c_str(), 10000);
+         vpxApi->PushNotification(("Failed to start emulation of rom '"s + m_szRomName + '\'').c_str(), 10000);
    }
-   if (status == PINMAME_STATUS_GAME_ALREADY_RUNNING) {
+   if (status == PINMAME_STATUS_GAME_ALREADY_RUNNING)
+   {
       LOGE("Game already running."s);
    }
 }
@@ -228,15 +339,361 @@ const vector<PinmameSoundCommand>& Controller::GetNewSoundCommands()
    return m_soundCommands;
 }
 
+// Inputs
+
+// Some PinMAME drivers defines a virtual matrix column for cabinet switches and use negative indices to access it (Whitestar for example)
+static constexpr int SWITCH_OFFSET = 16;
+
+void Controller::OnStateSrcChanged(const unsigned int msgId, void* userData, void* msgData)
+{
+   Controller* me = static_cast<Controller*>(userData);
+   assert(me->m_threadLock == std::this_thread::get_id());
+   me->m_stateUpdatePending = true;
+}
+
+void Controller::UpdateStateSrc() const
+{
+   assert(m_threadLock == std::this_thread::get_id());
+   if (!m_stateUpdatePending)
+      return;
+
+   m_stateUpdatePending = false;
+   m_states = { };
+   m_switches.clear();
+   m_switchMap.clear();
+   m_dipSwitches.clear();
+   m_dipSwitchMap.clear();
+   m_solenoids.clear();
+   m_solenoidMap.clear();
+   m_gis.clear();
+   m_giMap.clear();
+   m_lamps.clear();
+   m_lampMap.clear();
+
+   for (const StateSrcId& src : GetCtrlItems<StateSrcId>(m_msgApi, m_endpointId, m_getStateSrcMsgId))
+   {
+      if (src.id.endpointId == m_endpointId)
+      {
+         m_states = src;
+         break;
+      }
+   }
+
+   m_prevState.resize(m_states.nStates, 0);
+
+   for (unsigned int i = 0; i < m_states.nStates; i++)
+   {
+      switch (m_states.stateDefs[i].id.groupId & PMPI_GROUP_MASK)
+      {
+      case PMPI_GROUP_SOLENOID:
+         m_solenoids.push_back(i);
+         if (m_solenoidMap.size() < m_states.stateDefs[i].id.stateId + 1)
+            m_solenoidMap.resize(m_states.stateDefs[i].id.stateId + 1, UINT_MAX);
+         m_solenoidMap[m_states.stateDefs[i].id.stateId] = i;
+         break;
+
+      case PMPI_GROUP_GI:
+         m_gis.push_back(i);
+         if (m_giMap.size() < m_states.stateDefs[i].id.stateId + 1)
+            m_giMap.resize(m_states.stateDefs[i].id.stateId + 1, UINT_MAX);
+         m_giMap[m_states.stateDefs[i].id.stateId] = i;
+         break;
+
+      case PMPI_GROUP_LAMP:
+         m_lamps.push_back(i);
+         if (m_lampMap.size() < m_states.stateDefs[i].id.stateId + 1)
+            m_lampMap.resize(m_states.stateDefs[i].id.stateId + 1, UINT_MAX);
+         m_lampMap[m_states.stateDefs[i].id.stateId] = i;
+         break;
+
+      case PMPI_GROUP_MECH:
+         // TODO Mech
+         break;
+
+      case PMPI_GROUP_SWITCH:
+      {
+         m_switches.push_back(i);
+         const int switchOfs = static_cast<int16_t>(m_states.stateDefs[i].id.stateId) + SWITCH_OFFSET;
+         assert(switchOfs >= 0);
+         if (m_switchMap.size() < switchOfs + 1)
+            m_switchMap.resize(switchOfs + 1, UINT_MAX);
+         m_switchMap[switchOfs] = i;
+         if (switchOfs < m_switchStates.size())
+         {
+            uint8_t bv = m_switchStates[switchOfs] ? 0xFF : 0;
+            m_states.SetState(i, CTLPI_STATE_TYPE_UINT8, &bv);
+         }
+         break;
+      }
+
+      case PMPI_GROUP_DIPSWITCH:
+         m_dipSwitches.push_back(i);
+         if (m_dipSwitchMap.size() < m_states.stateDefs[i].id.stateId + 1)
+            m_dipSwitchMap.resize(m_states.stateDefs[i].id.stateId + 1, UINT_MAX);
+         m_dipSwitchMap[m_states.stateDefs[i].id.stateId] = i;
+         if (m_states.stateDefs[i].id.stateId < m_dipSwitchStates.size())
+         {
+            uint8_t bv = m_dipSwitchStates[m_states.stateDefs[i].id.stateId] ? 0xFF : 0;
+            m_states.SetState(i, CTLPI_STATE_TYPE_UINT8, &bv);
+         }
+         break;
+      }
+   }
+
+   // Applied cached DIP switch states that may have been defined before starting the machine
+   for (int i = 0; i < m_dipSwitchStates.size(); i++)
+   {
+      if (i < m_dipSwitchMap.size())
+      {
+         if (const unsigned int index = m_dipSwitchMap[i]; index < m_states.nStates)
+         {
+            uint8_t bv = (m_dipSwitchStates[i] != 0) ? 0xFF : 0;
+            m_states.SetState(index, CTLPI_STATE_TYPE_UINT8, &bv);
+         }
+      }
+   }
+}
+
+bool Controller::GetSwitch(int switchNo) const
+{
+   const int switchNoOfs = switchNo + SWITCH_OFFSET;
+   if (switchNoOfs < 0)
+      return false;
+
+   UpdateStateSrc();
+
+   if (switchNoOfs < m_switchMap.size())
+      if (const unsigned int index = m_switchMap[switchNoOfs]; index < m_states.nStates)
+      {
+         uint8_t state = 0;
+         m_states.GetState(index, CTLPI_STATE_TYPE_UINT8, &state);
+         return state != 0;
+      }
+
+   return switchNoOfs < m_switchStates.size() ? m_switchStates[switchNoOfs] : false;
+}
+
+void Controller::SetSwitch(int switchNo, bool state)
+{
+   const int switchNoOfs = switchNo + SWITCH_OFFSET;
+   if (switchNoOfs < 0)
+      return;
+
+   UpdateStateSrc();
+
+   if (m_switchStates.size() < switchNoOfs + 1)
+      m_switchStates.resize(switchNoOfs + 1, false);
+   m_switchStates[switchNoOfs] = state;
+
+   if (switchNoOfs < m_switchMap.size())
+      if (const unsigned int index = m_switchMap[switchNoOfs]; index < m_states.nStates)
+      {
+         uint8_t bv = state ? 0xFF : 0;
+         m_states.SetState(index, CTLPI_STATE_TYPE_UINT8, &bv);
+      }
+}
+
+int Controller::GetDip(int nDipBank) const
+{
+   if (nDipBank < 0)
+      return false;
+
+   UpdateStateSrc();
+
+   uint8_t state = 0;
+   uint8_t result = 0;
+   for (int i = 0; i < 8; i++)
+   {
+      if (const int dipSwitchNo = nDipBank * 8 + i; dipSwitchNo < m_dipSwitchMap.size())
+      {
+         if (const unsigned int index = m_dipSwitchMap[dipSwitchNo]; index < m_states.nStates)
+         {
+            if (m_states.GetState(index, CTLPI_STATE_TYPE_UINT8, &state) == 0 && state != 0)
+               result |= 1 << i;
+         }
+      }
+      else if (dipSwitchNo < m_dipSwitchStates.size())
+      {
+         if (m_dipSwitchStates[dipSwitchNo])
+            result |= 1 << i;
+      }
+   }
+   return result;
+}
+
+void Controller::SetDip(int nDipBank, int byteState)
+{
+   if (nDipBank < 0)
+      return;
+
+   UpdateStateSrc();
+
+   for (int i = 0; i < 8; i++)
+   {
+      const int dipSwitchNo = nDipBank * 8 + i;
+      bool state = (byteState & (1 << i)) != 0;
+
+      if (m_dipSwitchStates.size() < dipSwitchNo + 1)
+         m_dipSwitchStates.resize(dipSwitchNo + 1, false);
+      m_dipSwitchStates[dipSwitchNo] = state;
+
+      if (dipSwitchNo < m_dipSwitchMap.size())
+      {
+         if (const unsigned int index = m_dipSwitchMap[dipSwitchNo]; index < m_states.nStates)
+         {
+            uint8_t bv = (state != 0) ? 0xFF : 0;
+            m_states.SetState(index, CTLPI_STATE_TYPE_UINT8, &bv);
+         }
+      }
+   }
+}
+
+long Controller::GetSolMask(int nLow) const
+{
+   switch (nLow)
+   {
+   case 0: return m_solMask & 0x0FFFFFFFFULL;
+   case 1: return (m_solMask >> 32) & 0x0FFFFFFFFULL;
+   case 2: return m_deviceMode;
+   default: return -1;
+   }
+}
+
+void Controller::SetSolMask(int nLow, long newVal)
+{
+   switch (nLow)
+   {
+   case 0: m_solMask = (m_solMask & 0xFFFFFFFF00000000ULL) | newVal; break;
+   case 1: m_solMask = (m_solMask & 0x00000000FFFFFFFFULL) | (((uint64_t)newVal) << 32); break;
+   case 2:
+      if (DM_BINARY <= newVal && newVal <= DM_PHYSOUT)
+      {
+         m_deviceMode = (DeviceMode)newVal;
+         PinmameSetSolenoidMask(2, newVal);
+      }
+      break;
+   }
+}
+
+int Controller::GetModOutputType(int output, int no) const
+{
+   return output != static_cast<PINMAME_MOD_OUTPUT_TYPE>(PINMAME_MOD_OUTPUT_TYPE_SOLENOID) ? 0 : PinmameGetModOutputType(output, no);
+}
+
+void Controller::SetModOutputType(int output, int no, int newVal)
+{
+   if (output == static_cast<PINMAME_MOD_OUTPUT_TYPE>(PINMAME_MOD_OUTPUT_TYPE_SOLENOID))
+      PinmameSetModOutputType(output, no, static_cast<PINMAME_MOD_OUTPUT_TYPE>(newVal));
+}
+
+int Controller::GetSolenoid(int solenoid) const
+{
+   UpdateStateSrc();
+
+   if (solenoid < 0 || solenoid >= m_solenoidMap.size())
+      return 0;
+
+   if (const unsigned int index = m_solenoidMap[solenoid]; index < m_states.nStates)
+   {
+      uint8_t state = 0;
+      m_states.GetState(index, CTLPI_STATE_TYPE_UINT8, &state);
+      return state;
+   }
+
+   return 0;
+}
+
+int Controller::GetLamp(int lamp) const
+{
+   UpdateStateSrc();
+
+   if (lamp < 0 || lamp >= m_lampMap.size())
+      return 0;
+
+   if (const unsigned int index = m_lampMap[lamp]; index < m_states.nStates)
+   {
+      uint8_t state = 0;
+      m_states.GetState(index, CTLPI_STATE_TYPE_UINT8, &state);
+      return state;
+   }
+
+   return 0;
+}
+
+int Controller::GetGIString(int giString) const
+{
+   UpdateStateSrc();
+
+   if (giString < 0 || giString >= m_giMap.size())
+      return 0;
+
+   if (const unsigned int index = m_giMap[giString]; index < m_states.nStates)
+   {
+      uint8_t state = 0;
+      m_states.GetState(index, CTLPI_STATE_TYPE_UINT8, &state);
+      return state;
+   }
+
+   return 0;
+}
+
 const vector<PinmameLampState>& Controller::GetChangedLamps()
 {
-   m_lampStates.resize(PinmameGetMaxLamps()); // TODO we should use the actual size of the running machine
-   int count = PinmameGetChangedLamps(m_lampStates.data());
-   if (count < 0) // report error ?
-      count = 0;
-   m_lampStates.resize(count);
+   UpdateStateSrc();
+
+   m_lampStates.clear();
+   for (int lampIndex : m_lamps)
+   {
+      uint8_t state = 0;
+      m_states.GetState(lampIndex, CTLPI_STATE_TYPE_UINT8, &state);
+      if (m_prevState[lampIndex] != state)
+      {
+         m_lampStates.emplace_back(m_states.stateDefs[lampIndex].id.stateId, state);
+         m_prevState[lampIndex] = state;
+      }
+   }
    return m_lampStates;
 }
+
+const vector<PinmameGIState>& Controller::GetChangedGIStrings()
+{
+   UpdateStateSrc();
+
+   m_giStates.clear();
+   for (int giIndex : m_gis)
+   {
+      uint8_t state = 0;
+      m_states.GetState(giIndex, CTLPI_STATE_TYPE_UINT8, &state);
+      if (m_prevState[giIndex] != state)
+      {
+         m_giStates.emplace_back(m_states.stateDefs[giIndex].id.stateId, state);
+         m_prevState[giIndex] = state;
+      }
+   }
+   return m_giStates;
+}
+
+const vector<PinmameSolenoidState>& Controller::GetChangedSolenoids()
+{
+   UpdateStateSrc();
+
+   m_solenoidStates.clear();
+   for (int solIndex : m_solenoids)
+   {
+      uint8_t state = 0;
+      m_states.GetState(solIndex, CTLPI_STATE_TYPE_UINT8, &state);
+      if (m_prevState[solIndex] != state)
+      {
+         if (m_states.stateDefs[solIndex].id.stateId >= 64 || (m_solMask & (1ULL << (m_states.stateDefs[solIndex].id.stateId - 1))) != 0)
+            m_solenoidStates.emplace_back(m_states.stateDefs[solIndex].id.stateId, state);
+         m_prevState[solIndex] = state;
+      }
+   }
+   return m_solenoidStates;
+}
+
+
+// Segment Displays
 
 const vector<PinmameLEDState>& Controller::GetChangedLEDs(int nHigh, int nLow, int nnHigh, int nnLow)
 {
@@ -250,49 +707,36 @@ const vector<PinmameLEDState>& Controller::GetChangedLEDs(int nHigh, int nLow, i
    return m_ledStates;
 }
 
-const vector<PinmameGIState>& Controller::GetChangedGIStrings()
-{
-   m_giStates.resize(PinmameGetMaxGIs()); // TODO we should use the actual size of the running machine
-   int count = PinmameGetChangedGIs(m_giStates.data());
-   if (count < 0) // report error ?
-      count = 0;
-   m_giStates.resize(count);
-   return m_giStates;
-}
 
-const vector<PinmameSolenoidState>& Controller::GetChangedSolenoids()
-{
-   m_solenoidStates.resize(PinmameGetMaxSolenoids()); // TODO we should use the actual size of the running machine
-   int count = PinmameGetChangedSolenoids(m_solenoidStates.data());
-   if (count < 0) // report error ?
-      count = 0;
-   m_solenoidStates.resize(count);
-   return m_solenoidStates;
-}
+// DMD Displays
 
 void Controller::OnDmdSrcChanged(const unsigned int msgId, void* userData, void* msgData)
 {
    Controller* me = static_cast<Controller*>(userData);
-   me->m_defaultDmd.id.id = 0;
+   assert(me->m_threadLock == std::this_thread::get_id());
+   me->m_dmdUpdatePending = true;
 }
 
 void Controller::UpdateDmdSrc()
 {
-   if (m_defaultDmd.id.id == 0)
+   assert(m_threadLock == std::this_thread::get_id());
+   if (!m_dmdUpdatePending)
+      return;
+
+   m_dmdUpdatePending = false;
+   m_defaultDmd = { };
+   unsigned int largest = 128;
+   GetDisplaySrcMsg getSrcMsg = { 0, 0, nullptr };
+   m_msgApi->BroadcastMsg(m_endpointId, m_getDmdSrcMsgId, &getSrcMsg);
+   vector<DisplaySrcId> displaySources(getSrcMsg.count);
+   getSrcMsg = { getSrcMsg.count, 0, displaySources.data() };
+   m_msgApi->BroadcastMsg(m_endpointId, m_getDmdSrcMsgId, &getSrcMsg);
+   for (const DisplaySrcId& src : displaySources)
    {
-      unsigned int largest = 128;
-      GetDisplaySrcMsg getSrcMsg = { 0, 0, nullptr };
-      m_msgApi->BroadcastMsg(m_endpointId, m_getDmdSrcMsgId, &getSrcMsg);
-      vector<DisplaySrcId> displaySources(getSrcMsg.count);
-      getSrcMsg = { getSrcMsg.count, 0, displaySources.data() };
-      m_msgApi->BroadcastMsg(m_endpointId, m_getDmdSrcMsgId, &getSrcMsg);
-      for (const DisplaySrcId& src : displaySources)
+      if (src.id.endpointId == m_endpointId && src.width >= largest)
       {
-         if (src.id.endpointId == m_endpointId && src.width >= largest)
-         {
-            m_defaultDmd = src;
-            largest = src.width;
-         }
+         m_defaultDmd = src;
+         largest = src.width;
       }
    }
 }
@@ -355,8 +799,7 @@ std::vector<uint32_t> Controller::GetRawDmdColoredPixels()
    {
       pixels.resize(size);
       for (int i = 0; i < size; i++)
-         pixels[i] = ((uint32_t)static_cast<const uint8_t*>(frame.frame)[i * 3] << 16) 
-            | ((uint32_t)static_cast<const uint8_t*>(frame.frame)[i * 3 + 1] << 8)
+         pixels[i] = ((uint32_t)static_cast<const uint8_t*>(frame.frame)[i * 3] << 16) | ((uint32_t)static_cast<const uint8_t*>(frame.frame)[i * 3 + 1] << 8)
             | (static_cast<const uint8_t*>(frame.frame)[i * 3 + 2]);
    }
    return pixels;

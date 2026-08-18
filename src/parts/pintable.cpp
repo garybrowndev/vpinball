@@ -132,7 +132,7 @@ PinTable::~PinTable()
 
       for (size_t i = 0; i < m_vimage.size(); i++)
          delete m_vimage[i];
-  
+
       for (size_t i = 0; i < m_vfont.size(); i++)
       {
          m_vfont[i]->UnRegister();
@@ -160,7 +160,7 @@ PinTable::~PinTable()
 }
 
 void PinTable::UpdatePropertyImageList()
-{ 
+{
 #ifndef __STANDALONE__
     // just update the combo boxes in the property dialog
     g_pvp->GetPropertiesDocker()->GetContainProperties()->GetPropertyDialog()->UpdateTabs(m_vmultisel);
@@ -554,7 +554,7 @@ PinTable* PinTable::CopyForPlay()
    AddRef(); // as the live table holds a reference on this
 
    CComObject<PinTable> *dst = live_table;
-   
+
    dst->m_original_table_script = src->m_original_table_script;
    dst->m_external_script_name = src->m_external_script_name;
    dst->m_script_text = src->m_script_text;
@@ -1217,7 +1217,7 @@ void PinTable::Save(IObjectWriter& writer, const bool saveForUndo)
    writer.WriteFloat(FID(BOTM), m_bottom);
 
    writer.WriteBool(FID(EFSS), m_isFSSViewModeEnabled);
-   static constexpr int vsFields[NUM_BG_SETS][19] = { 
+   static constexpr int vsFields[NUM_BG_SETS][19] = {
       { FID(VSM0), FID(ROTA), FID(INCL), FID(LAYB), FID(FOVX), FID(XLTX), FID(XLTY), FID(XLTZ), FID(SCLX), FID(SCLY), FID(SCLZ), FID(HOF0), FID(VOF0), FID(WTX0), FID(WTY0), FID(WTZ0), FID(WBX0), FID(WBY0), FID(WBZ0) },
       { FID(VSM1), FID(ROTF), FID(INCF), FID(LAYF), FID(FOVF), FID(XLFX), FID(XLFY), FID(XLFZ), FID(SCFX), FID(SCFY), FID(SCFZ), FID(HOF1), FID(VOF1), FID(WTX1), FID(WTY1), FID(WTZ1), FID(WBX1), FID(WBY1), FID(WBZ1) },
       { FID(VSM2), FID(ROFS), FID(INFS), FID(LAFS), FID(FOFS), FID(XLXS), FID(XLYS), FID(XLZS), FID(SCXS), FID(SCYS), FID(SCZS), FID(HOF2), FID(VOF2), FID(WTX2), FID(WTY2), FID(WTZ2), FID(WBX2), FID(WBY2), FID(WBZ2) },
@@ -1541,10 +1541,30 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
             const int ctextures = m_loadTemp[2];
             const int cfonts = m_loadTemp[3];
             const int ccollection = m_loadTemp[4];
-            
+
             PLOGI << "PinTable Data loaded"; // For profiling
 
             feedback.AboutToProcessTable(csubobj + csounds + ctextures + cfonts);
+
+            // Load collection before resolving part names to handle name conflicts
+            for (int i = 0; i < ccollection; i++)
+            {
+               const wstring wStmName = L"Collection" + std::to_wstring(i);
+
+               IStream *pstmItem;
+               if (SUCCEEDED(hr = pstgData->OpenStream(wStmName.c_str(), nullptr, STGM_DIRECT | STGM_READ | STGM_SHARE_EXCLUSIVE, 0, &pstmItem)))
+               {
+                  CComObject<Collection> *pcol;
+                  CComObject<Collection>::CreateInstance(&pcol);
+                  pcol->AddRef();
+                  BiffReader reader(pstmItem, loadfileversion, hch, (loadfileversion < NO_ENCRYPTION_FORMAT_VERSION) ? hkey : 0);
+                  pcol->Load(reader);
+                  AddCollection(pcol);
+                  pcol->Release();
+                  pstmItem->Release();
+                  pstmItem = nullptr;
+               }
+            }
 
             ThreadPool pool(g_app->GetLogicalNumberOfProcessors());
             vector<IEditable *> parts;
@@ -1572,7 +1592,7 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
 
                      piedit->m_onLoadExpectedPartGroup.clear();
                      BiffReader reader(pstmItem, loadfileversion, (loadfileversion < 1000) ? hch : NULL, (loadfileversion < 1000) ? hkey : NULL); // 1000 (VP10 beta) removed the encryption //!! NO_ENCRYPTION_FORMAT_VERSION?
-                     piedit->Load(reader); 
+                     piedit->Load(reader);
                      pstmItem->Release();
                      pstmItem = nullptr;
                      if (reader.HasError())
@@ -1663,104 +1683,122 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
                      {
                         const wstring oldName = part->GetIScriptable()->m_wzName;
                         part->GetIScriptable()->m_wzName = GetUniqueName(part->GetIScriptable()->m_wzName);
-                        PLOGE << "Duplicate part name found: " << MakeString(oldName) << " renamed it to " << MakeString(part->GetIScriptable()->m_wzName);
+                        PLOGW << "Duplicate part name found: " << MakeString(oldName) << " renamed it to " << MakeString(part->GetIScriptable()->m_wzName);
                      }
-
                      AddPart(part);
+                     part->Release();
+                  }
+               }
 
-                     // We used to have a hack taken from VPVR to display backglass in VR: an external window would be captured, then rendered on a primitive with an 
-                     // image named backglassimage. We now have support for external renderer on flasher, so we replace these primitives by flashers.
-                     // As this may cause script error if the original table would expect a primitive object and tweak properties not supported by flasher object, 
-                     // we keep the original object. This is not perfect as the table script will not tweak this one, but at least, it makes updating table easy.
-                     if (part->GetItemType() == eItemPrimitive && StrCompareNoCase(((Primitive *)part)->m_d.m_szImage, "backglassimage"s))
+               // We used to have a hack taken from VPVR to display backglass in VR: an external window would be captured, then rendered on a primitive with an
+               // image named backglassimage. We now have support for external renderer on flasher, so we replace these primitives by flashers.
+               // As this may cause script error if the original table would expect a primitive object and tweak properties not supported by flasher object,
+               // we keep the original object. This is not perfect as the table script will not tweak this one, but at least, it makes updating table easy.
+               parts = GetParts();
+               for (IEditable* part : parts)
+               {
+                  if (part->GetItemType() == eItemPrimitive && StrCompareNoCase(((Primitive *)part)->m_d.m_szImage, "backglassimage"s))
+                  {
+                     bool hasBackglassFlasher = false;
+                     for (const auto existing : parts)
                      {
-                        Primitive * const primitive = (Primitive *)part;
-                        if (primitive->m_d.m_use3DMesh)
+                        if (existing->GetItemType() == ItemTypeEnum::eItemFlasher)
                         {
-                           // We need to reduce the primitive to a flasher rectangle. The algorithm is:
-                           // - to find the flasher plane using mesh's faces normals, favoring faces looking toward the player (a backfacing backglass is unlikely)
-                           // - to find the plane position by considering the vertices nearest to the player (to discard back of the primitive if using a box instead of a rect)
-                           // - to evaluate an axis align square in this plane and define a flasher accordingly (a rotated backglass is unlikely)
-                           const Matrix3D& transform = primitive->RecalculateMatrices();
-                           vector<vec3> vertices(primitive->m_mesh.m_vertices.size());
-                           for (size_t i2 = 0; i2 < primitive->m_mesh.m_vertices.size(); i2++)
-                              vertices[i2] = transform * primitive->m_mesh.m_vertices[i2];
-                           vec3 planeNormal(0.f, 0.f, 0.f);
-                           float planeNormalWeight = 0.f;
-                           for (size_t i2 = 0; i2 < primitive->m_mesh.m_indices.size(); i2 += 3)
+                           if (const Flasher *const exBackglass = (const Flasher *)existing;
+                              exBackglass->m_d.m_renderMode == FlasherData::EXT_RENDER && exBackglass->m_d.m_renderStyle == VPXWindowId::VPXWINDOW_Backglass)
                            {
-                              vec3 &a = vertices[primitive->m_mesh.m_indices[i2]];
-                              vec3 &b = vertices[primitive->m_mesh.m_indices[i2 + 1]];
-                              vec3 &c = vertices[primitive->m_mesh.m_indices[i2 + 2]];
-                              vec3 ab(b.x - a.x, b.y - a.y, b.z - a.z);
-                              vec3 ac(c.x - a.x, c.y - a.y, c.z - a.z);
-                              vec3 n = CrossProduct(ac, ab);
-                              n.Normalize();
-                              const float weight = -n.z; //= n.Dot(vec3(0.f, 0.f, -1.f));
-                              if (weight > 0.f)
-                              {
-                                 planeNormal += weight * n;
-                                 planeNormalWeight += weight;
-                              }
-                           }
-
-                           planeNormal.x = 0.f; // to simplify, we align the backglass X axis with the table (after all, backglasses should be facing the player)
-                           if (const float normalLength = planeNormal.Length(); normalLength > 1e-5f)
-                           {
-                              planeNormal /= normalLength;
-
-                              float planeDist = FLT_MAX;
-                              for (const unsigned int idx : primitive->m_mesh.m_indices)
-                                 planeDist = min(planeDist, planeNormal.Dot(vertices[idx]));
-
-                              float minx = FLT_MAX; // min/max along the x axis
-                              float miny = FLT_MAX; // min/max along planeYAxis
-                              float maxx = FLT_MIN;
-                              float maxy = FLT_MIN;
-                              const vec3 planeYAxis(0.f,planeNormal.z,-planeNormal.y); //= CrossProduct(planeNormal, vec3(1.f, 0.f, 0.f));
-                              for (const unsigned int idx : primitive->m_mesh.m_indices)
-                                 if (const float proj = planeNormal.Dot(vertices[idx]); proj < planeDist + 1.f)
-                                 {
-                                    const float px = vertices[idx].x; // since we aligned the x axis, planeXAxis is (1, 0, 0)
-                                    const float py = vertices[idx].Dot(planeYAxis);
-                                    minx = min(minx, px);
-                                    maxx = max(miny, px);
-                                    miny = min(miny, py);
-                                    maxy = max(maxy, py);
-                                 }
-                              const float backglassWidth = maxx - minx;
-                              const float backglassHeight = maxy - miny;
-                              if (backglassWidth > 0.f && backglassHeight > 0.f)
-                              {
-                                 Flasher *const backglass = (Flasher *)EditableRegistry::CreateAndInit(ItemTypeEnum::eItemFlasher, this, 0.f, 0.f);
-                                 if (backglass)
-                                 {
-                                    backglass->m_wzName = GetUniqueName(primitive->GetWName());
-                                    backglass->m_onLoadExpectedPartGroup = primitive->m_onLoadExpectedPartGroup;
-                                    backglass->Scale(backglassWidth / 100.f, backglassHeight / 100.f, Vertex2D {}, true); // We should gather the base flasher size from the object instead of guessing its default value
-                                    vec3 center = planeDist * planeNormal;
-                                    center += (miny + 0.5f * backglassHeight) * planeYAxis;
-                                    center.x += (minx + 0.5f * backglassWidth); // since planeXAxis is (1, 0, 0)
-                                    backglass->Translate(Vertex2D(center.x, center.y));
-                                    backglass->m_d.m_vCenter = Vertex2D(center.x, center.y);
-                                    backglass->m_d.m_height = center.z;
-                                    backglass->m_d.m_rotX = -180.f - RADTOANG(atan2(planeNormal.y, planeNormal.z)); // since planeXAxis is (1, 0, 0)
-                                    backglass->m_d.m_renderMode = FlasherData::EXT_RENDER;
-                                    backglass->m_d.m_renderStyle = VPXWindowId::VPXWINDOW_Backglass;
-                                    backglass->m_d.m_depthBias = primitive->m_d.m_depthBias;
-                                    backglass->m_d.m_isVisible = primitive->m_d.m_visible;
-                                    primitive->m_d.m_visible = false;
-                                    PLOGE << "Primitive '" << primitive->GetName() << "' used as a deprecated VR backglass was hidden and an external renderer flasher named '"
-                                          << backglass->GetName() << "' was added. This may cause script issues.";
-                                    AddPart(backglass);
-                                    backglass->Release();
-                                 }
-                              }
+                              hasBackglassFlasher = true;
+                              break;
                            }
                         }
                      }
+                     if (hasBackglassFlasher)
+                        continue;
+                     Primitive *const primitive = (Primitive *)part;
+                     if (primitive->m_d.m_use3DMesh)
+                        continue;
 
-                     part->Release();
+                     // We need to reduce the primitive to a flasher rectangle. The algorithm is:
+                     // - to find the flasher plane using mesh's faces normals, favoring faces looking toward the player (a backfacing backglass is unlikely)
+                     // - to find the plane position by considering the vertices nearest to the player (to discard back of the primitive if using a box instead of a rect)
+                     // - to evaluate an axis align square in this plane and define a flasher accordingly (a rotated backglass is unlikely)
+                     const Matrix3D &transform = primitive->RecalculateMatrices();
+                     vector<vec3> vertices(primitive->m_mesh.m_vertices.size());
+                     for (size_t i2 = 0; i2 < primitive->m_mesh.m_vertices.size(); i2++)
+                        vertices[i2] = transform * primitive->m_mesh.m_vertices[i2];
+                     vec3 planeNormal(0.f, 0.f, 0.f);
+                     float planeNormalWeight = 0.f;
+                     for (size_t i2 = 0; i2 < primitive->m_mesh.m_indices.size(); i2 += 3)
+                     {
+                        vec3 &a = vertices[primitive->m_mesh.m_indices[i2]];
+                        vec3 &b = vertices[primitive->m_mesh.m_indices[i2 + 1]];
+                        vec3 &c = vertices[primitive->m_mesh.m_indices[i2 + 2]];
+                        vec3 ab(b.x - a.x, b.y - a.y, b.z - a.z);
+                        vec3 ac(c.x - a.x, c.y - a.y, c.z - a.z);
+                        vec3 n = CrossProduct(ac, ab);
+                        n.Normalize();
+                        const float weight = -n.z; //= n.Dot(vec3(0.f, 0.f, -1.f));
+                        if (weight > 0.f)
+                        {
+                           planeNormal += weight * n;
+                           planeNormalWeight += weight;
+                        }
+                     }
+
+                     planeNormal.x = 0.f; // to simplify, we align the backglass X axis with the table (after all, backglasses should be facing the player)
+                     if (const float normalLength = planeNormal.Length(); normalLength > 1e-5f)
+                     {
+                        planeNormal /= normalLength;
+
+                        float planeDist = FLT_MAX;
+                        for (const unsigned int idx : primitive->m_mesh.m_indices)
+                           planeDist = min(planeDist, planeNormal.Dot(vertices[idx]));
+
+                        float minx = FLT_MAX; // min/max along the x axis
+                        float miny = FLT_MAX; // min/max along planeYAxis
+                        float maxx = -FLT_MAX;
+                        float maxy = -FLT_MAX;
+                        const vec3 planeYAxis(0.f, planeNormal.z, -planeNormal.y); //= CrossProduct(planeNormal, vec3(1.f, 0.f, 0.f));
+                        for (const unsigned int idx : primitive->m_mesh.m_indices)
+                           if (const float proj = planeNormal.Dot(vertices[idx]); proj < planeDist + 1.f)
+                           {
+                              const float px = vertices[idx].x; // since we aligned the x axis, planeXAxis is (1, 0, 0)
+                              const float py = vertices[idx].Dot(planeYAxis);
+                              minx = min(minx, px);
+                              maxx = max(maxx, px);
+                              miny = min(miny, py);
+                              maxy = max(maxy, py);
+                           }
+                        const float backglassWidth = maxx - minx;
+                        const float backglassHeight = maxy - miny;
+                        if (backglassWidth > 0.f && backglassHeight > 0.f)
+                        {
+                           Flasher *const backglass = (Flasher *)EditableRegistry::CreateAndInit(ItemTypeEnum::eItemFlasher, this, 0.f, 0.f);
+                           if (backglass)
+                           {
+                              backglass->m_wzName = GetUniqueName(primitive->GetWName());
+                              backglass->m_onLoadExpectedPartGroup = primitive->m_onLoadExpectedPartGroup;
+                              backglass->Scale(backglassWidth / 100.f, backglassHeight / 100.f, Vertex2D { },
+                                 true); // We should gather the base flasher size from the object instead of guessing its default value
+                              vec3 center = planeDist * planeNormal;
+                              center += (miny + 0.5f * backglassHeight) * planeYAxis;
+                              center.x += (minx + 0.5f * backglassWidth); // since planeXAxis is (1, 0, 0)
+                              backglass->Translate(Vertex2D(center.x, center.y));
+                              backglass->m_d.m_vCenter = Vertex2D(center.x, center.y);
+                              backglass->m_d.m_height = center.z;
+                              backglass->m_d.m_rotX = -180.f - RADTOANG(atan2(planeNormal.y, planeNormal.z)); // since planeXAxis is (1, 0, 0)
+                              backglass->m_d.m_renderMode = FlasherData::EXT_RENDER;
+                              backglass->m_d.m_renderStyle = VPXWindowId::VPXWINDOW_Backglass;
+                              backglass->m_d.m_depthBias = primitive->m_d.m_depthBias;
+                              backglass->m_d.m_isVisible = primitive->m_d.m_visible;
+                              primitive->m_d.m_visible = false;
+                              PLOGW << "Primitive '" << primitive->GetName() << "' used as a deprecated VR backglass was hidden and an external renderer flasher named '"
+                                    << backglass->GetName() << "' was added. This may cause script issues.";
+                              AddPart(backglass);
+                              backglass->Release();
+                           }
+                        }
+                     }
                   }
                }
             }
@@ -1779,7 +1817,7 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
                      for (size_t i2 = i + 1; i2 < m_vsound.size(); ++i2)
                         if (sound->GetName() == m_vsound[i2]->GetName())
                         {
-                           PLOGE << "Duplicate sound name found: " << sound->GetName() << ", dropping it!";
+                           PLOGW << "Duplicate sound name found: " << sound->GetName() << ", dropping it!";
                            m_vsound.erase(m_vsound.begin() + i2);
                            --i2;
                         }
@@ -1800,7 +1838,7 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
                      for (size_t i2 = i + 1; i2 < m_vimage.size(); ++i2)
                         if (image->m_name == m_vimage[i2]->m_name)
                         {
-                           PLOGE << "Duplicate image name found: " << image->GetName() << ", dropping it!";
+                           PLOGW << "Duplicate image name found: " << image->GetName() << ", dropping it!";
                            m_vimage.erase(m_vimage.begin() + i2);
                            --i2;
                         }
@@ -1821,25 +1859,6 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
                   ppf->Load(reader);
                   m_vfont.push_back(ppf);
                   ppf->Register();
-                  pstmItem->Release();
-                  pstmItem = nullptr;
-               }
-            }
-
-            for (int i = 0; i < ccollection; i++)
-            {
-               const wstring wStmName = L"Collection" + std::to_wstring(i);
-
-               IStream* pstmItem;
-               if (SUCCEEDED(hr = pstgData->OpenStream(wStmName.c_str(), nullptr, STGM_DIRECT | STGM_READ | STGM_SHARE_EXCLUSIVE, 0, &pstmItem)))
-               {
-                  CComObject<Collection> *pcol;
-                  CComObject<Collection>::CreateInstance(&pcol);
-                  pcol->AddRef();
-                  BiffReader reader(pstmItem, loadfileversion, hch, (loadfileversion < NO_ENCRYPTION_FORMAT_VERSION) ? hkey : 0);
-                  pcol->Load(reader);
-                  AddCollection(pcol);
-                  pcol->Release();
                   pstmItem->Release();
                   pstmItem = nullptr;
                }
@@ -1873,7 +1892,7 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
                      // Postpend "layer" to keep alphabetic order of layer
                      if (!layerPostpend && !layerName.ends_with(L"_Layer"))
                      {
-                        layerPostpend = true; 
+                        layerPostpend = true;
                         layerName += L"_Layer";
                      }
                      else
@@ -2076,7 +2095,7 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
                   RenamePart(editable, shortName);
                });
          }
-         
+
          // Since 10.8.1, Flashers are allowed on a 2D backdrop, with advanced rendering capabilities.
          /* This code would replace a DMD textbox by a flasher. It is deactivated since it would break scripting (but does anyone script this ?)
          for (size_t i = 0; i < m_vedit.size(); ++i)
@@ -2169,7 +2188,7 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
 
    std::filesystem::path tablePath = std::filesystem::path(filename).parent_path();
    std::filesystem::path tableFile = std::filesystem::path(filename).filename();
-   
+
    // Auto-import POV settings, if it exists. This is kept for backward compatibility as POV settings
    // are now normal settings stored with others in app/table ini file. It will be only imported if there is no table ini file
    if (const std::filesystem::path filenameAuto = tablePath / tableFile.replace_extension(".pov"); !FileExists(GetSettingsFileName()) && FileExists(filenameAuto))
@@ -2216,7 +2235,7 @@ void PinTable::LoadScriptOverride(const std::filesystem::path& scriptPath)
       return;
    }
    PLOGI << "Loading script: " << scriptPath.string();
-   
+
    std::streamsize size = file.tellg();
    file.seekg(0, std::ios::beg);
    std::vector<char> buffer((size_t)size);
@@ -2414,7 +2433,7 @@ void PinTable::Load(IObjectReader& reader)
             break;
          case FID(BTST):
             // FIXME Before 10.8, user tweaks were stored in the table file (now moved to a user ini file), we import the legacy settings if there is no user ini file
-            if (const int ballTrailStrength = reader.AsInt(); !hasIni) 
+            if (const int ballTrailStrength = reader.AsInt(); !hasIni)
                m_settings.SetPlayer_BallTrailStrength(dequantizeUnsigned<8>(ballTrailStrength), true);
             break;
          case FID(UAOC): m_enableAO = reader.AsInt() != 0; break; // Before 10.8, 1 would force AO
@@ -3324,7 +3343,7 @@ void PinTable::ImportBackdropPOV(const std::filesystem::path &filename)
 #ifndef __STANDALONE__
       const string& initialDir = m_settings.GetRecentDir_POVDir();
       vector<string> fileNames;
-      if (!m_vpinball->OpenFileDialog(initialDir, fileNames, 
+      if (!m_vpinball->OpenFileDialog(initialDir, fileNames,
          "User settings file (*.ini)\0*.ini\0Old POV file (*.pov)\0*.pov\0Legacy POV file(*.xml)\0*.xml\0",
          "ini", 0, toUserSettings ? "Import POV to user settings"s : "Import POV to table properties"s))
          return;
@@ -3825,7 +3844,7 @@ void PinTable::ClearMultiSel(ISelect* newSel)
       m_vmultisel[i].m_selectstate = SelectState::NotSelected;
 
    //remove the clone of the multi selection in the smart browser class
-   //to sync the clone and the actual multi-selection 
+   //to sync the clone and the actual multi-selection
    //it will be updated again on AddMultiSel() call
    m_vmultisel.clear();
 
@@ -3985,6 +4004,10 @@ void PinTable::OnDelete()
    {
       // Can't delete these items yet - ClearMultiSel() will try to mark them as unselected
       m_vseldelete.push_back(m_vmultisel.ElementAt(i));
+      if (m_vmultisel.ElementAt(i)->GetItemType() == ItemTypeEnum::eItemPartGroup)
+         for (const auto part : m_vedit)
+            if (part->GetPartGroup() == m_vmultisel.ElementAt(i) && std::ranges::find(m_vseldelete, part->GetISelect()) == m_vseldelete.end())
+               m_vseldelete.push_back(part->GetISelect());
    }
 
    ClearMultiSel();
@@ -4125,7 +4148,7 @@ VPX::Sound *PinTable::GetSound(const string &name) const
 
 STDMETHODIMP PinTable::PlaySound(BSTR soundName, int loopcount, float volume, float pan, float randompitch, int pitch, VARIANT_BOOL usesame, VARIANT_BOOL restart, float front_rear_fade)
 {
-   if (g_pplayer == nullptr || !g_pplayer->m_PlaySound)
+   if (g_pplayer == nullptr)
       return S_OK;
    const string name = MakeString(soundName);
    if (StrCompareNoCase("knock"s, name) || StrCompareNoCase("knocker"s, name)) // FIXME remove or port to plugin
@@ -4145,7 +4168,7 @@ STDMETHODIMP PinTable::PlaySound(BSTR soundName, int loopcount, float volume, fl
 
 STDMETHODIMP PinTable::StopSound(BSTR soundName)
 {
-   if (g_pplayer == nullptr || !g_pplayer->m_PlaySound)
+   if (g_pplayer == nullptr)
       return S_OK;
    const string name = MakeString(soundName);
    VPX::Sound *sound = GetSound(name);
@@ -6622,7 +6645,10 @@ STDMETHODIMP PinTable::get_Option(BSTR optionName, float minValue, float maxValu
    {
       if ((option.id.type == prop.value().type) && (option.id.index == prop.value().index))
       {
-         *param = option.value;
+         if (Settings::GetRegistry().GetProperty(option.id)->m_type == VPX::Properties::PropertyDef::Type::Bool)
+            *param = minValue + option.value;
+         else
+            *param = option.value;
          return S_OK;
       }
    }
@@ -6635,7 +6661,10 @@ STDMETHODIMP PinTable::put_Option(BSTR optionName, float minValue, float maxValu
    auto prop = RegisterOption(optionName, minValue, maxValue, step, defaultValue, unit, values);
    if (!prop.has_value())
       return E_FAIL;
-   m_settings.Set(prop.value(), val, true);
+   if (Settings::GetRegistry().GetProperty(prop.value())->m_type == VPX::Properties::PropertyDef::Type::Bool)
+      m_settings.Set(prop.value(), val != minValue, true);
+   else
+      m_settings.Set(prop.value(), val, true);
    return S_OK;
 }
 
@@ -6918,20 +6947,20 @@ void PinTable::ShowWhereMaterialUsed(vector<WhereUsedInfo> &vWhereUsed, Material
 
 STDMETHODIMP PinTable::get_ReflectElementsOnPlayfield(VARIANT_BOOL *pVal)
 {
-   PLOGE << "ReflectElementsOnPlayfield is deprecated";
+   PLOGW << "ReflectElementsOnPlayfield is deprecated";
    *pVal = FTOVB(true);
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_ReflectElementsOnPlayfield(VARIANT_BOOL newVal)
 {
-   PLOGE << "ReflectElementsOnPlayfield is deprecated";
+   PLOGW << "ReflectElementsOnPlayfield is deprecated";
    return S_OK;
 }
 
 STDMETHODIMP PinTable::get_YieldTime(LONG *pVal)
 {
-   PLOGE << "YieldTime is deprecated";
+   PLOGW << "YieldTime is deprecated";
    *pVal = 0;
    if (!g_pplayer)
       return E_FAIL;
@@ -6940,7 +6969,7 @@ STDMETHODIMP PinTable::get_YieldTime(LONG *pVal)
 
 STDMETHODIMP PinTable::put_YieldTime(LONG newVal)
 {
-   PLOGE << "YieldTime is deprecated";
+   PLOGW << "YieldTime is deprecated";
    if (!g_pplayer)
       return E_FAIL;
    return S_OK;
@@ -6948,138 +6977,138 @@ STDMETHODIMP PinTable::put_YieldTime(LONG newVal)
 
 STDMETHODIMP PinTable::get_TableHeight(float *pVal)
 {
-   PLOGE << "TableHeight is deprecated";
+   PLOGW << "TableHeight is deprecated";
    *pVal = 0.f;
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_TableHeight(float newVal)
 {
-   PLOGE << "TableHeight is deprecated";
+   PLOGW << "TableHeight is deprecated";
    return S_OK;
 }
 
 STDMETHODIMP PinTable::get_TableAdaptiveVSync(int *pVal)
 {
-   PLOGE << "TableAdaptiveVSync is deprecated";
+   PLOGW << "TableAdaptiveVSync is deprecated";
    *pVal = -1;
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_TableAdaptiveVSync(int newVal)
 {
-   PLOGE << "TableAdaptiveVSync is deprecated";
+   PLOGW << "TableAdaptiveVSync is deprecated";
    return S_OK;
 }
 
 STDMETHODIMP PinTable::get_GlobalAlphaAcc(VARIANT_BOOL *pVal)
 {
-   PLOGE << "GlobalAlphaAcc is deprecated";
+   PLOGW << "GlobalAlphaAcc is deprecated";
    *pVal = (VARIANT_BOOL)-1;
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_GlobalAlphaAcc(VARIANT_BOOL newVal)
 {
-   PLOGE << "GlobalAlphaAcc is deprecated";
+   PLOGW << "GlobalAlphaAcc is deprecated";
    return S_OK;
 }
 
 STDMETHODIMP PinTable::get_GlobalDayNight(VARIANT_BOOL *pVal)
 {
-   PLOGE << "GlobalDayNight is deprecated";
+   PLOGW << "GlobalDayNight is deprecated";
    *pVal = (VARIANT_BOOL)0;
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_GlobalDayNight(VARIANT_BOOL newVal)
 {
-   PLOGE << "GlobalDayNight is deprecated";
+   PLOGW << "GlobalDayNight is deprecated";
    return S_OK;
 }
 
 STDMETHODIMP PinTable::get_GlobalStereo3D(VARIANT_BOOL *pVal)
 {
-   PLOGE << "GlobalStereo3D is deprecated";
+   PLOGW << "GlobalStereo3D is deprecated";
    *pVal = (VARIANT_BOOL)0;
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_GlobalStereo3D(VARIANT_BOOL newVal)
 {
-   PLOGE << "GlobalStereo3D is deprecated";
+   PLOGW << "GlobalStereo3D is deprecated";
    return S_OK;
 }
 
 STDMETHODIMP PinTable::get_MaxSeparation(float *pVal)
 {
-   PLOGE << "MaxSeparation is deprecated";
+   PLOGW << "MaxSeparation is deprecated";
    *pVal = 0.f;
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_MaxSeparation(float newVal)
 {
-   PLOGE << "MaxSeparation is deprecated";
+   PLOGW << "MaxSeparation is deprecated";
    return S_OK;
 }
 
 STDMETHODIMP PinTable::get_ZPD(float *pVal)
 {
-   PLOGE << "ZPD is deprecated";
+   PLOGW << "ZPD is deprecated";
    *pVal = 0.f;
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_ZPD(float newVal)
 {
-   PLOGE << "ZPD is deprecated";
+   PLOGW << "ZPD is deprecated";
    return S_OK;
 }
 
 STDMETHODIMP PinTable::get_Offset(float *pVal)
 {
-   PLOGE << "3D Offset is deprecated";
+   PLOGW << "3D Offset is deprecated";
    *pVal = 0.f;
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_Offset(float newVal)
 {
-   PLOGE << "3D Offset is deprecated";
+   PLOGW << "3D Offset is deprecated";
    return S_OK;
 }
 
 STDMETHODIMP PinTable::get_PlungerFilter(VARIANT_BOOL *pVal)
 {
-   PLOGE << "PlungerFilter is deprecated";
+   PLOGW << "PlungerFilter is deprecated";
    *pVal = (VARIANT_BOOL)0;
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_PlungerFilter(VARIANT_BOOL newVal)
 {
-   PLOGE << "PlungerFilter is deprecated";
+   PLOGW << "PlungerFilter is deprecated";
    return S_OK;
 }
 
 STDMETHODIMP PinTable::get_PlungerNormalize(int *pVal)
 {
-   PLOGE << "PlungerNormalize is deprecated";
+   PLOGW << "PlungerNormalize is deprecated";
    *pVal = 100;
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_PlungerNormalize(int newVal)
 {
-   PLOGE << "PlungerNormalize is deprecated";
+   PLOGW << "PlungerNormalize is deprecated";
    return S_OK;
 }
 
 // Changing AA & FXAA is somewhat wrong as it changes the setting for all time, and is not implemented while playing, so this is just a No-Op
 STDMETHODIMP PinTable::get_EnableAntialiasing(UserDefaultOnOff *pVal)
 {
-   PLOGE << "EnableAntialiasing is deprecated";
+   PLOGW << "EnableAntialiasing is deprecated";
    *pVal = UserDefaultOnOff::Default;
    return S_OK;
 }
@@ -7087,14 +7116,14 @@ STDMETHODIMP PinTable::get_EnableAntialiasing(UserDefaultOnOff *pVal)
 // Changing AA & FXAA is somewhat wrong as it changes the setting for all time, and is not implemented while playing, so this is just a No-Op
 STDMETHODIMP PinTable::put_EnableAntialiasing(UserDefaultOnOff newVal)
 {
-   PLOGE << "EnableAntialiasing is deprecated";
+   PLOGW << "EnableAntialiasing is deprecated";
    return S_OK;
 }
 
 // Changing AA & FXAA is somewhat wrong as it changes the setting for all time, and is not implemented while playing, so this is just a No-Op
 STDMETHODIMP PinTable::get_EnableFXAA(FXAASettings *pVal)
 {
-   PLOGE << "EnableFXAA is deprecated";
+   PLOGW << "EnableFXAA is deprecated";
    *pVal = FXAASettings::Defaults;
    return S_OK;
 }
@@ -7102,7 +7131,7 @@ STDMETHODIMP PinTable::get_EnableFXAA(FXAASettings *pVal)
 // Changing AA & FXAA is somewhat wrong as it changes the setting for all time, and is not implemented while playing, so this is just a No-Op
 STDMETHODIMP PinTable::put_EnableFXAA(FXAASettings newVal)
 {
-   PLOGE << "EnableFXAA is deprecated";
+   PLOGW << "EnableFXAA is deprecated";
    return S_OK;
 }
 
@@ -7110,27 +7139,27 @@ STDMETHODIMP PinTable::put_EnableFXAA(FXAASettings newVal)
 
 STDMETHODIMP PinTable::get_BackglassMode(BackglassIndex *pVal)
 {
-   PLOGE << "BackglassMode is deprecated";
+   PLOGW << "BackglassMode is deprecated";
    *pVal = static_cast<BackglassIndex>(static_cast<int>(m_viewMode) + static_cast<int>(DESKTOP));
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_BackglassMode(BackglassIndex pVal)
 {
-   PLOGE << "BackglassMode is deprecated and ignored, this call has no effect";
+   PLOGW << "BackglassMode is deprecated and ignored, this call has no effect";
    return S_OK;
 }
 
 STDMETHODIMP PinTable::get_FieldOfView(float *pVal)
 {
-   PLOGE << "FieldOfView is deprecated";
+   PLOGW << "FieldOfView is deprecated";
    *pVal = mViewSetups[m_viewMode].mFOV;
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_FieldOfView(float newVal)
 {
-   PLOGE << "FieldOfView is deprecated";
+   PLOGW << "FieldOfView is deprecated";
    STARTUNDO
    mViewSetups[m_viewMode].mFOV = newVal;
    STOPUNDO
@@ -7140,14 +7169,14 @@ STDMETHODIMP PinTable::put_FieldOfView(float newVal)
 
 STDMETHODIMP PinTable::get_Inclination(float *pVal)
 {
-   PLOGE << "Inclination is deprecated";
+   PLOGW << "Inclination is deprecated";
    *pVal = mViewSetups[m_viewMode].mLookAt;
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_Inclination(float newVal)
 {
-   PLOGE << "Inclination is deprecated";
+   PLOGW << "Inclination is deprecated";
    STARTUNDO
    mViewSetups[m_viewMode].mLookAt = newVal;
    STOPUNDO
@@ -7157,14 +7186,14 @@ STDMETHODIMP PinTable::put_Inclination(float newVal)
 
 STDMETHODIMP PinTable::get_Layback(float *pVal)
 {
-   PLOGE << "Layback is deprecated";
+   PLOGW << "Layback is deprecated";
    *pVal = mViewSetups[m_viewMode].mLayback;
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_Layback(float newVal)
 {
-   PLOGE << "Layback is deprecated";
+   PLOGW << "Layback is deprecated";
    STARTUNDO
    mViewSetups[m_viewMode].mLayback = newVal;
    STOPUNDO
@@ -7174,14 +7203,14 @@ STDMETHODIMP PinTable::put_Layback(float newVal)
 
 STDMETHODIMP PinTable::get_Rotation(float *pVal)
 {
-   PLOGE << "Rotation is deprecated";
+   PLOGW << "Rotation is deprecated";
    *pVal = mViewSetups[m_viewMode].mViewportRotation;
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_Rotation(float newVal)
 {
-   PLOGE << "Rotation is deprecated";
+   PLOGW << "Rotation is deprecated";
    STARTUNDO
    mViewSetups[m_viewMode].mViewportRotation = newVal;
    STOPUNDO
@@ -7191,14 +7220,14 @@ STDMETHODIMP PinTable::put_Rotation(float newVal)
 
 STDMETHODIMP PinTable::get_Scalex(float *pVal)
 {
-   PLOGE << "Scalex is deprecated";
+   PLOGW << "Scalex is deprecated";
    *pVal = mViewSetups[m_viewMode].mSceneScaleX;
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_Scalex(float newVal)
 {
-   PLOGE << "Scalex is deprecated";
+   PLOGW << "Scalex is deprecated";
    STARTUNDO
    mViewSetups[m_viewMode].mSceneScaleX = newVal;
    STOPUNDO
@@ -7208,14 +7237,14 @@ STDMETHODIMP PinTable::put_Scalex(float newVal)
 
 STDMETHODIMP PinTable::get_Scaley(float *pVal)
 {
-   PLOGE << "Scaley is deprecated";
+   PLOGW << "Scaley is deprecated";
    *pVal = mViewSetups[m_viewMode].mSceneScaleY;
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_Scaley(float newVal)
 {
-   PLOGE << "Scaley is deprecated";
+   PLOGW << "Scaley is deprecated";
    STARTUNDO
    mViewSetups[m_viewMode].mSceneScaleY = newVal;
    STOPUNDO
@@ -7225,14 +7254,14 @@ STDMETHODIMP PinTable::put_Scaley(float newVal)
 
 STDMETHODIMP PinTable::get_Scalez(float *pVal)
 {
-   PLOGE << "Scalez is deprecated";
+   PLOGW << "Scalez is deprecated";
    *pVal = mViewSetups[m_viewMode].mSceneScaleZ;
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_Scalez(float newVal)
 {
-   PLOGE << "Scalez is deprecated";
+   PLOGW << "Scalez is deprecated";
    STARTUNDO
    mViewSetups[m_viewMode].mSceneScaleZ = newVal;
    STOPUNDO
@@ -7242,14 +7271,14 @@ STDMETHODIMP PinTable::put_Scalez(float newVal)
 
 STDMETHODIMP PinTable::get_Xlatex(float *pVal)
 {
-   PLOGE << "Xlatex is deprecated";
+   PLOGW << "Xlatex is deprecated";
    *pVal = mViewSetups[m_viewMode].mViewX;
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_Xlatex(float newVal)
 {
-   PLOGE << "Xlatex is deprecated";
+   PLOGW << "Xlatex is deprecated";
    STARTUNDO
    mViewSetups[m_viewMode].mViewX = newVal;
    STOPUNDO
@@ -7259,14 +7288,14 @@ STDMETHODIMP PinTable::put_Xlatex(float newVal)
 
 STDMETHODIMP PinTable::get_Xlatey(float *pVal)
 {
-   PLOGE << "Xlatey is deprecated";
+   PLOGW << "Xlatey is deprecated";
    *pVal = mViewSetups[m_viewMode].mViewY;
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_Xlatey(float newVal)
 {
-   PLOGE << "Xlatey is deprecated";
+   PLOGW << "Xlatey is deprecated";
    STARTUNDO
    mViewSetups[m_viewMode].mViewY = newVal;
    STOPUNDO
@@ -7276,14 +7305,14 @@ STDMETHODIMP PinTable::put_Xlatey(float newVal)
 
 STDMETHODIMP PinTable::get_Xlatez(float *pVal)
 {
-   PLOGE << "Xlatez is deprecated";
+   PLOGW << "Xlatez is deprecated";
    *pVal = mViewSetups[m_viewMode].mViewZ;
    return S_OK;
 }
 
 STDMETHODIMP PinTable::put_Xlatez(float newVal)
 {
-   PLOGE << "Xlatez is deprecated";
+   PLOGW << "Xlatez is deprecated";
    STARTUNDO
    mViewSetups[m_viewMode].mViewZ = newVal;
    STOPUNDO

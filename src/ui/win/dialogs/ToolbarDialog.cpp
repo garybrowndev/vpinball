@@ -4,6 +4,7 @@
 #include "ToolbarDialog.h"
 
 #include "core/editablereg.h"
+#include "core/VPApp.h"
 #include "parts/pintable.h"
 #include "ui/win/resource.h"
 #include "ui/win/WinEditor.h"
@@ -62,6 +63,12 @@ BOOL ToolbarDialog::OnInitDialog()
     AttachItem(ID_INSERT_PRIMITIVE, m_primitiveButton);
     AttachItem(ID_INSERT_FLASHER, m_flasherButton);
     AttachItem(ID_INSERT_RUBBER, m_rubberButton);
+    AttachItem(IDC_TURN_VR_ON, m_vrCombo);
+
+#ifndef ENABLE_BGFX
+    GetDlgItem(IDC_VR_MODE).ShowWindow(SW_HIDE);
+    m_vrCombo.ShowWindow(SW_HIDE);
+#endif
 
     m_tooltip.Create(GetHwnd());
     m_tooltip.AddTool(m_magnifyButton, _T("Zoom in/out"));
@@ -91,6 +98,11 @@ BOOL ToolbarDialog::OnInitDialog()
     m_tooltip.AddTool(m_primitiveButton, _T("Insert Primitive"));
     m_tooltip.AddTool(m_flasherButton, _T("Insert Flasher"));
     m_tooltip.AddTool(m_rubberButton, _T("Insert Rubber"));
+
+    m_vrCombo.AddString("Off");
+    m_vrCombo.AddString("Auto");
+    m_vrCombo.AddString("On");
+    m_vrCombo.SetCurSel(2 - g_app->m_settings.GetPlayerVR_AskToTurnOn());
 
     constexpr int iconSize = 24;
     HANDLE hIcon = ::LoadImage(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_MAGNIFY), IMAGE_ICON, iconSize, iconSize, LR_DEFAULTCOLOR);
@@ -201,6 +213,8 @@ BOOL ToolbarDialog::OnInitDialog()
     m_resizer.AddChild(m_primitiveButton.GetHwnd(), CResizer::center, RD_STRETCH_WIDTH | RD_STRETCH_HEIGHT);
     m_resizer.AddChild(m_flasherButton.GetHwnd(), CResizer::center, RD_STRETCH_WIDTH | RD_STRETCH_HEIGHT);
     m_resizer.AddChild(m_rubberButton.GetHwnd(), CResizer::center, RD_STRETCH_WIDTH | RD_STRETCH_HEIGHT);
+    m_resizer.AddChild(GetDlgItem(IDC_VR_MODE), CResizer::center, 0);
+    m_resizer.AddChild(m_vrCombo, CResizer::center, RD_STRETCH_WIDTH);
 
     m_resizer.RecalcLayout();
 
@@ -371,6 +385,14 @@ BOOL ToolbarDialog::OnCommand(WPARAM wParam, LPARAM lParam)
         {
             g_pvp->DoPlay(1);
             break;
+        }
+        case IDC_TURN_VR_ON:
+        {
+           if (UINT notifyCode = HIWORD(wParam); notifyCode == CBN_SELCHANGE)
+           {
+              g_app->m_settings.SetPlayerVR_AskToTurnOn(2 - m_vrCombo.GetCurSel(), false);
+           }
+           break;
         }
     }
     return FALSE;

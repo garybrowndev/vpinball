@@ -29,7 +29,6 @@ PlumbHandler::~PlumbHandler()
 float PlumbHandler::GetPlumbDamping() const
 {
    return m_plumbAngularDamping0 / m_dampingCoef0;
-   //return m_plumbAngularDamping1 / 1.5f;
 }
 
 void PlumbHandler::SetPlumbDamping(float v)

@@ -4,6 +4,8 @@
 #include "Server.h"
 #include "plugins/LoggingPlugin.h"
 
+#include "pinmame/PinMAMEPlugin.h"
+
 using namespace std::string_literals;
 using namespace std::string_view_literals;
 
@@ -14,6 +16,7 @@ using namespace std::string_view_literals;
 #include "controls/B2SPictureBox.h"
 #include "controls/B2SLEDBox.h"
 #include "controls/B2SReelBox.h"
+#include "classes/B2SReelDisplay.h"
 #include "classes/LEDDisplayDigitLocation.h"
 #include "classes/CollectData.h"
 #include "dream7/Dream7Display.h"
@@ -22,21 +25,24 @@ using namespace std::string_view_literals;
 #include "classes/B2SScreen.h"
 #include "utils/PinMAMEAPI.h"
 
+#include <random>
+
 
 namespace B2SLegacy {
 
 Server* Server::m_singleton = nullptr;
 
 Server::Server(MsgPluginAPI* msgApi, uint32_t endpointId, VPXPluginAPI* vpxApi, ScriptClassDef* serverClassDef)
-   : m_onGameStartId(msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_EVT_ON_GAME_START))
-   , m_onGameEndId(msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_EVT_ON_GAME_END))
-   , m_onGetDevSrcId(msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DEVICE_GET_SRC_MSG)) 
+   : m_onControllersChangedId(msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_CONTROLLERS_ON_CHG_MSG))
+   , m_getControllersId(msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_CONTROLLERS_GET_MSG))
+   , m_onGetStateSrcId(msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_STATE_GET_SRC_MSG)) 
    , m_msgApi(msgApi)
    , m_vpxApi(vpxApi)
    , m_endpointId(endpointId)
    , m_onGetAuxRendererId(msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_MSG_GET_AUX_RENDERER))
    , m_onAuxRendererChgId(msgApi->GetMsgID(VPXPI_NAMESPACE, VPXPI_EVT_AUX_RENDERER_CHG))
-   , m_onDevChangedMsgId(msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DEVICE_ON_SRC_CHG_MSG))
+   , m_onStateChangedMsgId(msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_STATE_ON_SRC_CHG_MSG))
+   , m_onStateChangeEventId(msgApi->GetMsgID("B2S", "OnStateChange"))
    , m_pinmameApi(msgApi, endpointId, this, serverClassDef)
 {
    m_singleton = this;
@@ -50,35 +56,43 @@ Server::Server(MsgPluginAPI* msgApi, uint32_t endpointId, VPXPluginAPI* vpxApi, 
    m_pTimer->SetInterval(37);
    m_pTimer->SetElapsedListener(std::bind(&Server::TimerElapsed, this, std::placeholders::_1));
 
-   m_devSrc.id.endpointId = m_endpointId;
-   m_devSrc.GetByteState = GetByteState;
-   m_devSrc.GetFloatState = GetFloatState;
-   m_devSrc.SetChangeCallback = RegisterStateChangeCallback;
+   m_stateSrc.id.endpointId = m_endpointId;
+   m_stateSrc.nGroups = 0;
+   m_stateSrc.groupDefs = nullptr;
+   m_stateSrc.GetState = GetStateAPI;
+   m_stateSrc.SetState = SetStateAPI;
 
-   msgApi->SubscribeMsg(endpointId, m_onGetAuxRendererId, OnGetRendererStatic, this);
-   msgApi->SubscribeMsg(endpointId, m_onDevChangedMsgId, OnDevSrcChangedStatic, this);
-   msgApi->SubscribeMsg(endpointId, m_onGetDevSrcId, OnGetDevSrc, this);
-   msgApi->BroadcastMsg(endpointId, m_onAuxRendererChgId, nullptr);
+   m_msgApi->SubscribeMsg(m_endpointId, m_getControllersId, OnGetControllers, this);
+   m_msgApi->SubscribeMsg(m_endpointId, m_onGetAuxRendererId, OnGetRendererStatic, this);
+   m_msgApi->SubscribeMsg(m_endpointId, m_onStateChangedMsgId, OnStateSrcChangedStatic, this);
+   m_msgApi->SubscribeMsg(m_endpointId, m_onGetStateSrcId, OnGetStateSrc, this);
+   m_msgApi->BroadcastMsg(m_endpointId, m_onAuxRendererChgId, nullptr);
 }
 
 Server::~Server()
 {
    if (m_gameRunning)
-      m_msgApi->BroadcastMsg(m_endpointId, m_onGameEndId, nullptr);
-   m_msgApi->ReleaseMsgID(m_onGameStartId);
-   m_msgApi->ReleaseMsgID(m_onGameEndId);
+   {
+      m_gameRunning = false;
+      m_msgApi->BroadcastMsg(m_endpointId, m_onControllersChangedId, nullptr);
+   }
 
+   m_msgApi->UnsubscribeMsg(m_getControllersId, OnGetControllers, this);
    m_msgApi->UnsubscribeMsg(m_onGetAuxRendererId, OnGetRendererStatic, this);
-   m_msgApi->UnsubscribeMsg(m_onDevChangedMsgId, OnDevSrcChangedStatic, this);
-   m_msgApi->UnsubscribeMsg(m_onGetDevSrcId, OnGetDevSrc, this);
+   m_msgApi->UnsubscribeMsg(m_onStateChangedMsgId, OnStateSrcChangedStatic, this);
+   m_msgApi->UnsubscribeMsg(m_onGetStateSrcId, OnGetStateSrc, this);
    m_msgApi->BroadcastMsg(m_endpointId, m_onAuxRendererChgId, nullptr);
+   m_msgApi->ReleaseMsgID(m_onControllersChangedId);
+   m_msgApi->ReleaseMsgID(m_getControllersId);
    m_msgApi->ReleaseMsgID(m_onGetAuxRendererId);
    m_msgApi->ReleaseMsgID(m_onAuxRendererChgId);
-   m_msgApi->ReleaseMsgID(m_onDevChangedMsgId);
-   m_msgApi->ReleaseMsgID(m_onGetDevSrcId);
+   m_msgApi->ReleaseMsgID(m_onStateChangedMsgId);
+   m_msgApi->ReleaseMsgID(m_onGetStateSrcId);
 
-   delete[] m_deviceStateSrc.deviceDefs;
-   delete[] m_devSrc.deviceDefs;
+   m_msgApi->ReleaseMsgID(m_onStateChangeEventId);
+
+   delete[] m_pinmameStateSrc.stateDefs;
+   delete[] m_stateSrc.stateDefs;
 
    if (m_onDestroyHandler)
       m_onDestroyHandler(this);
@@ -130,123 +144,194 @@ int Server::OnRender(VPXRenderContext2D* const renderCtx, void* context)
    return 0;
 }
 
-void Server::OnDevSrcChanged(const unsigned int msgId, void* userData, void* msgData)
+void Server::OnGetControllers(const unsigned int msgId, void* userData, void* msgData)
 {
-   delete[] m_deviceStateSrc.deviceDefs;
-   memset(&m_deviceStateSrc, 0, sizeof(m_deviceStateSrc));
+   if (auto me = static_cast<Server*>(userData); me->m_gameRunning)
+   {
+      auto msg = static_cast<GetControllersMsg*>(msgData);
+      if (msg->count < msg->maxEntryCount)
+      {
+         msg->entries[msg->count].endpointId = me->m_endpointId;
+         msg->entries[msg->count].gameId = me->m_controllerGameId.c_str();
+      }
+      msg->count++;
+   }
+}
+
+void Server::OnStateSrcChanged(const unsigned int msgId, void* userData, void* msgData)
+{
+   delete[] m_pinmameStateSrc.stateDefs;
+   memset(&m_pinmameStateSrc, 0, sizeof(m_pinmameStateSrc));
 
    unsigned int pinmameEndpoint = m_msgApi->GetPluginEndpoint("PinMAME");
    if (pinmameEndpoint == 0)
       return;
 
-   unsigned int getDevSrcMsgId = m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_DEVICE_GET_SRC_MSG);
-   GetDevSrcMsg getSrcMsg = { 0, 0, nullptr };
-   m_msgApi->SendMsg(m_endpointId, getDevSrcMsgId, pinmameEndpoint, &getSrcMsg);
-   vector<DevSrcId> entries(getSrcMsg.count);
+   unsigned int getStateSrcMsgId = m_msgApi->GetMsgID(CTLPI_NAMESPACE, CTLPI_STATE_GET_SRC_MSG);
+   GetStateSrcMsg getSrcMsg = { 0, 0, nullptr };
+   m_msgApi->SendMsg(m_endpointId, getStateSrcMsgId, pinmameEndpoint, &getSrcMsg);
+   vector<StateSrcId> entries(getSrcMsg.count);
    getSrcMsg = { getSrcMsg.count, 0, entries.data() };
-   m_msgApi->SendMsg(m_endpointId, getDevSrcMsgId, pinmameEndpoint, &getSrcMsg);
-   m_msgApi->ReleaseMsgID(getDevSrcMsgId);
+   m_msgApi->SendMsg(m_endpointId, getStateSrcMsgId, pinmameEndpoint, &getSrcMsg);
+   m_msgApi->ReleaseMsgID(getStateSrcMsgId);
    for (unsigned int i = 0; i < getSrcMsg.count; i++)
    {
       if (getSrcMsg.entries[i].id.endpointId == pinmameEndpoint)
       {
-         m_deviceStateSrc = getSrcMsg.entries[i];
-         if (getSrcMsg.entries[i].deviceDefs)
+         m_pinmameStateSrc = getSrcMsg.entries[i];
+         if (getSrcMsg.entries[i].stateDefs)
          {
-            m_deviceStateSrc.deviceDefs = new DeviceDef[getSrcMsg.entries[i].nDevices];
-            memcpy(m_deviceStateSrc.deviceDefs, getSrcMsg.entries[i].deviceDefs, getSrcMsg.entries[i].nDevices * sizeof(DeviceDef));
+            m_pinmameStateSrc.stateDefs = new StateDef[getSrcMsg.entries[i].nStates];
+            memcpy(m_pinmameStateSrc.stateDefs, getSrcMsg.entries[i].stateDefs, getSrcMsg.entries[i].nStates * sizeof(StateDef));
          }
          break;
       }
    }
 
-   if (m_deviceStateSrc.deviceDefs == nullptr)
+   if (m_pinmameStateSrc.stateDefs == nullptr)
       return;
 
-   LOGI(std::format("Device state updated - {} devices", m_deviceStateSrc.nDevices));
+   LOGI(std::format("Device state updated - {} devices", m_pinmameStateSrc.nStates));
 }
 
-void Server::OnGetDevSrc(const unsigned int, void* userData, void* msgData)
+void Server::OnStateSrcChangedStatic(const unsigned int msgId, void* userData, void* msgData)
+{
+   static_cast<Server*>(userData)->OnStateSrcChanged(msgId, userData, msgData);
+}
+
+void Server::OnGetStateSrc(const unsigned int, void* userData, void* msgData)
 {
    auto me = static_cast<Server*>(userData);
-   auto msg = static_cast<GetDevSrcMsg*>(msgData);
+   auto msg = static_cast<GetStateSrcMsg*>(msgData);
    if (msg->count < msg->maxEntryCount)
-      memcpy(&msg->entries[msg->count], &me->m_devSrc, sizeof(DevSrcId));
+      memcpy(&msg->entries[msg->count], &me->m_stateSrc, sizeof(StateSrcId));
    msg->count++;
 }
 
-void Server::UpdateDevSrc()
+struct B2SPluginEvent
 {
+   uint8_t type;
+   int32_t index;
+   int32_t value;
+};
+
+void Server::UpdateStateSrc()
+{
+   // TODO this should be performed when controller start/stop, not when states are declared
    if (m_gameRunning && m_b2sStates.empty())
    {
       m_gameRunning = false;
-      m_msgApi->BroadcastMsg(m_endpointId, m_onGameEndId, nullptr);
+      m_msgApi->BroadcastMsg(m_endpointId, m_onControllersChangedId, nullptr);
    }
    else if (!m_gameRunning && !m_b2sStates.empty())
    {
       m_gameRunning = true;
-      CtlOnGameStartMsg msg = { GetB2SName().c_str(), 0 };
-      m_msgApi->BroadcastMsg(m_endpointId, m_onGameStartId, reinterpret_cast<void*>(&msg));
+      m_msgApi->BroadcastMsg(m_endpointId, m_onControllersChangedId, nullptr);
    }
 
-   delete[] m_devSrc.deviceDefs;
-   m_devSrc.nDevices = static_cast<unsigned int>(m_b2sStates.size());
-   m_devSrc.deviceDefs = new DeviceDef[m_devSrc.nDevices];
-   m_devSrcNames.resize(m_devSrc.nDevices);
+   std::unique_lock<std::mutex> lock(m_stateSrcMutex);
+   delete[] m_stateSrc.stateDefs;
+   m_stateSrc.nStates = static_cast<unsigned int>(m_b2sStates.size() + m_playerScores.size() + m_scoreDigits.size());
+   m_stateSrc.nGroups = static_cast<unsigned int>(m_stateGroupDefs.size());
+   m_stateSrc.groupDefs = m_stateGroupDefs.data();
+   m_stateSrc.stateDefs = new StateDef[m_stateSrc.nStates]();
+   m_stateSrcNames.resize(m_stateSrc.nStates);
    uint16_t index = 0;
    for (const auto& [id, v] : m_b2sStates)
    {
-      m_devSrcNames[index] = std::format("B2S.Data #{}", id);
-      m_devSrc.deviceDefs[index].name = m_devSrcNames[index].c_str();
-      m_devSrc.deviceDefs[index].id.groupId = 0x0001;
-      m_devSrc.deviceDefs[index].id.deviceId = id;
+      m_stateSrcNames[index] = std::format("B2S.Data #{}", id);
+      m_stateSrc.stateDefs[index].name = m_stateSrcNames[index].c_str();
+      m_stateSrc.stateDefs[index].id.groupId = 0x0001;
+      m_stateSrc.stateDefs[index].id.stateId = id;
+      m_stateSrc.stateDefs[index].typeMask = CTLPI_STATE_TYPE_FLOAT | CTLPI_STATE_TYPE_UINT8;
       index++;
    }
-   m_stateChgCallbacks.clear();
-   m_msgApi->BroadcastMsg(m_endpointId, m_onDevChangedMsgId, nullptr);
-}
-
-uint8_t MSGPIAPI Server::GetByteState(const unsigned int deviceIndex)
-{
-   if (Server::m_singleton == nullptr || deviceIndex >= m_singleton->m_devSrc.nDevices)
-      return 0;
-   int b2sId = m_singleton->m_devSrc.deviceDefs[deviceIndex].id.deviceId;
-   return static_cast<uint8_t>(m_singleton->GetState(b2sId) * 255.f);
-}
-
-float MSGPIAPI Server::GetFloatState(const unsigned int deviceIndex)
-{
-   if (Server::m_singleton == nullptr || deviceIndex >= m_singleton->m_devSrc.nDevices)
-      return 0.f;
-   int b2sId = m_singleton->m_devSrc.deviceDefs[deviceIndex].id.deviceId;
-   return m_singleton->GetState(b2sId);
-}
-
-void MSGPIAPI Server::RegisterStateChangeCallback(unsigned int deviceIndex, int isRegister, ctlpi_chg_callback cb, void* ctx)
-{
-   if (Server::m_singleton == nullptr || deviceIndex >= m_singleton->m_devSrc.nDevices)
-      return;
-   const int b2sId = m_singleton->m_devSrc.deviceDefs[deviceIndex].id.deviceId;
-   if (auto mapIt = m_singleton->m_stateChgCallbacks.find(b2sId); mapIt == m_singleton->m_stateChgCallbacks.end())
-      m_singleton->m_stateChgCallbacks[b2sId] = vector<ChgCallback>();
-   auto& callbacks = m_singleton->m_stateChgCallbacks[b2sId];
-   auto it = std::ranges::find_if(callbacks, [&cb, ctx](const ChgCallback& a) { return a.m_callback == cb && a.m_context == ctx; });
-   if (isRegister)
+   for (const auto& [id, v] : m_playerScores)
    {
-      if (it == callbacks.end())
-         callbacks.emplace_back(cb, deviceIndex, ctx);
+      m_stateSrcNames[index] = std::format("Player Score #{}", id);
+      m_stateSrc.stateDefs[index].name = m_stateSrcNames[index].c_str();
+      m_stateSrc.stateDefs[index].id.groupId = 0x0002;
+      m_stateSrc.stateDefs[index].id.stateId = id;
+      m_stateSrc.stateDefs[index].typeMask = CTLPI_STATE_TYPE_INT32 | CTLPI_STATE_TYPE_INT64;
+      index++;
    }
-   else
+   for (const auto& [id, v] : m_scoreDigits)
    {
-      if (it != callbacks.end())
-         callbacks.erase(it);
+      m_stateSrcNames[index] = std::format("Digit Score #{}", id);
+      m_stateSrc.stateDefs[index].name = m_stateSrcNames[index].c_str();
+      m_stateSrc.stateDefs[index].id.groupId = 0x0003;
+      m_stateSrc.stateDefs[index].id.stateId = id;
+      m_stateSrc.stateDefs[index].typeMask = CTLPI_STATE_TYPE_INT32 | CTLPI_STATE_TYPE_INT64;
+      index++;
    }
+   lock.unlock();
+
+   m_msgApi->BroadcastMsg(m_endpointId, m_onStateChangedMsgId, nullptr);
 }
+
+int MSGPIAPI Server::GetStateAPI(unsigned int inputIndex, int type, void* pResult)
+{
+   if (Server::m_singleton == nullptr)
+      return -1;
+   int id;
+   uint32_t groupId;
+   {
+      const std::lock_guard<std::mutex> lock(m_singleton->m_stateSrcMutex);
+      if (inputIndex >= m_singleton->m_stateSrc.nStates)
+         return -1;
+      id = m_singleton->m_stateSrc.stateDefs[inputIndex].id.stateId;
+      groupId = m_singleton->m_stateSrc.stateDefs[inputIndex].id.groupId;
+   }
+   switch (groupId)
+   {
+   case 0x0001:
+   {
+      // Normalized illuminations 0..1 or 0..255
+      const float val = m_singleton->GetState(id);
+      switch (type)
+      {
+      case CTLPI_STATE_TYPE_FLOAT: *static_cast<float*>(pResult) = val; return 0;
+      case CTLPI_STATE_TYPE_UINT8: *static_cast<uint8_t*>(pResult) = static_cast<uint8_t>(val * 255.f); return 0;
+      }
+      break;
+   }
+   case 0x0002:
+   case 0x0003:
+   {
+      // Scores, credits and other generic states
+      const int val = groupId == 0x0002 ? m_singleton->GetPlayerScore(id) : m_singleton->GetScoreDigit(id);
+      switch (type)
+      {
+      case CTLPI_STATE_TYPE_INT32: *static_cast<int32_t*>(pResult) = static_cast<int32_t>(val); return 0;
+      case CTLPI_STATE_TYPE_INT64: *static_cast<int64_t*>(pResult) = static_cast<int64_t>(val); return 0;
+      }
+      break;
+   }
+   }
+   return -1;
+}
+
+int MSGPIAPI Server::SetStateAPI(unsigned int inputIndex, int type, void* pResult) { return -1; }
 
 float Server::GetState(int b2sId) const
 {
+   const std::lock_guard<std::mutex> lock(m_stateSrcMutex);
    const auto it = m_b2sStates.find(b2sId);
    return it == m_b2sStates.end() ? 0.f : it->second;
+}
+
+int Server::GetPlayerScore(int playerno) const
+{
+   const std::lock_guard<std::mutex> lock(m_stateSrcMutex);
+   const auto it = m_playerScores.find(playerno);
+   return it == m_playerScores.end() ? 0 : it->second;
+}
+
+int Server::GetScoreDigit(int digit) const
+{
+   const std::lock_guard<std::mutex> lock(m_stateSrcMutex);
+   const auto it = m_scoreDigits.find(digit);
+   return it == m_scoreDigits.end() ? 0 : it->second;
 }
 
 int Server::OnRenderStatic(VPXRenderContext2D* ctx, void* userData)
@@ -272,11 +357,6 @@ void Server::OnGetRendererStatic(const unsigned int, void* userData, void* msgDa
          msg->entries[msg->count] = dmdEntry;
       msg->count++;
    }
-}
-
-void Server::OnDevSrcChangedStatic(const unsigned int msgId, void* userData, void* msgData)
-{
-   static_cast<Server*>(userData)->OnDevSrcChanged(msgId, userData, msgData);
 }
 
 void Server::TimerElapsed(Timer* pTimer)
@@ -367,6 +447,31 @@ const string& Server::GetB2SServerDirectory() const
    return m_szPath;
 }
 
+static std::string CreateGuidString()
+{
+   std::random_device rd;
+   std::mt19937_64 gen(rd());
+   std::uniform_int_distribution<uint64_t> dist;
+
+   uint64_t hi = dist(gen);
+   uint64_t lo = dist(gen);
+
+   // Set UUID version (4) and variant bits per RFC 4122
+   hi = (hi & 0xFFFFFFFFFFFF0FFFULL) | 0x0000000000004000ULL;
+   lo = (lo & 0x3FFFFFFFFFFFFFFFULL) | 0x8000000000000000ULL;
+
+   char buf[37];
+   std::snprintf(buf, sizeof(buf),
+      "%08llx-%04llx-%04llx-%04llx-%012llx",
+      (hi >> 32) & 0xFFFFFFFFULL,
+      (hi >> 16) & 0xFFFFULL,
+      hi & 0xFFFFULL,
+      (lo >> 48) & 0xFFFFULL,
+      lo & 0xFFFFFFFFFFFFULL);
+
+   return std::string(buf);
+}
+
 const string& Server::GetB2SName() const
 {
    return m_pB2SSettings->GetB2SName();
@@ -377,16 +482,16 @@ void Server::SetB2SName(const string& b2sName)
    if (b2sName == m_pB2SSettings->GetB2SName())
       return;
 
-   if (m_gameRunning)
-      m_msgApi->BroadcastMsg(m_endpointId, m_onGameEndId, nullptr);
-
    m_pB2SSettings->SetB2SName(b2sName);
 
+   string id = trim_string(b2sName);
+   if (id.empty())
+      m_controllerGameId = "b2s::" + CreateGuidString();
+   else
+      m_controllerGameId = "b2s::" + string_to_lower(id);
+
    if (m_gameRunning)
-   {
-      CtlOnGameStartMsg msg = { GetB2SName().c_str(), 0 };
-      m_msgApi->BroadcastMsg(m_endpointId, m_onGameStartId, reinterpret_cast<void*>(&msg));
-   }
+      m_msgApi->BroadcastMsg(m_endpointId, m_onControllersChangedId, nullptr);
 }
 
 const string& Server::GetTableName() const
@@ -516,6 +621,18 @@ void Server::B2SSetData(const string& name, int value)
    MyB2SSetData(name, value);
 }
 
+void Server::B2SSetData(int id, const string& value)
+{
+   if (is_string_numeric(value))
+      MyB2SSetData(id, string_to_int(value, 0));
+}
+
+void Server::B2SSetData(const string& name, const string& value)
+{
+   if (is_string_numeric(value))
+      MyB2SSetData(name, string_to_int(value, 0));
+}
+
 void Server::B2SPulseData(int id)
 {
    MyB2SSetData(id, 1);
@@ -533,9 +650,46 @@ void Server::B2SSetPos(int id, int xpos, int ypos)
    MyB2SSetPos(id, xpos, ypos);
 }
 
-void Server::B2SSetPos(const string& name, int xpos, int ypos)
+void Server::B2SSetPos(int id, int xpos, const string& ypos)
 {
-   MyB2SSetPos(string_to_int(name, 0), xpos, ypos);
+   if (is_string_numeric(ypos))
+      MyB2SSetPos(id, xpos, string_to_int(ypos, 0));
+}
+
+void Server::B2SSetPos(int id, const string& xpos, int ypos)
+{
+   if (is_string_numeric(xpos))
+      MyB2SSetPos(id, string_to_int(xpos, 0), ypos);
+}
+
+void Server::B2SSetPos(int id, const string& xpos, const string& ypos)
+{
+   if (is_string_numeric(xpos) && is_string_numeric(ypos))
+      MyB2SSetPos(id, string_to_int(xpos, 0), string_to_int(ypos, 0));
+}
+
+void Server::B2SSetPos(const string& id, int xpos, int ypos)
+{
+   if (is_string_numeric(id))
+      MyB2SSetPos(string_to_int(id, 0), xpos, ypos);
+}
+
+void Server::B2SSetPos(const string& id, int xpos, const string& ypos)
+{
+   if (is_string_numeric(id) && is_string_numeric(ypos))
+      MyB2SSetPos(string_to_int(id, 0), xpos, string_to_int(ypos, 0));
+}
+
+void Server::B2SSetPos(const string& id, const string& xpos, int ypos)
+{
+   if (is_string_numeric(id) && is_string_numeric(xpos))
+      MyB2SSetPos(string_to_int(id, 0), string_to_int(xpos, 0), ypos);
+}
+
+void Server::B2SSetPos(const string& id, const string& xpos, const string& ypos)
+{
+   if (is_string_numeric(id) && is_string_numeric(xpos) && is_string_numeric(ypos))
+      MyB2SSetPos(string_to_int(id, 0), string_to_int(xpos, 0), string_to_int(ypos, 0));
 }
 
 void Server::B2SSetIllumination(const string& name, int value)
@@ -558,14 +712,16 @@ void Server::B2SSetLEDDisplay(int display, const string& text)
    MyB2SSetLEDDisplay(display, text);
 }
 
+// Reel method(s)
 void Server::B2SSetReel(int digit, int value)
 {
    MyB2SSetScore(digit, value, true);
 }
 
+// Score: 1-24
 void Server::B2SSetScore(int display, int value)
 {
-   MyB2SSetScore(GetFirstDigitOfDisplay(display), value, false);
+   MyB2SSetScore(GetFirstDigitOfDisplay(display), value);
 }
 
 void Server::B2SSetScorePlayer(int playerno, int score)
@@ -608,6 +764,7 @@ void Server::B2SSetScoreDigit(int digit, int value)
    MyB2SSetScore(digit, value, false);
 }
 
+// Score rollover: 25-28
 void Server::B2SSetScoreRollover(int id, int value)
 {
    MyB2SSetData(id, value);
@@ -633,6 +790,7 @@ void Server::B2SSetScoreRolloverPlayer4(int value)
    MyB2SSetData(28, value);
 }
 
+// Credits: 29
 void Server::B2SSetCredits(int value)
 {
    MyB2SSetScore(29, value, false);
@@ -799,22 +957,22 @@ void Server::B2SMapSound(int digit, const string& soundname)
 
 void Server::MyB2SSetData(int id, int value)
 {
-   const auto it = m_b2sStates.find(id);
-   if (it == m_b2sStates.end())
+   bool isNewState;
    {
-      m_b2sStates[id] = static_cast<float>(value);
-      UpdateDevSrc();
+      const std::lock_guard<std::mutex> lock(m_stateSrcMutex);
+      const auto it = m_b2sStates.find(id);
+      isNewState = it == m_b2sStates.end();
+      if (isNewState)
+         m_b2sStates[id] = static_cast<float>(value);
+      else
+         it->second = static_cast<float>(value);
    }
-   else
-   {
-      it->second = static_cast<float>(value);
-      const auto chgIt = m_stateChgCallbacks.find(id);
-      if (chgIt != m_stateChgCallbacks.end())
-      {
-         for (const auto& cb : chgIt->second)
-            cb.m_callback(cb.m_index, cb.m_context);
-      }
-   }
+   if (isNewState)
+      UpdateStateSrc();
+
+
+   B2SPluginEvent event { 'E', id, value };
+   m_msgApi->BroadcastMsg(m_endpointId, m_onStateChangeEventId, &event);
 
    if (m_pB2SData->IsBackglassRunning()) {
       // Handle top/second light switching based on ROM IDs
@@ -941,15 +1099,16 @@ void Server::CheckGetMech(int number, int mech)
 
 void Server::CheckLamps(ScriptArray* psa)
 {
-   if (m_deviceStateSrc.deviceDefs == nullptr)
+   if (m_pinmameStateSrc.stateDefs == nullptr)
       return;
 
-   for (unsigned int i = 0; i < m_deviceStateSrc.nDevices; i++)
+   for (unsigned int i = 0; i < m_pinmameStateSrc.nStates; i++)
    {
-      if ((m_deviceStateSrc.deviceDefs[i].id.groupId & 0xFF00) == 0x0200)
+      if ((m_pinmameStateSrc.stateDefs[i].id.groupId & PMPI_GROUP_MASK) == PMPI_GROUP_LAMP)
       {
-         const int lampId = m_deviceStateSrc.deviceDefs[i].id.deviceId;
-         const float state = m_deviceStateSrc.GetFloatState(i);
+         const int lampId = m_pinmameStateSrc.stateDefs[i].id.stateId;
+         float state;
+         m_pinmameStateSrc.GetState(i, CTLPI_STATE_TYPE_FLOAT, &state);
          const int lampState = static_cast<int>(state * 255.0f);
 
          if (m_pB2SData->IsUseRomLamps() || m_pB2SData->IsUseAnimationLamps()) {
@@ -1084,15 +1243,16 @@ void Server::CheckLamps(ScriptArray* psa)
 
 void Server::CheckSolenoids(ScriptArray* psa)
 {
-   if (m_deviceStateSrc.deviceDefs == nullptr)
+   if (m_pinmameStateSrc.stateDefs == nullptr)
       return;
 
-   for (unsigned int i = 0; i < m_deviceStateSrc.nDevices; i++)
+   for (unsigned int i = 0; i < m_pinmameStateSrc.nStates; i++)
    {
-      if ((m_deviceStateSrc.deviceDefs[i].id.groupId & 0xFF00) == 0x0000)
+      if ((m_pinmameStateSrc.stateDefs[i].id.groupId & PMPI_GROUP_MASK) == PMPI_GROUP_SOLENOID)
       {
-         const int solenoidId = m_deviceStateSrc.deviceDefs[i].id.deviceId;
-         const float state = m_deviceStateSrc.GetFloatState(i);
+         const int solenoidId = m_pinmameStateSrc.stateDefs[i].id.stateId;
+         float state;
+         m_pinmameStateSrc.GetState(i, CTLPI_STATE_TYPE_FLOAT, &state);
          const int solenoidState = static_cast<int>(state * 255.0f);
 
          if (m_pB2SData->IsUseRomSolenoids() || m_pB2SData->IsUseAnimationSolenoids())
@@ -1228,15 +1388,16 @@ void Server::CheckSolenoids(ScriptArray* psa)
 
 void Server::CheckGIStrings(ScriptArray* psa)
 {
-   if (m_deviceStateSrc.deviceDefs == nullptr)
+   if (m_pinmameStateSrc.stateDefs == nullptr)
       return;
 
-   for (unsigned int i = 0; i < m_deviceStateSrc.nDevices; i++)
+   for (unsigned int i = 0; i < m_pinmameStateSrc.nStates; i++)
    {
-      if ((m_deviceStateSrc.deviceDefs[i].id.groupId & 0xFF00) == 0x0100)
+      if ((m_pinmameStateSrc.stateDefs[i].id.groupId & PMPI_GROUP_MASK) == PMPI_GROUP_GI)
       {
-         const int giStringId = m_deviceStateSrc.deviceDefs[i].id.deviceId;
-         const float state = m_deviceStateSrc.GetFloatState(i);
+         const int giStringId = m_pinmameStateSrc.stateDefs[i].id.stateId;
+         float state;
+         m_pinmameStateSrc.GetState(i, CTLPI_STATE_TYPE_FLOAT, &state);
          const int giStringBool = static_cast<int>(state * 255.0f) > m_giStringThreshold;
 
          if (m_pB2SData->IsUseRomGIStrings() || m_pB2SData->IsUseAnimationGIStrings()) {
@@ -1537,26 +1698,42 @@ int Server::GetFirstDigitOfDisplay(int display) const
 
 void Server::MyB2SSetScore(int digit, int value, bool animateReelChange)
 {
+   bool isNewState;
+   {
+      const std::lock_guard<std::mutex> lock(m_stateSrcMutex);
+      const auto it = m_scoreDigits.find(digit);
+      isNewState = it == m_scoreDigits.end();
+      if (isNewState)
+         m_scoreDigits[digit] = value;
+      else
+         it->second = value;
+   }
+   if (isNewState)
+      UpdateStateSrc();
+
+   B2SPluginEvent event { 'B', digit, value };
+   m_msgApi->BroadcastMsg(m_endpointId, m_onStateChangeEventId, &event);
+
    if (m_pB2SData->IsBackglassRunning()) {
       if (digit > 0) {
-         const auto& led = m_pB2SData->GetLEDs()->find("LEDBox" + std::to_string(digit));
-         const bool useLEDs = (led != m_pB2SData->GetLEDs()->end() && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Rendered);
-         const auto& dream7 = m_pB2SData->GetLEDDisplayDigits()->find(digit - 1);
-         const bool useLEDDisplays = (dream7 != m_pB2SData->GetLEDDisplayDigits()->end() && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Dream7);
-         const auto& reel = m_pB2SData->GetReels()->find("ReelBox" + std::to_string(digit));
-         const bool useReels = reel != m_pB2SData->GetReels()->end();
+         const bool useLEDs = (m_pB2SData->GetLEDs()->contains("LEDBox" + std::to_string(digit)) && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Rendered);
+         const bool useLEDDisplays = (m_pB2SData->GetLEDDisplayDigits()->contains(digit - 1) && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Dream7);
+         const bool useReels = m_pB2SData->GetReels()->contains("ReelBox" + std::to_string(digit));
 
          if (useLEDs) {
             // Rendered LEDs are used
-            led->second->SetText(std::to_string(value));
+            const string ledname = "LEDBox" + std::to_string(digit);
+            (*m_pB2SData->GetLEDs())[ledname]->SetText(std::to_string(value));
          }
          else if (useLEDDisplays) {
             // Dream 7 displays are used
-            dream7->second->GetLEDDisplay()->SetValue(dream7->second->GetDigit(), std::to_string(value));
+            LEDDisplayDigitLocation* pLEDDisplayDigit = (*m_pB2SData->GetLEDDisplayDigits())[digit - 1];
+            pLEDDisplayDigit->GetLEDDisplay()->SetValue(pLEDDisplayDigit->GetDigit(), std::to_string(value));
          }
          else if (useReels) {
             // Reels are used
-            reel->second->SetText(value, animateReelChange);
+            const string reelname = "ReelBox" + std::to_string(digit);
+            (*m_pB2SData->GetReels())[reelname]->SetText(value, animateReelChange);
          }
       }
    }
@@ -1566,18 +1743,17 @@ void Server::MyB2SSetScore(int digit, int score)
 {
    if (m_pB2SData->IsBackglassRunning()) {
       if (digit > 0) {
-         const auto& led = m_pB2SData->GetLEDs()->find("LEDBox" + std::to_string(digit));
-         const bool useLEDs = (led != m_pB2SData->GetLEDs()->end() && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Rendered);
-         const auto& dream7 = m_pB2SData->GetLEDDisplayDigits()->find(digit - 1);
-         const bool useLEDDisplays = (dream7 != m_pB2SData->GetLEDDisplayDigits()->end() && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Dream7);
-         const auto& reel = m_pB2SData->GetReels()->find("ReelBox" + std::to_string(digit));
-         const bool useReels = reel != m_pB2SData->GetReels()->end();
+         const bool useLEDs = (m_pB2SData->GetLEDs()->contains("LEDBox" + std::to_string(digit)) && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Rendered);
+         const bool useLEDDisplays = (m_pB2SData->GetLEDDisplayDigits()->contains(digit - 1) && m_pB2SSettings->GetUsedLEDType() == eLEDTypes_Dream7);
+         const bool useReels = m_pB2SData->GetReels()->contains("ReelBox" + std::to_string(digit));
 
          if (useLEDs) {
             // Check the passed digit
+            const string led = "LEDBox" + std::to_string(digit);
+
             // Get all necessary display data
-            const int startdigit = led->second->GetStartDigit();
-            const int digits = led->second->GetDigits();
+            const int startdigit = (*m_pB2SData->GetLEDs())[led]->GetStartDigit();
+            const int digits = (*m_pB2SData->GetLEDs())[led]->GetDigits();
             const string scoreAsString = string(digits - std::to_string(score).length(), ' ') + std::to_string(score);
 
             // Set digits
@@ -1585,24 +1761,24 @@ void Server::MyB2SSetScore(int digit, int score)
                (*m_pB2SData->GetLEDs())["LEDBox" + std::to_string(i)]->SetText(string(1,scoreAsString[i - startdigit]));
          }
          else if (useLEDDisplays) {
+            LEDDisplayDigitLocation* pLEDDisplayDigit = (*m_pB2SData->GetLEDDisplayDigits())[digit - 1];
+
             // Get all necessary display data
-            const int digits = dream7->second->GetLEDDisplay()->GetDigits();
+            const int digits = pLEDDisplayDigit->GetLEDDisplay()->GetDigits();
             const string scoreAsString = string(digits - std::to_string(score).length(), ' ') + std::to_string(score);
 
             // Set digits
             for (int i = digits - 1; i >= 0; i--)
-               dream7->second->GetLEDDisplay()->SetValue(i, string(1,scoreAsString[i]));
+               pLEDDisplayDigit->GetLEDDisplay()->SetValue(i, string(1,scoreAsString[i]));
          }
          else if (useReels) {
-            // Reels are used
-            // Get all necessary display data
-            const int startdigit = reel->second->GetStartDigit();
-            const int digits = reel->second->GetDigits();
-            const string scoreAsString = string(digits - std::to_string(score).length(), '0') + std::to_string(score);
+            // Get the necessary infos
+            const string reel = "ReelBox" + std::to_string(digit);
+            const int id = (*m_pB2SData->GetReels())[reel]->GetDisplayID();
 
-            // Set digits
-            for (int i = startdigit + digits - 1; i >= startdigit; i--)
-               (*m_pB2SData->GetReels())["ReelBox" + std::to_string(i)]->SetText(scoreAsString[i - startdigit] - '0', true); // convert char to int
+            // Set value
+            if (m_pB2SData->GetReelDisplays()->contains(id))
+               (*m_pB2SData->GetReelDisplays())[id]->SetScore(score);
          }
       }
    }
@@ -1610,11 +1786,27 @@ void Server::MyB2SSetScore(int digit, int score)
 
 void Server::MyB2SSetScorePlayer(int playerno, int score)
 {
+   bool isNewState;
+   {
+      const std::lock_guard<std::mutex> lock(m_stateSrcMutex);
+      const auto it = m_playerScores.find(playerno);
+      isNewState = it == m_playerScores.end();
+      if (isNewState)
+         m_playerScores[playerno] = score;
+      else
+         it->second = score;
+   }
+   if (isNewState)
+      UpdateStateSrc();
+
+   B2SPluginEvent event { 'C', playerno, score };
+   m_msgApi->BroadcastMsg(m_endpointId, m_onStateChangeEventId, &event);
+
    if (m_pB2SData->IsBackglassRunning()) {
       if (playerno > 0) {
-         const auto& it = m_pB2SData->GetPlayers()->find(playerno);
-         if (it != m_pB2SData->GetPlayers()->end())
-            it->second->SetScore(m_pB2SData, score);
+         // Set score to player class
+         if (m_pB2SData->GetPlayers()->contains(playerno))
+            (*m_pB2SData->GetPlayers())[playerno]->SetScore(m_pB2SData, score);
       }
    }
 }

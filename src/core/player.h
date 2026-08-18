@@ -235,25 +235,31 @@ public:
    void UnpauseMusic();
    void UpdateVolume();
 
-   bool m_PlayMusic;
-   bool m_PlaySound;
-   int m_MusicVolume; // -100..100
-   int m_SoundVolume; // -100..100
+   float m_backglassVolume;
+   float m_playfieldVolume;
+
+   float GetAudioLaneMixerVolume(uint64_t laneId) const;
+   void SetAudioLaneMixerVolume(uint64_t laneId, float volume);
 
    std::unique_ptr<VPX::AudioPlayer> m_audioPlayer;
 
 private:
    int m_pauseMusicRefCount = 0;
 
-   // External audio sources with priority override chain
    static void OnAudioUpdated(const unsigned int msgId, void *userData, void *msgData);
    static void OnAudioSrcChanged(const unsigned int msgId, void *userData, void *msgData);
-   void UpdateActiveAudioSource();
    unsigned int m_onAudioUpdatedMsgId;
    unsigned int m_onAudioSrcChangedMsgId;
    unsigned int m_getAudioSrcMsgId;
-   uint64_t m_activeAudioSourceId = 0;
-   ankerl::unordered_dense::map<uint64_t, VPX::AudioPlayer::AudioStreamID> m_audioStreams;
+   mutable std::mutex m_audioSourceMutex;
+   struct AudioLane
+   {
+      AudioSrcId source = { };
+      bool overriden = false;
+      float mixerVolume = 1.f;
+      ankerl::unordered_dense::map<uint64_t, VPX::AudioPlayer::AudioStreamID> streams;
+   };
+   ankerl::unordered_dense::map<uint64_t, AudioLane> m_audioLanes;
 #pragma endregion
 
 public:
