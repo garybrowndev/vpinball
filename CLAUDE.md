@@ -171,22 +171,32 @@ Don't promote any of these to `platforms/android-x86_64/` — the rule is: **onl
 
 ## Branch Strategy & Update Workflow
 
-- `master` — tracks upstream `vpinball/vpinball` **plus one cherry-picked patch** (see "Master is not pure upstream" below).
+- `master` — tracks upstream `vpinball/vpinball` **plus four local patches** (see "Master is not pure upstream" below).
 - `integration` — `master` + Ball History changes merged together. This is the build/test branch **and the canonical deploy-to-cabinet source**: the standing `_BH` builds on the VPM come from a green `integration` CI run. Finished WIP graduates here via the ship PR (below) before it becomes the cabinet's real build.
 - `development` — active Ball History development work. **Test/debug only** — development builds may be deployed to the cabinet during an iteration loop (play-test gate, debug-vpx), but development is never the standing cabinet build. Real gameplay runs `integration`.
 - Remotes: `origin` = `garybrowndev/vpinball`, `upstream` = `vpinball/vpinball`
 
-### ⚠️ Master is not pure upstream — carries one patch
+### ⚠️ Master is not pure upstream — carries four local patches
 
-`origin/master` intentionally carries the **B2S compat stub** commit (`3ea227d80` — "Restore B2SBackglassServer discovery under modern -Play path") cherry-picked on top of upstream. This is the single patch required for any stock (non-Ball-History) build to work with PinUp-Popper + B2SBackglassServer on the cabinet, since upstream rejected the fix (PR vpinball/vpinball#2529) but we still need the cabinet to boot tables.
+`origin/master` intentionally carries four small fixes on top of upstream. These are **fork-local only** — none is currently submitted to `vpinball/vpinball`. They are kept minimal and independent so they replay cleanly on every rebase.
+
+**SHAs change on every rebase** (they are replayed, not merged). To list the current set:
+`git log upstream/master..master --oneline --no-merges`
+
+| Patch (subject) | Why it exists |
+|---|---|
+| Restore B2SBackglassServer discovery under modern -Play path | The **B2S compat stub**. Without it no stock (non-Ball-History) build works with PinUp-Popper + B2SBackglassServer, so the cabinet can't boot tables. Upstream rejected the fix (PR vpinball/vpinball#2529). |
+| Fix InputManager crash when multiple devices share a settings ID | Gary's cabinet has three identical DragonRise encoders whose HID info carries no serial, so they collide on one settings ID and trip an assert. |
+| Fix Debug builds hanging when loading VPinMAME tables with .NET COM servers | Debug-only hang on VPM tables (#24). |
+| Fix spurious tilt on first nudge with an event-driven accelerometer | `MotionKalmanAxis` files its first-ever sample as bias, but SDL only emits joystick events on *change* — so a still cabinet sends nothing and the first sample is the player's nudge, tripping a false tilt for ~5s. Guarded in `CabinetNudgeSensor::UpdateAxisSensor`. **Best upstream-PR candidate of the four.** |
 
 Consequence: `git merge --ff-only upstream/master` will fail on master after a fetch. Use one of:
 
 ```bash
-# Rebase (preferred — clean single-patch history)
+# Rebase (preferred — keeps the local patches as a clean, reviewable tail)
 git fetch upstream
 git checkout master
-git rebase upstream/master       # replays the B2S patch on top of new upstream tip
+git rebase upstream/master       # replays all four patches on top of the new upstream tip
 git push --force-with-lease origin master
 
 # Or merge-commit (preserves history, accumulates merge commits)
@@ -195,7 +205,9 @@ git merge upstream/master
 git push origin master
 ```
 
-If the B2S patch ever lands upstream or a replacement solution arrives, drop the cherry-pick and restore `git merge --ff-only` flow.
+**After any rebase, verify all four survived** — `git log upstream/master..master --oneline --no-merges` should list all of them, and comparing each patch's added/removed lines against the pre-rebase version catches a mis-replay that a bare commit count would miss.
+
+If any of these lands upstream or is superseded, drop it and update this table plus `get_stack_bullets()` in `.claude/skills/status-vpx/scripts/status.sh`.
 
 ### Sync workflow (upstream -> development)
 1. `git fetch upstream`

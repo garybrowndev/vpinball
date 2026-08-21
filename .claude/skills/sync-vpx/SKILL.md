@@ -1,6 +1,6 @@
 ---
 name: sync-vpx
-description: Run the full upstream→down sync round on Gary's vpinball_ballhistory fork — fetch upstream, rebase master (replaying its 3 local patches), merge master→integration resolving Ball-History conflicts, refresh fork deps, CMake-build, verify on the cabinet, then merge integration→development. This is the WRITE companion to the read-only status-vpx. Use this whenever Gary says "sync from upstream", "update my fork", "pull in upstream", "bring upstream down", "rebase master onto upstream", "merge master into integration", "do the whole merge round", "get up to date from upstream", "go through that round (pull, build, merge, build, master/integration/development)", or status-vpx reported "N commits to bring in" on the upstream→master row and Gary wants to act on it. Drives every step with human checkpoints before each push and at every conflict — it never force-pushes or merges silently. Do NOT use this for a read-only status check (that's status-vpx) or for building/debugging a single config on the cabinet (that's debug-vpx).
+description: Run the full upstream→down sync round on Gary's vpinball_ballhistory fork — fetch upstream, rebase master (replaying its 4 local patches), merge master→integration resolving Ball-History conflicts, refresh fork deps, CMake-build, verify on the cabinet, then merge integration→development. This is the WRITE companion to the read-only status-vpx. Use this whenever Gary says "sync from upstream", "update my fork", "pull in upstream", "bring upstream down", "rebase master onto upstream", "merge master into integration", "do the whole merge round", "get up to date from upstream", "go through that round (pull, build, merge, build, master/integration/development)", or status-vpx reported "N commits to bring in" on the upstream→master row and Gary wants to act on it. Drives every step with human checkpoints before each push and at every conflict — it never force-pushes or merges silently. Do NOT use this for a read-only status check (that's status-vpx) or for building/debugging a single config on the cabinet (that's debug-vpx).
 ---
 
 # sync-vpx — the upstream→down sync round
@@ -10,7 +10,7 @@ branch stack, this skill *advances* it: it walks upstream changes down through t
 3-branch fork, resolving conflicts and rebuilding along the way.
 
 ```
-upstream/master ─► master (+3 local patches) ─► integration (+Ball History) ─► development (+WIP)
+upstream/master ─► master (+4 local patches) ─► integration (+Ball History) ─► development (+WIP)
 ```
 
 The round flows **downhill** (upstream → development). The reverse direction
@@ -21,7 +21,7 @@ The round flows **downhill** (upstream → development). The reverse direction
 Three of the steps are genuinely risky and need human judgment:
 
 - **Rebasing master force-pushes to origin.** master isn't pure upstream — it carries
-  3 local patches that get *replayed* on top of the new upstream tip. A bad replay
+  4 local patches that get *replayed* on top of the new upstream tip. A bad replay
   silently drops a patch the cabinet needs to boot.
 - **Merging master→integration is where upstream collides with Ball History.** The
   conflicts land in a known set of integration-point files and must be resolved
@@ -42,7 +42,7 @@ bash .claude/skills/sync-vpx/scripts/sync-plan.sh
 ```
 
 It fetches origin+upstream (non-destructive) and reports: how many commits upstream is
-ahead, the 3 local patches that will replay, the working-tree state, the active `gh`
+ahead, the 4 local patches that will replay, the working-tree state, the active `gh`
 account, and which upstream commits touch Ball-History integration files (the
 likely-conflict preview). Read it out and confirm:
 
@@ -59,17 +59,23 @@ If upstream is 0 ahead of master, the fork is already current — say so and sto
 
 ## Phase 1 — master ← upstream (rebase + force-push)  ⛔ CHECKPOINT
 
-master carries these 3 local patches on top of upstream (verify against the live repo —
-counts/SHAs drift):
+master carries these 4 local patches on top of upstream. **SHAs are replayed on every
+rebase, so never match them by hash** — enumerate the live set instead:
 
-- `3ea227d80` Restore B2SBackglassServer discovery under modern -Play path (the B2S
-  compat stub — without it the cabinet's PinUp-Popper/B2S setup won't boot tables)
-- `40a71b3ed` Fix InputManager crash when multiple devices share a settings ID
-- `14237196d` Fix Debug builds hanging when loading VPinMAME tables with .NET COM servers
+```bash
+git log upstream/master..master --oneline --no-merges
+```
+
+- Restore B2SBackglassServer discovery under modern -Play path (the B2S compat stub —
+  without it the cabinet's PinUp-Popper/B2S setup won't boot tables)
+- Fix InputManager crash when multiple devices share a settings ID
+- Fix Debug builds hanging when loading VPinMAME tables with .NET COM servers
+- Fix spurious tilt on first nudge with an event-driven accelerometer (Kalman idle-start
+  bias assumption vs SDL's emit-on-change joystick events)
 
 ```bash
 git checkout master
-git rebase upstream/master      # replays the 3 patches on top of new upstream tip
+git rebase upstream/master      # replays the 4 patches on top of new upstream tip
 ```
 
 - **If conflicts:** resolve them keeping *both* intents — upstream's new code AND the
@@ -77,9 +83,20 @@ git rebase upstream/master      # replays the 3 patches on top of new upstream t
   upstream refactored the area the patch touches. Re-read the patch's diff
   (`git show <sha>`) to understand what it's protecting, then port that intent into the
   new code. `git rebase --abort` returns to safety if it goes sideways.
-- **After a clean rebase, verify all 3 patches survived:**
-  `git log upstream/master..master --oneline --no-merges` should still list all three.
-  If one vanished, the rebase dropped it — stop and investigate before pushing.
+- **After a clean rebase, verify all 4 patches survived — by content, not by count.**
+  `git log upstream/master..master --oneline --no-merges` should still list all four, but
+  a bare count won't catch a patch that replayed into upstream's refactored code and lost
+  half its hunks. Compare each patch's added/removed lines against its pre-rebase version:
+
+  ```bash
+  # old SHA -> new SHA for each patch; strip line numbers/blob hashes and diff the bodies
+  a=$(git show <oldSha> --format='' | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)')
+  b=$(git show <newSha> --format='' | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)')
+  [ "$a" = "$b" ] && echo IDENTICAL || echo DIFFERS
+  ```
+
+  Get the old SHAs from `git reflog` (the pre-rebase tip is still there). If one vanished
+  or differs unexpectedly, stop and investigate before pushing.
 
 ⛔ **CHECKPOINT — do not push without Gary's OK.** This force-pushes and rewrites origin
 master history:
