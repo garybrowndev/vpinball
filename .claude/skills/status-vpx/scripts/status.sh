@@ -99,7 +99,7 @@ get_stack_bullets() {
   case "$1" in
     "master/upstream")
       echo "B2S compat stub for PinUp-Popper backglass discovery"
-      echo "3 local fixes — .NET COM hang, InputManager device-ID collision, Kalman idle-start tilt"
+      echo "2 local fixes — InputManager device-ID collision, Kalman idle-start tilt"
       ;;
     "integration/master")
       echo "Ball History feature stack — physics replay + trainer mode"
