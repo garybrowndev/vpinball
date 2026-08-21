@@ -163,21 +163,8 @@ void CabinetNudgeSensor::UpdateAxisSensor(SyncedSensor& sensor, MotionKalmanAxis
       alignedTimestampNS = m_timeNs;
    }
 
-   // MotionKalmanAxis seeds itself from the first measurement it ever receives, filing that sample
-   // entirely into the bias state ("Practical idle-start assumption: first measured acceleration is
-   // bias-dominated"). That is correct for a sensor which streams continuously while the cabinet is
-   // at rest, so the first sample really is the sensor's zero offset.
-   //
-   // It is wrong for a device delivered through SDL's joystick layer, which only emits an event when
-   // an axis value *changes*. A cabinet sitting still produces no events at all, so the first sample
-   // VPX ever receives is the player's first nudge. Filing that as bias makes every later sample read
-   // high by the nudge magnitude until the bias mean-reverts (m_biasMeanReversionTimeS, ~5s), which is
-   // long enough to drive the plumb past its tilt threshold and trip a spurious tilt on first touch.
-   //
-   // Guard it: if the filter is still uninitialised and this sample is clearly motion rather than
-   // rest, initialise with zero bias and let the sample go through the normal measurement path. A
-   // sensor that does report at rest is unaffected -- its first sample is below the rest threshold,
-   // so the upstream idle-start assumption still applies unchanged.
+   // An event-driven sensor sends nothing while at rest, so its first sample is motion, not bias.
+   // Seed with zero bias in that case rather than let it be taken for the sensor's zero offset.
    if (!axis.IsInitialized() && fabsf(sensor.m_sensor.GetValue()) >= restThresold)
       axis.Reset(alignedTimestampNS);
 
