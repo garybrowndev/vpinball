@@ -3499,20 +3499,11 @@ void BallHistory::ShowStatus(Player& player, int currentTimeMs)
       Vertex3Ds passPosition1 = bcor.m_PassPosition - Vertex3Ds(statusOffset * statusCosA, statusOffset * statusSinA, 0.0f);
       Vertex3Ds passPosition2 = bcor.m_PassPosition + Vertex3Ds(statusOffset * statusCosA, statusOffset * statusSinA, 0.0f);
       statuses.push_back({ "Distance\nPassL<->PassR", std::format("{:.1f}wu", DistanceToLineSegment(passPosition1, passPosition2, mousePosition3D)) });
-      // Distance-based opening pairing (replaces the original X-coordinate compare which
-      // doesn't survive rotation).
-      const bool statusSwap = DistancePixels(passPosition1, bcor.m_OpeningPositionRight)
-                            < DistancePixels(passPosition1, bcor.m_OpeningPositionLeft);
-      if (!statusSwap)
-      {
-         statuses.push_back({ "Distance\nPassL<->OpenL", std::format("{:.1f}wu", DistanceToLineSegment(passPosition1, bcor.m_OpeningPositionLeft, mousePosition3D)) });
-         statuses.push_back({ "Distance\nPassR<->OpenR", std::format("{:.1f}wu", DistanceToLineSegment(passPosition2, bcor.m_OpeningPositionRight, mousePosition3D)) });
-      }
-      else
-      {
-         statuses.push_back({ "Distance\nPassL<->OpeningR", std::format("{:.1f}wu", DistanceToLineSegment(passPosition1, bcor.m_OpeningPositionRight, mousePosition3D)) });
-         statuses.push_back({ "Distance\nPassR<->OpeningL", std::format("{:.1f}wu", DistanceToLineSegment(passPosition2, bcor.m_OpeningPositionLeft, mousePosition3D)) });
-      }
+      // Report distances to the walls that are actually drawn and actually tested:
+      // left pass-end -> left opening, right pass-end -> right opening. Must stay in lockstep
+      // with the pairing in ProcessModeTrainer's fail-corridor check.
+      statuses.push_back({ "Distance\nPassL<->OpenL", std::format("{:.1f}wu", DistanceToLineSegment(passPosition1, bcor.m_OpeningPositionLeft, mousePosition3D)) });
+      statuses.push_back({ "Distance\nPassR<->OpenR", std::format("{:.1f}wu", DistanceToLineSegment(passPosition2, bcor.m_OpeningPositionRight, mousePosition3D)) });
 
       statuses.push_back({ "Gameplay\nDifficulty", "" });
       GetGameplayDifficultyConfigValues(statuses);
@@ -9494,24 +9485,16 @@ void BallHistory::ProcessModeTrainer(Player& player, int currentTimeMs)
             {
                HitBall& controlVBall = *m_ControlVBalls[controlVBallIndex];
 
-               float distanceToFailLeft = 0.0f;
-               float distanceToFailRight = 0.0f;
-
-               // Pair each rotated pass-end with the closer opening point. The original
-               // x-coordinate comparison only worked for horizontal pass walls; with rotation
-               // it can flip the wrong way (e.g., a vertical pass wall would always swap).
-               const bool swap = DistancePixels(passPositionLeft, bcor.m_OpeningPositionRight)
-                              < DistancePixels(passPositionLeft, bcor.m_OpeningPositionLeft);
-               if (!swap)
-               {
-                  distanceToFailLeft = DistanceToLineSegment(passPositionLeft, bcor.m_OpeningPositionLeft, controlVBall.m_d.m_pos);
-                  distanceToFailRight = DistanceToLineSegment(passPositionRight, bcor.m_OpeningPositionRight, controlVBall.m_d.m_pos);
-               }
-               else
-               {
-                  distanceToFailLeft = DistanceToLineSegment(passPositionLeft, bcor.m_OpeningPositionRight, controlVBall.m_d.m_pos);
-                  distanceToFailRight = DistanceToLineSegment(passPositionRight, bcor.m_OpeningPositionLeft, controlVBall.m_d.m_pos);
-               }
+               // Pair each rotated pass-end with the SAME opening the renderer connects it to
+               // (DrawTrainerBallCorridorOpeningLeft/Right): left end -> left opening, right end ->
+               // right opening, always. A previous "nearest opening" heuristic could swap the
+               // pairing and produce two crossed diagonals that slice through the corridor
+               // interior, failing the ball well before it ever reached a drawn red wall. That
+               // happens whenever the corridor is strongly asymmetric - e.g. a pass wall pushed up
+               // against one side, where the far pass-end is genuinely nearer the opposite opening.
+               // Whatever the geometry, the walls we test must be the walls we drew.
+               const float distanceToFailLeft = DistanceToLineSegment(passPositionLeft, bcor.m_OpeningPositionLeft, controlVBall.m_d.m_pos);
+               const float distanceToFailRight = DistanceToLineSegment(passPositionRight, bcor.m_OpeningPositionRight, controlVBall.m_d.m_pos);
 
                if (distanceToFailLeft < controlVBall.m_d.m_radius)
                {
