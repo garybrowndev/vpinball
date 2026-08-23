@@ -15,6 +15,7 @@ AudioSettingsPage::AudioSettingsPage()
 
 void AudioSettingsPage::BuildPage()
 {
+   m_devices.clear();
    for (const auto& device : VPX::AudioPlayer::EnumerateAudioDevices())
       m_devices.push_back(device.name);
 
@@ -53,7 +54,7 @@ void AudioSettingsPage::BuildPage()
    AddItem(std::make_unique<InGameUIItem>(InGameUIItem::LabelType::Header, "Audio Source Levels"s));
 
    unsigned int getAudioSrcMsgId = m_player->m_pluginManager.GetMsgAPI().GetMsgID(CTLPI_NAMESPACE, CTLPI_AUDIO_GET_SRC_MSG);
-   for (const auto& audioSrc : GetCtrlItems<AudioSrcId>(&m_player->m_pluginManager.GetMsgAPI(), m_player->m_pluginAPI.GetVPXEndPointId(), getAudioSrcMsgId))
+   for (const auto& audioSrc : PinballPlugin::Controller::GetCtrlItems<AudioSrcId>(&m_player->m_pluginManager.GetMsgAPI(), m_player->m_pluginAPI.GetVPXEndPointId(), getAudioSrcMsgId))
    {
       MsgEndpointInfo info { };
       m_player->m_pluginManager.GetMsgAPI().GetEndpointInfo(audioSrc.id.endpointId, &info);
