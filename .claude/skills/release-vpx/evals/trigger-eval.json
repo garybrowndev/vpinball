@@ -1,0 +1,22 @@
+[
+  {"query": "cut a release of the fork", "should_trigger": true},
+  {"query": "publish a new GitHub release from integration", "should_trigger": true},
+  {"query": "integration is green, let's put out a build people can download", "should_trigger": true},
+  {"query": "tag this commit and make a release with the ball history binaries", "should_trigger": true},
+  {"query": "run the prerelease workflow for the current integration tip", "should_trigger": true},
+  {"query": "my last release was back in April, time for a new one", "should_trigger": true},
+  {"query": "release v10.8.1 with the trainer changes in it", "should_trigger": true},
+  {"query": "make the release a full release instead of a prerelease and write the notes", "should_trigger": true},
+  {"query": "publish the ball history build to github so I can send someone the link", "should_trigger": true},
+  {"query": "I want a downloadable zip of this build on the releases page", "should_trigger": true},
+  {"query": "deploy the latest build to my VPM cabinet", "should_trigger": false},
+  {"query": "push the green integration exes to virtualpin so I can play them", "should_trigger": false},
+  {"query": "sync master with upstream and merge down through integration", "should_trigger": false},
+  {"query": "where does my branch stack stand right now", "should_trigger": false},
+  {"query": "VPX crashed on the cabinet, attach cdb and find out why", "should_trigger": false},
+  {"query": "open a PR from development to integration", "should_trigger": false},
+  {"query": "why is the x86 debug job red in CI", "should_trigger": false},
+  {"query": "download the third-party deps for the current commit so I can build locally", "should_trigger": false},
+  {"query": "bundle these tables into a pinup popper package", "should_trigger": false},
+  {"query": "rebase master onto upstream and force push", "should_trigger": false}
+]
