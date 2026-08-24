@@ -98,8 +98,10 @@ devl_tip=$(tip development)
 get_stack_bullets() {
   case "$1" in
     "master/upstream")
+      # One bullet per fork-local patch on master. The Kalman idle-start tilt fix was
+      # dropped 2026-08-23 — it landed upstream as 63f31bdd9. Emit fewer/more lines
+      # freely; the side-note assembly joins whatever is non-empty.
       echo "B2S compat stub for PinUp-Popper backglass discovery"
-      echo "1 local fix — Kalman idle-start tilt (SDL event-driven accelerometer)"
       ;;
     "integration/master")
       echo "Ball History feature stack — physics replay + trainer mode"
@@ -289,7 +291,11 @@ echo ""
 # Side note: master's local patches on top of upstream — single line.
 if [ $have_um = 1 ] && [ "$um_a" != "0" ]; then
   read_two < <(get_stack_bullets "master/upstream")
-  echo "_Side note — master carries **$um_a** local patch(es) on top of upstream so things build: ${__b1}; ${__b2}._"
+  # Join only the non-empty bullets — with a single patch, __b2 is empty and a bare
+  # "${__b1}; ${__b2}" would emit a dangling "; ".
+  __bullets="$__b1"
+  [ -n "$__b2" ] && __bullets="$__b1; $__b2"
+  echo "_Side note — master carries **$um_a** local patch(es) on top of upstream so things build: ${__bullets}._"
   echo ""
 fi
 

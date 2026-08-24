@@ -176,9 +176,9 @@ Don't promote any of these to `platforms/android-x86_64/` — the rule is: **onl
 - `development` — active Ball History development work. **Test/debug only** — development builds may be deployed to the cabinet during an iteration loop (play-test gate, debug-vpx), but development is never the standing cabinet build. Real gameplay runs `integration`.
 - Remotes: `origin` = `garybrowndev/vpinball`, `upstream` = `vpinball/vpinball`
 
-### ⚠️ Master is not pure upstream — carries two local patches
+### ⚠️ Master is not pure upstream — carries one local patch
 
-`origin/master` intentionally carries two small fixes on top of upstream. These are **fork-local only** — none is currently submitted to `vpinball/vpinball`. They are kept minimal and independent so they replay cleanly on every rebase.
+`origin/master` intentionally carries one small fix on top of upstream. It is **fork-local only** and kept minimal and independent so it replays cleanly on every rebase.
 
 **SHAs change on every rebase** (they are replayed, not merged). To list the current set:
 `git log upstream/master..master --oneline --no-merges`
@@ -186,7 +186,20 @@ Don't promote any of these to `platforms/android-x86_64/` — the rule is: **onl
 | Patch (subject) | Why it exists |
 |---|---|
 | Restore B2SBackglassServer discovery under modern -Play path | The **B2S compat stub**. Without it no stock (non-Ball-History) build works with PinUp-Popper + B2SBackglassServer, so the cabinet can't boot tables. Upstream rejected the fix (PR vpinball/vpinball#2529). |
-| Fix spurious tilt on first nudge with an event-driven accelerometer | `MotionKalmanAxis` files its first-ever sample as bias, but SDL only emits joystick events on *change* — so a still cabinet sends nothing and the first sample is the player's nudge, tripping a false tilt for ~5s. Guarded in `CabinetNudgeSensor::UpdateAxisSensor`. Filed upstream as draft PR vpinball/vpinball#3802. |
+
+### Tilt patch landed upstream 2026-08-23 — no longer fork-local
+
+"Fix spurious tilt on first nudge with an event-driven accelerometer" (draft PR
+vpinball/vpinball#3802) was **merged upstream** as `63f31bdd9 "Nudge: fix spurious tilt on
+first nudge with an event-driven accelerometer"`. During that round's rebase git reported
+`skipped previously applied commit 520f055a8`; the upstream commit's added/removed lines are
+byte-identical to ours, so nothing was lost. Master dropped from two patches to one.
+
+Still worth knowing *why* it existed: `MotionKalmanAxis` files its first-ever sample as bias,
+but SDL only emits joystick events on *change* — so a still cabinet sends nothing and the
+first sample is the player's nudge, tripping a false tilt for ~5s. Guarded in
+`CabinetNudgeSensor::UpdateAxisSensor`. If that symptom ever returns, upstream's version of
+this guard is the place to look.
 
 ### Two patches dropped 2026-08-21 — both had gone vestigial
 
@@ -236,6 +249,21 @@ When upstream changes conflict with Ball History integration points:
 2. Re-apply Ball History changes in separate commits (reviewable)
 3. Key files that always need re-integration: `player.h/cpp`, `LiveUI.cpp`, `InputManager.cpp`, build files
 
+**Not every fork patch deserves re-applying.** When upstream lands its own solution to the
+same problem a fork patch solves, take upstream's and drop ours — but say so in the merge
+commit, or the next session re-adds it. Precedent (2026-08-23): integration carried
+`f2d76a60b "InGameUIPage: enforce min widget width on narrow viewports"`, which clamped
+`maxLabelWidth` so the widget column kept a floor of `max(40% of content, 12em)`. Upstream's
+"liveui: stack widgets below labels on narrow displays" solves it better — below a 12em gap
+it stacks the widget *under* the label at full row width — and its `stackFields` /
+`labelMaxWidth` / `rowStartScreenX` are threaded through the whole render loop (11/6/5
+references). Our four locals were confined to the conflict hunk. Re-layering ours on top
+would be actively wrong: our clamp feeds `labelEndScreenX`, which is the input to upstream's
+stacking decision, so keeping it would suppress stacking on screens that want it.
+
+⚠️ **Do not confuse this with camera/viewport work.** "Narrow viewport" here means the F12
+settings-menu row layout, nothing to do with autofit, POV, or `ViewSetup.cpp`.
+
 ## Configuration
 
 - **VPinball settings**: `C:\Users\<user>\AppData\Roaming\VPinballX\10.8\VPinballX.ini`
@@ -282,21 +310,37 @@ SSRefl               = 1                  ; Additive screen-space reflection —
 [TableOverride]
 ViewCabMode          = 2                  ; Window mode (required for autofit)
 ViewCabRotation      = 0.0                ; Post-Vincent autofit fix — see history below
-ViewCabWindowTopScale = 1.0               ; Calibrate per-cabinet via F12; ~0.7 on Gary's rig
 ```
+
+> **`ViewCabWindowTopScale` is gone** — the feature was reverted on 2026-07-04 (see below).
+> Do not put it in an ini; nothing reads it.
 
 Other quality knobs (`PFReflection`, `AlphaRampAccuracy`, `MaxTexDimension`, `DynamicAO`, `ForceAnisotropicFiltering`) are already at max in their **code defaults** — no ini override needed.
 
-### `ViewCabWindowTopScale` — fork-local autofit calibration knob (added 2026-05-13)
+### ~~`ViewCabWindowTopScale`~~ — REVERTED 2026-07-04, not in the source
 
-Multiplier applied to autofit-computed `WindowTopZOfs` so the top-glass-plane bias on Gary's cabinet can be trimmed **proportionally across all tables**. Default `1.0` = no-op. `0.7` trims every table's top by 30%, preserving per-table variation (short tables get small trim, tall tables get large trim — what an offset can't do).
+**This feature does not exist in any branch.** It was removed by `dd306757c "Revert: Cabinet
+autofit: walk-down glass-height calibration + Scale/Cap knobs + Custom/Standard toggle"`
+(Gary, 2026-07-04), which reverted `e638bba3d`. Verified 2026-08-23: `ViewCabWindowTopScale`
+appears in **no** source file on `master`, `integration`, or `development` — only in this
+document. The prose below described it as live for seven weeks after it was gone.
 
-- Property defs in `src/core/Settings_properties.inl` (DT/FSS/Cab triple at lines ~684, ~705, ~726).
-- Multiplier applied in `src/renderer/ViewSetup.cpp` `ApplyTableOverrideSettings` (line 185-186).
-- F12 → Point Of View slider in `src/ui/live/ingameui/PointOfViewSettingsPage.cpp` (visible only in autofit modes; setter applies incremental ratio `mWindowTopZOfs *= (v/prev)` — **does NOT** call `SetWindowAutofit` because that clobbers every other slider's transient state).
-- Page's `SaveMode` upgraded from `Table` to `Both` so changes can be saved globally OR per-table.
+**If you are here because a doc/memory/ini mentions this knob: it is stale. Ignore it.**
+`WindowTopZOfs` in `ViewSetup.cpp` is upstream's own variable and is unrelated to the
+removed multiplier — do not mistake grep hits on it for this feature surviving.
 
-Fork-local feature — upstream-worthy PR but not yet filed.
+<details><summary>What it did, for anyone considering restoring it (<code>e638bba3d</code> is still in history)</summary>
+
+Multiplier applied to autofit-computed `WindowTopZOfs` so the top-glass-plane bias on Gary's cabinet could be trimmed **proportionally across all tables**. Default `1.0` = no-op. `0.7` trimmed every table's top by 30%, preserving per-table variation (short tables get small trim, tall tables get large trim — what a flat offset can't do). Gary ran ~0.7.
+
+- Property defs in `src/core/Settings_properties.inl` (DT/FSS/Cab triple).
+- Multiplier applied in `src/renderer/ViewSetup.cpp` `ApplyTableOverrideSettings`.
+- F12 → Point Of View slider in `src/ui/live/ingameui/PointOfViewSettingsPage.cpp` (visible only in autofit modes; setter applied incremental ratio `mWindowTopZOfs *= (v/prev)` — deliberately **not** `SetWindowAutofit`, which clobbers every other slider's transient state).
+- Page's `SaveMode` was upgraded from `Table` to `Both`.
+
+Line numbers from the original notes are not reproduced here — they refer to a tree that no
+longer matches. Read `e638bba3d` directly instead.
+</details>
 
 ### Cabinet rotation: post-Vincent regime change (April 29, 2026)
 
