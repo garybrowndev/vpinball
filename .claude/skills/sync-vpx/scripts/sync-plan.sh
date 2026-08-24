@@ -55,23 +55,33 @@ fi
 echo ""
 
 # ---- 1. upstream → master ----
+# downhill_work=1 means there is something to rebase/merge down. When it is 0 we
+# skip the downhill phase previews, but we must STILL fall through to Phase 6 —
+# "upstream is current" and "development has unshipped work" are independent, and
+# the uphill backlog is exactly what you want to see on an otherwise no-op round.
+downhill_work=1
 if git show-ref --verify --quiet refs/remotes/upstream/master \
    && git show-ref --verify --quiet refs/heads/master; then
   n=$(git rev-list --count master..upstream/master 2>/dev/null || echo 0)
   echo "## Phase 1 — master ← upstream"
   if [ "$n" = "0" ]; then
-    echo "- **0 commits** — fork is already current with upstream. Nothing to sync. ✓"
-    echo ""
-    echo "_(Stop here unless you specifically want to re-merge down through integration/development.)_"
-    exit 0
+    echo "- **0 commits** — fork is already current with upstream. Nothing to sync down. ✓"
+    downhill_work=0
+  else
+    echo "- **$n commit(s)** to pull in (range \`master..upstream/master\`)."
+    echo "- Local patches that will REPLAY on top (must all survive the rebase):"
+    git log upstream/master..master --oneline --no-merges | sed 's/^/    - /'
   fi
-  echo "- **$n commit(s)** to pull in (range \`master..upstream/master\`)."
-  echo "- Local patches that will REPLAY on top (must all survive the rebase):"
-  git log upstream/master..master --oneline --no-merges | sed 's/^/    - /'
+  echo ""
+fi
+
+if [ "$downhill_work" = "0" ]; then
+  echo "_(Downhill phases 2–5 skipped — nothing new from upstream. Uphill ship state below.)_"
   echo ""
 fi
 
 # ---- 2. conflict-risk preview for master → integration ----
+if [ "$downhill_work" = "1" ]; then
 echo "## Phase 2 — master → integration (conflict-risk preview)"
 echo "Incoming upstream commits that touch Ball-History integration files —"
 echo "expect to re-integrate these by hand:"
@@ -101,4 +111,32 @@ echo "- Phase 3: refresh fork deps for the new commit (gh on \`garybrowndev\`) �
 echo "- Phase 4: deploy to cabinet via debug-vpx → Gary play-tests (B2S boot + Ball History V/R). ⛔ gate."
 echo "- Phase 5: merge integration → development → push. ⛔ checkpoint before push."
 echo ""
+fi
+
+# ---- 6. uphill ship flow: integration ← development ----
+# The ONLY uphill direction this skill handles. integration → master is deliberately
+# NOT part of the round: master stays upstream + fork-local patches, and anything
+# going that way is a conscious fork-only decision, never automatic.
+echo "## Phase 6 — integration ← development (ship flow)"
+if git show-ref --verify --quiet refs/heads/integration \
+   && git show-ref --verify --quiet refs/heads/development; then
+  ship=$(git rev-list --count integration..development 2>/dev/null || echo 0)
+  if [ "$ship" = "0" ]; then
+    echo "- **0 commits** — development has nothing integration is missing. ✓"
+  else
+    echo "- **$ship commit(s)** on development that integration does not have:"
+    git log integration..development --oneline --no-merges | sed 's/^/    - /'
+    echo ""
+    echo "- Files that would change:"
+    git diff --stat integration development | sed 's/^/    /'
+    echo ""
+    echo "- Ship via PR (not a direct merge): \`gh pr create --base integration --head development\`"
+    echo "  ⛔ checkpoint — get Gary's OK before merging, then wait for integration CI."
+  fi
+else
+  echo "- _(integration or development branch missing — skipped.)_"
+fi
+echo ""
+
 echo "_Every push (esp. the Phase 1 \`--force-with-lease\` on master) is a checkpoint — get Gary's OK first._"
+echo "_Never merge integration → master as part of a round; that direction is fork-only and deliberate._"
