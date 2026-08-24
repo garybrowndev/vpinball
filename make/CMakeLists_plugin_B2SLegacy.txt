@@ -124,6 +124,12 @@ if(BUILD_SHARED)
       src
    )
 
+   if(NOT (PLATFORM STREQUAL "windows" OR PLATFORM STREQUAL "windows-mingw"))
+      target_compile_definitions(B2SLegacyPlugin PRIVATE
+         "__forceinline=__attribute__((always_inline)) inline"
+      )
+   endif()
+
    if(PLATFORM STREQUAL "windows" OR PLATFORM STREQUAL "windows-mingw")
       if(MSVC)
          set_target_properties(B2SLegacyPlugin PROPERTIES
@@ -225,6 +231,10 @@ if(BUILD_STATIC)
       plugins/b2slegacy
       src/core
       src
+   )
+
+   target_compile_definitions(B2SLegacyPlugin PRIVATE
+      "__forceinline=__attribute__((always_inline)) inline"
    )
 
    set_target_properties(B2SLegacyPlugin PROPERTIES

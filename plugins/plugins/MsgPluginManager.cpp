@@ -316,20 +316,30 @@ void MsgPluginManager::ProcessAsyncCallbacks()
    if (m_timers.empty())
       return;
    std::list<TimerEntry> timers;
+   const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
    {
       const std::lock_guard lock(m_timerListMutex);
-      const std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
-      for (auto it = m_timers.begin(); it != m_timers.end();)
+      for (auto it = m_timers.begin(); it != m_timers.end(); it++)
       {
          if (it->time > now)
             break;
          timers.push_back(*it);
-         it = m_timers.erase(it);
       }
    }
    // Release lock before calling callbacks to avoid deadlock
    for (const auto& it : timers)
       it.callback(it.userData);
+   // Remove only after timer have been fired
+   if (!timers.empty())
+   {
+      const std::lock_guard lock(m_timerListMutex);
+      for (auto it = m_timers.begin(); it != m_timers.end();)
+      {
+         if (it->time > now)
+            break;
+         it = m_timers.erase(it);
+      }
+   }
 }
 
 
@@ -536,6 +546,7 @@ void MsgPlugin::Unload()
       return;
    }
    m_unloadPlugin();
+   m_msgAPI->FlushPendingCallbacks(m_endpointId);
    if (m_loader)
    {
       m_loader->Unlink(m_module);
