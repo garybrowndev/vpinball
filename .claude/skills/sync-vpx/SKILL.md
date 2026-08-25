@@ -87,7 +87,7 @@ table in `CLAUDE.md` and from `get_stack_bullets()` in
 
 ```bash
 git checkout master
-git rebase upstream/master      # replays the 2 patches on top of new upstream tip
+git rebase upstream/master      # replays the local patches on top of the new upstream tip
 ```
 
 - **If conflicts:** resolve them keeping *both* intents — upstream's new code AND the
