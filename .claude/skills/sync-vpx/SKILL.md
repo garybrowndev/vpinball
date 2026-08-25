@@ -1,6 +1,6 @@
 ---
 name: sync-vpx
-description: Run the full upstream→down sync round on Gary's vpinball_ballhistory fork — fetch upstream, rebase master (replaying its 2 local patches), merge master→integration resolving Ball-History conflicts, refresh fork deps, CMake-build, verify on the cabinet, then merge integration→development. This is the WRITE companion to the read-only status-vpx. Use this whenever Gary says "sync from upstream", "update my fork", "pull in upstream", "bring upstream down", "rebase master onto upstream", "merge master into integration", "do the whole merge round", "get up to date from upstream", "go through that round (pull, build, merge, build, master/integration/development)", or status-vpx reported "N commits to bring in" on the upstream→master row and Gary wants to act on it. Drives every step with human checkpoints before each push and at every conflict — it never force-pushes or merges silently. Do NOT use this for a read-only status check (that's status-vpx) or for building/debugging a single config on the cabinet (that's debug-vpx).
+description: Run the full sync round on Gary's vpinball_ballhistory fork — downhill then uphill. Downhill (Phases 1-5) fetches upstream, rebases master replaying its fork-local patches, merges master→integration resolving Ball-History conflicts, refreshes fork deps, CMake-builds, and verifies on the cabinet before merging integration→development. Uphill (Phase 6) then ships anything development holds that integration lacks back up via PR, so a sync never strands development's own commits. This is the WRITE companion to the read-only status-vpx. Use this whenever Gary says "sync from upstream", "update my fork", "pull in upstream", "bring upstream down", "rebase master onto upstream", "merge master into integration", "do the whole merge round", "get up to date from upstream", "go through that round (pull, build, merge, build, master/integration/development)", "ship development back to integration", "push dev back up", or status-vpx reported "N commits to bring in" on the upstream→master row or "Ship flow" on the integration←development row. Drives every step with human checkpoints before each push, at every conflict, and before merging the ship PR — it never force-pushes or merges silently. It never merges integration→master; that direction is fork-only and deliberate. Do NOT use this for a read-only status check (that's status-vpx) or for building/debugging a single config on the cabinet (that's debug-vpx).
 ---
 
 # sync-vpx — the upstream→down sync round
@@ -10,19 +10,24 @@ branch stack, this skill *advances* it: it walks upstream changes down through t
 3-branch fork, resolving conflicts and rebuilding along the way.
 
 ```
-upstream/master ─► master (+2 local patches) ─► integration (+Ball History) ─► development (+WIP)
+upstream/master ─► master (+local patches) ─► integration (+Ball History) ─► development (+WIP)
+                                                    ▲                              │
+                                                    └──────── ship (PR) ───────────┘
 ```
 
-The round flows **downhill** (upstream → development). The reverse direction
-(development → integration, the "ship" flow) is a PR, not this skill — see the end.
+The round flows **downhill** first (upstream → development, Phases 1–5), then makes one
+**uphill** pass (development → integration, Phase 6) to ship back anything development
+holds that integration lacks. Uphill is always a PR, never a direct merge.
+
+`integration → master` is **not** part of the round in either direction — see Phase 6.
 
 ## Why this is a guided skill, not a one-shot script
 
 Three of the steps are genuinely risky and need human judgment:
 
 - **Rebasing master force-pushes to origin.** master isn't pure upstream — it carries
-  2 local patches that get *replayed* on top of the new upstream tip. A bad replay
-  silently drops a patch the cabinet needs to boot.
+  fork-local patches that get *replayed* on top of the new upstream tip. A bad replay
+  silently drops a patch the cabinet needs to boot. Never assume the count; enumerate.
 - **Merging master→integration is where upstream collides with Ball History.** The
   conflicts land in a known set of integration-point files and must be resolved
   upstream-wins-then-reapply, not blindly.
@@ -42,9 +47,11 @@ bash .claude/skills/sync-vpx/scripts/sync-plan.sh
 ```
 
 It fetches origin+upstream (non-destructive) and reports: how many commits upstream is
-ahead, the 2 local patches that will replay, the working-tree state, the active `gh`
-account, and which upstream commits touch Ball-History integration files (the
-likely-conflict preview). Read it out and confirm:
+ahead, the local patches that will replay, the working-tree state, the active `gh`
+account, which upstream commits touch Ball-History integration files (the likely-conflict
+preview), and the **Phase 6 ship backlog** (`integration..development`). Note it reports
+the ship backlog even when upstream is 0 ahead — "upstream is current" and "development
+has unshipped work" are independent conditions. Read it out and confirm:
 
 1. **Working tree is clean.** Uncommitted work + a rebase/merge round is how you lose
    changes. If dirty, stop and ask Gary to commit/stash first.
@@ -59,21 +66,28 @@ If upstream is 0 ahead of master, the fork is already current — say so and sto
 
 ## Phase 1 — master ← upstream (rebase + force-push)  ⛔ CHECKPOINT
 
-master carries these 2 local patches on top of upstream. **SHAs are replayed on every
-rebase, so never match them by hash** — enumerate the live set instead:
+master carries fork-local patches on top of upstream. **Never hardcode the count or match
+them by hash** — SHAs are replayed on every rebase, and the set shrinks when a patch lands
+upstream (the Kalman idle-start tilt fix did exactly that on 2026-08-23, going from two
+patches to one). Enumerate the live set every time:
 
 ```bash
 git log upstream/master..master --oneline --no-merges
 ```
 
+As of 2026-08-24 that is exactly one:
+
 - Restore B2SBackglassServer discovery under modern -Play path (the B2S compat stub —
   without it the cabinet's PinUp-Popper/B2S setup won't boot tables)
-- Fix spurious tilt on first nudge with an event-driven accelerometer (Kalman idle-start
-  bias assumption vs SDL's emit-on-change joystick events)
+
+If `git rebase` reports `skipped previously applied commit <sha>`, that patch has landed
+upstream — confirm by diffing its body against upstream's version, then drop it from the
+table in `CLAUDE.md` and from `get_stack_bullets()` in
+`.claude/skills/status-vpx/scripts/status.sh`.
 
 ```bash
 git checkout master
-git rebase upstream/master      # replays the 2 patches on top of new upstream tip
+git rebase upstream/master      # replays the local patches on top of the new upstream tip
 ```
 
 - **If conflicts:** resolve them keeping *both* intents — upstream's new code AND the
@@ -154,6 +168,8 @@ the third-party deps from *this very run's artifacts*, which only exist once the
 run id. If it fails, the merge/re-integration is broken — read the failing logs, fix on
 integration, re-push, re-wait. Never download deps from a failed or still-running build.
 
+## Phase 3 — refresh fork deps + local CMake build
+
 After an upstream merge the third-party dep SHAs bump, so the old `dev-third-party` zips
 no longer match. **Only the fork's own CI run for the new integration commit has matching
 deps** (upstream's won't — the merged tree has different dep SHAs).
@@ -179,6 +195,32 @@ deps** (upstream's won't — the merged tree has different dep SHAs).
 3. **If a plugin post-build fails on a missing DLL** (e.g. `libserialport64-0.dll`), the
    deps are stale → the run you pulled from doesn't match the commit. Refresh from the
    correct run.
+
+### ⚠️ If upstream bumped bgfx, check the embedded shaders BEFORE building
+
+BGFX shaders are **not** compiled by the build — they are pre-compiled blobs checked into
+`src/shaders/bgfx_*.h`, regenerated only by the `vpinball-bgfx-shaders` workflow, which is
+**`workflow_dispatch`-only**. So upstream can move `BGFX_PATCH_SHA` without regenerating
+them, and nothing in CI catches it: the build succeeds and only *running a table* fails,
+with `Fatal Error: shader compilation failed!` at `RenderDevice.cpp` and every shader
+failing at once in `vpinball.log`. This happened on 2026-08-23 (`42ec8999f`) and cost a
+full cycle plus a broken cabinet.
+
+If the round's diff touches `platforms/config.sh` or `src/shaders/bgfx/shaderc.exe`, run
+this two-second check before building:
+
+```powershell
+# what the CURRENT shaderc emits
+cd src/shaders/bgfx
+./shaderc.exe -f vs_imgui.sc -o $env:TEMP\v.bin --type vertex --platform windows -p s_5_0 -O 3 --varyingdef varying.def.sc -i . --define NOSTEREO
+# first 4 bytes are "VSH" + version; compare against the checked-in blob's version byte
+```
+
+Mismatch (e.g. tool emits `0x0c`, blobs are `0x0b`) means the shaders are stale. Fix by
+regenerating them yourself — `src/shaders/bgfx/shaders.ps1` with the in-tree `shaderc.exe`,
+plus `dxcompiler.dll` + `dxil.dll` pulled from bgfx at `BGFX_PATCH_SHA` for the `s_6_0`
+step (those two DLLs are **not** checked in; fetch, use, then delete them). Commit the
+regenerated headers with a note that upstream's version supersedes ours in the next merge.
 4. Switch `gh` back to `gary-brown_bplogix` once deps are pulled (keeps the default EMU
    account active for everything else).
 
@@ -222,12 +264,49 @@ round's final confirmation that the active branch is healthy. If it fails here b
 integration was green, the WIP on development conflicts with the upstream changes; surface
 the failing logs and fix on development.
 
-## Phase 6 — postflight
+## Phase 6 — integration ← development (the ship flow)  ⛔ CHECKPOINT
 
-Run `status-vpx` to confirm the round landed clean: all flow rows should read "no new
-commits" (except possibly `integration ← development` if WIP remains), and origin sync
-should be ✓ across the board. Summarize for Gary what came down from upstream (the themes
-from the 42-or-however-many commits) so he knows what changed in the build he just tested.
+**This is the one uphill leg of the round, and it runs on every round.** After the
+downhill flow lands, development may still hold commits integration has never seen — WIP
+that predates this round, or fixes made *during* it (docs corrections, tooling, anything
+committed to development while working). Leaving them stranded is how integration's copy
+of `CLAUDE.md`/skills silently goes stale, which matters because **integration is the
+canonical deploy-to-cabinet branch**.
+
+```bash
+git log integration..development --oneline --no-merges   # what is unshipped
+git diff --stat integration development                  # what would change
+```
+
+If that is empty, say so and move to postflight. If not, ship it **as a PR, never a
+direct merge** — the PR is the review gate:
+
+```bash
+gh pr create --repo garybrowndev/vpinball --base integration --head development \
+   --title "<what it does>" --body "<why, and what verified it>"
+```
+
+⛔ **CHECKPOINT — get Gary's OK before merging.** Then merge (prefer a **merge commit**,
+matching how integration has historically taken changes), pull it locally, and ⏳ **wait
+for integration CI to go green** so both branches end the round verified at identical
+content.
+
+Judgement on scope: a docs/tooling-only PR needs no rebuild. If the unshipped commits
+touch source, treat it like Phase 3–4 — build and have Gary play-test before merging,
+because integration is what the cabinet actually runs.
+
+> ⚠️ **Never merge `integration → master` as part of a round.** `master` is upstream plus
+> the fork-local patches, nothing else. Something only goes that way when Gary explicitly
+> wants a fork-only fix that is *not* going upstream — a conscious decision, never a
+> step in this skill.
+
+## Phase 7 — postflight
+
+Run `status-vpx` to confirm the round landed clean: all four flow rows should read "no new
+commits" — including `integration ← development`, which Phase 6 should have just drained —
+and origin sync should be ✓ across the board. Summarize for Gary what came down from
+upstream (the themes from the 42-or-however-many commits) so he knows what changed in the
+build he just tested.
 
 ## CI gating (wait for checks, handle failures)
 
@@ -323,9 +402,12 @@ where the stack now stands — don't auto-continue to the next phase without con
 
 ## Relationship to the other skills
 
-- **status-vpx** — read-only "where am I". Run it before (Phase 0) and after (Phase 6).
-  It now emits a "▶ Next" hint pointing here when upstream is ahead of master.
+- **status-vpx** — read-only "where am I". Run it before (Phase 0) and after (Phase 7).
+  It emits a "▶ Next" hint pointing here when upstream is ahead of master, and a
+  "▶ Ship flow" hint when development is ahead of integration — the latter is now
+  handled inside this skill as Phase 6 rather than being left to the reader.
 - **debug-vpx** — the build/deploy/cabinet inner-loop. Phase 4 delegates to it.
-- **The ship flow (development → integration)** is the *opposite* direction and is a PR,
-  not this skill: `gh pr create --base integration --head development`, merge after CI +
-  local verification. Mention it if Gary asks to "ship" rather than "sync".
+- **The ship flow (development → integration)** used to live outside this skill. It is
+  now **Phase 6** and runs on every round, so a sync no longer leaves development's own
+  commits stranded. If Gary asks to "ship" *without* syncing, run Phase 6 on its own —
+  it is self-contained (`git log integration..development`, then a PR).
