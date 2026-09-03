@@ -11,16 +11,17 @@ using std::string;
 class RenderDevice;
 class BaseTexture;
 
-enum SamplerFilter : unsigned int
+enum class SamplerFilter : unsigned int
 {
-   SF_NONE, // No filtering at all. DX: MIPFILTER = NONE; MAGFILTER = POINT; MINFILTER = POINT; / OpenGL Nearest/Nearest
-   SF_BILINEAR, // Bilinar texture filtering (linear min/mag, no mipmapping). DX: MIPFILTER = NONE; MAGFILTER = LINEAR; MINFILTER = LINEAR;
-   SF_TRILINEAR, // Trilinar texture filtering (linear min/mag, with mipmapping). DX: MIPFILTER = LINEAR; MAGFILTER = LINEAR; MINFILTER = LINEAR;
-   SF_ANISOTROPIC, // Anisotropic texture filtering.
-   SF_UNDEFINED, // Used for undefined default values
+   SF_NONE = 0, // No filtering at all. DX: MIPFILTER = NONE; MAGFILTER = POINT; MINFILTER = POINT; / OpenGL Nearest/Nearest
+   SF_BILINEAR = 1, // Bilinar texture filtering (linear min/mag, no mipmapping). DX: MIPFILTER = NONE; MAGFILTER = LINEAR; MINFILTER = LINEAR;
+   SF_TRILINEAR = 2, // Trilinar texture filtering (linear min/mag, with mipmapping). DX: MIPFILTER = LINEAR; MAGFILTER = LINEAR; MINFILTER = LINEAR;
+   SF_ANISOTROPIC = 3, // Anisotropic texture filtering.
+   SF_PIXELATED = 4, // Point magnification (crisp texels), but filtered minification (avoids aliasing when downscaled). DX: MIPFILTER = LINEAR; MAGFILTER = POINT; MINFILTER = ANISOTROPIC;
+   SF_UNDEFINED = 5, // Used for undefined default values
 };
 
-enum SamplerAddressMode : unsigned int
+enum class SamplerAddressMode : unsigned int
 {
    SA_REPEAT,
    SA_CLAMP,
@@ -28,7 +29,7 @@ enum SamplerAddressMode : unsigned int
    SA_UNDEFINED, // Used for undefined default values
 };
 
-enum SurfaceType
+enum class SurfaceType
 {
    RT_DEFAULT, // Default single layer surface
    RT_STEREO, // Texture array with 2 layers
@@ -43,8 +44,8 @@ public:
 
 #if defined(ENABLE_BGFX)
    Sampler(RenderDevice* rd, string name, SurfaceType type, bgfx::TextureHandle bgfxTexture, bgfx::TextureFormat::Enum bgfxFormat, unsigned int width, unsigned int height, bool ownTexture);
-   bgfx::TextureHandle GetCoreTexture(bool genMipmaps);
-   bool IsMipMapGenerated() const { return (m_textureUpdate == nullptr) && !bgfx::isValid(m_nomipsTexture); }
+   bgfx::TextureHandle GetCoreTexture(bool withMipmaps);
+   bool IsUploadPending() const { return (m_textureUpdate != nullptr) || m_pendingMipMapGen; }
    uintptr_t GetNativeTexture();
    class RenderTarget* m_msaaDepthResolve = nullptr;
 
@@ -78,6 +79,7 @@ private:
    bgfx::TextureFormat::Enum m_bgfx_format = bgfx::TextureFormat::Enum::Count;
    bgfx::TextureHandle m_nomipsTexture = BGFX_INVALID_HANDLE; // The texture without any mipmaps
    bgfx::TextureHandle m_mipsTexture = BGFX_INVALID_HANDLE;
+   bool m_useNoMip = false;
    bool m_pendingMipMapGen = false;
    std::mutex m_textureUpdateMutex;
    bool m_isTextureUpdateLinear;

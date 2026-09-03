@@ -962,7 +962,7 @@ void RenderDevice::OnInputSampled()
 #endif
 
 #elif defined(ENABLE_OPENGL)
-GLuint RenderDevice::m_samplerStateCache[3 * 3 * 5];
+GLuint RenderDevice::m_samplerStateCache[3 * 3 * 6];
 static const char* glErrorToString(const int error)
 {
    switch (error)
@@ -1167,10 +1167,6 @@ std::vector<std::string> RenderDevice::GetSelectableBackendNames()
       const bgfx::RendererType::Enum renderer = supported[i];
       if (renderer == bgfx::RendererType::Noop || renderer == bgfx::RendererType::WebGPU)
          continue; // no-op / web backend, not a usable desktop choice
-      #if !defined(_DEBUG) && !defined(ENABLE_BGFX_DX12)
-      if (renderer == bgfx::RendererType::Direct3D12)
-         continue;
-      #endif
       result.push_back(bgfxRendererName(renderer));
    }
    return result;
@@ -1260,10 +1256,6 @@ RenderDevice::RenderDevice(
    if (!backendMatched && !gfxBackend.empty() && gfxBackend != "Default"s) {
       PLOGW << "Ignoring unknown or unsupported graphics backend '" << gfxBackend << "' (case sensitive), using platform default. Valid values: " << validBackends;
    }
-#if !defined(_DEBUG) && !defined(ENABLE_BGFX_DX12)
-   if (init.type == bgfx::RendererType::Direct3D12)
-      init.type = bgfx::RendererType::Count;
-#endif
    if (init.type == bgfx::RendererType::Noop)
       init.type = bgfx::RendererType::Count;
    if (g_pplayer->m_vrDevice == nullptr)
@@ -1492,9 +1484,9 @@ RenderDevice::RenderDevice(
       binding->unit = i;
       binding->use_rank = i;
       binding->sampler = nullptr;
-      binding->filter = SF_UNDEFINED;
-      binding->clamp_u = SA_UNDEFINED;
-      binding->clamp_v = SA_UNDEFINED;
+      binding->filter = SamplerFilter::SF_UNDEFINED;
+      binding->clamp_u = SamplerAddressMode::SA_UNDEFINED;
+      binding->clamp_v = SamplerAddressMode::SA_UNDEFINED;
       m_samplerBindings.push_back(binding);
    }
 
@@ -1681,11 +1673,24 @@ RenderDevice::RenderDevice(
        hr = m_pD3DDevice->SetDialogBoxMode(TRUE);*/ // needs D3DPRESENTFLAG_LOCKABLE_BACKBUFFER, but makes rendering slower on some systems :/
 #endif
 
+   // Substitute for anything that has no valid texture to upload (e.g. out of mem):
+   // An 8x8 magenta checker tex to be recognizable however far it gets stretched. Should even this fail, the machine is completely out of memory
+   m_fallbackTexture = BaseTexture::Create(8, 8, BaseTexture::Format::SRGBA);
+   if (m_fallbackTexture == nullptr)
+      ReportError("Fatal Error: unable to create the fallback texture!"s, -1, __FILE__, __LINE__);
+   else
+   {
+      uint32_t* const __restrict texels = static_cast<uint32_t*>(m_fallbackTexture->data());
+      for (unsigned int i = 0; i < 8u * 8u; ++i)
+         texels[i] = ((i ^ (i >> 3u)) & 1u) ? 0xFFFF00FFu : 0xFF400040u;
+   }
+
    // Create default texture
    {
-      std::shared_ptr<BaseTexture> surf = std::shared_ptr<BaseTexture>(BaseTexture::Create(1, 1, BaseTexture::Format::RGBA));
-      memset(surf->data(), 0, 4);
-      m_nullTexture = std::make_shared<Sampler>(this, "Null"s, surf, false);
+      std::shared_ptr<BaseTexture> surf = BaseTexture::Create(1, 1, BaseTexture::Format::RGBA);
+      if (surf)
+         memset(surf->data(), 0, 4);
+      m_nullTexture = std::make_shared<Sampler>(this, "Null"s, OrFallback(surf), false);
    }
 
    // create default vertex declarations for shaders
@@ -1795,10 +1800,10 @@ RenderDevice::RenderDevice(
    #endif
 
    // Initialize uniform to default value
-   m_basicShader->SetVector(SHADER_staticColor_Alpha, 1.0f, 1.0f, 1.0f, 1.0f); // No tinting
+   m_basicShader->SetVector(ShaderUniform::staticColor_Alpha, 1.0f, 1.0f, 1.0f, 1.0f); // No tinting
    // FIXME XR
    #ifndef ENABLE_XR
-   m_DMDShader->SetFloat(SHADER_alphaTestValue, 1.0f); // No alpha clipping
+   m_DMDShader->SetFloat(ShaderUniform::alphaTestValue, 1.0f); // No alpha clipping
    #endif
 
    #if !defined(__OPENGLES__)
@@ -1854,6 +1859,10 @@ RenderDevice::~RenderDevice()
    m_SMAAareaTexture = nullptr;
    m_SMAAsearchTexture = nullptr;
    m_texMan.UnloadAll();
+   #if defined(ENABLE_BGFX)
+      // Samplers still queued here own BGFX textures: release them before BGFX is shut down
+      m_pendingTextureUploads.clear();
+   #endif
 
    m_renderFrame = nullptr;
 
@@ -1872,8 +1881,8 @@ RenderDevice::~RenderDevice()
    delete m_pVertexTexelDeclaration;
    delete m_pVertexNormalTexelDeclaration;
 
-   for (auto prog : m_mipmapPrograms)
-      bgfx::destroy(prog);
+   if (bgfx::isValid(m_srgbMipmapProgram))
+      bgfx::destroy(m_srgbMipmapProgram);
 
    // Shutdown BGFX once all native resources have been cleaned up
    m_rendererInitialized.release();
@@ -2203,7 +2212,7 @@ void RenderDevice::SubmitAndFlipFrame(bool present)
    for (auto it = m_pendingTextureUploads.cbegin(); it != m_pendingTextureUploads.cend();)
    {
       (*it)->GetCoreTexture(true);
-      if ((*it)->IsMipMapGenerated())
+      if (!(*it)->IsUploadPending())
       {
          it = m_pendingTextureUploads.erase(it);
       }
@@ -2360,8 +2369,8 @@ void RenderDevice::UploadAndSetSMAATextures()
    }
 #endif
 
-   m_FBShader->SetTexture(SHADER_areaTex, m_SMAAareaTexture);
-   m_FBShader->SetTexture(SHADER_searchTex, m_SMAAsearchTexture);
+   m_FBShader->SetTexture(ShaderUniform::areaTex, m_SMAAareaTexture);
+   m_FBShader->SetTexture(ShaderUniform::searchTex, m_SMAAsearchTexture);
 }
 
 void RenderDevice::UploadTexture(ITexManCacheable* texture, const bool linearRGB)
@@ -2380,10 +2389,10 @@ void RenderDevice::SetSamplerState(int unit, SamplerFilter filter, SamplerAddres
 {
 #if defined(ENABLE_BGFX)
 #elif defined(ENABLE_OPENGL)
-   assert(std::size(m_samplerStateCache) == 3*3*5);
-   int samplerStateId = min((int)clamp_u, 2) * 5 * 3
-                      + min((int)clamp_v, 2) * 5
-                      + min((int)filter, 4);
+   assert(std::size(m_samplerStateCache) == 3*3*6);
+   int samplerStateId = min((int)clamp_u, 2) * 6 * 3
+                      + min((int)clamp_v, 2) * 6
+                      + min((int)filter, 5);
    GLuint sampler_state = m_samplerStateCache[samplerStateId];
    if (sampler_state == 0)
    {
@@ -2391,29 +2400,34 @@ void RenderDevice::SetSamplerState(int unit, SamplerFilter filter, SamplerAddres
       glGenSamplers(1, &sampler_state);
       m_samplerStateCache[samplerStateId] = sampler_state;
       static constexpr int glAddress[] = { GL_REPEAT, GL_CLAMP_TO_EDGE, GL_MIRRORED_REPEAT, GL_REPEAT };
-      glSamplerParameteri(sampler_state, GL_TEXTURE_WRAP_S, glAddress[clamp_u]);
-      glSamplerParameteri(sampler_state, GL_TEXTURE_WRAP_T, glAddress[clamp_v]);
+      glSamplerParameteri(sampler_state, GL_TEXTURE_WRAP_S, glAddress[static_cast<unsigned int>(clamp_u)]);
+      glSamplerParameteri(sampler_state, GL_TEXTURE_WRAP_T, glAddress[static_cast<unsigned int>(clamp_v)]);
       switch (filter)
       {
       default: assert(!"unknown filter");
-      case SF_NONE: // No mipmapping
+      case SamplerFilter::SF_NONE: // No mipmapping
          glSamplerParameteri(sampler_state, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
          glSamplerParameteri(sampler_state, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
          glSamplerParameterf(sampler_state, GL_TEXTURE_MAX_ANISOTROPY, 1.0f);
          break;
-      case SF_BILINEAR: // Bilinear texture filtering.
+      case SamplerFilter::SF_BILINEAR: // Bilinear texture filtering.
          glSamplerParameteri(sampler_state, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
          glSamplerParameteri(sampler_state, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
          glSamplerParameterf(sampler_state, GL_TEXTURE_MAX_ANISOTROPY, 1.0f);
          break;
-      case SF_TRILINEAR: // Trilinear texture filtering.
+      case SamplerFilter::SF_TRILINEAR: // Trilinear texture filtering.
          glSamplerParameteri(sampler_state, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
          glSamplerParameteri(sampler_state, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
          glSamplerParameterf(sampler_state, GL_TEXTURE_MAX_ANISOTROPY, 1.0f);
          break;
-      case SF_ANISOTROPIC: // Anisotropic texture filtering.
+      case SamplerFilter::SF_ANISOTROPIC: // Anisotropic texture filtering.
          glSamplerParameteri(sampler_state, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
          glSamplerParameteri(sampler_state, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+         glSamplerParameterf(sampler_state, GL_TEXTURE_MAX_ANISOTROPY, m_maxaniso);
+         break;
+      case SamplerFilter::SF_PIXELATED: // Point magnification, filtered (anisotropic) minification.
+         glSamplerParameteri(sampler_state, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+         glSamplerParameteri(sampler_state, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
          glSamplerParameterf(sampler_state, GL_TEXTURE_MAX_ANISOTROPY, m_maxaniso);
          break;
       }
@@ -2426,7 +2440,7 @@ void RenderDevice::SetSamplerState(int unit, SamplerFilter filter, SamplerAddres
       switch (filter)
       {
       default:
-      case SF_NONE:
+      case SamplerFilter::SF_NONE:
          // Don't filter textures, no mipmapping.
          CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_MAGFILTER, D3DTEXF_POINT));
          CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_MINFILTER, D3DTEXF_POINT));
@@ -2434,7 +2448,7 @@ void RenderDevice::SetSamplerState(int unit, SamplerFilter filter, SamplerAddres
          m_curStateChanges+=3;
          break;
 
-      case SF_BILINEAR:
+      case SamplerFilter::SF_BILINEAR:
          // Interpolate in 2x2 texels, no mipmapping.
          CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR));
          CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_MINFILTER, D3DTEXF_LINEAR));
@@ -2442,7 +2456,7 @@ void RenderDevice::SetSamplerState(int unit, SamplerFilter filter, SamplerAddres
          m_curStateChanges += 3;
          break;
 
-      case SF_TRILINEAR:
+      case SamplerFilter::SF_TRILINEAR:
          // Filter textures on 2 mip levels (interpolate in 2x2 texels). And filter between the 2 mip levels.
          CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR));
          CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_MINFILTER, D3DTEXF_LINEAR));
@@ -2450,9 +2464,18 @@ void RenderDevice::SetSamplerState(int unit, SamplerFilter filter, SamplerAddres
          m_curStateChanges += 3;
          break;
 
-      case SF_ANISOTROPIC:
+      case SamplerFilter::SF_ANISOTROPIC:
          // Full HQ anisotropic Filter. Should lead to driver doing whatever it thinks is best.
          CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_MAGFILTER, m_mag_aniso ? D3DTEXF_ANISOTROPIC : D3DTEXF_LINEAR));
+         CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_MINFILTER, D3DTEXF_ANISOTROPIC));
+         CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR));
+         CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_MAXANISOTROPY, min(m_maxaniso, (DWORD)16)));
+         m_curStateChanges += 4;
+         break;
+
+      case SamplerFilter::SF_PIXELATED:
+         // Keep crisp texels when magnified, but filter (and mipmap) when minified to avoid aliasing.
+         CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_MAGFILTER, D3DTEXF_POINT));
          CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_MINFILTER, D3DTEXF_ANISOTROPIC));
          CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR));
          CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_MAXANISOTROPY, min(m_maxaniso, (DWORD)16)));
@@ -2465,9 +2488,9 @@ void RenderDevice::SetSamplerState(int unit, SamplerFilter filter, SamplerAddres
    {
       switch (clamp_u)
       {
-         case SA_REPEAT: CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP)); m_curStateChanges++; break;
-         case SA_CLAMP: CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP)); m_curStateChanges++; break;
-         case SA_MIRROR: CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_ADDRESSU, D3DTADDRESS_MIRROR)); m_curStateChanges++; break;
+         case SamplerAddressMode::SA_REPEAT: CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP)); m_curStateChanges++; break;
+         case SamplerAddressMode::SA_CLAMP: CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP)); m_curStateChanges++; break;
+         case SamplerAddressMode::SA_MIRROR: CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_ADDRESSU, D3DTADDRESS_MIRROR)); m_curStateChanges++; break;
       }
       m_bound_clampu[unit] = clamp_u;
    }
@@ -2475,9 +2498,9 @@ void RenderDevice::SetSamplerState(int unit, SamplerFilter filter, SamplerAddres
    {
       switch (clamp_v)
       {
-         case SA_REPEAT: CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP)); m_curStateChanges++; break;
-         case SA_CLAMP: CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP)); m_curStateChanges++; break;
-         case SA_MIRROR: CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_ADDRESSV, D3DTADDRESS_MIRROR)); m_curStateChanges++; break;
+         case SamplerAddressMode::SA_REPEAT: CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP)); m_curStateChanges++; break;
+         case SamplerAddressMode::SA_CLAMP: CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP)); m_curStateChanges++; break;
+         case SamplerAddressMode::SA_MIRROR: CHECKD3D(m_pD3DDevice->SetSamplerState(unit, D3DSAMP_ADDRESSV, D3DTADDRESS_MIRROR)); m_curStateChanges++; break;
       }
       m_bound_clampv[unit] = clamp_v;
    }
@@ -2544,17 +2567,17 @@ void RenderDevice::SetClipPlane(const vec4 &plane)
    // FIXME GLES implement (or use BGFX OpenGL ES implementation)
    return;
 #elif defined(ENABLE_BGFX)
-   //m_DMDShader->SetVector(SHADER_clip_plane, &plane); // FIXME
-   m_basicShader->SetVector(SHADER_clip_plane, &plane);
-   m_lightShader->SetVector(SHADER_clip_plane, &plane);
-   m_flasherShader->SetVector(SHADER_clip_plane, &plane);
-   m_ballShader->SetVector(SHADER_clip_plane, &plane);
+   //m_DMDShader->SetVector(ShaderUniform::clip_plane, &plane); // FIXME
+   m_basicShader->SetVector(ShaderUniform::clip_plane, &plane);
+   m_lightShader->SetVector(ShaderUniform::clip_plane, &plane);
+   m_flasherShader->SetVector(ShaderUniform::clip_plane, &plane);
+   m_ballShader->SetVector(ShaderUniform::clip_plane, &plane);
 #elif defined(ENABLE_OPENGL)
-   m_DMDShader->SetVector(SHADER_clip_plane, &plane);
-   m_basicShader->SetVector(SHADER_clip_plane, &plane);
-   m_lightShader->SetVector(SHADER_clip_plane, &plane);
-   m_flasherShader->SetVector(SHADER_clip_plane, &plane);
-   m_ballShader->SetVector(SHADER_clip_plane, &plane);
+   m_DMDShader->SetVector(ShaderUniform::clip_plane, &plane);
+   m_basicShader->SetVector(ShaderUniform::clip_plane, &plane);
+   m_lightShader->SetVector(ShaderUniform::clip_plane, &plane);
+   m_flasherShader->SetVector(ShaderUniform::clip_plane, &plane);
+   m_ballShader->SetVector(ShaderUniform::clip_plane, &plane);
 #elif defined(ENABLE_DX9)
    // FIXME DX9 shouldn't we set the Model matrix to identity first ?
    Matrix3D mT = g_pplayer->m_renderer->GetMVP().GetModelViewProj(0); // = world * view * proj
@@ -2715,51 +2738,51 @@ void RenderDevice::DrawMesh(Shader* shader, const bool isTranparentPass, const V
 
 void RenderDevice::DrawGaussianBlur(RenderTarget* source, RenderTarget* tmp, RenderTarget* dest, float kernel_size, int singleLayer)
 {
-   ShaderTechniques tech_h, tech_v;
+   ShaderTechnique tech_h, tech_v;
    if (kernel_size < 8)
    {
-      tech_h = SHADER_TECHNIQUE_fb_blur_horiz7x7;
-      tech_v = SHADER_TECHNIQUE_fb_blur_vert7x7;
+      tech_h = ShaderTechnique::fb_blur_horiz7x7;
+      tech_v = ShaderTechnique::fb_blur_vert7x7;
    }
    else if (kernel_size < 10)
    {
-      tech_h = SHADER_TECHNIQUE_fb_blur_horiz9x9;
-      tech_v = SHADER_TECHNIQUE_fb_blur_vert9x9;
+      tech_h = ShaderTechnique::fb_blur_horiz9x9;
+      tech_v = ShaderTechnique::fb_blur_vert9x9;
    }
    else if (kernel_size < 12)
    {
-      tech_h = SHADER_TECHNIQUE_fb_blur_horiz11x11;
-      tech_v = SHADER_TECHNIQUE_fb_blur_vert11x11;
+      tech_h = ShaderTechnique::fb_blur_horiz11x11;
+      tech_v = ShaderTechnique::fb_blur_vert11x11;
    }
    else if (kernel_size < 14)
    {
-      tech_h = SHADER_TECHNIQUE_fb_blur_horiz13x13;
-      tech_v = SHADER_TECHNIQUE_fb_blur_vert13x13;
+      tech_h = ShaderTechnique::fb_blur_horiz13x13;
+      tech_v = ShaderTechnique::fb_blur_vert13x13;
    }
    else if (kernel_size < 17)
    {
-      tech_h = SHADER_TECHNIQUE_fb_blur_horiz15x15;
-      tech_v = SHADER_TECHNIQUE_fb_blur_vert15x15;
+      tech_h = ShaderTechnique::fb_blur_horiz15x15;
+      tech_v = ShaderTechnique::fb_blur_vert15x15;
    }
    else if (kernel_size < 21)
    {
-      tech_h = SHADER_TECHNIQUE_fb_blur_horiz19x19;
-      tech_v = SHADER_TECHNIQUE_fb_blur_vert19x19;
+      tech_h = ShaderTechnique::fb_blur_horiz19x19;
+      tech_v = ShaderTechnique::fb_blur_vert19x19;
    }
    else if (kernel_size < 25)
    {
-      tech_h = SHADER_TECHNIQUE_fb_blur_horiz23x23;
-      tech_v = SHADER_TECHNIQUE_fb_blur_vert23x23;
+      tech_h = ShaderTechnique::fb_blur_horiz23x23;
+      tech_v = ShaderTechnique::fb_blur_vert23x23;
    }
    else if (kernel_size < 31)
    {
-      tech_h = SHADER_TECHNIQUE_fb_blur_horiz27x27;
-      tech_v = SHADER_TECHNIQUE_fb_blur_vert27x27;
+      tech_h = ShaderTechnique::fb_blur_horiz27x27;
+      tech_v = ShaderTechnique::fb_blur_vert27x27;
    }
    else
    {
-      tech_h = SHADER_TECHNIQUE_fb_blur_horiz39x39;
-      tech_v = SHADER_TECHNIQUE_fb_blur_vert39x39;
+      tech_h = ShaderTechnique::fb_blur_horiz39x39;
+      tech_v = ShaderTechnique::fb_blur_vert39x39;
    }
 
    RenderPass* const initial_rt = GetCurrentPass();
@@ -2771,22 +2794,22 @@ void RenderDevice::DrawGaussianBlur(RenderTarget* source, RenderTarget* tmp, Ren
    SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
    SetRenderState(RenderState::ZENABLE, RenderState::RS_FALSE);
    {
-      m_FBShader->SetTextureNull(SHADER_tex_fb_filtered);
+      m_FBShader->SetTextureNull(ShaderUniform::tex_fb_filtered);
       SetRenderTarget(initial_rt->m_name + " HBlur", tmp, false); // switch to temporary output buffer for horizontal phase of gaussian blur
       m_currentPass->m_singleLayerRendering = singleLayer; // We support blurring a single layer (for anaglyph defocusing)
       AddRenderTargetDependency(source);
-      m_FBShader->SetTexture(SHADER_tex_fb_filtered, source->GetColorSampler());
-      m_FBShader->SetVector(SHADER_w_h_height, (float)(1.0 / source->GetWidth()), (float)(1.0 / source->GetHeight()), 1.0f, 1.0f);
+      m_FBShader->SetTexture(ShaderUniform::tex_fb_filtered, source->GetColorSampler());
+      m_FBShader->SetVector(ShaderUniform::w_h_height, (float)(1.0 / source->GetWidth()), (float)(1.0 / source->GetHeight()), 1.0f, 1.0f);
       m_FBShader->SetTechnique(tech_h);
       DrawFullscreenTexturedQuad(m_FBShader);
    }
    {
-      m_FBShader->SetTextureNull(SHADER_tex_fb_filtered);
+      m_FBShader->SetTextureNull(ShaderUniform::tex_fb_filtered);
       SetRenderTarget(initial_rt->m_name + " VBlur", dest, false); // switch to output buffer for vertical phase of gaussian blur
       m_currentPass->m_singleLayerRendering = singleLayer; // We support blurring a single layer (for anaglyph defocusing)
       AddRenderTargetDependency(tmp);
-      m_FBShader->SetTexture(SHADER_tex_fb_filtered, tmp->GetColorSampler());
-      m_FBShader->SetVector(SHADER_w_h_height, (float)(1.0 / tmp->GetWidth()), (float)(1.0 / tmp->GetHeight()), 1.0f, 1.0f);
+      m_FBShader->SetTexture(ShaderUniform::tex_fb_filtered, tmp->GetColorSampler());
+      m_FBShader->SetVector(ShaderUniform::w_h_height, (float)(1.0 / tmp->GetWidth()), (float)(1.0 / tmp->GetHeight()), 1.0f, 1.0f);
       m_FBShader->SetTechnique(tech_v);
       DrawFullscreenTexturedQuad(m_FBShader);
    }

@@ -75,7 +75,7 @@ FEATURES:
   . the legacy asymetric sensor calibration was removed (this was removed from joystick calibration before Windows 10 and always gave worse results compared to the default symetric calibration)
   . the legacy (optional) position filter was removed
 
-- the BGFX library employs all the latest rendering backends (Vulkan, Metal, DirectX11, OpenGL, ...) with some unique benefits: (note that DX11 should be preferred on Windows) (DX12 currently disabled)
+- the BGFX library employs all the latest rendering backends (Vulkan, Metal, DirectX11, DirectX12, OpenGL, ...) with some unique benefits: (note that DX11 should be preferred on Windows)
   . it supports Variable Refresh Rate display (when VSync is switched off)
   . it uses multiple CPU cores to separately process the rendering from the game simulation, allowing for lower input/physics/controller latency,
     better nudging, more stable gameplay emulation, as well as a performance boost
@@ -236,7 +236,19 @@ FIXES:
 
 - remove some of the limits (like maximum line length) of the code view/script editor
 
+- fix script editor changes not leading to flagging the table as changed (visible via the added '*')
+- fix ctrl+s not working within the script editor 
+
+- WinUI: fix zooming on a wall with image
+-        fix zoom blocking at max or min
+-        redraw display when grid/playfield is toggled
+-        do not filter navigation inside property pane
+-        delete elements of deleted layer
+-        fix crash on second Select Dialog open
+
 - LiveUI: fix delayed mipmap generation (happens when starting with static rendering, then opening LiveUI) (used for trilinear and anisotropic texture filtering)
+
+- allow FreeImage to decode PNG with corrupted gamma chunks
 
 - BAM headtracking has been removed again. It could be re-added via the new plugin system though. Any volunteers?
 
@@ -250,6 +262,8 @@ FIXES:
 - the BASS sound engine was replaced/unified with SDL3+miniaudio, fixing the pitch/volume adjustment of 'ogg' files.
   As a consequence 'ogg' files should now be favored over legacy 'wav'.
   In general, multiple issues/regressions (e.g. too low volume) found in 10.8 were fixed due to this.
+
+- the win32 vpx container regarding has been replaced for all builds with the (heavily modified and optimized) POLE library
 
 - see Changelog_Scripts.txt for the respective core script changes (version 3.62)
 - see CommandReference.txt for the changelog of all the scripting properties/interface changes

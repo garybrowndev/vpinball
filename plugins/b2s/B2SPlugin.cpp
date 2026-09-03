@@ -82,11 +82,19 @@ PSC_CLASS_START(B2S_Server, B2SServer)
    PSC_PROP_R(double, B2SBuildVersion)
    PSC_PROP_R(string, B2SServerDirectory)
    PSC_FUNCTION2(void, B2SSetData, int, int)
+   PSC_FUNCTION2(void, B2SSetData, int, string)
    PSC_FUNCTION2(void, B2SSetData, string, int)
+   PSC_FUNCTION2(void, B2SSetData, string, string)
    PSC_FUNCTION1(void, B2SPulseData, int)
    PSC_FUNCTION1(void, B2SPulseData, string)
    PSC_FUNCTION3(void, B2SSetPos, int, int, int)
+   PSC_FUNCTION3(void, B2SSetPos, int, string, int)
+   PSC_FUNCTION3(void, B2SSetPos, int, int, string)
+   PSC_FUNCTION3(void, B2SSetPos, int, string, string)
    PSC_FUNCTION3(void, B2SSetPos, string, int, int)
+   PSC_FUNCTION3(void, B2SSetPos, string, string, int)
+   PSC_FUNCTION3(void, B2SSetPos, string, int, string)
+   PSC_FUNCTION3(void, B2SSetPos, string, string, string)
    PSC_FUNCTION2(void, B2SSetIllumination, string, int)
    PSC_FUNCTION2(void, B2SSetLED, int, int)
    PSC_FUNCTION2(void, B2SSetLED, int, string)
@@ -166,8 +174,8 @@ PSC_CLASS_START(B2S_Server, B2SServer)
    PSC_PROXY_PROP_RW_ARRAY1(me, bool, Switch, int)
    PSC_PROXY_PROP_W_ARRAY1(me, int32, Mech, int)
    PSC_PROXY_PROP_R_ARRAY1(me, int32, GetMech, int)
-   PSC_PROXY_PROP_R_ARRAY1(me, int32, Lamp, int)
-   PSC_PROXY_PROP_R_ARRAY1(me, int32, Solenoid, int)
+   PSC_PROXY_PROP_R_ARRAY1(me, bool, Lamp, int)
+   PSC_PROXY_PROP_R_ARRAY1(me, bool, Solenoid, int)
    PSC_PROXY_PROP_R_ARRAY1(me, int32, GIString, int)
    PSC_PROXY_PROP_RW_ARRAY1(me, int32, Dip, int)
    PSC_PROXY_PROP_R(me, B2S_ByteArray, NVRAM)
@@ -251,7 +259,7 @@ MSGPI_EXPORT void MSGPIAPI B2SPluginLoad(const uint32_t sessionId, const MsgPlug
    msgApi->BroadcastMsg(endpointId, getScriptApiId, &scriptApi);
 
    B2SRenderer::RegisterSettings(msgApi, endpointId);
-   B2SDMDOverlay::RegisterSettings(msgApi, endpointId);
+   DMDOverlay::DMDOverlay::RegisterSettings(msgApi, endpointId);
 
    nServer = 0;
    auto classLambda = [](ScriptClassDef* scd) { scriptApi->RegisterScriptClass(scd); };

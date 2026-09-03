@@ -85,9 +85,6 @@ public:
          LINESTRIP
       };
 
-      // Names of the graphics backends selectable on this platform: reported as supported by bgfx and not
-      // filtered out (excludes Noop, WebGPU, and Direct3D12 in release). Single source of truth shared by
-      // the graphics settings UI and the GfxBackend validation/log so they cannot drift.
       static std::vector<std::string> GetSelectableBackendNames();
 
    #elif defined(ENABLE_OPENGL)
@@ -179,7 +176,14 @@ public:
 
    void UploadTexture(ITexManCacheable* texture, const bool linearRGB);
    void SetSamplerState(int unit, SamplerFilter filter, SamplerAddressMode clamp_u, SamplerAddressMode clamp_v);
+
+   // Default texture (1x1 Black)
    std::shared_ptr<Sampler> m_nullTexture = nullptr;
+
+   // Stand-in for a texture that could not be created (failed decode, unsupported file, out of memory), so that callers never need to pass a null on (8x8 magenta checker)
+   std::shared_ptr<BaseTexture> m_fallbackTexture = nullptr;
+   std::shared_ptr<const BaseTexture> OrFallback(std::shared_ptr<const BaseTexture> tex) const { return tex ? std::move(tex) : m_fallbackTexture; }
+
    TextureManager m_texMan;
    const bool m_compressTextures;
 
@@ -280,7 +284,7 @@ public:
    std::binary_semaphore m_frameReadySem { 0 }; // Semaphore to signal when a frame is ready to be submitted
    std::mutex m_frameMutex; // Mutex to lock acces to retained render frame between logic thread and render thread
 
-   std::vector<bgfx::ProgramHandle> m_mipmapPrograms;
+   bgfx::ProgramHandle m_srgbMipmapProgram = BGFX_INVALID_HANDLE;
 
    uint64_t m_lastGPUFrameLength = 0;
 
@@ -347,7 +351,7 @@ public:
 private:
    GLfloat m_maxaniso;
    int m_GLversion;
-   static GLuint m_samplerStateCache[3 * 3 * 5];
+   static GLuint m_samplerStateCache[3 * 3 * 6];
 
    void CaptureGLScreenshot();
 

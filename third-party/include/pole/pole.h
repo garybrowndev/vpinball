@@ -18,6 +18,7 @@
 
    Corrected some of the artificial (=failing on 32bit systems) handling of 64bit sizes/indices, leading to a lot of warnings
    Note that things can still fail on 32bit systems for large files, but it should at least assert now
+   Allow multithreaded reading of multiple streams from a single storage (synchronized read access)
    Also some minor optimizations
    2026 VPX team
 
@@ -149,6 +150,13 @@ public:
    * Returns true if storage can be modified.
    */
   bool isWriteable() const;
+  /**
+   * Returns the absolute byte offset of the first byte of a stream, or 0 if the stream
+   * does not exist. Offsets are comparable across every stream in the container,
+   * including those small enough to live inside the mini-stream container, so they can be
+   * used to visit streams in the order they are physically laid out.
+   **/
+  uint64 streamOffset( const std::string& name );
 
   /**
    * Deletes a specified stream or directory. If directory, it will

@@ -70,14 +70,14 @@ public:
    void SetSolMask(int nLow, long newVal); // Define device emulation mode, or mask applied to GetChangedSolenoids
    int GetModOutputType(int output, int no) const; // FIXME deprecate in PinMAME/VPinMAME/LibPinMAME, this is wrong (it was added to wait while defining them inside PinMAME)
    void SetModOutputType(int output, int no, int newVal); // FIXME deprecate in PinMAME/VPinMAME/LibPinMAME, this is wrong (it was added to wait while defining them inside PinMAME)
-   int GetSolenoid(int nSolenoid) const;
-   int GetLamp(int nLamp) const;
+   bool GetSolenoid(int nSolenoid) const;
+   bool GetLamp(int nLamp) const;
    int GetGIString(int nString) const;
    int GetGetMech(int mechNo) const { return PinmameGetMech(mechNo); }
    void SetMech(int mechNo, int newVal);
-   const vector<PinmameLampState>& GetChangedLamps();
-   const vector<PinmameGIState>& GetChangedGIStrings();
-   const vector<PinmameSolenoidState>& GetChangedSolenoids();
+   const vector<PinmameLampState>& GetChangedLamps() const;
+   const vector<PinmameGIState>& GetChangedGIStrings() const;
+   const vector<PinmameSolenoidState>& GetChangedSolenoids() const;
 
    // Segment displays
    const vector<PinmameLEDState>& GetChangedLEDs(int nHigh, int nLow, int nnHigh = 0, int nnLow = 0);
@@ -178,13 +178,6 @@ private:
    const MsgPluginAPI* const m_msgApi;
    const unsigned int m_endpointId;
 
-   unsigned int m_getStateSrcMsgId, m_onStateSrcChangedMsgId;
-   mutable bool m_stateUpdatePending = true;
-   static void OnStateSrcChanged(const unsigned int msgId, void* userData, void* msgData);
-   void UpdateStateSrc() const;
-   mutable StateSrcId m_states { };
-   mutable vector<uint8_t> m_prevState;
-
    enum DeviceMode
    {
       DM_BINARY,
@@ -194,25 +187,26 @@ private:
    uint64_t m_solMask = 0xFFFFFFFFFFFFFFFFULL; // Mask applied to (and only to) GetChangedSolenoids
    DeviceMode m_deviceMode = DM_BINARY;
 
-   mutable vector<int> m_switches;
-   mutable vector<bool> m_switchStates;
-   mutable vector<unsigned int> m_switchMap;
-
-   mutable vector<int> m_dipSwitches;
-   mutable vector<bool> m_dipSwitchStates;
-   mutable vector<unsigned int> m_dipSwitchMap;
-
-   mutable vector<int> m_solenoids;
-   mutable vector<unsigned int> m_solenoidMap;
-   mutable vector<PinmameSolenoidState> m_solenoidStates;
-
-   mutable vector<int> m_gis;
-   mutable vector<unsigned int> m_giMap;
-   mutable vector<PinmameGIState> m_giStates;
-
-   mutable vector<int> m_lamps;
-   mutable vector<unsigned int> m_lampMap;
-   mutable vector<PinmameLampState> m_lampStates;
+   mutable PinballPlugin::Controller::CtrlItemConsumer<StateSrcId> m_stateSources;
+   void OnStateSrcChanged(const std::vector<StateSrcId>& states);
+   StateSrcId m_switches { };
+   vector<bool> m_switchStates;
+   vector<unsigned int> m_switchMap;
+   StateSrcId m_dipSwitches { };
+   vector<bool> m_dipSwitchStates;
+   vector<unsigned int> m_dipSwitchMap;
+   StateSrcId m_solenoids { };
+   vector<unsigned int> m_solenoidMap;
+   mutable vector<uint8_t> m_prevSolenoidStates;
+   mutable vector<PinmameSolenoidState> m_changedSolenoids;
+   StateSrcId m_gis { };
+   vector<unsigned int> m_giMap;
+   mutable vector<uint8_t> m_prevGIStates;
+   mutable vector<PinmameGIState> m_changedGIs;
+   StateSrcId m_lamps { };
+   vector<unsigned int> m_lampMap;
+   mutable vector<uint8_t> m_prevLampStates;
+   mutable vector<PinmameLampState> m_changedLamps;
 
    unsigned int m_getDmdSrcMsgId, m_onDmdChangedMsgId;
    bool m_dmdUpdatePending = true;

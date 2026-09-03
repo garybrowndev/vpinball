@@ -287,5 +287,5 @@ void InputAction::SetRepeatPeriod(int delayMs)
 
 bool InputAction::IsNavigationAction() const
 {
-   return GetActionId() <= m_eventManager->GetLaunchBallActionId();
+   return m_eventManager->IsUINavigationActionId(GetActionId());
 }

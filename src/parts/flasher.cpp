@@ -833,6 +833,24 @@ STDMETHODIMP Flasher::put_DMDHeight(int pVal)
    return S_OK;
 }
 
+// The setters below take their element count from DMDWidth/DMDHeight, which a script can assign separately from the array, so the two can disagree.
+// Counted over every dimension: a script may pass a rectangular array, and the flat read below also accepts one
+static bool SafeArrayHasAtLeast(SAFEARRAY* const psa, const int count)
+{
+   const UINT dims = SafeArrayGetDim(psa);
+   if (dims == 0)
+      return false;
+   int64_t total = 1; // Widened: a bounds check must not be defeated by its own overflow
+   for (UINT dim = 1; dim <= dims; ++dim)
+   {
+      LONG lbound, ubound;
+      if (FAILED(SafeArrayGetLBound(psa, dim, &lbound)) || FAILED(SafeArrayGetUBound(psa, dim, &ubound)))
+         return false;
+      total *= static_cast<int64_t>(ubound) - lbound + 1;
+   }
+   return total >= count;
+}
+
 STDMETHODIMP Flasher::put_DMDPixels(VARIANT pVal) // assumes VT_UI1 as input //!! use 64bit instead of 8bit to reduce overhead??
 {
 
@@ -840,8 +858,13 @@ STDMETHODIMP Flasher::put_DMDPixels(VARIANT pVal) // assumes VT_UI1 as input //!
    if (psa == nullptr || m_dmdSize.x <= 0 || m_dmdSize.y <= 0)
       return E_FAIL;
 
-   BaseTexture::Update(m_dmdFrame, m_dmdSize.x, m_dmdSize.y, BaseTexture::BW_FP32, nullptr);
    const int size = m_dmdSize.x * m_dmdSize.y;
+   if (!SafeArrayHasAtLeast(psa, size))
+      return E_FAIL;
+
+   if (m_dmdFrame != nullptr && (m_dmdFrame->width() != m_dmdSize.x || m_dmdFrame->height() != m_dmdSize.y || m_dmdFrame->m_format != BaseTexture::BW_FP32))
+      g_pplayer->m_pluginAPI.OnDMDUpdated(this, nullptr);
+   BaseTexture::Update(m_dmdFrame, m_dmdSize.x, m_dmdSize.y, BaseTexture::BW_FP32, nullptr);
    // Convert from linear [0..100] luminance
    VARIANT *p;
    SafeArrayAccessData(psa, (void **)&p);
@@ -850,7 +873,7 @@ STDMETHODIMP Flasher::put_DMDPixels(VARIANT pVal) // assumes VT_UI1 as input //!
       data[ofs] = (float)V_UI4(&p[ofs]) * (float)(1.0 / 100.);
    SafeArrayUnaccessData(psa);
    m_dmdFrameId++;
-   g_pplayer->m_pluginAPI.UpdateDMDSource(this, true);
+   g_pplayer->m_pluginAPI.OnDMDUpdated(this, m_dmdFrame);
    return S_OK;
 }
 
@@ -860,8 +883,11 @@ STDMETHODIMP Flasher::put_DMDColoredPixels(VARIANT pVal) //!! assumes VT_UI4 as 
    if (psa == nullptr || m_dmdSize.x <= 0 || m_dmdSize.y <= 0)
       return E_FAIL;
 
-   BaseTexture::Update(m_dmdFrame, m_dmdSize.x, m_dmdSize.y, BaseTexture::SRGBA, nullptr);
    const int size = m_dmdSize.x * m_dmdSize.y;
+   if (!SafeArrayHasAtLeast(psa, size))
+      return E_FAIL;
+
+   BaseTexture::Update(m_dmdFrame, m_dmdSize.x, m_dmdSize.y, BaseTexture::SRGBA, nullptr);
    uint32_t *const __restrict data = reinterpret_cast<uint32_t *>(m_dmdFrame->data());
    // gamma compressed [0..255] sRGB
    VARIANT *p;
@@ -894,7 +920,7 @@ void Flasher::ResetVideoCap()
    m_isVideoCap = false;
    if (m_videoCapTex)
    {
-      //  m_renderer->m_renderDevice->m_flasherShader->SetTextureNull(SHADER_tex_flasher_A); //!! ??
+      //  m_renderer->m_renderDevice->m_flasherShader->SetTextureNull(ShaderUniform::tex_flasher_A); //!! ??
       m_renderer->m_renderDevice->m_texMan.UnloadTexture(m_videoCapTex.get());
       m_videoCapTex = nullptr;
    }
@@ -1265,19 +1291,19 @@ void Flasher::Render(const unsigned int renderMask)
          Texture *const pinA = m_ptable->GetImage(m_d.m_szImageA);
          Texture *const pinB = m_ptable->GetImage(m_d.m_szImageB);
 
-         m_renderer->m_renderDevice->m_flasherShader->SetVector(SHADER_staticColor_Alpha, &color);
+         m_renderer->m_renderDevice->m_flasherShader->SetVector(ShaderUniform::staticColor_Alpha, &color);
 
          vec4 flasherData(-1.f, -1.f, (float)m_d.m_filter, m_d.m_addBlend ? 1.f : 0.f);
-         m_renderer->m_renderDevice->m_flasherShader->SetTechnique(SHADER_TECHNIQUE_basic_noLight);
+         m_renderer->m_renderDevice->m_flasherShader->SetTechnique(ShaderTechnique::basic_noLight);
 
          float flasherMode;
          if ((pinA || m_isVideoCap) && !pinB)
          {
             flasherMode = 0.f;
             if (m_isVideoCap)
-               m_renderer->m_renderDevice->m_flasherShader->SetTexture(SHADER_tex_flasher_A, m_videoCapTex.get());
+               m_renderer->m_renderDevice->m_flasherShader->SetTexture(ShaderUniform::tex_flasher_A, m_videoCapTex.get());
             else
-               m_renderer->m_renderDevice->m_flasherShader->SetTexture(SHADER_tex_flasher_A, pinA);
+               m_renderer->m_renderDevice->m_flasherShader->SetTexture(ShaderUniform::tex_flasher_A, pinA);
 
             if (!m_d.m_addBlend)
                flasherData.x = !m_isVideoCap ? pinA->m_alphaTestValue : 0.f;
@@ -1285,7 +1311,7 @@ void Flasher::Render(const unsigned int renderMask)
          else if (!(pinA || m_isVideoCap) && pinB)
          {
             flasherMode = 0.f;
-            m_renderer->m_renderDevice->m_flasherShader->SetTexture(SHADER_tex_flasher_A, pinB);
+            m_renderer->m_renderDevice->m_flasherShader->SetTexture(ShaderUniform::tex_flasher_A, pinB);
 
             if (!m_d.m_addBlend)
                flasherData.x = pinB->m_alphaTestValue;
@@ -1294,10 +1320,10 @@ void Flasher::Render(const unsigned int renderMask)
          {
             flasherMode = 1.f;
             if (m_isVideoCap)
-               m_renderer->m_renderDevice->m_flasherShader->SetTexture(SHADER_tex_flasher_A, m_videoCapTex.get());
+               m_renderer->m_renderDevice->m_flasherShader->SetTexture(ShaderUniform::tex_flasher_A, m_videoCapTex.get());
             else
-               m_renderer->m_renderDevice->m_flasherShader->SetTexture(SHADER_tex_flasher_A, pinA);
-            m_renderer->m_renderDevice->m_flasherShader->SetTexture(SHADER_tex_flasher_B, pinB);
+               m_renderer->m_renderDevice->m_flasherShader->SetTexture(ShaderUniform::tex_flasher_A, pinA);
+            m_renderer->m_renderDevice->m_flasherShader->SetTexture(ShaderUniform::tex_flasher_B, pinB);
 
             if (!m_d.m_addBlend)
             {
@@ -1308,12 +1334,12 @@ void Flasher::Render(const unsigned int renderMask)
          else
             flasherMode = 2.f;
 
-         m_renderer->m_renderDevice->m_flasherShader->SetVector(SHADER_alphaTestValueAB_filterMode_addBlend, &flasherData);
-         m_renderer->m_renderDevice->m_flasherShader->SetVector(SHADER_amount_blend_modulate_vs_add_flasherMode, static_cast<float>(m_d.m_filterAmount) / 100.0f, clampedModulateVsAdd, flasherMode, 0.f);
+         m_renderer->m_renderDevice->m_flasherShader->SetVector(ShaderUniform::alphaTestValueAB_filterMode_addBlend, &flasherData);
+         m_renderer->m_renderDevice->m_flasherShader->SetVector(ShaderUniform::amount_blend_modulate_vs_add_flasherMode, static_cast<float>(m_d.m_filterAmount) / 100.0f, clampedModulateVsAdd, flasherMode, 0.f);
 
          // Check if this flasher is used as a lightmap and should be convoluted with the light shadows
          if (m_lightmap != nullptr && m_lightmap->m_d.m_shadows == ShadowMode::RAYTRACED_BALL_SHADOWS)
-            m_renderer->m_renderDevice->m_flasherShader->SetVector(SHADER_lightCenter_doShadow, m_lightmap->m_d.m_vCenter.x, m_lightmap->m_d.m_vCenter.y, m_lightmap->GetCurrentHeight(), 1.0f);
+            m_renderer->m_renderDevice->m_flasherShader->SetVector(ShaderUniform::lightCenter_doShadow, m_lightmap->m_d.m_vCenter.x, m_lightmap->m_d.m_vCenter.y, m_lightmap->GetCurrentHeight(), 1.0f);
 
          m_renderer->m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
          m_renderer->m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_TRUE);
@@ -1323,7 +1349,7 @@ void Flasher::Render(const unsigned int renderMask)
 
          m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_flasherShader, true, pos, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numPolys * 3);
 
-         m_renderer->m_renderDevice->m_flasherShader->SetVector(SHADER_lightCenter_doShadow, 0.0f, 0.0f, 0.0f, 0.0f);
+         m_renderer->m_renderDevice->m_flasherShader->SetVector(ShaderUniform::lightCenter_doShadow, 0.0f, 0.0f, 0.0f, 0.0f);
          break;
       }
 
@@ -1335,11 +1361,13 @@ void Flasher::Render(const unsigned int renderMask)
          }
          else
          {
+            // DMD rendering, so reject video screens even when the link names one explicitly -
+            // Display mode below is the intended way to show these
             PinballPlugin::ResURIResolver::DisplayState dmd { nullptr };
             if (!m_d.m_imageSrcLink.empty())
-               dmd = g_pplayer->m_resURIResolver.GetDisplayState(m_d.m_imageSrcLink);
+               dmd = g_pplayer->m_resURIResolver.GetDmdDisplayState(m_d.m_imageSrcLink);
             if (dmd.state.frame == nullptr)
-               dmd = g_pplayer->m_resURIResolver.GetDisplayState("ctrl://default/display"s);
+               dmd = g_pplayer->m_resURIResolver.GetDmdDisplayState("ctrl://default/display"s);
             if (dmd.state.frame != nullptr)
                UploadRenderFrame(dmd);
          }
@@ -1363,6 +1391,7 @@ void Flasher::Render(const unsigned int renderMask)
          break;
 
       case FlasherData::DISPLAY:
+#if defined(ENABLE_BGFX) // just to avoid a crash
          if (const PinballPlugin::ResURIResolver::DisplayState display = g_pplayer->m_resURIResolver.GetDisplayState(m_d.m_imageSrcLink); display.state.frame != nullptr)
          {
             UploadRenderFrame(display);
@@ -1380,6 +1409,7 @@ void Flasher::Render(const unsigned int renderMask)
             // We also apply the depth bias shift, not for backward compatibility (as display did not exist before 10.8.1) but for consistency between DMD and Display mode
             m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_DMDShader, true, pos, m_d.m_depthBias - 10000.f, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numPolys * 3);
          }
+#endif
          break;
 
       case FlasherData::ALPHASEG:
@@ -1413,11 +1443,11 @@ void Flasher::Render(const unsigned int renderMask)
             m_renderer->m_renderDevice->SetRenderState(RenderState::ALPHABLENDENABLE, RenderState::RS_FALSE);
             // Draw a solid black background using the common flasher mesh and transform
             m_renderer->m_renderDevice->SetRenderState(RenderState::ZWRITEENABLE, RenderState::RS_FALSE);
-            m_renderer->m_renderDevice->m_basicShader->SetTechnique(SHADER_TECHNIQUE_unshaded_without_texture);
-            m_renderer->m_renderDevice->m_basicShader->SetVector(SHADER_staticColor_Alpha, 0.f, 0.f, 0.f, 1.f);
+            m_renderer->m_renderDevice->m_basicShader->SetTechnique(ShaderTechnique::unshaded_without_texture);
+            m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::staticColor_Alpha, 0.f, 0.f, 0.f, 1.f);
             m_renderer->m_renderDevice->DrawMesh(
                m_renderer->m_renderDevice->m_basicShader, true, pos, m_d.m_depthBias, m_meshBuffer, RenderDevice::TRIANGLELIST, 0, m_numPolys * 3);
-            m_renderer->m_renderDevice->m_basicShader->SetVector(SHADER_staticColor_Alpha, 1.f, 1.f, 1.f, 1.f);
+            m_renderer->m_renderDevice->m_basicShader->SetVector(ShaderUniform::staticColor_Alpha, 1.f, 1.f, 1.f, 1.f);
             // Vertices are emitted in (0,0) -> (1,1). We must scale & rotate around center then translate to fit flasher's position
             Matrix3D transform;
             VPXRenderContext2D *context;
