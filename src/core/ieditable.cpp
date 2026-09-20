@@ -18,24 +18,6 @@ IEditable::~IEditable()
    SetPartGroup(nullptr);
 }
 
-void IEditable::Delete()
-{
-   MarkForDelete();
-
-   GetPTable()->RemovePart(this);
-
-   for (size_t i = 0; i < m_vCollection.size(); i++)
-   {
-      Collection *const pcollection = m_vCollection[i];
-      pcollection->m_visel.find_erase(GetISelect());
-   }
-}
-
-void IEditable::Uncreate()
-{
-   GetPTable()->RemovePart(this);
-}
-
 void IEditable::SetPartGroup(PartGroup* partGroup)
 {
    if (m_partGroup != partGroup)
@@ -75,6 +57,46 @@ bool IEditable::IsChild(const PartGroup* group) const
    while ((parent != group) && (parent != nullptr))
       parent = parent->GetPartGroup();
    return parent == group;
+}
+
+bool IEditable::IsUIVisible(const bool applyPartGroupVisibility) const
+{
+   return m_uiVisible && (!applyPartGroupVisibility || GetPartGroup() == nullptr || GetPartGroup()->IsUIVisible(true));
+}
+
+void IEditable::FlipY(const Vertex2D& pvCenter)
+{
+   const Vertex2D vCenter = GetCenter();
+   Translate(Vertex2D(0.f, -2.f * (vCenter.y - pvCenter.y)));
+}
+
+void IEditable::FlipX(const Vertex2D& pvCenter)
+{
+   const Vertex2D vCenter = GetCenter();
+   Translate(Vertex2D(-2.f * (vCenter.x - pvCenter.x), 0.f));
+}
+
+void IEditable::Rotate(const float ang, const Vertex2D& pvCenter, const bool useElementCenter)
+{
+   const Vertex2D vCenter = GetCenter();
+
+   const float sn = sinf(ANGTORAD(ang));
+   const float cs = cosf(ANGTORAD(ang));
+
+   const float dx = vCenter.x - pvCenter.x;
+   const float dy = vCenter.y - pvCenter.y;
+
+   Translate(Vertex2D(pvCenter.x + cs * dx - sn * dy - vCenter.x, pvCenter.y + cs * dy + sn * dx - vCenter.y));
+}
+
+void IEditable::Scale(const float scalex, const float scaley, const Vertex2D& pvCenter, const bool useElementCenter)
+{
+   const Vertex2D vCenter = GetCenter();
+
+   const float dx = vCenter.x - pvCenter.x;
+   const float dy = vCenter.y - pvCenter.y;
+
+   Translate(Vertex2D(pvCenter.x + dx * scalex - vCenter.x, pvCenter.y + dy * scaley - vCenter.y));
 }
 
 void IEditable::LoadSharedEditableField(const int tag, IObjectReader& reader)
@@ -136,8 +158,6 @@ void IEditable::SaveSharedEditableFields(IObjectWriter& writer)
 
 HRESULT IEditable::put_TimerEnabled(VARIANT_BOOL newVal, BOOL *pte)
 {
-   STARTUNDO
-
    const BOOL val = VBTOF(newVal);
 
    if (val != *pte && m_phittimer)
@@ -145,21 +165,15 @@ HRESULT IEditable::put_TimerEnabled(VARIANT_BOOL newVal, BOOL *pte)
 
    *pte = val;
 
-   STOPUNDO
-
    return S_OK;
 }
 
 HRESULT IEditable::put_TimerInterval(long newVal, int *pTimerInterval)
 {
-   STARTUNDO
-
    *pTimerInterval = newVal;
 
    if (m_phittimer)
       m_phittimer->SetInterval(newVal);
-
-   STOPUNDO
 
    return S_OK;
 }
@@ -172,13 +186,9 @@ HRESULT IEditable::get_UserValue(VARIANT *pVal)
 
 HRESULT IEditable::put_UserValue(VARIANT *newVal)
 {
-   STARTUNDO
-
    VariantInit(&m_uservalue);
    VariantClear(&m_uservalue);
    const HRESULT hr = VariantCopy(&m_uservalue, newVal);
-
-   STOPUNDO
 
    return hr;
 }
@@ -207,40 +217,6 @@ void IEditable::TimerRelease(vector<HitTimer *> &pvht)
    if (m_timerEnabled)
       RemoveFromVectorSingle(pvht, m_phittimer.get());
    m_phittimer = nullptr;
-}
-
-void IEditable::BeginUndo()
-{
-   if (GetPTable())
-      GetPTable()->BeginUndo();
-}
-
-void IEditable::EndUndo()
-{
-   if (GetPTable())
-      GetPTable()->EndUndo();
-}
-
-void IEditable::MarkForUndo()
-{
-   if (GetPTable())
-      GetPTable()->m_undo.MarkForUndo(this);
-}
-
-void IEditable::MarkForDelete()
-{
-   GetPTable()->m_undo.BeginUndo();
-   GetPTable()->m_undo.MarkForDelete(this);
-   GetPTable()->m_undo.EndUndo();
-}
-
-void IEditable::Undelete()
-{
-   for (size_t i = 0; i < m_vCollection.size(); i++)
-   {
-      Collection *const pcollection = m_vCollection[i];
-      pcollection->m_visel.push_back(GetISelect());
-   }
 }
 
 string IEditable::GetName() const
@@ -278,12 +254,10 @@ void IEditable::SetName(const wstring& name)
       if (!pt->IsNameUnique(newName))
          newName = pt->GetUniqueName(newName);
 
-      STARTUNDO
       if (pt->HasPart(this))
          pt->RenamePart(this, newName);
       else
          scriptable->m_wzName = newName;
-      STOPUNDO
    }
    else
    {

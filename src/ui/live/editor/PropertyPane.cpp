@@ -61,7 +61,7 @@ void PropertyPane::Header(const string& typeName, const std::function<wstring()>
    const wstring wname = getName();
    string name = MakeString(wname);
    if ( ImGui::InputText("##Name", &name))
-      setName(wname);
+      setName(MakeWString(name));
    ImGui::EndDisabled();
    ImGui::Separator();
 }
@@ -181,6 +181,12 @@ void PropertyPane::ConvertUnit(Unit from, Unit& to, float& value, int& nDecimalA
 
    default: to = from; break;
    }
+}
+
+void PropertyPane::ResolveUnit(Unit from, Unit& to, int& nDecimalAdjust)
+{
+   float value = 0.f;
+   ConvertUnit(from, to, value, nDecimalAdjust);
 }
 
 const char* PropertyPane::GetUnitLabel(Unit unit)

@@ -28,7 +28,6 @@ class Timer :
    public IConnectionPointContainerImpl<Timer>,
    public IProvideClassInfo2Impl<&CLSID_Timer, &DIID_ITimerEvents, &LIBID_VPinballLib>,
    public EventProxy<Timer, &DIID_ITimerEvents>,
-   public ISelect,
    public IEditable,
    public IScriptable,
    //public IHitable, // FIXME implement UI picking
@@ -59,17 +58,13 @@ public:
       CONNECTION_POINT_ENTRY(DIID_ITimerEvents)
    END_CONNECTION_POINT_MAP()
 
-   void MoveOffset(const float dx, const float dy) final;
-   void SetObjectPos() final;
+   void Translate(const Vertex2D &offset) final;
    // Multi-object manipulation
    Vertex2D GetCenter() const final;
-   void PutCenter(const Vertex2D& pv) final;
-
-   void RenderBlueprint(Sur *psur, const bool solid) final;
 
    void WriteRegDefaults() final;
 
-   STANDARD_EDITABLE_DECLARES_NO_RENDERABLE_NO_HITABLE(Timer, eItemTimer, TIMER, VIEW_PLAYFIELD | VIEW_BACKGLASS)
+   STANDARD_EDITABLE_DECLARES_NO_RENDERABLE_NO_HITABLE(Timer, eItemTimer, TIMER)
 
    //DECLARE_NOT_AGGREGATABLE(Timer)
    // Remove the comment from the line above if you don't want your object to

@@ -4,17 +4,16 @@
 
 #pragma once
 
+#include "core/ieditable.h"
 #include "math/MeshUtils.h"
 #include "ui/win/resource.h"
 
-class IHaveDragPoints;
+class DragPointCurve;
 
-class DragPoint :
-   public IDispatchImpl<IControlPoint, &IID_IControlPoint, &LIBID_VPinballLib>,
-   public ISupportErrorInfo,
-   public CComObjectRoot,
-   public CComCoClass<DragPoint, &CLSID_DragPoint>,
-   public ISelect
+class DragPoint : public IDispatchImpl<IControlPoint, &IID_IControlPoint, &LIBID_VPinballLib>,
+                  public ISupportErrorInfo,
+                  public CComObjectRoot,
+                  public CComCoClass<DragPoint, &CLSID_DragPoint>
 {
 public:
 #ifdef __STANDALONE__
@@ -24,39 +23,23 @@ public:
 #endif
    DragPoint() { }
 
-   void Init(IHaveDragPoints *pihdp, const float x, const float y, const float z, const bool smooth);
+   void Init(DragPointCurve *pcurve, const float x, const float y, const float z, const bool smooth);
 
-   // From ISelect
-   void UIRenderPass1(Sur *const psur) final { /* handled by owner */ }
-   void UIRenderPass2(Sur *const psur) final { /* handled by owner */ }
-   void OnLButtonDown(int x, int y) final;
-   void OnLButtonUp(int x, int y) final;
-   void MoveOffset(const float dx, const float dy) final;
-   void SetObjectPos() final;
-   ItemTypeEnum GetItemType() const final { return eItemDragPoint; }
+   static inline constexpr ItemTypeEnum ItemType = eItemDragPoint;
+   ItemTypeEnum GetItemType() const { return eItemDragPoint; }
 
-   // Multi-object manipulation
-   Vertex2D GetCenter() const final;
-   void PutCenter(const Vertex2D &pv) final;
+   // Single point manipulation, used by the Win32 editor (moves only this point, not the parent part)
+   void Translate(const Vertex2D &offset);
+   Vertex2D GetCenter() const;
 
-#ifndef __STANDALONE__
-   void EditMenu(CMenu &menu) final;
-   void DoCommand(int icmd, int x, int y) final;
-#endif
-
-   void SetSelectFormat(Sur *psur) final;
-   void SetMultiSelectFormat(Sur *psur) final;
-   IEditable *GetIEditable() final;
-   const IEditable *GetIEditable() const final;
-   PinTable *GetPTable() final { return GetIEditable()->GetPTable(); }
-   const PinTable *GetPTable() const final { return GetIEditable()->GetPTable(); }
-   IDispatch *GetIDispatch() final { return (IDispatch *)this; }
-   const IDispatch *GetIDispatch() const final { return (const IDispatch *)this; }
-
-   int GetSelectLevel() const final { return 2; } // So dragpoints won't be band-selected with the main objects
+   IEditable *GetIEditable();
+   const IEditable *GetIEditable() const;
 
    void Copy();
    void Paste();
+
+   void ToggleSmooth();
+   void ToggleSlingshot();
 
    BEGIN_COM_MAP(DragPoint)
       COM_INTERFACE_ENTRY(IDispatch)
@@ -71,8 +54,10 @@ public:
    // ISupportsErrorInfo
    STDMETHOD(InterfaceSupportsErrorInfo)(REFIID riid);
 
-   void Delete() final;
-   void Uncreate() final;
+   // Can't allow less points than the user can recover from
+   bool CanDelete() const;
+
+   void Delete();
 
    bool LoadToken(const int id, IObjectReader& reader);
 
@@ -99,73 +84,67 @@ public:
    bool m_slingshot;
    bool m_autoTexture;
 
-   bool IsUILocked() const final { return m_uiLocked; }
-   void SetUILock(bool lock) final { m_uiLocked = lock; }
-   bool IsUIVisible() const final { return m_uiVisible; }
-   void SetUIVisible(bool visible) final { m_uiVisible = visible; }
-
    bool m_uiLocked = false; // Can not be dragged in the editor
    bool m_uiVisible = true; // UI visibility (not the same as rendering visibility which is a member of part data)
 
 private:
-#if defined(_M_X64) || defined(_M_AMD64) || !defined(_MSC_VER)
-   IHaveDragPoints *m_pihdp;
-   #define M_PIHDP m_pihdp
-#else
-   void *m_pihdp; // actually IHaveDragPoints, but somehow doesn't work on VS/x86, no sane solution found yet, might simply be a compiler bug
-   #define M_PIHDP ((IHaveDragPoints *)m_pihdp)
-#endif
+   DragPointCurve *m_pcurve;
    static Vertex3Ds m_copyPoint;   // coordinates of a control point to copy
    static bool      m_pointCopied;
 };
 
-class IHaveDragPoints
+// A curve made of DragPoint control points
+class DragPointCurve final
 {
 public:
-   IHaveDragPoints() = default;
+   DragPointCurve(IEditable *owner, const int minPoints)
+      : m_owner(owner)
+      , m_minPoints(minPoints)
+   {
+   }
 
-   virtual ~IHaveDragPoints();
+   ~DragPointCurve();
 
-   virtual IEditable *GetIEditable() = 0;
-   virtual const IEditable *GetIEditable() const = 0;
-   virtual PinTable *GetPTable() = 0;
-   virtual const PinTable *GetPTable() const = 0;
+   IEditable *GetIEditable() { return m_owner; }
+   const IEditable *GetIEditable() const { return m_owner; }
 
-   virtual int GetMinimumPoints() const { return 3; }
+   PinTable *GetPTable() { return m_owner->GetPTable(); }
+   const PinTable *GetPTable() const { return m_owner->GetPTable(); }
+
+   int GetMinimumPoints() const { return m_minPoints; }
 
    void SavePoints(IObjectWriter& writer) const;
    void LoadPointToken(IObjectReader& reader);
 
-   virtual void ClearPointsForOverwrite();
+   void ClearPointsForOverwrite();
 
-   virtual Vertex2D GetPointCenter() const;
-   virtual void PutPointCenter(const Vertex2D &pv) { }
+   const Vertex2D& GetCenter() const;
+   const Vertex2D& GetMinBound() const;
+   const Vertex2D& GetMaxBound() const;
 
    void FlipPointY(const Vertex2D& pvCenter);
    void FlipPointX(const Vertex2D& pvCenter);
-   void RotatePoints(const float ang, const Vertex2D& pvCenter, const bool useElementCenter);
-   void ScalePoints(const float scalex, const float scaley, const Vertex2D& pvCenter, const bool useElementCenter);
-   void TranslatePoints(const Vertex2D &pvOffset);
+   void RotatePoints(const float ang, const Vertex2D& center);
+   void ScalePoints(const float scalex, const float scaley, const Vertex2D& center);
+   void TranslatePoints(const Vertex2D &offset);
    void ReverseOrder();
 
    void GetTextureCoords(const vector<RenderVertex> & vv, float **ppcoords) const;
-
-   friend class DragPoint;
 
    template <typename T>
    void GetRgVertex(vector<T> &vv, const bool loop = true, const float accuracy = 4.f) const // 4 = maximum precision that we allow for
    {
       static const int Dim = T::Dim;    // for now, this is always 2 or 3
 
-      const int cpoint = (int)m_vdpoint.size();
+      const int cpoint = (int)m_dragpoints.size();
       const int endpoint = loop ? cpoint : cpoint - 1;
 
       T rendv2;
 
       for (int i = 0; i < endpoint; i++)
       {
-         const CComObject<DragPoint> * const pdp1 = m_vdpoint[i];
-         const CComObject<DragPoint> * const pdp2 = m_vdpoint[(i < cpoint - 1) ? (i + 1) : 0];
+         const CComObject<DragPoint> * const pdp1 = m_dragpoints[i];
+         const CComObject<DragPoint> * const pdp2 = m_dragpoints[(i < cpoint - 1) ? (i + 1) : 0];
 
          if ((pdp1->m_v.x == pdp2->m_v.x) && (pdp1->m_v.y == pdp2->m_v.y) && (pdp1->m_v.z == pdp2->m_v.z))
          {
@@ -181,8 +160,8 @@ public:
          if (inext >= cpoint)
             inext = (loop ? inext - cpoint : cpoint - 1);
 
-         const CComObject<DragPoint> * const pdp0 = m_vdpoint[iprev];
-         const CComObject<DragPoint> * const pdp3 = m_vdpoint[inext];
+         const CComObject<DragPoint> * const pdp0 = m_dragpoints[iprev];
+         const CComObject<DragPoint> * const pdp3 = m_dragpoints[inext];
 
          CatmullCurve<Dim> cc;
          cc.SetCurve(pdp0->m_v, pdp1->m_v, pdp2->m_v, pdp3->m_v);
@@ -210,5 +189,47 @@ public:
       }
    }
 
-   vector< CComObject<DragPoint>* > m_vdpoint;
+   void ClearPoints()
+   {
+      for (auto point : m_dragpoints)
+         point->Release();
+      m_dragpoints.clear();                                                                                                                                                             \
+      OnPointsModified();
+   }
+
+   void DeletePoint(CComObject<DragPoint> * point)
+   {
+      RemoveFromVectorSingle(m_dragpoints, point);
+      point->Release();
+      OnPointsModified();
+   }
+
+   void PushPoint(CComObject<DragPoint> *pdp)
+   {
+      m_dragpoints.push_back(pdp);
+      OnPointsModified();
+   }
+
+   void InsertPoint(size_t pos, CComObject<DragPoint> *pdp)
+   {
+      m_dragpoints.insert(m_dragpoints.begin() + pos, pdp);
+      OnPointsModified();
+   }
+
+   void OnPointsModified() { m_boundsDirty = true; }
+
+   const vector<CComObject<DragPoint> *> GetPoints() const { return m_dragpoints; }
+
+private:
+   IEditable *const m_owner;
+   const int m_minPoints;
+
+   vector<CComObject<DragPoint> *> m_dragpoints;
+
+   // Lazily updated bounds & center
+   void UpdateBounds() const;
+   mutable bool m_boundsDirty = true;
+   mutable Vertex2D m_minBound;
+   mutable Vertex2D m_maxBound;
+   mutable Vertex2D m_center;
 };

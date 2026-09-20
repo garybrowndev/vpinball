@@ -9,6 +9,7 @@
 #include <wxx_stdcontrols.h>
 
 #include "utils/vector.h"
+#include "ui/win/IWinUIPart.h"
 
 
 #pragma region BasePropertyDialog
@@ -20,9 +21,12 @@ class Texture;
 class BasePropertyDialog: public CDialog
 {
 public:
-    BasePropertyDialog(const int id, const VectorProtected<ISelect> *pvsel) : CDialog(id), m_pvsel(pvsel)
+    BasePropertyDialog(const int id, const vector<IWinUIPart *> *pvsel) : CDialog(id), m_pvsel(pvsel)
     {
     }
+
+    IWinUIPart *SelAt(const int i) const { return (*m_pvsel)[i]; }
+    int SelCount() const { return (int)m_pvsel->size(); }
 
     virtual void UpdateProperties(const int dispid) = 0;
     virtual void UpdateVisuals(const int dispid=-1) = 0;
@@ -60,14 +64,16 @@ public:
         return FALSE;
     }
 
-    void UpdateBaseProperties(ISelect *psel, BaseProperty *property, const int dispid);
-    void UpdateBaseVisuals(ISelect *psel, BaseProperty *property, const int dispid = -1);
+    void UpdateBaseProperties(IEditable *part, BaseProperty *property, const int dispid);
+    void UpdateBaseVisuals(IEditable *part, BaseProperty *property, const int dispid = -1);
 
-    const VectorProtected<ISelect>* m_pvsel;
+    const vector<IWinUIPart *>* m_pvsel;
     static bool m_disableEvents;
 
 protected:
     INT_PTR DialogProc(UINT msg, WPARAM wparam, LPARAM lparam) override;
+    void OnOK() override;
+    void OnCancel() override;
 
     EditBox   *m_baseHitThresholdEdit = nullptr;
     EditBox   *m_baseElasticityEdit = nullptr;
@@ -134,7 +140,7 @@ private:
 class TimerProperty final : public BasePropertyDialog
 {
 public:
-    TimerProperty(const VectorProtected<ISelect> *pvsel);
+    TimerProperty(const vector<IWinUIPart *> *pvsel);
     void UpdateProperties(const int dispid) override;
     void UpdateVisuals(const int dispid=-1) override;
 
@@ -254,9 +260,9 @@ class PropertyDialog final : public CDialog
 public:
     PropertyDialog();
 
-    void CreateTabs(VectorProtected<ISelect> &pvsel);
+    void CreateTabs(const vector<IWinUIPart *> &pvsel);
     void DeleteAllTabs();
-    void UpdateTabs(VectorProtected<ISelect> &pvsel);
+    void UpdateTabs(const vector<IWinUIPart *> &pvsel);
 
     static void UpdateTextureComboBox(const vector<Texture*>& contentList, const CComboBox &combo, const string &selectName);
     static void UpdateComboBox(const vector<string>& contentList, const CComboBox &combo, const string &selectName);
@@ -265,9 +271,11 @@ public:
     static void UpdateSoundComboBox(const PinTable *const ptable, const CComboBox &combo, const string &selectName);
     static void UpdateCollectionComboBox(const PinTable *const ptable, const CComboBox &combo, const char *selectName);
 
-    static void StartUndo(ISelect *const psel);
+    static void StartUndo(IEditable *const part);
 
-    static void EndUndo(ISelect *const psel);
+    static void EndUndo(IEditable *const part);
+
+    static void UpdateStatusBarInfo(IEditable *const part);
 
     static bool GetCheckboxState(const HWND checkBoxHwnd)
     {
@@ -334,6 +342,8 @@ protected:
     BOOL OnCommand(WPARAM wParam, LPARAM lParam) override;
     INT_PTR DialogProc(UINT msg, WPARAM wparam, LPARAM lparam) override;
     void OnClose() override;
+    void OnOK() override;
+    void OnCancel() override;
 
 private:
     PropertyTab  m_tab;

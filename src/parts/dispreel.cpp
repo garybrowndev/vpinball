@@ -9,8 +9,6 @@
 #include "renderer/Renderer.h"
 #include "renderer/Shader.h"
 #include "renderer/trace.h"
-#include "ui/win/sur.h"
-#include "ui/win/WinEditor.h"
 #include "utils/color.h"
 
 
@@ -43,9 +41,9 @@ void DispReel::SetDefaults(const bool fromMouseClick)
 #define LinkProp(field, prop) field = fromMouseClick ? g_app->m_settings.GetDefaultPropsDispReel_##prop() : Settings::GetDefaultPropsDispReel_##prop##_Default()
    LinkProp(m_d.m_szImage, Image);
    LinkProp(m_d.m_szSound, Sound);
-   LinkProp(m_d.m_useImageGrid, TimerEnabled);
+   LinkProp(m_d.m_useImageGrid, UseImageGrid);
    LinkProp(m_d.m_visible, Visible);
-   LinkProp(m_d.m_imagesPerGridRow, UseImageGrid);
+   LinkProp(m_d.m_imagesPerGridRow, ImagesPerRow);
    LinkProp(m_d.m_transparent, Transparent);
    LinkProp(m_d.m_reelcount, ReelCount);
    LinkProp(m_d.m_width, Width);
@@ -65,9 +63,9 @@ void DispReel::WriteRegDefaults()
 #define LinkProp(field, prop) g_app->m_settings.SetDefaultPropsDispReel_##prop(field, false)
    LinkProp(m_d.m_szImage, Image);
    LinkProp(m_d.m_szSound, Sound);
-   LinkProp(m_d.m_useImageGrid, TimerEnabled);
+   LinkProp(m_d.m_useImageGrid, UseImageGrid);
    LinkProp(m_d.m_visible, Visible);
-   LinkProp(m_d.m_imagesPerGridRow, UseImageGrid);
+   LinkProp(m_d.m_imagesPerGridRow, ImagesPerRow);
    LinkProp(m_d.m_transparent, Transparent);
    LinkProp(m_d.m_reelcount, ReelCount);
    LinkProp(m_d.m_width, Width);
@@ -94,62 +92,6 @@ STDMETHODIMP DispReel::InterfaceSupportsErrorInfo(REFIID riid)
          return S_OK;
 
    return S_FALSE;
-}
-
-// draw the shape of the object with a solid fill, only used in the editor/UI and not in-game
-void DispReel::UIRenderPass1(Sur * const psur)
-{
-   psur->SetBorderColor(-1, false, 0);
-   psur->SetFillColor(m_d.m_backcolor);
-   psur->SetObject(this);
-
-   // draw background box
-   psur->Rectangle(m_d.m_v1.x, m_d.m_v1.y, m_d.m_v2.x, m_d.m_v2.y);
-
-   // draw n reels in the box (in blue)
-   psur->SetFillColor(RGB(0, 0, 255));
-   for (int i = 0; i < m_d.m_reelcount; ++i)
-   {
-      // set up top corner point
-      const float fi = (float)i;
-      const float x = m_d.m_v1.x + fi*(m_d.m_width + m_d.m_reelspacing) + m_d.m_reelspacing;
-      const float y = m_d.m_v1.y + m_d.m_reelspacing;
-      const float x2 = x + m_d.m_width;
-      const float y2 = y + m_d.m_height;
-
-      // set up points (clockwise)
-      const Vertex2D rgv[4] = { Vertex2D(x, y), Vertex2D(x2, y), Vertex2D(x2, y2), Vertex2D(x, y2) };
-      psur->Polygon(rgv, 4);
-   }
-}
-
-// draw the shape of the object with a black outline (no solid fill), only used in the editor/UI and not in-game
-void DispReel::UIRenderPass2(Sur * const psur)
-{
-   if (!GetPTable()->GetEMReelsEnabled()) return;
-
-   psur->SetBorderColor(RGB(0, 0, 0), false, 0);
-   psur->SetFillColor(-1);
-   psur->SetObject(this);
-   psur->SetObject(nullptr);
-
-   // draw background box
-   psur->Rectangle(m_d.m_v1.x, m_d.m_v1.y, m_d.m_v2.x, m_d.m_v2.y);
-
-   // draw n reels in the box
-   for (int i = 0; i < m_d.m_reelcount; ++i)
-   {
-      // set up top corner point
-      const float fi = (float)i;
-      const float x = m_d.m_v1.x + fi*(m_d.m_width + m_d.m_reelspacing) + m_d.m_reelspacing;
-      const float y = m_d.m_v1.y + m_d.m_reelspacing;
-      const float x2 = x + m_d.m_width;
-      const float y2 = y + m_d.m_height;
-
-      // set up points (clockwise)
-      const Vertex2D rgv[4] = { Vertex2D(x, y), Vertex2D(x2, y), Vertex2D(x2, y2), Vertex2D(x, y2) };
-      psur->Polygon(rgv, 4);
-   }
 }
 
 
@@ -408,31 +350,18 @@ void DispReel::Render(const unsigned int renderMask)
 #pragma endregion
 
 
-void DispReel::SetObjectPos()
+void DispReel::Translate(const Vertex2D &offset)
 {
-   m_vpinball->SetObjectPosCur(m_d.m_v1.x, m_d.m_v1.y);
-}
+   m_d.m_v1.x += offset.x;
+   m_d.m_v1.y += offset.y;
 
-void DispReel::MoveOffset(const float dx, const float dy)
-{
-   m_d.m_v1.x += dx;
-   m_d.m_v1.y += dy;
-
-   m_d.m_v2.x += dx;
-   m_d.m_v2.y += dy;
+   m_d.m_v2.x += offset.x;
+   m_d.m_v2.y += offset.y;
 }
 
 Vertex2D DispReel::GetCenter() const
 {
    return m_d.m_v1;
-}
-
-void DispReel::PutCenter(const Vertex2D& pv)
-{
-   m_d.m_v1 = pv;
-
-   m_d.m_v2.x = pv.x + getBoxWidth();
-   m_d.m_v2.y = pv.y + getBoxHeight();
 }
 
 void DispReel::Save(IObjectWriter& writer, const bool saveForUndo)
@@ -567,9 +496,6 @@ STDMETHODIMP DispReel::put_Height(float newVal)
 STDMETHODIMP DispReel::get_X(float *pVal)
 {
    *pVal = GetX();
-   if (m_vpinball)
-      m_vpinball->SetStatusBarUnitInfo(string(), true);
-
    return S_OK;
 }
 

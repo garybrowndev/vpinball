@@ -62,10 +62,10 @@ typedef union CtlResId
 //
 
 // Broadcasted after a controller has been added, modified or removed, there is no message data
-#define CTLPI_CONTROLLERS_ON_CHG_MSG    "OnControllersChanged"
+#define CTLPI_CONTROLLERS_ON_CHG_MSG    "OnControllersChanged:1"
 
 // Request subscribers to fill up an array with the list of controller definition blocks, message data is a pointer to a GetControllersMsg structure
-#define CTLPI_CONTROLLERS_GET_MSG       "GetControllers"
+#define CTLPI_CONTROLLERS_GET_MSG       "GetControllers:1"
 
 typedef struct ControllerDef
 {
@@ -89,10 +89,10 @@ typedef struct GetControllersMsg
 //
 
 // Broadcasted after a controller state source has been added, modified or removed, there is no message data
-#define CTLPI_STATE_ON_SRC_CHG_MSG    "OnStateSrcChanged"
+#define CTLPI_STATE_ON_SRC_CHG_MSG    "OnStateSrcChanged:1"
 
 // Request subscribers to fill up an array with the list of state blocks, message data is a pointer to a GetStateSrcMsg structure
-#define CTLPI_STATE_GET_SRC_MSG       "GetStateSrc"
+#define CTLPI_STATE_GET_SRC_MSG       "GetStateSrc:1"
 
 #define CTLPI_STATE_FORMAT_UINT8              1
 #define CTLPI_STATE_FORMAT_UINT16             2
@@ -156,10 +156,10 @@ typedef struct GetStateSrcMsg
 //
 
 // Broadcasted after a display source has been added, modified or removed, there is no message data
-#define CTLPI_DISPLAY_ON_SRC_CHG_MSG              "OnDisplaysChanged"
+#define CTLPI_DISPLAY_ON_SRC_CHG_MSG              "OnDisplaysChanged:1"
 
 // Request subscribers to fill up an array with the list of display sources, message data is a pointer to a GetDisplaySrcMsg structure
-#define CTLPI_DISPLAY_GET_SRC_MSG                 "GetDisplays"
+#define CTLPI_DISPLAY_GET_SRC_MSG                 "GetDisplays:1"
 
 // Render frame formats
 #define CTLPI_DISPLAY_FORMAT_LUM32F               1u
@@ -191,18 +191,18 @@ typedef struct DisplayFrame
 
 typedef struct DisplaySrcId
 {
-   CtlResId id;                                                             // Unique Id of the display
-   CtlResId overrideId;                                                     // If this source overrides another source, id of the overriden source, 0 otherwise
-   unsigned int width;                                                      // 
-   unsigned int height;                                                     // 
+   CtlResId id;                      // Unique Id of the display
+   CtlResId overrideId;              // Id of the display this source overrides if any, { endpoint, 0xFFFF } if overriding something else then a display, 0 if not overriding anything
+   unsigned int width;               
+   unsigned int height;              
    union {
       struct {
          uint16_t hardwareModel;
          uint16_t hardwareFamily;
       };
-      uint32_t hardware;                                                    // Hardware hint. See CTLPI_DISPLAY_HARDWARE_xxx
+      uint32_t hardware;             // Hardware hint. See CTLPI_DISPLAY_HARDWARE_xxx
    };
-   void* callContext;                                                       // Opaque pointer that must be passed to GetRenderFrame/GetIdentifyFrame calls
+   void* callContext;                // Opaque pointer that must be passed to GetRenderFrame/GetIdentifyFrame calls
 
    // Render frames, suitable for presenting to the user, but not meant to be backward compatible
    unsigned int frameFormat;                                                // See CTLPI_DISPLAY_FORMAT_xxx
@@ -230,10 +230,10 @@ typedef struct GetDisplaySrcMsg
 //
 
 // Broadcasted after an alpha numeric source has been added, modified or removed, there is no message data
-#define CTLPI_SEG_ON_SRC_CHG_MSG        "OnSegDisplaysChanged"
+#define CTLPI_SEG_ON_SRC_CHG_MSG        "OnSegDisplaysChanged:1"
 
 // Request subscribers to fill up an array with the list of alpha numeric sources, message data is a pointer to a GetSegSrcMsg structure
-#define CTLPI_SEG_GET_SRC_MSG           "GetSegDisplays"
+#define CTLPI_SEG_GET_SRC_MSG           "GetSegDisplays:1"
 
 // Individual segment display layouts
 typedef enum {
@@ -310,13 +310,13 @@ typedef struct GetSegSrcMsg
 // to handle overiding, global mixer, and routing to the right output.
 
 // Broadcasted after an audio source has been added, modified or removed, there is no message data
-#define CTLPI_AUDIO_ON_SRC_CHG_MSG "OnAudioSrcChanged"
+#define CTLPI_AUDIO_ON_SRC_CHG_MSG "OnAudioSrcChanged:1"
 
 // Request subscribers to fill up an array with the list of audio sources, message data is a pointer to a GetAudioSrcMsg structure
-#define CTLPI_AUDIO_GET_SRC_MSG    "GetAudioSrc"
+#define CTLPI_AUDIO_GET_SRC_MSG    "GetAudioSrc:1"
 
 // Broadcasted when an audio stream is updated with new samples
-#define CTLPI_AUDIO_ON_UPDATE_MSG  "AudioUpdate"
+#define CTLPI_AUDIO_ON_UPDATE_MSG  "AudioUpdate:1"
 
 #define CTLPI_AUDIO_TARGET_BACKGLASS         0
 

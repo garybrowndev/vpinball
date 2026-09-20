@@ -53,7 +53,7 @@ BOOL CollectionManagerDialog::OnInitDialog()
     lvcol.cx = 100;
     ListView_InsertColumn(hListHwnd, 1, &lvcol);
 
-    pt->m_table->ListCollections(hListHwnd);
+    pt->ListCollections(hListHwnd);
     ListView_SetItemState(hListHwnd, 0, LVIS_SELECTED | LVIS_FOCUSED, LVIS_SELECTED | LVIS_FOCUSED);
     GotoDlgCtrl(hListHwnd);
     return FALSE;
@@ -82,7 +82,7 @@ void CollectionManagerDialog::EditCollection()
             pt->m_table->SetNonUndoableDirty(eSaveDirty);
 
         ListView_SetItemText_Safe(hListHwnd, sel, 0, MakeString(pcol->m_wzName).c_str());
-        ListView_SetItemText_Safe(hListHwnd, sel, 1, std::to_string(pcol->m_visel.size()).c_str());
+        ListView_SetItemText_Safe(hListHwnd, sel, 1, std::to_string(pcol->GetParts().size()).c_str());
     }
 }
 
@@ -121,7 +121,7 @@ INT_PTR CollectionManagerDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lPa
                        lvitem.iSubItem = 0;
                        ListView_GetItem(hListHwnd, &lvitem);
                        const Collection * const pcol = (Collection *)lvitem.lParam;
-                       ListView_SetItemText_Safe(hListHwnd, i, 1, std::to_string(pcol->m_visel.size()).c_str());
+                       ListView_SetItemText_Safe(hListHwnd, i, 1, std::to_string(pcol->GetParts().size()).c_str());
                     }
                 }
             }
@@ -171,13 +171,13 @@ BOOL CollectionManagerDialog::OnCommand(WPARAM wParam, LPARAM lParam)
         }
         case IDC_NEW:
         {
-            pt->m_table->NewCollection(hListHwnd, false);
+            pt->NewCollection(hListHwnd, false);
             pt->m_table->SetNonUndoableDirty(eSaveDirty);
             break;
         }
         case IDC_CREATEFROMSELECTION:
         {
-            pt->m_table->NewCollection(hListHwnd, true);
+            pt->NewCollection(hListHwnd, true);
             pt->m_table->SetNonUndoableDirty(eSaveDirty);
             break;
         }
@@ -214,7 +214,7 @@ BOOL CollectionManagerDialog::OnCommand(WPARAM wParam, LPARAM lParam)
                 lvitem1.iItem = idx - 1;
                 ListView_InsertItem(hListHwnd, &lvitem1);
                 ListView_SetItemText_Safe(hListHwnd, idx - 1, 0, MakeString(pcol->m_wzName).c_str());
-                ListView_SetItemText_Safe(hListHwnd, idx - 1, 1, std::to_string(pcol->m_visel.size()).c_str());
+                ListView_SetItemText_Safe(hListHwnd, idx - 1, 1, std::to_string(pcol->GetParts().size()).c_str());
 
                 ListView_SetItemState(hListHwnd, -1, 0, LVIS_SELECTED);
                 ListView_SetItemState(hListHwnd, idx - 1, LVIS_SELECTED, LVIS_SELECTED);
@@ -225,7 +225,7 @@ BOOL CollectionManagerDialog::OnCommand(WPARAM wParam, LPARAM lParam)
         case IDC_COL_DOWN_BUTTON:
         {
             const int idx = ListView_GetNextItem(hListHwnd, -1, LVNI_SELECTED);
-            if (idx != -1 && (idx < pt->m_table->m_vcollection.size() - 1))
+            if (idx != -1 && (idx < (int)pt->m_table->GetCollections().size() - 1))
             {
                 ::SetFocus(hListHwnd);
                 LVITEM lvitem1 = {};
@@ -240,7 +240,7 @@ BOOL CollectionManagerDialog::OnCommand(WPARAM wParam, LPARAM lParam)
                 lvitem1.iItem = idx + 1;
                 ListView_InsertItem(hListHwnd, &lvitem1);
                 ListView_SetItemText_Safe(hListHwnd, idx + 1, 0, MakeString(pcol->m_wzName).c_str());
-                ListView_SetItemText_Safe(hListHwnd, idx + 1, 1, std::to_string(pcol->m_visel.size()).c_str());
+                ListView_SetItemText_Safe(hListHwnd, idx + 1, 1, std::to_string(pcol->GetParts().size()).c_str());
 
                 ListView_SetItemState(hListHwnd, -1, 0, LVIS_SELECTED);
                 ListView_SetItemState(hListHwnd, idx + 1, LVIS_SELECTED, LVIS_SELECTED);
@@ -329,15 +329,14 @@ BOOL CollectionDialog::OnInitDialog()
     const HWND hwndIn = GetDlgItem(IDC_INLIST).GetHwnd();
 
     ::SendMessage(hwndIn, WM_SETREDRAW, FALSE, 0); // to speed up adding the entries :/
-    for (int i = 0; i < pcol->m_visel.size(); i++)
+    for (IEditable * const piedit : pcol->GetParts())
     {
-        IEditable * const piedit = pcol->m_visel[i].GetIEditable();
         IScriptable * const piscript = piedit->GetIScriptable();
         if (piscript)
         {
             string name = MakeString(piscript->m_wzName);
             const size_t index = ::SendMessage(hwndIn, LB_ADDSTRING, 0, (size_t)name.data());
-            ::SendMessage(hwndIn, LB_SETITEMDATA, index, (size_t)piscript);
+            ::SendMessage(hwndIn, LB_SETITEMDATA, index, (size_t)piedit);
         }
     }
     ::SendMessage(hwndIn, WM_SETREDRAW, TRUE, 0);
@@ -348,20 +347,19 @@ BOOL CollectionDialog::OnInitDialog()
     for (IEditable *const piedit : ppt->m_table->GetParts())
     {
         IScriptable * const piscript = piedit->GetIScriptable();
-        ISelect * const pisel = piedit->GetISelect();
 
         // Only process objects not in this collection
-        int l;
-        for (l = 0; l < pcol->m_visel.size(); l++)
-            if (pisel == pcol->m_visel.ElementAt(l))
+        size_t l;
+        for (l = 0; l < pcol->GetParts().size(); l++)
+            if (piedit == pcol->GetParts()[l])
                 break;
 
-        if ((l == pcol->m_visel.size()) && piscript)
+        if ((l == pcol->GetParts().size()) && piscript)
         //if (!piedit->m_pcollection)
         {
             string name = MakeString(piscript->m_wzName);
             const size_t index = ::SendMessage(hwndOut, LB_ADDSTRING, 0, (size_t)name.data());
-            ::SendMessage(hwndOut, LB_SETITEMDATA, index, (size_t)piscript);
+            ::SendMessage(hwndOut, LB_SETITEMDATA, index, (size_t)piedit);
         }
     }
     ::SendMessage(hwndOut, WM_SETREDRAW, TRUE, 0);
@@ -451,9 +449,8 @@ void CollectionDialog::OnOK()
 {
     Collection * const pcol = pCurCollection.pcol;
 
-    for (int i = 0; i < pcol->m_visel.size(); i++)
+    for (IEditable * const ie : pcol->GetParts())
     {
-        IEditable * const ie = pcol->m_visel[i].GetIEditable();
         const int index = FindIndexOf(ie->m_vCollection, pcol);
         if (index != -1)
         {
@@ -462,7 +459,7 @@ void CollectionDialog::OnOK()
         }
     }
 
-    pcol->m_visel.clear();
+    pcol->ClearParts();
 
     const HWND hwndIn = GetDlgItem(IDC_INLIST).GetHwnd();
 
@@ -470,20 +467,10 @@ void CollectionDialog::OnOK()
 
     for (size_t i = 0; i < count; i++)
     {
-       IScriptable * const piscript = (IScriptable *)::SendMessage(hwndIn, LB_GETITEMDATA, i, 0);
-       for (const auto &pedit : pCurCollection.ppt->m_table->GetParts())
-       {
-          if (piscript == pedit->GetIScriptable())
-          {
-             if (ISelect *const pisel = pedit->GetISelect(); pisel) // Not sure how we could possibly get an iscript here that was never an iselect
-             {
-                pcol->m_visel.push_back(pisel);
-                pisel->GetIEditable()->m_vCollection.push_back(pcol);
-                pisel->GetIEditable()->m_viCollection.push_back((int)i);
-             }
-             break;
-          }
-       }
+       IEditable *const pedit = (IEditable *)::SendMessage(hwndIn, LB_GETITEMDATA, i, 0);
+       pcol->AddPart(pedit);
+       pedit->m_vCollection.push_back(pcol);
+       pedit->m_viCollection.push_back((int)i);
     }
 
     const size_t fireEvents = GetDlgItem(IDC_FIRE).SendMessage(BM_GETCHECK, 0, 0);

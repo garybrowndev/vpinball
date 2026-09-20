@@ -3,17 +3,21 @@
 #pragma once
 
 #include "input/InputManager.h"
+#include "core/pinundo.h"
 #include "imgui/imgui.h"
 #include "imguizmo/ImGuizmo.h"
 #include "imgui_markdown/imgui_markdown.h"
-#include "editor/EditableUIPart.h"
+#include "editor/EditorUIPart.h"
 #include "renderer/Renderer.h"
+#include "unordered_dense.h"
+#include <variant>
 
 class LiveUI;
 class PinTable;
 class Player;
 class InputManager;
 class Renderer;
+class DragPoint;
 
 namespace VPX::EditorUI
 {
@@ -51,63 +55,115 @@ private:
          S_IMAGE,
          S_EDITABLE,
          S_RENDERPROBE
-      } type = S_NONE;
-      union
-      {
-         int camera;
-         Material *material;
-         Texture *image;
-         RenderProbe *renderprobe;
-         int ball_index;
       };
-      std::shared_ptr<EditableUIPart> uiPart;
+      struct CameraSel
+      {
+         int viewSetup;
+         bool operator==(const CameraSel &) const = default;
+      };
 
-      Selection() { }
-      Selection(SelectionType t, int ball)
+      // Alternative order must match SelectionType (GetType relies on it)
+      using Payload = std::variant<std::monostate, CameraSel, Material *, Texture *, std::shared_ptr<EditorUIPart>, RenderProbe *>;
+      static_assert(std::variant_size_v<Payload> == S_RENDERPROBE + 1);
+      Payload payload;
+
+      Selection() = default;
+      Selection(Material *material)
+         : payload(material)
       {
-         type = t;
-         ball_index = ball;
       }
-      Selection(std::shared_ptr<EditableUIPart> data)
+      Selection(Texture *image)
+         : payload(image)
       {
-         type = S_EDITABLE;
-         uiPart = data;
       }
-      Selection(Material *data)
+      Selection(const std::shared_ptr<EditorUIPart> &uiPart)
+         : payload(uiPart)
       {
-         type = S_MATERIAL;
-         material = data;
       }
-      Selection(Texture *data)
+      Selection(RenderProbe *probe)
+         : payload(probe)
       {
-         type = S_IMAGE;
-         image = data;
       }
-      Selection(RenderProbe *data)
+      static Selection Camera(int viewSetup)
       {
-         type = S_RENDERPROBE;
-         renderprobe = data;
+         Selection sel;
+         sel.payload = CameraSel { viewSetup };
+         return sel;
       }
-      bool operator==(Selection s) const
+
+      SelectionType GetType() const { return static_cast<SelectionType>(payload.index()); }
+      int GetCamera() const
       {
-         if (type != s.type)
-            return false;
-         switch (type)
-         {
-         case S_NONE: return true;
-         case S_CAMERA: return camera == s.camera;
-         case S_MATERIAL: return material == s.material;
-         case S_IMAGE: return image == s.image;
-         case S_EDITABLE: return uiPart == s.uiPart;
-         case S_RENDERPROBE: return renderprobe == s.renderprobe;
-         }
-         assert(false);
-         return false;
+         const CameraSel *cam = std::get_if<CameraSel>(&payload);
+         return cam ? cam->viewSetup : -1;
       }
+      Material *GetMaterial() const
+      {
+         const auto *p = std::get_if<Material *>(&payload);
+         return p ? *p : nullptr;
+      }
+      Texture *GetImage() const
+      {
+         const auto *p = std::get_if<Texture *>(&payload);
+         return p ? *p : nullptr;
+      }
+      std::shared_ptr<EditorUIPart> GetPart() const
+      {
+         const auto *p = std::get_if<std::shared_ptr<EditorUIPart>>(&payload);
+         return p ? *p : nullptr;
+      }
+      RenderProbe *GetProbe() const
+      {
+         const auto *p = std::get_if<RenderProbe *>(&payload);
+         return p ? *p : nullptr;
+      }
+
+      bool operator==(const Selection &) const = default;
    } m_selection;
 
-   // Decorated editable parts
-   vector<std::shared_ptr<EditableUIPart>> m_editables;
+   // Multi selection of editable parts: all currently selected parts, with m_selection.GetPart() being the
+   // active one (property pane target and gizmo pivot). Empty unless m_selection.GetType() == S_EDITABLE.
+   vector<std::shared_ptr<EditorUIPart>> m_multiSel;
+   std::shared_ptr<EditorUIPart> m_outlinerAnchor; // Anchor part for shift+click range selection in the outliner
+   bool m_boxSelectActive = false;
+   ImVec2 m_boxSelectStart;
+   bool IsPartSelected(const std::shared_ptr<EditorUIPart> &part) const;
+   bool IsEditableSelected(const IEditable *editable) const;
+   void ClearSelection();
+   void SetSelection(const Selection &selection);
+   void TogglePartSelection(const std::shared_ptr<EditorUIPart> &part);
+   void SelectOutlinerRange(const std::shared_ptr<EditorUIPart> &part);
+   void RayCastParts(const ImVec2 &mousePos, vector<HitTestResult> &vhoHit) const;
+   bool IsEditablePickable(const IEditable *editable) const;
+   void BoxSelectParts(const ImVec2 &cornerA, const ImVec2 &cornerB, bool add);
+   void SelectAllParts();
+
+   // Drag point edit mode (entered/exited with Tab when the active selected part has a DragPointCurve):
+   // while active, the part's curve points are rendered and can be selected & transformed in the table XY plane
+   std::shared_ptr<EditorUIPart> m_pointEditPart; // Part whose DragPointCurve is being edited (nullptr when not in point edit mode)
+   vector<DragPoint *> m_pointSel; // Selected drag points of the edited part's curve
+   Selection m_savedSelection; // Selection state saved on mode entry, restored on exit
+   vector<std::shared_ptr<EditorUIPart>> m_savedMultiSel;
+   std::shared_ptr<EditorUIPart> m_savedOutlinerAnchor;
+   bool m_pointDragPending = false; // Left button is down on a selected point (drag not started yet)
+   bool m_pointDragActive = false; // Left button drag is moving the selected points
+   float m_pointDragZ = 0.f; // Table Z coordinate of the plane in which points are dragged
+   Vertex2D m_pointDragPos; // Last drag position in table coordinates
+   void EnterPointEditMode();
+   void ExitPointEditMode(bool restoreSelection);
+   bool IsPointSelected(const DragPoint *point) const;
+   void TogglePointSelection(DragPoint *point);
+   DragPoint *HitTestDragPoint(const ImVec2 &mousePos) const;
+   void BoxSelectPoints(const ImVec2 &cornerA, const ImVec2 &cornerB, bool add);
+   Vertex2D GetPointSelectionCenter() const;
+   Vertex2D UnprojectToPlane(const ImVec2 &mousePos, float z) const;
+   void FlipPointSelection(bool flipX);
+   void SetPointSelectionSmooth(bool smooth);
+   void DeleteSelectedPoints();
+
+   // Decorated editable parts (kept sorted for the outliner, and indexed by editable)
+   vector<std::shared_ptr<EditorUIPart>> m_editables;
+   ankerl::unordered_dense::map<const IEditable *, std::shared_ptr<EditorUIPart>> m_editableMap;
    void UpdateEditableList();
 
    // Main UI frame & panels
@@ -129,6 +185,7 @@ private:
 
    // Undo support
    void PushUndo(IEditable *part, unsigned int editId);
+   PinUndo m_undo;
    IEditable *m_lastUndoPart = nullptr;
    unsigned int m_lastUndoId = 0;
 
@@ -136,10 +193,9 @@ private:
    void DeleteSelection();
 
    // Outliner
-   float m_outliner_width = 0.0f;
    string m_outlinerFilter;
    bool m_outlinerSelectLiveTab = true;
-   bool IsOutlinerFiltered(const string &name) const;
+   bool MatchesOutlinerFilter(const string &name) const;
 
    // Properties
    bool m_propertiesSelectLiveTab = true;
@@ -147,36 +203,40 @@ private:
    // Rendering
    float m_menubar_height = 0.0f;
    float m_toolbar_height = 0.0f;
-   enum PhysicOverlay
+   enum class PhysicOverlay
    {
-      PO_NONE,
-      PO_SELECTED,
-      PO_ALL
-   } m_physOverlay = PO_NONE;
-   bool m_selectionOverlay = true;
-   enum SelectionFilter
-   {
-      SF_Playfield = 0x0002,
-      SF_Primitives = 0x0004,
-      SF_Lights = 0x0008,
-      SF_Flashers = 0x0010
+      None,
+      Selected,
+      All
    };
-   int m_selectionFilter = 0xFFFF;
+   PhysicOverlay m_physOverlay = PhysicOverlay::None;
+   bool m_selectionOverlay = true;
+   enum class SelectionFilter : uint32_t
+   {
+      None = 0,
+      Playfield = 0x0002,
+      Primitives = 0x0004,
+      Lights = 0x0008,
+      Flashers = 0x0010,
+      All = 0x0002 | 0x0004 | 0x0008 | 0x0010
+   };
+   friend constexpr SelectionFilter operator|(const SelectionFilter a, const SelectionFilter b) { return static_cast<SelectionFilter>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b)); }
+   friend constexpr SelectionFilter operator&(const SelectionFilter a, const SelectionFilter b) { return static_cast<SelectionFilter>(static_cast<uint32_t>(a) & static_cast<uint32_t>(b)); }
+   friend constexpr SelectionFilter operator~(const SelectionFilter a) { return static_cast<SelectionFilter>(~static_cast<uint32_t>(a)); }
+   static constexpr bool HasFlag(const SelectionFilter flags, const SelectionFilter flag) { return (flags & flag) != SelectionFilter::None; }
+   SelectionFilter m_selectionFilter = SelectionFilter::All;
 
    // UI state
    bool m_isOpened = false;
-   bool m_showPlumbDialog = false;
    bool m_flyMode = false;
    bool m_showRendererInspection = false;
-   uint32_t m_OpenUITime = 0; // Used to delay keyboard shortcut
-   uint32_t m_StartTime_msec = 0; // Used for timed splash overlays
    enum class Units
    {
       VPX, Metric, Imperial
    } m_units = Units::VPX;
 
    // 3D editor
-   ImGuizmo::OPERATION m_gizmoOperation = ImGuizmo::NONE;
+   ImGuizmo::OPERATION m_gizmoOperation = (ImGuizmo::OPERATION)0;
    ImGuizmo::MODE m_gizmoMode = ImGuizmo::WORLD;
    bool GetSelectionTransform(Matrix3D &transform) const;
    void SetSelectionTransform(const Matrix3D &transform, bool clearPosition = false, bool clearScale = false, bool clearRotation = false) const;
@@ -198,8 +258,8 @@ private:
       RenderContext(Player *player, ImDrawList *drawlist, ViewMode viewMode, Renderer::ShadeMode shadeMode, bool needsLiveTableSync);
       ~RenderContext() override = default;
 
-      bool NeedsLiveTableSync() const { return m_needsLiveTableSync; }
-      ImU32 GetColor(bool selected) const { return selected ? IM_COL32(255, 128, 0, 255) : IM_COL32_BLACK; };
+      bool NeedsLiveTableSync() const override { return m_needsLiveTableSync; }
+      ImU32 GetColor(bool selected) const override { return selected ? (m_isActive ? IM_COL32(255, 128, 0, 255) : IM_COL32(192, 96, 0, 255)) : IM_COL32_BLACK; };
       bool IsSelected() const override { return m_isSelected; }
       bool IsShowInvisible() const override;
       ViewMode GetViewMode() const override { return m_viewMode; }
@@ -212,6 +272,7 @@ private:
       void DrawWireframe(IEditable *editable) const override;
 
       bool m_isSelected = false;
+      bool m_isActive = false;
 
    private:
       Player *m_player;

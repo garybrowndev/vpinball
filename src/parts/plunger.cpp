@@ -13,8 +13,7 @@
 #include "renderer/Renderer.h"
 #include "renderer/Shader.h"
 #include "renderer/trace.h"
-#include "ui/win/sur.h"
-#include "ui/win/WinEditor.h"
+
 
 Plunger::~Plunger()
 {
@@ -112,33 +111,6 @@ void Plunger::WriteRegDefaults()
 #undef LinkProp
 }
 
-void Plunger::UIRenderPass1(Sur * const psur)
-{
-}
-
-void Plunger::UIRenderPass2(Sur * const psur)
-{
-   psur->SetBorderColor(RGB(0, 0, 0), false, 0);
-   psur->SetFillColor(-1);
-
-   // draw the park position, if appropriate
-   if (m_d.m_parkPosition > 0.0f && m_d.m_parkPosition < 1.0f)
-   {
-      const float park = m_d.m_parkPosition * m_d.m_stroke;
-      psur->SetLineColor(RGB(0, 180, 0), false, //
-         (m_selectstate == ISelect::SelectState::Selected)           ? 4 //
-            : (m_selectstate == ISelect::SelectState::MultiSelected) ? 3 //
-            : IsUILocked()                                           ? 1 //
-                                                                     : 2);
-      psur->Line(m_d.m_v.x - m_d.m_width, m_d.m_v.y - m_d.m_stroke + park, m_d.m_v.x + m_d.m_width, m_d.m_v.y - m_d.m_stroke + park);
-   }
-
-   psur->SetObject(this);
-   psur->Rectangle(m_d.m_v.x - m_d.m_width, m_d.m_v.y - m_d.m_stroke,
-      m_d.m_v.x + m_d.m_width, m_d.m_v.y + m_d.m_height);
-}
-
-
 #pragma region Physics
 
 void Plunger::PhysicSetup(PhysicsEngine* physics, const bool isUI)
@@ -171,25 +143,15 @@ void Plunger::PhysicRelease(PhysicsEngine* physics, const bool isUI)
 #pragma endregion
 
 
-void Plunger::SetObjectPos()
+void Plunger::Translate(const Vertex2D &offset)
 {
-   m_vpinball->SetObjectPosCur(m_d.m_v.x, m_d.m_v.y);
-}
-
-void Plunger::MoveOffset(const float dx, const float dy)
-{
-   m_d.m_v.x += dx;
-   m_d.m_v.y += dy;
+   m_d.m_v.x += offset.x;
+   m_d.m_v.y += offset.y;
 }
 
 Vertex2D Plunger::GetCenter() const
 {
    return m_d.m_v;
-}
-
-void Plunger::PutCenter(const Vertex2D& pv)
-{
-   m_d.m_v = pv;
 }
 
 
@@ -1220,9 +1182,6 @@ STDMETHODIMP Plunger::CreateBall(IBall **pResult)
 STDMETHODIMP Plunger::get_X(float *pVal)
 {
    *pVal = m_d.m_v.x;
-   if (m_vpinball)
-      m_vpinball->SetStatusBarUnitInfo(string(), true);
-
    return S_OK;
 }
 

@@ -54,6 +54,7 @@ MsgPluginManager::MsgPluginManager()
 {
    assert(m_pluginManager == nullptr);
    m_pluginManager = this;
+   m_api.version = 1;
    m_api.GetPluginEndpoint = GetPluginEndpoint;
    m_api.GetEndpointInfo = GetEndpointInfo;
    m_api.GetMsgID = GetMsgID;
@@ -145,6 +146,8 @@ unsigned int MsgPluginManager::GetMsgID(const char* name_space, const char* name
    freeMsg->name_space = name_space;
    freeMsg->name = name;
    freeMsg->callbacks.clear();
+   assert(nameView.rfind(':') != std::string_view::npos); // Message name must include a version marker separated by a colon (e.g. "OnDmdTrigger:1")
+   assert(nameView.rfind(':') != 0); // Message name may not be just a version marker (e.g. ":1" is invalid)
    return freeMsg->id;
 }
 
@@ -463,6 +466,12 @@ void MsgPluginManager::UnloadPlugin(MsgPlugin& plugin)
 {
    m_settingHandler(plugin.m_id, SettingAction::UnregisterAll, nullptr);
    plugin.Unload();
+   {
+      // Check for any invalid pending callback
+      const std::lock_guard lock(m_timerListMutex);
+      assert(std::ranges::find_if(m_timers, [id = plugin.m_endpointId](auto callback) { return callback.endpointId == id; }) == m_timers.end());
+   }
+
    bool invalidPlugin = false;
    for (const auto& timer : m_timers)
       if (timer.endpointId == plugin.m_endpointId)
@@ -553,7 +562,6 @@ void MsgPlugin::Unload()
       return;
    }
    m_unloadPlugin();
-   m_msgAPI->FlushPendingCallbacks(m_endpointId);
    if (m_loader)
    {
       m_loader->Unlink(m_module);

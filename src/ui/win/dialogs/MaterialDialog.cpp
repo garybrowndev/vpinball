@@ -4,8 +4,21 @@
 #include "MaterialDialog.h"
 
 #include "core/VPApp.h"
+#include "parts/bumper.h"
+#include "parts/decal.h"
+#include "parts/flipper.h"
+#include "parts/hittarget.h"
+#include "parts/kicker.h"
 #include "parts/Material.h"
 #include "parts/pintable.h"
+#include "parts/plunger.h"
+#include "parts/primitive.h"
+#include "parts/ramp.h"
+#include "parts/rubber.h"
+#include "parts/spinner.h"
+#include "parts/surface.h"
+#include "parts/trigger.h"
+#include "ui/win/PinTableWnd.h"
 #include "ui/win/resource.h"
 #include "ui/win/WinEditor.h"
 
@@ -141,7 +154,7 @@ BOOL MaterialDialog::OnInitDialog()
    lvcol.pszText = (LPSTR)ls2.m_szbuffer; // = "Used in Table";
    lvcol.cx = 50;
    ListView_InsertColumn(m_hMaterialList, 1, &lvcol);
-   pt->ListMaterials(m_hMaterialList);
+   ListMaterials(m_hMaterialList);
 
    ListView_SetItemState(m_hMaterialList, 0, LVIS_SELECTED, LVIS_SELECTED);
    GotoDlgCtrl(m_hMaterialList);
@@ -213,7 +226,7 @@ BOOL MaterialDialog::OnCommand(WPARAM wParam, LPARAM lParam)
                        }
                    }
                    pt->SetNonUndoableDirty(eSaveDirty);
-                   pt->UpdatePropertyMaterialList();
+                   pt->m_tableEditor->UpdatePropertyMaterialList();
                }
            }
            break;
@@ -256,7 +269,7 @@ BOOL MaterialDialog::OnCommand(WPARAM wParam, LPARAM lParam)
                        }
                    }
                    pt->SetNonUndoableDirty(eSaveDirty);
-                   pt->UpdatePropertyMaterialList();
+                   pt->m_tableEditor->UpdatePropertyMaterialList();
                }
            }
            break;
@@ -299,7 +312,7 @@ BOOL MaterialDialog::OnCommand(WPARAM wParam, LPARAM lParam)
                        }
                    }
                    pt->SetNonUndoableDirty(eSaveDirty);
-                   pt->UpdatePropertyMaterialList();
+                   pt->m_tableEditor->UpdatePropertyMaterialList();
                }
            }
            break;
@@ -342,7 +355,7 @@ BOOL MaterialDialog::OnCommand(WPARAM wParam, LPARAM lParam)
                        }
                    }
                    pt->SetNonUndoableDirty(eSaveDirty);
-                   pt->UpdatePropertyMaterialList();
+                   pt->m_tableEditor->UpdatePropertyMaterialList();
                }
            }
            break;
@@ -370,10 +383,10 @@ BOOL MaterialDialog::OnCommand(WPARAM wParam, LPARAM lParam)
             {
                Material *const pNewMat = new Material(mat);
                pt->AddMaterial(pNewMat);
-               pt->AddListMaterial(m_hMaterialList, pNewMat);
+               AddListMaterial(m_hMaterialList, pNewMat);
             }
             pt->SetNonUndoableDirty(eSaveDirty);
-            pt->UpdatePropertyMaterialList();
+            pt->m_tableEditor->UpdatePropertyMaterialList();
          }
          break;
       }
@@ -382,9 +395,9 @@ BOOL MaterialDialog::OnCommand(WPARAM wParam, LPARAM lParam)
          Material * const pmat = new Material();
 
          pt->AddMaterial(pmat);
-         pt->AddListMaterial(m_hMaterialList, pmat);
+         AddListMaterial(m_hMaterialList, pmat);
          pt->SetNonUndoableDirty(eSaveDirty);
-         pt->UpdatePropertyMaterialList();
+         pt->m_tableEditor->UpdatePropertyMaterialList();
 
          break;
       }
@@ -425,7 +438,7 @@ BOOL MaterialDialog::OnCommand(WPARAM wParam, LPARAM lParam)
                pmat->m_name = mat.szName;
 
                pt->AddMaterial(pmat);
-               pt->AddListMaterial(m_hMaterialList, pmat);
+               AddListMaterial(m_hMaterialList, pmat);
             }
             fclose(f);
 
@@ -434,7 +447,7 @@ BOOL MaterialDialog::OnCommand(WPARAM wParam, LPARAM lParam)
                g_app->m_settings.SetRecentDir_MaterialDir(szFilename[0].substr(0, index), false);
 
             pt->SetNonUndoableDirty(eSaveDirty);
-            pt->UpdatePropertyMaterialList();
+            pt->m_tableEditor->UpdatePropertyMaterialList();
          }
          break;
       }
@@ -567,7 +580,7 @@ BOOL MaterialDialog::OnCommand(WPARAM wParam, LPARAM lParam)
                }
             }
             pt->SetNonUndoableDirty(eSaveDirty);
-            pt->UpdatePropertyMaterialList();
+            pt->m_tableEditor->UpdatePropertyMaterialList();
          }
          break;
       }
@@ -691,7 +704,7 @@ void MaterialDialog::SaveEditedMaterial(Material& mat)
          pt->SetNonUndoableDirty(eSaveDirty);
    mat.m_fScatterAngle = fv;
 
-   pt->UpdatePropertyMaterialList();
+   pt->m_tableEditor->UpdatePropertyMaterialList();
 }
 
 INT_PTR MaterialDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -769,7 +782,7 @@ INT_PTR MaterialDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                   ListView_SetItemText_Safe(m_hMaterialList, pinfo->item.iItem, 0, pmat->m_name.c_str());
                }
                pt->SetNonUndoableDirty(eSaveDirty);
-               pt->UpdatePropertyMaterialList();
+               pt->m_tableEditor->UpdatePropertyMaterialList();
                return TRUE;
             }
             case LVN_ITEMCHANGING:
@@ -950,7 +963,7 @@ void MaterialDialog::OnOK()
          // The previous selection is now deleted, so look again from the top of the list
          sel = ListView_GetNextItem(m_hMaterialList, sel, LVNI_SELECTED);
 
-         pt->UpdatePropertyMaterialList();
+         pt->m_tableEditor->UpdatePropertyMaterialList();
       }
    }
    SavePosition();
@@ -994,4 +1007,150 @@ void MaterialDialog::ShowWhereUsed()
          SetFocus();
       }
     }
+}
+
+void MaterialDialog::ListMaterials(HWND hwndListView)
+{
+   CCO(PinTable) *const pt = g_pvp->GetActiveTable();
+   if (pt)
+   {
+      for (Material *const pmat : pt->GetMaterialList())
+         AddListMaterial(hwndListView, pmat);
+   }
+}
+
+int MaterialDialog::AddListMaterial(HWND hwndListView, Material *const pmat)
+{
+#ifndef __STANDALONE__
+   constexpr char usedStringYes[] = "X";
+   constexpr char usedStringNo[] = " ";
+
+   LVITEM lvitem;
+   lvitem.mask = LVIF_DI_SETITEM | LVIF_TEXT | LVIF_PARAM;
+   lvitem.iItem = 0;
+   lvitem.iSubItem = 0;
+   lvitem.pszText = (LPSTR)pmat->m_name.c_str();
+   lvitem.lParam = (size_t)pmat;
+
+   const int index = ListView_InsertItem(hwndListView, &lvitem);
+   ListView_SetItemText_Safe(hwndListView, index, 1, usedStringNo);
+
+   CCO(PinTable) *const pt = g_pvp->GetActiveTable();
+   if (pt)
+   {
+      if (pmat->m_name == pt->m_playfieldMaterial)
+      {
+         ListView_SetItemText_Safe(hwndListView, index, 1, usedStringYes);
+      }
+      else
+      {
+         for (IEditable *const pEdit : pt->GetParts())
+         {
+            bool inUse = false;
+            if (pEdit == nullptr)
+               continue;
+
+            switch (pEdit->GetItemType())
+            {
+            case eItemPrimitive:
+            {
+               const Primitive *const pPrim = (Primitive *)pEdit;
+               if (StrCompareNoCase(pPrim->m_d.m_szMaterial, pmat->m_name) || StrCompareNoCase(pPrim->m_d.m_szPhysicsMaterial, pmat->m_name))
+                  inUse = true;
+               break;
+            }
+            case eItemRamp:
+            {
+               const Ramp *const pRamp = (Ramp *)pEdit;
+               if (StrCompareNoCase(pRamp->m_d.m_szMaterial, pmat->m_name) || StrCompareNoCase(pRamp->m_d.m_szPhysicsMaterial, pmat->m_name))
+                  inUse = true;
+               break;
+            }
+            case eItemSurface:
+            {
+               const Surface *const pSurf = (Surface *)pEdit;
+               if (StrCompareNoCase(pSurf->m_d.m_szPhysicsMaterial, pmat->m_name) || StrCompareNoCase(pSurf->m_d.m_szSideMaterial, pmat->m_name)
+                  || StrCompareNoCase(pSurf->m_d.m_szTopMaterial, pmat->m_name) || StrCompareNoCase(pSurf->m_d.m_szSlingShotMaterial, pmat->m_name))
+                  inUse = true;
+               break;
+            }
+            case eItemDecal:
+            {
+               const Decal *const pDecal = (Decal *)pEdit;
+               if (StrCompareNoCase(pDecal->m_d.m_szMaterial, pmat->m_name))
+                  inUse = true;
+               break;
+            }
+            case eItemFlipper:
+            {
+               const Flipper *const pFlip = (Flipper *)pEdit;
+               if (StrCompareNoCase(pFlip->m_d.m_szRubberMaterial, pmat->m_name) || StrCompareNoCase(pFlip->m_d.m_szMaterial, pmat->m_name))
+                  inUse = true;
+               break;
+            }
+            case eItemHitTarget:
+            {
+               const HitTarget *const pHit = (HitTarget *)pEdit;
+               if (StrCompareNoCase(pHit->m_d.m_szMaterial, pmat->m_name) || StrCompareNoCase(pHit->m_d.m_szPhysicsMaterial, pmat->m_name))
+                  inUse = true;
+               break;
+            }
+            case eItemPlunger:
+            {
+               const Plunger *const pPlung = (Plunger *)pEdit;
+               if (StrCompareNoCase(pPlung->m_d.m_szMaterial, pmat->m_name))
+                  inUse = true;
+               break;
+            }
+            case eItemSpinner:
+            {
+               const Spinner *const pSpin = (Spinner *)pEdit;
+               if (StrCompareNoCase(pSpin->m_d.m_szMaterial, pmat->m_name))
+                  inUse = true;
+               break;
+            }
+            case eItemRubber:
+            {
+               const Rubber *const pRub = (Rubber *)pEdit;
+               if (StrCompareNoCase(pRub->m_d.m_szMaterial, pmat->m_name) || StrCompareNoCase(pRub->m_d.m_szPhysicsMaterial, pmat->m_name))
+                  inUse = true;
+               break;
+            }
+            case eItemBumper:
+            {
+               const Bumper *const pBump = (Bumper *)pEdit;
+               if (StrCompareNoCase(pBump->m_d.m_szCapMaterial, pmat->m_name) || StrCompareNoCase(pBump->m_d.m_szBaseMaterial, pmat->m_name)
+                  || StrCompareNoCase(pBump->m_d.m_szSkirtMaterial, pmat->m_name) || StrCompareNoCase(pBump->m_d.m_szRingMaterial, pmat->m_name))
+                  inUse = true;
+               break;
+            }
+            case eItemKicker:
+            {
+               const Kicker *const pKick = (Kicker *)pEdit;
+               if (StrCompareNoCase(pKick->m_d.m_szMaterial, pmat->m_name))
+                  inUse = true;
+               break;
+            }
+            case eItemTrigger:
+            {
+               const Trigger *const pTrig = (Trigger *)pEdit;
+               if (StrCompareNoCase(pTrig->m_d.m_szMaterial, pmat->m_name))
+                  inUse = true;
+               break;
+            }
+            default: break;
+            }
+
+            if (inUse)
+            {
+               ListView_SetItemText_Safe(hwndListView, index, 1, usedStringYes);
+               break;
+            }
+         } //for
+      } //else
+   }
+   return index;
+#else
+   return 0;
+#endif
 }

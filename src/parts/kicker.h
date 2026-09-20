@@ -38,7 +38,6 @@ class Kicker :
    public EventProxy<Kicker, &DIID_IKickerEvents>,
    public IConnectionPointContainerImpl<Kicker>,
    public IProvideClassInfo2Impl<&CLSID_Kicker, &DIID_IKickerEvents, &LIBID_VPinballLib>,
-   public ISelect,
    public IEditable,
    public IHitable,
    public IRenderable,
@@ -73,24 +72,19 @@ public:
       CONNECTION_POINT_ENTRY(DIID_IKickerEvents)
    END_CONNECTION_POINT_MAP()
 
-   STANDARD_EDITABLE_DECLARES(Kicker, eItemKicker, KICKER, VIEW_PLAYFIELD)
+   STANDARD_EDITABLE_DECLARES(Kicker, eItemKicker, KICKER)
 
    DECLARE_REGISTRY_RESOURCEID(IDR_KICKER)
    // ISupportsErrorInfo
    STDMETHOD(InterfaceSupportsErrorInfo)(REFIID riid);
 
-   void MoveOffset(const float dx, const float dy) final;
-   void SetObjectPos() final;
+   void Translate(const Vertex2D &offset) final;
    // Multi-object manipulation
    Vertex2D GetCenter() const final;
-   void PutCenter(const Vertex2D& pv) final;
-   KickerHitCircle * GetKickerHitCircle();
+   KickerHitCircle * GetKickerHitCircle(); // Ball History: needs the hit circle to suppress capture while replaying
 
    void SetDefaultPhysics(const bool fromMouseClick) final;
    void ExportMesh(ObjLoader& loader) final;
-
-   ItemTypeEnum HitableGetItemType() const final { return eItemKicker; }
-   void UpdateStatusBarInfo() final;
 
    void WriteRegDefaults() final;
 

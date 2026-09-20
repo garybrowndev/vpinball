@@ -72,7 +72,6 @@ class LightSeq :
    public IConnectionPointContainerImpl<LightSeq>,
    public IProvideClassInfo2Impl<&CLSID_LightSeq, &DIID_ILightSeqEvents, &LIBID_VPinballLib>,
    public EventProxy<LightSeq, &DIID_ILightSeqEvents>,
-   public ISelect,
    public IEditable,
    public IScriptable,
    public IFireEvents,
@@ -106,19 +105,13 @@ public:
       CONNECTION_POINT_ENTRY(DIID_ILightSeqEvents)
    END_CONNECTION_POINT_MAP()
 
-   void RenderOutline(Sur * const psur);
-
-   void MoveOffset(const float dx, const float dy) final;
-   void SetObjectPos() final;
+   void Translate(const Vertex2D &offset) final;
    // Multi-object manipulation
    Vertex2D GetCenter() const final;
-   void PutCenter(const Vertex2D& pv) final;
-
-   void RenderBlueprint(Sur *psur, const bool solid) final { } // Renders the image onto the Blueprint, but we don't want light seqs on the blue print as it is non-essensial
 
    void WriteRegDefaults() final;
 
-   STANDARD_EDITABLE_DECLARES_NO_HITABLE(LightSeq, eItemLightSeq, LIGHTSEQ, VIEW_PLAYFIELD | VIEW_BACKGLASS)
+   STANDARD_EDITABLE_DECLARES_NO_HITABLE(LightSeq, eItemLightSeq, LIGHTSEQ)
 
    //DECLARE_NOT_AGGREGATABLE(LightSeq)
    // Remove the comment from the line above if you don't want your object to

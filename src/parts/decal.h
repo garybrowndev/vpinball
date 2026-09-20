@@ -35,7 +35,6 @@ class Decal :
    public EventProxy<Decal, &DIID_IDecalEvents>,
    public IConnectionPointContainerImpl<Decal>,
    public IProvideClassInfo2Impl<&CLSID_Decal, &DIID_IDecalEvents, &LIBID_VPinballLib>,
-   public ISelect,
    public IEditable,
    //public Hitable, // FIXME implement UI picking
    public IRenderable,
@@ -62,17 +61,19 @@ public:
       COM_INTERFACE_ENTRY(IProvideClassInfo2)
    END_COM_MAP()
 
-   STANDARD_EDITABLE_DECLARES_NO_HITABLE(Decal, eItemDecal, DECAL, VIEW_PLAYFIELD | VIEW_BACKGLASS)
+   STANDARD_EDITABLE_DECLARES_NO_HITABLE(Decal, eItemDecal, DECAL)
 
    BEGIN_CONNECTION_POINT_MAP(Decal)
       CONNECTION_POINT_ENTRY(DIID_IDecalEvents)
    END_CONNECTION_POINT_MAP()
 
-   void MoveOffset(const float dx, const float dy) final { m_d.m_vCenter.x += dx; m_d.m_vCenter.y += dy; }
-   void SetObjectPos() final;
+   void Translate(const Vertex2D &offset) final
+   {
+      m_d.m_vCenter.x += offset.x;
+      m_d.m_vCenter.y += offset.y;
+   }
    // Multi-object manipulation
    Vertex2D GetCenter() const final { return m_d.m_vCenter; }
-   void PutCenter(const Vertex2D& pv) final { m_d.m_vCenter = pv; }
    float GetDepth(const Vertex3Ds &viewDir) const final;
    void Rotate(const float ang, const Vertex2D &pvCenter, const bool useElementCenter) final;
 
@@ -83,6 +84,9 @@ public:
    void EnsureSize();
 
    DecalData m_d;
+
+   // Computes the 4 vertices of the rotated quad of this decal for editor display
+   void GetEditorQuad(Vertex2D rgv[4]) const;
 
 private:
    void GetTextSize(int * const px, int * const py);

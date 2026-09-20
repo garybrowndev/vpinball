@@ -10,8 +10,6 @@
 #include "renderer/RenderCommand.h"
 #include "renderer/Shader.h"
 #include "renderer/trace.h"
-#include "ui/win/sur.h"
-#include "ui/win/WinEditor.h"
 #include "utils/objloader.h"
 #include "utils/color.h"
 
@@ -38,7 +36,6 @@ HRESULT Primitive::Init(const float x, const float y, const bool fromMouseClick,
    m_d.m_vPosition.x = x;
    m_d.m_vPosition.y = y;
    CalculateBuiltinOriginal();
-   UpdateStatusBarInfo();
    return S_OK;
 }
 
@@ -407,217 +404,84 @@ void Primitive::TransformVertices()
    }
 }
 
-//////////////////////////////
-// Rendering
-//////////////////////////////
-
-// 2D
-
-void Primitive::UIRenderPass1(Sur * const psur)
+void Primitive::GetEditorTriangles(vector<Vertex2D> &triangles) const
 {
-}
-
-void Primitive::UIRenderPass2(Sur * const psur)
-{
-   RecalculateMatrices();
-   TransformVertices();
-
-   psur->SetLineColor(RGB(0, 0, 0), false, 1);
-   psur->SetObject(this);
-   if (!m_d.m_displayTexture)
+   triangles.reserve(m_mesh.NumIndices());
+   for (size_t i = 0; i < m_mesh.NumIndices(); i += 3)
    {
-      if ((m_d.m_edgeFactorUI <= 0.0f) || (m_d.m_edgeFactorUI >= 1.0f) || !m_d.m_use3DMesh)
-      {
-         if (!m_d.m_use3DMesh || (m_d.m_edgeFactorUI >= 1.0f) || (m_mesh.NumVertices() <= 100)) // small mesh: draw all triangles
-         {
-            for (size_t i = 0; i < m_mesh.NumIndices(); i += 3)
-            {
-               const Vertex3Ds * const A = &m_vertices[m_mesh.m_indices[i]];
-               const Vertex3Ds * const B = &m_vertices[m_mesh.m_indices[i + 1]];
-               const Vertex3Ds * const C = &m_vertices[m_mesh.m_indices[i + 2]];
-               psur->Line(A->x, A->y, B->x, B->y);
-               psur->Line(B->x, B->y, C->x, C->y);
-               psur->Line(C->x, C->y, A->x, A->y);
-            }
-         }
-         else // large mesh: draw a simplified mesh for performance reasons, does not approximate the shape well
-         {
-            if (m_mesh.NumIndices() > 0)
-            {
-               const size_t numPts = m_mesh.NumIndices() / 3 + 1;
-               vector<Vertex2D> drawVertices(numPts);
-
-               const Vertex3Ds& A = m_vertices[m_mesh.m_indices[0]];
-               drawVertices[0] = Vertex2D(A.x, A.y);
-
-               unsigned int o = 1;
-               for (size_t i = 0; i < m_mesh.NumIndices(); i += 3, ++o)
-               {
-                  const Vertex3Ds& B = m_vertices[m_mesh.m_indices[i + 1]];
-                  drawVertices[o] = Vertex2D(B.x, B.y);
-               }
-
-               psur->Polyline(drawVertices.data(), (int)drawVertices.size());
-            }
-         }
-      }
-      else
-      {
-         vector<Vertex2D> drawVertices;
-         for (size_t i = 0; i < m_mesh.NumIndices(); i += 3)
-         {
-            const Vertex3Ds * const A = &m_vertices[m_mesh.m_indices[i]];
-            const Vertex3Ds * const B = &m_vertices[m_mesh.m_indices[i + 1]];
-            const Vertex3Ds * const C = &m_vertices[m_mesh.m_indices[i + 2]];
-            const float An = m_normals[m_mesh.m_indices[i]];
-            const float Bn = m_normals[m_mesh.m_indices[i + 1]];
-            const float Cn = m_normals[m_mesh.m_indices[i + 2]];
-            if (fabsf(An + Bn) < m_d.m_edgeFactorUI)
-            {
-               drawVertices.emplace_back(A->x, A->y);
-               drawVertices.emplace_back(B->x, B->y);
-            }
-            if (fabsf(Bn + Cn) < m_d.m_edgeFactorUI)
-            {
-               drawVertices.emplace_back(B->x, B->y);
-               drawVertices.emplace_back(C->x, C->y);
-            }
-            if (fabsf(Cn + An) < m_d.m_edgeFactorUI)
-            {
-               drawVertices.emplace_back(C->x, C->y);
-               drawVertices.emplace_back(A->x, A->y);
-            }
-         }
-
-         if (!drawVertices.empty())
-            psur->Lines(drawVertices.data(), (int)(drawVertices.size() / 2));
-      }
-   }
-
-   // draw center marker
-   psur->SetLineColor(RGB(128, 128, 128), false, 1);
-   psur->Line(m_d.m_vPosition.x - 10.0f, m_d.m_vPosition.y, m_d.m_vPosition.x + 10.0f, m_d.m_vPosition.y);
-   psur->Line(m_d.m_vPosition.x, m_d.m_vPosition.y - 10.0f, m_d.m_vPosition.x, m_d.m_vPosition.y + 10.0f);
-   
-   if (m_d.m_displayTexture)
-   {
-      Texture * const ppi = m_ptable->GetImage(m_d.m_szImage);
-      if (ppi && ppi->GetGDIBitmap())
-      {
-         vector<RenderVertex> vvertex;
-         vvertex.reserve(m_mesh.NumIndices());
-         for (size_t i = 0; i < m_mesh.NumIndices(); i += 3)
-         {
-            const Vertex3Ds * const A = &m_vertices[m_mesh.m_indices[i]];
-            const Vertex3Ds * const B = &m_vertices[m_mesh.m_indices[i + 1]];
-            const Vertex3Ds * const C = &m_vertices[m_mesh.m_indices[i + 2]];
-            RenderVertex rvA;
-            RenderVertex rvB;
-            RenderVertex rvC;
-            rvA.x = A->x;
-            rvA.y = A->y;
-            rvB.x = B->x;
-            rvB.y = B->y;
-            rvC.x = C->x;
-            rvC.y = C->y;
-            vvertex.push_back(rvC);
-            vvertex.push_back(rvB);
-            vvertex.push_back(rvA);
-         }
-         psur->PolygonImage(vvertex, ppi->GetGDIBitmap(), m_ptable->m_left, m_ptable->m_top, m_ptable->m_right, m_ptable->m_bottom, ppi->m_width, ppi->m_height);
-      }
+      const Vertex3Ds &A = m_vertices[m_mesh.m_indices[i]];
+      const Vertex3Ds &B = m_vertices[m_mesh.m_indices[i + 1]];
+      const Vertex3Ds &C = m_vertices[m_mesh.m_indices[i + 2]];
+      triangles.emplace_back(C.x, C.y);
+      triangles.emplace_back(B.x, B.y);
+      triangles.emplace_back(A.x, A.y);
    }
 }
 
-void Primitive::RenderBlueprint(Sur *psur, const bool solid)
+void Primitive::GetEditorWireframe(vector<Vertex2D> &edges, vector<Vertex2D> &polyline) const
 {
-   psur->SetFillColor(solid ? BLUEPRINT_SOLID_COLOR : -1);
-   psur->SetLineColor(RGB(0, 0, 0), false, 1);
-   psur->SetObject(this);
-
-   if (solid && m_d.m_use3DMesh)
-   {
-       for (size_t i = 0; i < m_mesh.NumIndices(); i += 3)
-       {
-           const Vertex3Ds * const A = &m_vertices[m_mesh.m_indices[i]];
-           const Vertex3Ds * const B = &m_vertices[m_mesh.m_indices[i + 1]];
-           const Vertex3Ds * const C = &m_vertices[m_mesh.m_indices[i + 2]];
-
-           Vertex2D rv[3];
-           rv[0].x = C->x; rv[0].y = C->y;
-           rv[1].x = B->x; rv[1].y = B->y;
-           rv[2].x = A->x; rv[2].y = A->y;
-           psur->Polygon(rv, 3);
-       }
-       return;
-   }
    if ((m_d.m_edgeFactorUI <= 0.0f) || (m_d.m_edgeFactorUI >= 1.0f) || !m_d.m_use3DMesh)
    {
       if (!m_d.m_use3DMesh || (m_d.m_edgeFactorUI >= 1.0f) || (m_mesh.NumVertices() <= 100)) // small mesh: draw all triangles
       {
+         edges.reserve(m_mesh.NumIndices() * 2);
          for (size_t i = 0; i < m_mesh.NumIndices(); i += 3)
          {
-            const Vertex3Ds * const A = &m_vertices[m_mesh.m_indices[i]];
-            const Vertex3Ds * const B = &m_vertices[m_mesh.m_indices[i + 1]];
-            const Vertex3Ds * const C = &m_vertices[m_mesh.m_indices[i + 2]];
-            psur->Line(A->x, A->y, B->x, B->y);
-            psur->Line(B->x, B->y, C->x, C->y);
-            psur->Line(C->x, C->y, A->x, A->y);
+            const Vertex3Ds &A = m_vertices[m_mesh.m_indices[i]];
+            const Vertex3Ds &B = m_vertices[m_mesh.m_indices[i + 1]];
+            const Vertex3Ds &C = m_vertices[m_mesh.m_indices[i + 2]];
+            edges.emplace_back(A.x, A.y);
+            edges.emplace_back(B.x, B.y);
+            edges.emplace_back(B.x, B.y);
+            edges.emplace_back(C.x, C.y);
+            edges.emplace_back(C.x, C.y);
+            edges.emplace_back(A.x, A.y);
          }
       }
-      else // large mesh: draw a simplified mesh for performance reasons, does not approximate the shape well
+      else if (m_mesh.NumIndices() > 0) // large mesh: draw a simplified mesh for performance reasons, does not approximate the shape well
       {
-         if (m_mesh.NumIndices() > 0)
+         polyline.reserve(m_mesh.NumIndices() / 3 + 1);
+         const Vertex3Ds &A = m_vertices[m_mesh.m_indices[0]];
+         polyline.emplace_back(A.x, A.y);
+         for (size_t i = 0; i < m_mesh.NumIndices(); i += 3)
          {
-            const size_t numPts = m_mesh.NumIndices() / 3 + 1;
-            vector<Vertex2D> drawVertices(numPts);
-
-            const Vertex3Ds& A = m_vertices[m_mesh.m_indices[0]];
-            drawVertices[0] = Vertex2D(A.x, A.y);
-
-            unsigned int o = 1;
-            for (size_t i = 0; i < m_mesh.NumIndices(); i += 3, ++o)
-            {
-               const Vertex3Ds& B = m_vertices[m_mesh.m_indices[i + 1]];
-               drawVertices[o] = Vertex2D(B.x, B.y);
-            }
-
-            psur->Polyline(drawVertices.data(), (int)drawVertices.size());
+            const Vertex3Ds &B = m_vertices[m_mesh.m_indices[i + 1]];
+            polyline.emplace_back(B.x, B.y);
          }
       }
    }
    else
    {
-      vector<Vertex2D> drawVertices;
       for (size_t i = 0; i < m_mesh.NumIndices(); i += 3)
       {
-         const Vertex3Ds * const A = &m_vertices[m_mesh.m_indices[i]];
-         const Vertex3Ds * const B = &m_vertices[m_mesh.m_indices[i + 1]];
-         const Vertex3Ds * const C = &m_vertices[m_mesh.m_indices[i + 2]];
+         const Vertex3Ds &A = m_vertices[m_mesh.m_indices[i]];
+         const Vertex3Ds &B = m_vertices[m_mesh.m_indices[i + 1]];
+         const Vertex3Ds &C = m_vertices[m_mesh.m_indices[i + 2]];
          const float An = m_normals[m_mesh.m_indices[i]];
          const float Bn = m_normals[m_mesh.m_indices[i + 1]];
          const float Cn = m_normals[m_mesh.m_indices[i + 2]];
          if (fabsf(An + Bn) < m_d.m_edgeFactorUI)
          {
-            drawVertices.emplace_back(A->x, A->y);
-            drawVertices.emplace_back(B->x, B->y);
+            edges.emplace_back(A.x, A.y);
+            edges.emplace_back(B.x, B.y);
          }
          if (fabsf(Bn + Cn) < m_d.m_edgeFactorUI)
          {
-            drawVertices.emplace_back(B->x, B->y);
-            drawVertices.emplace_back(C->x, C->y);
+            edges.emplace_back(B.x, B.y);
+            edges.emplace_back(C.x, C.y);
          }
          if (fabsf(Cn + An) < m_d.m_edgeFactorUI)
          {
-            drawVertices.emplace_back(C->x, C->y);
-            drawVertices.emplace_back(A->x, A->y);
+            edges.emplace_back(C.x, C.y);
+            edges.emplace_back(A.x, A.y);
          }
       }
-
-      if (!drawVertices.empty())
-         psur->Lines(drawVertices.data(), (int)(drawVertices.size() / 2));
    }
 }
+
+//////////////////////////////
+// Rendering
+//////////////////////////////
 
 // VPX before 10.8 computed the viewer position based on a partial bounding volume that would not include primitives, so never fill legacy_bounds in here, only bounds
 void Primitive::GetBoundingVertices(vector<Vertex3Ds> &bounds, vector<Vertex3Ds> *const legacy_bounds)
@@ -837,20 +701,6 @@ void Primitive::CalculateBuiltinOriginal()
    //ComputeNormals(m_mesh.m_vertices, m_mesh.m_indices);
 }
 
-void Primitive::UpdateStatusBarInfo()
-{
-   if (!m_vpinball)
-      return;
-   if (m_d.m_use3DMesh)
-   {
-       const string tbuf = "Vertices: " + std::to_string(m_mesh.NumVertices()) + " | Polygons: " + std::to_string(m_mesh.NumIndices());
-       m_vpinball->SetStatusBarUnitInfo(tbuf, false);
-   }
-   else
-       m_vpinball->SetStatusBarUnitInfo(string(), false);
-
-}
-
 void Primitive::ExportMesh(ObjLoader& loader)
 {
    if (m_d.m_visible)
@@ -906,13 +756,12 @@ void Primitive::RenderSetup(Renderer *renderer)
       size_t overall_size = 0;
       bool partOfGroup = false;
       vector<Primitive *> prims;
-      for (int i = 0; i < collection->m_visel.size(); i++)
+      for (IEditable *const part : collection->GetParts())
       {
-         ISelect *const pisel = collection->m_visel.ElementAt(i);
-         if (pisel->GetItemType() != eItemPrimitive)
+         if (part->GetItemType() != eItemPrimitive)
             continue;
 
-         Primitive *const prim = (Primitive *)pisel;
+         Primitive *const prim = (Primitive *)part;
          // only support dynamic mesh primitives for now
          if (!prim->m_d.m_use3DMesh || prim->m_d.m_staticRendering)
             continue;
@@ -1055,7 +904,7 @@ void Primitive::Render(const unsigned int renderMask)
    }
 
    // Do not render ourself inside our reflection probe (no self reflection)
-   RenderProbe * const reflection_probe = m_d.m_reflectionStrength <= 0 ? nullptr : m_ptable->GetRenderProbe(m_d.m_szReflectionProbe);
+   RenderProbe * const reflection_probe = (isUIPass || m_d.m_reflectionStrength <= 0) ? nullptr : m_ptable->GetRenderProbe(m_d.m_szReflectionProbe);
    if (reflection_probe != nullptr && reflection_probe->IsRendering())
       return;
    
@@ -1309,30 +1158,16 @@ void Primitive::UpdateAnimation(const float diff_time_msec)
 // Positioning
 //////////////////////////////
 
-void Primitive::SetObjectPos()
+void Primitive::Translate(const Vertex2D &offset)
 {
-    m_vpinball->SetObjectPosCur(m_d.m_vPosition.x, m_d.m_vPosition.y);
-}
-
-void Primitive::MoveOffset(const float dx, const float dy)
-{
-   m_d.m_vPosition.x += dx;
-   m_d.m_vPosition.y += dy;
+   m_d.m_vPosition.x += offset.x;
+   m_d.m_vPosition.y += offset.y;
    CalculateBuiltinOriginal();
-   UpdateStatusBarInfo();
 }
 
 Vertex2D Primitive::GetCenter() const
 {
    return {m_d.m_vPosition.x, m_d.m_vPosition.y};
-}
-
-void Primitive::PutCenter(const Vertex2D& pv)
-{
-   m_d.m_vPosition.x = pv.x;
-   m_d.m_vPosition.y = pv.y;
-   CalculateBuiltinOriginal();
-   UpdateStatusBarInfo();
 }
 
 //////////////////////////////
@@ -1662,239 +1497,82 @@ void Primitive::Load(IObjectReader& reader)
    CalculateBuiltinOriginal();
 }
 
-INT_PTR CALLBACK Primitive::ObjImportProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
+bool Primitive::LoadMesh(
+   const string &filename, const MeshUnits units, const bool importAbsolutePosition, const bool centerMesh, const bool importMaterial, const bool importAnimation, const bool doForsyth)
 {
-#ifndef __STANDALONE__
-   static Primitive *prim = nullptr;
-   switch (uMsg)
-   {
-   case WM_INITDIALOG:
-   {
-      static constexpr char nullstring[8] = {};
-
-      prim = (Primitive*)lParam;
-      SetDlgItemText(hwndDlg, IDC_FILENAME_EDIT, nullstring);
-      CheckDlgButton(hwndDlg, IDC_CONVERT_COORD_CHECK, BST_CHECKED);
-      CheckDlgButton(hwndDlg, IDC_REL_POSITION_RADIO, BST_CHECKED);
-      CheckDlgButton(hwndDlg, IDC_ABS_POSITION_RADIO, BST_UNCHECKED);
-      CheckDlgButton(hwndDlg, IDC_CENTER_MESH, BST_UNCHECKED);
-      CheckDlgButton(hwndDlg, IDC_IMPORT_NO_FORSYTH, BST_UNCHECKED);
-      EnableWindow(GetDlgItem(hwndDlg, IDOK), FALSE);
-      return TRUE;
-   }
-   case WM_CLOSE:
-   {
-      prim = nullptr;
-      EndDialog(hwndDlg, FALSE);
-      break;
-   }
-   case WM_COMMAND:
-      switch (HIWORD(wParam))
-      {
-      case BN_CLICKED:
-         switch (LOWORD(wParam))
-         {
-         case IDOK:
-         {
-            char szFileName[MAXSTRING];
-            szFileName[0] = '\0';
-
-            GetDlgItemText(hwndDlg, IDC_FILENAME_EDIT, szFileName, MAXSTRING);
-            if (szFileName[0] == '\0')
-            {
-               ShowError("No .obj file selected!");
-               break;
-            }
-            prim->m_mesh.Clear();
-            prim->m_d.m_use3DMesh = false;
-            prim->m_meshBuffer = nullptr;
-
-            constexpr bool flipTV = false;
-            const bool convertToLeftHanded = IsDlgButtonChecked(hwndDlg, IDC_CONVERT_COORD_CHECK) == BST_CHECKED;
-            const bool importAbsolutePosition = IsDlgButtonChecked(hwndDlg, IDC_ABS_POSITION_RADIO) == BST_CHECKED;
-            const bool centerMesh = IsDlgButtonChecked(hwndDlg, IDC_CENTER_MESH) == BST_CHECKED;
-            const bool importMaterial = IsDlgButtonChecked(hwndDlg, IDC_IMPORT_MATERIAL) == BST_CHECKED;
-            const bool importAnimation = IsDlgButtonChecked(hwndDlg, IDC_IMPORT_ANIM_SEQUENCE) == BST_CHECKED;
-            const bool doForsyth = IsDlgButtonChecked(hwndDlg, IDC_IMPORT_NO_FORSYTH) == BST_UNCHECKED;
-            if (importMaterial)
-            {
-               std::filesystem::path szMatName = std::filesystem::path(szFileName).replace_extension(".mtl");
-               Material * const mat = new Material();
-               if (ObjLoader::LoadMaterial(szMatName.string(), mat))
-               {
-                  prim->GetPTable()->AddMaterial(mat);
-                  prim->m_d.m_szMaterial = mat->m_name;
-               }
-            }
-            if (prim->m_mesh.LoadWavefrontObj(szFileName, flipTV, convertToLeftHanded))
-            {
-               if (importAbsolutePosition || centerMesh)
-               {
-                  for (size_t i = 0; i < prim->m_mesh.m_vertices.size(); i++)
-                  {
-                     prim->m_mesh.m_vertices[i].x -= prim->m_mesh.middlePoint.x;
-                     prim->m_mesh.m_vertices[i].y -= prim->m_mesh.middlePoint.y;
-                     prim->m_mesh.m_vertices[i].z -= prim->m_mesh.middlePoint.z;
-                  }
-                  if (importAbsolutePosition)
-                  {
-                     prim->m_d.m_vPosition.x = prim->m_mesh.middlePoint.x;
-                     prim->m_d.m_vPosition.y = prim->m_mesh.middlePoint.y;
-                     prim->m_d.m_vPosition.z = prim->m_mesh.middlePoint.z;
-                     prim->m_d.m_vSize.x = 1.0f;
-                     prim->m_d.m_vSize.y = 1.0f;
-                     prim->m_d.m_vSize.z = 1.0f;
-                  }
-               }
-               if (importAnimation)
-               {
-                  if (prim->m_mesh.LoadAnimation(szFileName, flipTV, convertToLeftHanded))
-                  {
-                     if (centerMesh)
-                     {
-                        for (size_t t = 0; t < prim->m_mesh.m_animationFrames.size(); t++)
-                        {
-                           for (size_t i = 0; i < prim->m_mesh.m_vertices.size(); i++)
-                           {
-                              prim->m_mesh.m_animationFrames[t].m_frameVerts[i].x -= prim->m_mesh.middlePoint.x;
-                              prim->m_mesh.m_animationFrames[t].m_frameVerts[i].y -= prim->m_mesh.middlePoint.y;
-                              prim->m_mesh.m_animationFrames[t].m_frameVerts[i].z -= prim->m_mesh.middlePoint.z;
-                           }
-                        }
-                     }
-                  }
-               }
-               prim->m_d.m_use3DMesh = true;
-               if (doForsyth)
-               {
-                   unsigned int* const tmp = reorderForsyth(prim->m_mesh.m_indices, (int)prim->m_mesh.NumVertices());
-                   if (tmp != nullptr)
-                   {
-                       memcpy(prim->m_mesh.m_indices.data(), tmp, prim->m_mesh.NumIndices() * sizeof(unsigned int));
-                       delete[] tmp;
-                   }
-               }
-               prim->UpdateStatusBarInfo();
-               prim = nullptr;
-               EndDialog(hwndDlg, TRUE);
-            }
-            else
-               ShowError("Unable to open file!");
-            break;
-         }
-         case IDC_BROWSE_BUTTON:
-         {
-            if (prim == nullptr)
-               break;
-
-            SetForegroundWindow(hwndDlg);
-
-            const string& szInitialDir = g_app->m_settings.GetRecentDir_ImportDir();
-
-            vector<string> szFileName;
-            if (g_pvp->OpenFileDialog(szInitialDir, szFileName, "Wavefront obj file (*.obj)\0*.obj\0", "obj", 0))
-            {
-               SetDlgItemText(hwndDlg, IDC_FILENAME_EDIT, szFileName[0].c_str());
-
-               size_t index = szFileName[0].find_last_of(PATH_SEPARATOR_CHAR);
-               if (index != string::npos)
-               {
-                  g_app->m_settings.SetRecentDir_ImportDir(szFileName[0].substr(0, index), false);
-                  index++;
-                  prim->m_d.m_meshFileName = szFileName[0].substr(index, szFileName[0].length() - index);
-               }
-
-               EnableWindow(GetDlgItem(hwndDlg, IDOK), TRUE);
-            }
-            break;
-         }
-         case IDCANCEL:
-         {
-            prim = nullptr;
-            EndDialog(hwndDlg, FALSE);
-            break;
-         }
-         }
-      }
-   }
-#endif
-   return FALSE;
-}
-
-bool Primitive::BrowseFor3DMeshFile()
-{
-#ifndef __STANDALONE__
-   DialogBoxParam(g_app->GetInstanceHandle(), MAKEINTRESOURCE(IDD_MESH_IMPORT_DIALOG), m_vpinball->GetHwnd(), ObjImportProc, (size_t)this);
-#endif
-#if 1
-   return false;
-#else
-   char szFileName[MAXSTRING];
-   szFileName[0] = '\0';
-   string szInitialDir;
-
-   OPENFILENAME ofn = {};
-   ofn.lStructSize = sizeof(OPENFILENAME);
-   ofn.hInstance = g_app->GetInstanceHandle();
-   ofn.hwndOwner = m_vpinball->m_hwnd;
-   // TEXT
-   ofn.lpstrFilter = "Wavefront obj file (*.obj)\0*.obj\0";
-   ofn.lpstrFile = szFileName;
-   ofn.nMaxFile = std::size(szFileName);
-   ofn.lpstrDefExt = "obj";
-   ofn.Flags = OFN_OVERWRITEPROMPT | OFN_HIDEREADONLY;
-
-   szInitialDir = g_app->m_settings.GetRecentDir_ImportDir();
-
-   ofn.lpstrInitialDir = szInitialDir.c_str();
-
-   const int ret = GetOpenFileName(&ofn);
-   if (ret == 0)
-      return false;
-
-   string filename(ofn.lpstrFile);
-   size_t index = filename.find_last_of(PATH_SEPARATOR_CHAR);
-   if (index != string::npos)
-   {
-      const string newInitDir(szFilename.substr(0, index));
-      g_app->m_settings.SetRecentDir_ImportDir(newInitDir, false);
-      index++;
-      m_d.m_meshFileName = filename.substr(index, filename.length() - index);
-   }
-
    m_mesh.Clear();
    m_d.m_use3DMesh = false;
-   SAFE_BUFFER_RELEASE(vertexBuffer);
+   m_meshBuffer = nullptr;
+   m_vertexBufferRegenerate = true;
 
-   bool flipTV = false;
-   bool convertToLeftHanded = false;
-   int ans = m_vpinball->MessageBox("Do you want to mirror the object?", "Convert coordinate system?", MB_YESNO | MB_DEFBUTTON2);
-   if (ans == IDYES)
+   if (importMaterial)
    {
-      convertToLeftHanded = true;
-   }
-   else
-   {
-      ans = m_vpinball->MessageBox("Do you want to convert texture coordinates?", "Confirm", MB_YESNO | MB_DEFBUTTON2);
-      if (ans == IDYES)
+      std::filesystem::path szMatName = std::filesystem::path(filename).replace_extension(".mtl");
+      Material *const mat = new Material();
+      if (ObjLoader::LoadMaterial(szMatName.string(), mat))
       {
-         flipTV = true;
+         GetPTable()->AddMaterial(mat);
+         m_d.m_szMaterial = mat->m_name;
       }
    }
-   if (m_mesh.LoadWavefrontObj(ofn.lpstrFile, flipTV, convertToLeftHanded))
+   if (!m_mesh.LoadWavefrontObj(filename, units))
+      return false;
+
+   // Meshes imported in meters are converted to VP units, so the primitive scale is reset to 1
+   if (units == MeshUnits::Meters)
    {
-      m_d.m_vPosition.x = m_mesh.middlePoint.x;
-      m_d.m_vPosition.y = m_mesh.middlePoint.y;
-      m_d.m_vPosition.z = m_mesh.middlePoint.z;
       m_d.m_vSize.x = 1.0f;
       m_d.m_vSize.y = 1.0f;
       m_d.m_vSize.z = 1.0f;
-      m_d.m_use3DMesh = true;
-      UpdateStatusBarInfo();
-      return true;
    }
-   return false;
-#endif
+
+   if (importAbsolutePosition || centerMesh)
+   {
+      for (size_t i = 0; i < m_mesh.m_vertices.size(); i++)
+      {
+         m_mesh.m_vertices[i].x -= m_mesh.middlePoint.x;
+         m_mesh.m_vertices[i].y -= m_mesh.middlePoint.y;
+         m_mesh.m_vertices[i].z -= m_mesh.middlePoint.z;
+      }
+      if (importAbsolutePosition)
+      {
+         m_d.m_vPosition.x = m_mesh.middlePoint.x;
+         m_d.m_vPosition.y = m_mesh.middlePoint.y;
+         m_d.m_vPosition.z = m_mesh.middlePoint.z;
+         m_d.m_vSize.x = 1.0f;
+         m_d.m_vSize.y = 1.0f;
+         m_d.m_vSize.z = 1.0f;
+      }
+   }
+   if (importAnimation)
+   {
+      if (m_mesh.LoadAnimation(filename.c_str(), units))
+      {
+         if (centerMesh)
+         {
+            for (size_t t = 0; t < m_mesh.m_animationFrames.size(); t++)
+            {
+               for (size_t i = 0; i < m_mesh.m_vertices.size(); i++)
+               {
+                  m_mesh.m_animationFrames[t].m_frameVerts[i].x -= m_mesh.middlePoint.x;
+                  m_mesh.m_animationFrames[t].m_frameVerts[i].y -= m_mesh.middlePoint.y;
+                  m_mesh.m_animationFrames[t].m_frameVerts[i].z -= m_mesh.middlePoint.z;
+               }
+            }
+         }
+      }
+   }
+   m_d.m_use3DMesh = true;
+   if (doForsyth)
+   {
+      unsigned int *const tmp = reorderForsyth(m_mesh.m_indices, (int)m_mesh.NumVertices());
+      if (tmp != nullptr)
+      {
+         memcpy(m_mesh.m_indices.data(), tmp, m_mesh.NumIndices() * sizeof(unsigned int));
+         delete[] tmp;
+      }
+   }
+   return true;
 }
 
 //////////////////////////////
@@ -1931,48 +1609,6 @@ STDMETHODIMP Primitive::put_NormalMap(BSTR newVal)
    m_d.m_szNormalMap = szImage;
 
    return S_OK;
-}
-
-STDMETHODIMP Primitive::get_MeshFileName(BSTR *pVal)
-{
-   *pVal = MakeWideBSTR(m_d.m_meshFileName);
-   return S_OK;
-}
-
-STDMETHODIMP Primitive::put_MeshFileName(BSTR newVal)
-{
-   m_d.m_meshFileName = MakeString(newVal);
-   return S_OK;
-}
-
-bool Primitive::LoadMeshDialog()
-{
-   STARTUNDO
-   const bool result = BrowseFor3DMeshFile();
-   m_vertexBufferRegenerate = true;
-   STOPUNDO
-
-   return result;
-}
-
-void Primitive::ExportMeshDialog()
-{
-#ifndef __STANDALONE__
-   const string& szInitialDir = g_app->m_settings.GetRecentDir_ImportDir();
-
-   vector<string> szFileName;
-   if (m_vpinball->SaveFileDialog(szInitialDir, szFileName, "Wavefront obj file (*.obj)\0*.obj\0", "obj", OFN_OVERWRITEPROMPT | OFN_HIDEREADONLY))
-   {
-      const size_t index = szFileName[0].find_last_of(PATH_SEPARATOR_CHAR);
-      if (index != string::npos)
-      {
-         const string newInitDir(szFileName[0].substr(0, index));
-         g_app->m_settings.SetRecentDir_ImportDir(newInitDir, false);
-      }
-
-      m_mesh.SaveWavefrontObj(szFileName[0], m_d.m_use3DMesh ? MakeString(m_wzName) : "Primitive"s);
-   }
-#endif
 }
 
 float Primitive::GetDepth(const Vertex3Ds& viewDir) const

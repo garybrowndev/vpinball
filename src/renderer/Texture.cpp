@@ -471,7 +471,10 @@ void BaseTexture::Update(std::shared_ptr<BaseTexture>& tex, const unsigned int w
          assert(tex->pitch() * tex->height() == width * height * pixelSize);
          if (tex->data() != image && image)
             memcpy(tex->data(), image, width * height * pixelSize);
-         tex->m_aliases.clear();
+         {
+            std::lock_guard lock(tex->m_aliasMutex);
+            tex->m_aliases.clear();
+         }
          if (g_pplayer)
             g_pplayer->m_renderer->m_renderDevice->m_texMan.SetDirty(tex.get());
          return;
@@ -586,8 +589,8 @@ bool BaseTexture::Save(const std::filesystem::path& filepath) const
 
 std::shared_ptr<BaseTexture> BaseTexture::GetAlias(Format format) const
 {
-   auto it = m_aliases.find(format);
-   if (it == m_aliases.end())
+   std::lock_guard lock(m_aliasMutex);
+   if (auto it = m_aliases.find(format); it == m_aliases.end())
    {
       std::shared_ptr<BaseTexture> alias = Convert(format);
       if (!m_isOpaqueDirty)
@@ -956,8 +959,8 @@ Texture* Texture::CreateFromObjectReader(IObjectReader& reader, PinTable* const 
             // The 'BITS' field is deprecated and only used in pre 10.8.1 files which were all BIFF streams so we can safely cast here
             BiffReader& br = (BiffReader&)reader;
 
-            // FIXME Assert until the old path based on IStorage is removed (still pending removal in undo & copy/paste), but this is already
-            // legacy deprecated and largely unused feature, moreover bmp are not supposed to enter this codeblock (no undo or copy/paste)
+            // This is a legacy deprecated and largely unused feature, moreover bmp are not supposed to enter this codeblock (no undo or copy/paste)
+            // so the reader is expected to always be backed by a POLE storage stream
             assert(br.m_stream != nullptr);
 
             // Old files used to store some bitmaps as a 32-bit SBGRA picture, we now (10.8.1+) always use a compressed file format. Convert here to simplify the code
@@ -992,6 +995,7 @@ Texture* Texture::CreateFromObjectReader(IObjectReader& reader, PinTable* const 
                else
                   copy_rgba_rgb<false>(dst, src, width); // copy without alpha channel
             }
+            delete[] tmp;
 
             // Convert to a lossless webp
             auto memStream = FreeImage_OpenMemory();

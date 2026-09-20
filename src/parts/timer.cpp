@@ -5,8 +5,6 @@
 
 #include "core/VPApp.h"
 #include "parts/Collection.h"
-#include "ui/win/sur.h"
-#include "ui/win/WinEditor.h"
 
 
 Timer::~Timer()
@@ -43,58 +41,15 @@ void Timer::WriteRegDefaults()
 #undef LinkProp
 }
 
-void Timer::SetObjectPos()
+void Timer::Translate(const Vertex2D& offset)
 {
-   m_vpinball->SetObjectPosCur(m_d.m_v.x, m_d.m_v.y);
-}
-
-void Timer::MoveOffset(const float dx, const float dy)
-{
-   m_d.m_v.x += dx;
-   m_d.m_v.y += dy;
+   m_d.m_v.x += offset.x;
+   m_d.m_v.y += offset.y;
 }
 
 Vertex2D Timer::GetCenter() const
 {
    return m_d.m_v;
-}
-
-void Timer::PutCenter(const Vertex2D& pv)
-{
-   m_d.m_v = pv;
-}
-
-void Timer::UIRenderPass1(Sur * const psur)
-{
-}
-
-void Timer::UIRenderPass2(Sur * const psur)
-{
-   psur->SetFillColor(-1);//RGB(192,192,192));
-   psur->SetBorderColor(RGB(0, 0, 0), false, 0);
-   psur->SetLineColor(RGB(0, 0, 0), false, 0);
-
-   psur->SetObject(this);
-
-   psur->Ellipse(m_d.m_v.x, m_d.m_v.y, 18);
-
-   psur->Ellipse(m_d.m_v.x, m_d.m_v.y, 15);
-
-   for (int i = 0; i < 12; i++)
-   {
-      const float angle = (float)(M_PI*2.0 / 12.0)*(float)i;
-      const float sn = sinf(angle);
-      const float cs = cosf(angle);
-      psur->Line(m_d.m_v.x + sn*9.0f, m_d.m_v.y - cs*9.0f, m_d.m_v.x + sn * 15.0f, m_d.m_v.y - cs*15.0f);
-   }
-
-   //angle = ((PI*2)/24) * 3;
-   psur->Line(m_d.m_v.x, m_d.m_v.y, m_d.m_v.x + 10.5f, m_d.m_v.y - 7.5f);
-
-}
-
-void Timer::RenderBlueprint(Sur *psur, const bool solid)
-{
 }
 
 STDMETHODIMP Timer::InterfaceSupportsErrorInfo(REFIID riid)

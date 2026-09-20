@@ -8,13 +8,36 @@
 #include "core/VPApp.h"
 #include "parts/Material.h"
 #include "parts/pintable.h"
+#include "ui/VPXFileFeedback.h"
+#include "ui/live/LiveUI.h"
 #include "ui/win/WinEditor.h"
 #include "utils/BiffReader.h"
+#include "utils/color.h"
 
 #include "pole/pole.h"
 
 #include <iostream>
 #include <fstream>
+
+
+// A Visual Pinball table is an OLE compound file (CFB). Validate the signature so passing a
+// non-table file (wrong type, or a path typo resolving to something else) reports a clear error
+// instead of loading into a black screen.
+static bool IsTableFile(const std::filesystem::path& path)
+{
+   std::ifstream f(path, std::ios::binary);
+   if (!f.is_open())
+      return false;
+   unsigned char sig[8] = {};
+   f.read(reinterpret_cast<char*>(sig), sizeof(sig));
+   static constexpr unsigned char cfb[8] = { 0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1 };
+   if (f.gcount() != static_cast<std::streamsize>(sizeof(sig)))
+      return false;
+   for (size_t k = 0; k < sizeof(sig); ++k)
+      if (sig[k] != cfb[k])
+         return false;
+   return true;
+}
 
 
 ShowInfoAndExitCommand::ShowInfoAndExitCommand(const string& title, const string& message, int exitCode)
@@ -47,7 +70,8 @@ CComObject<PinTable>* TableBasedCommand::LoadTable()
    CComObject<PinTable>* table;
    CComObject<PinTable>::CreateInstance(&table);
    table->AddRef();
-   table->LoadGameFromFilename(m_tableFilename.string());
+   VPXFileFeedback feedback;
+   table->LoadGameFromFilename(m_tableFilename.string(), feedback);
    if (!m_tableIniFileName.empty() && FileExists(m_tableIniFileName))
       table->SetSettingsFileName(m_tableIniFileName);
    return table;
@@ -268,8 +292,40 @@ LiveEditCommand::LiveEditCommand(const std::filesystem::path& tableFilename)
 
 void LiveEditCommand::Execute()
 {
-   CComObject<PinTable>* table = LoadTable();
+   CComObject<PinTable>* table;
+   CComObject<PinTable>::CreateInstance(&table);
+   table->AddRef();
+   VPXFileFeedback feedback;
+
+   // Try to load the requested table, if a filename was provided
+   bool loadFailed = false;
+   if (!m_tableFilename.empty())
+   {
+      HRESULT hr = E_FAIL;
+      if (IsTableFile(m_tableFilename))
+         hr = table->LoadGameFromFilename(m_tableFilename, feedback);
+      // Same as the Win32 editor: hash/corrupt content errors still keep the loaded table
+      loadFailed = FAILED(hr) && (hr != APPX_E_BLOCK_HASH_INVALID) && (hr != APPX_E_CORRUPT_CONTENT);
+   }
+
+   if (m_tableFilename.empty() || loadFailed)
+   {
+      // No table was provided, or loading it failed: fall back to the default table (same as 'New Table' in the editor)
+      table->m_glassTopHeight = table->m_glassBottomHeight = 210;
+      for (int i = 0; i < 16; i++)
+         table->m_rgcolorcustom[i] = RGB(0, 0, 0);
+      table->LoadGameFromFilename(g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, "blankTable.vpx"), feedback);
+      table->m_title = "Table1"s;
+      table->m_settings.SetIniPath(std::filesystem::path());
+      table->m_filename.clear();
+   }
+
+   if (!m_tableIniFileName.empty() && FileExists(m_tableIniFileName))
+      table->SetSettingsFileName(m_tableIniFileName);
+
    auto player = std::make_unique<Player>(table, Player::PlayMode::FullEdit);
+   if (loadFailed)
+      player->m_liveUI->PushNotification("Failed to load table '" + m_tableFilename.string() + "', starting with a new table"s, 10000);
    player->GameLoop();
    player = nullptr;
    table->Release();
@@ -331,9 +387,7 @@ enum option_names
    OPTION_EXTMINIMIZED,
    OPTION_EDIT,
 #endif
-#ifdef _DEBUG
    OPTION_LIVE_EDIT,
-#endif
    OPTION_PLAY,
    OPTION_POVEDIT,
    OPTION_POV,
@@ -379,9 +433,7 @@ static const CommandLineOption options[] = {
    { OPTION_EXTMINIMIZED, "ExtMinimized"s, "Start the windows editor in the 'invisible' minimized window mode, but with enabled Pause Menu"s },
    { OPTION_EDIT, "Edit"s, "[filename]  Load file into VP"s },
 #endif
-#ifdef _DEBUG
-   { OPTION_LIVE_EDIT, "LiveEdit"s, "[opt filename]  Start in live editor mode. if a filename is provided, loads it as the table to edit"s },
-#endif
+   { OPTION_LIVE_EDIT, "LiveEdit"s, "[opt filename]  Start in live editor mode. if a filename is provided, loads it as the table to edit. WARNING Unstable feature only provided for early testing"s },
    { OPTION_PLAY, "Play"s, "[filename]  Load and play file"s },
    { OPTION_POVEDIT, "PovEdit"s, "[filename]  Load and run file in live editing mode, then export new pov on exit"s },
    { OPTION_POV, "Pov"s, "[filename]  Load, export pov and close"s },
@@ -446,25 +498,6 @@ void CommandLineProcessor::OnCommandLineError(const string& title, const string&
    #else
       std::cout << title << "\n\n" << message << "\n\n";
    #endif
-}
-
-// A Visual Pinball table is an OLE compound file (CFB). Validate the signature so passing a
-// non-table file (wrong type, or a path typo resolving to something else) reports a clear error
-// instead of loading into a black screen.
-static bool IsTableFile(const std::filesystem::path& path)
-{
-   std::ifstream f(path, std::ios::binary);
-   if (!f.is_open())
-      return false;
-   unsigned char sig[8] = {};
-   f.read(reinterpret_cast<char*>(sig), sizeof(sig));
-   static constexpr unsigned char cfb[8] = { 0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1 };
-   if (f.gcount() != static_cast<std::streamsize>(sizeof(sig)))
-      return false;
-   for (size_t k = 0; k < sizeof(sig); ++k)
-      if (sig[k] != cfb[k])
-         return false;
-   return true;
 }
 
 void CommandLineProcessor::ProcessCommandLine()
@@ -645,12 +678,13 @@ void CommandLineProcessor::ProcessCommandLine(int nArgs, const char* szArglist[]
          commands.push_back(std::make_unique<ShowInfoAndExitCommand>("", "Visual Pinball "s + VP_VERSION_STRING_FULL_LITERAL, 0));
          break;
 
-      #ifdef _DEBUG
       case OPTION_LIVE_EDIT:
          if (i + 1 < nArgs)
          {
             const std::filesystem::path tableFileName = GetPathFromArg(szArglist[i + 1]);
-            if (FileExists(tableFileName))
+            // Take the next argument as the table filename unless it is another option. A missing or
+            // invalid file is still passed along so the command can report the load failure.
+            if (FileExists(tableFileName) || ((szArglist[i + 1][0] != '-') && (szArglist[i + 1][0] != '/')))
             {
                commands.push_back(std::make_unique<LiveEditCommand>(tableFileName));
                i++;
@@ -665,7 +699,6 @@ void CommandLineProcessor::ProcessCommandLine(int nArgs, const char* szArglist[]
             commands.push_back(std::make_unique<LiveEditCommand>());
          }
          break;
-      #endif
 
       case OPTION_POVEDIT:
       case OPTION_PLAY:

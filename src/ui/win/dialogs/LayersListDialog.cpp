@@ -8,6 +8,7 @@
 #include "parts/Collection.h"
 #include "parts/PartGroup.h"
 #include "parts/pintable.h"
+#include "ui/win/PinTableWnd.h"
 #include "ui/win/resource.h"
 #include "ui/win/WinEditor.h"
 
@@ -122,6 +123,16 @@ BOOL LayersListDialog::PreTranslateMessage(MSG& msg)
    return IsDialogMessage(msg);
 }
 
+void LayersListDialog::OnOK()
+{
+   // Don't call CDialog::OnOK() as this modeless dialog is hosted inside a docked pane, and the default implementation would destroy it
+}
+
+void LayersListDialog::OnCancel()
+{
+   // Don't call CDialog::OnCancel() as this modeless dialog is hosted inside a docked pane, and the default implementation would destroy it
+}
+
 BOOL LayersListDialog::OnCommand(WPARAM wParam, LPARAM lParam)
 {
    if (m_activeTable == nullptr)
@@ -138,9 +149,9 @@ BOOL LayersListDialog::OnCommand(WPARAM wParam, LPARAM lParam)
    case IDC_SELECT:
       if (m_activeTable && GetSelectedPartGroup())
       {
-         m_activeTable->ClearMultiSel();
-         m_activeTable->AddMultiSel(GetSelectedPartGroup(), true, false, false);
-         m_activeTable->RefreshProperties();
+         m_activeTable->m_tableEditor->ClearMultiSel();
+         m_activeTable->m_tableEditor->AddMultiSel(m_activeTable->m_tableEditor->GetUIPart(GetSelectedPartGroup()), true, false, false);
+         m_activeTable->m_tableEditor->RefreshProperties();
          m_activeTable->SetDirtyDraw();
       }
       return TRUE;
@@ -153,9 +164,9 @@ BOOL LayersListDialog::OnCommand(WPARAM wParam, LPARAM lParam)
             m_activeTable->GetUniqueName(ItemTypeEnum::eItemPartGroup, partGroup->GetIScriptable()->m_wzName);
             m_activeTable->AddPart(partGroup);
             partGroup->SetPartGroup(GetSelectedPartGroup());
-            m_activeTable->BeginUndo();
-            m_activeTable->m_undo.MarkForCreate(partGroup);
-            m_activeTable->EndUndo();
+            m_activeTable->m_tableEditor->BeginUndo();
+            m_activeTable->m_tableEditor->MarkForCreate(partGroup);
+            m_activeTable->m_tableEditor->EndUndo();
             Update();
          }
       }
@@ -164,8 +175,8 @@ BOOL LayersListDialog::OnCommand(WPARAM wParam, LPARAM lParam)
    case IDC_DELETE_LAYER_BUTTON:
       if (PartGroup* toDelete = GetSelectedPartGroup(); m_activeTable && toDelete)
       {
-         m_activeTable->SelectItem(toDelete);
-         m_activeTable->OnDelete();
+         m_activeTable->m_tableEditor->SelectItem(toDelete);
+         m_activeTable->m_tableEditor->DeleteSelection();
       }
       return TRUE;
 
@@ -189,7 +200,7 @@ BOOL LayersListDialog::OnCommand(WPARAM wParam, LPARAM lParam)
 
 void LayersListDialog::AssignToSelectedGroup()
 {
-   if (m_activeTable == nullptr || m_activeTable->MultiSelIsEmpty())
+   if (m_activeTable == nullptr || m_activeTable->m_tableEditor->MultiSelIsEmpty())
       return;
 
    PartGroup* group = GetSelectedPartGroup();
@@ -199,7 +210,7 @@ void LayersListDialog::AssignToSelectedGroup()
       return;
    }
 
-   m_activeTable->AssignSelectionToPartGroup(group);
+   m_activeTable->m_tableEditor->AssignSelectionToPartGroup(group);
 }
 
 void LayersListDialog::SetActiveTable(PinTable* ptable)
@@ -212,8 +223,8 @@ void LayersListDialog::SetActiveTable(PinTable* ptable)
       {
          if (m_activeTable)
          {
-            ISelect* const sel = m_activeTable->m_vmultisel.ElementAt(0);
-            m_layerTreeView.Select(sel ? sel->GetIEditable() : nullptr);
+            IWinUIPart* const sel = m_activeTable->m_tableEditor->GetSelectedItem();
+            m_layerTreeView.Select(sel ? sel->GetEditable() : nullptr);
          }
          else
          {
@@ -229,8 +240,8 @@ void LayersListDialog::Update()
    m_layerTreeView.Update();
    if (IsSyncedOnSelection())
    {
-      ISelect* const sel = m_activeTable->m_vmultisel.ElementAt(0);
-      m_layerTreeView.Select(sel ? sel->GetIEditable() : nullptr);
+      IWinUIPart* const sel = m_activeTable->m_tableEditor->GetSelectedItem();
+      m_layerTreeView.Select(sel ? sel->GetEditable() : nullptr);
    }
    UpdateCommands();
 }
@@ -424,17 +435,16 @@ void LayerTreeView::Update()
       {
          bool show = false, hide = false;
          for (auto e : m_activeTable->GetParts())
-            if (e->GetPartGroup() == node.editable && e->GetISelect())
+            if (e->GetPartGroup() == node.editable)
             {
-               show |= e->m_uiVisible;
-               hide |= !e->m_uiVisible;
+               show |= e->IsUIVisible(false);
+               hide |= !e->IsUIVisible(false);
             }
          state = (show && !hide) ? 1 : (!show && hide) ? 2 : 3;
       }
       else
       {
-         const ISelect* const select = node.editable->GetISelect();
-         state = (select && select->IsUIVisible()) ? 1 : (select && !select->IsUIVisible()) ? 2 : 3;
+         state = node.editable->IsUIVisible(false) ? 1 : 2;
       }
       TreeView_SetItemState(GetHwnd(), node.item, INDEXTOSTATEIMAGEMASK(state), TVIS_STATEIMAGEMASK);
       globalVisibility = globalVisibility == 3 ? 3 : globalVisibility == -1 ? state : (globalVisibility != state) ? 3 : globalVisibility;
@@ -563,7 +573,7 @@ LRESULT LayerTreeView::WndProc(UINT msg, WPARAM wparam, LPARAM lparam)
             PartGroup* group = (hSelectedDrop == m_hRootItem) ? nullptr 
                              : (dropTarget->editable->GetItemType() == eItemPartGroup) ? static_cast<PartGroup*>(dropTarget->editable)
                              : dropTarget->editable->GetPartGroup();
-            m_activeTable->BeginUndo();
+            m_activeTable->m_tableEditor->BeginUndo();
             for (const auto& dragItem : m_DragItems)
             {
                auto existing = std::ranges::find_if(m_content, [dragItem](const TreeEntry& te) { return te.item == dragItem; });
@@ -574,7 +584,7 @@ LRESULT LayerTreeView::WndProc(UINT msg, WPARAM wparam, LPARAM lparam)
                existing->editable->SetPartGroup(group);
                Select(existing->editable);
             }
-            m_activeTable->EndUndo();
+            m_activeTable->m_tableEditor->EndUndo();
             Update();
          }
          m_DragItems.clear();
@@ -664,8 +674,8 @@ LRESULT LayerTreeView::OnNMClick(LPNMHDR lpnmh)
    {
       if (ht.hItem == m_hRootItem)
       {
-         bool visible = std::ranges::find_if(m_content, [](const TreeEntry& te) { return !te.editable->m_uiVisible; }) != m_content.end();
-         std::ranges::for_each(m_content, [visible](const TreeEntry& te) { te.editable->m_uiVisible = visible; });
+         bool visible = std::ranges::find_if(m_content, [](const TreeEntry& te) { return !te.editable->IsUIVisible(false); }) != m_content.end();
+         std::ranges::for_each(m_content, [visible](const TreeEntry& te) { te.editable->SetUIVisible(visible); });
       }
       else
       {
@@ -674,7 +684,7 @@ LRESULT LayerTreeView::OnNMClick(LPNMHDR lpnmh)
          {
             auto selected = selectedItem->editable;
             if (selected->GetItemType() != eItemPartGroup)
-               selected->m_uiVisible = !selected->m_uiVisible;
+               selected->SetUIVisible(!selected->IsUIVisible(false));
             else
             {
                bool visible = std::ranges::find_if(m_content, 
@@ -684,7 +694,7 @@ LRESULT LayerTreeView::OnNMClick(LPNMHDR lpnmh)
                      while (pg != nullptr && pg != selected)
                         pg = pg->GetPartGroup();
                      if (pg == selected)
-                        return !te.editable->m_uiVisible; 
+                        return !te.editable->IsUIVisible(false); 
                      return false;
                   }) != m_content.end();
                std::ranges::for_each(m_content,
@@ -694,7 +704,7 @@ LRESULT LayerTreeView::OnNMClick(LPNMHDR lpnmh)
                      while (pg != nullptr && pg != selected)
                         pg = pg->GetPartGroup();
                      if (pg == selected)
-                        te.editable->m_uiVisible = visible;
+                        te.editable->SetUIVisible(visible);
                   });
             }
          }
@@ -729,19 +739,20 @@ LRESULT LayerTreeView::OnNMDBClick(LPNMHDR lpnmh)
       return FALSE;
    auto selected = selectedItem->editable;
 
-   m_activeTable->ClearMultiSel();
+   m_activeTable->m_tableEditor->ClearMultiSel();
    if (selected->GetItemType() == eItemPartGroup)
-      std::ranges::for_each(m_content,[&, selected](const TreeEntry& te)
-         { 
+      std::ranges::for_each(m_content,
+         [&, selected](const TreeEntry& te)
+         {
             PartGroup* pg = te.editable->GetPartGroup();
             while (pg != nullptr && pg != selected)
                pg = pg->GetPartGroup();
             if (pg == selected)
-               m_activeTable->AddMultiSel(te.editable->GetISelect(), true, false, false);
+               m_activeTable->m_tableEditor->AddMultiSel(m_activeTable->m_tableEditor->GetUIPart(te.editable), true, false, false);
          });
    else
-      m_activeTable->AddMultiSel(selected->GetISelect(), true, false, false);
-   m_activeTable->RefreshProperties();
+      m_activeTable->m_tableEditor->AddMultiSel(m_activeTable->m_tableEditor->GetUIPart(selected), true, false, false);
+   m_activeTable->m_tableEditor->RefreshProperties();
    m_activeTable->SetDirtyDraw();
    return TRUE;
 }

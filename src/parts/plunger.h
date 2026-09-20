@@ -109,7 +109,6 @@ class Plunger :
    public IProvideClassInfo2Impl<&CLSID_Plunger, &DIID_IPlungerEvents, &LIBID_VPinballLib>,
    //public CComObjectRootEx<CComSingleThreadModel>,
 
-   public ISelect,
    public IEditable,
    public IHitable,
    public IRenderable,
@@ -144,15 +143,12 @@ public:
    Plunger() { }
    virtual ~Plunger();
 
-   STANDARD_EDITABLE_DECLARES(Plunger, eItemPlunger, PLUNGER, VIEW_PLAYFIELD)
+   STANDARD_EDITABLE_DECLARES(Plunger, eItemPlunger, PLUNGER)
 
-   void MoveOffset(const float dx, const float dy) final;
-   void SetObjectPos() final;
+   void Translate(const Vertex2D &offset) final;
    // Multi-object manipulation
    Vertex2D GetCenter() const final;
-   void PutCenter(const Vertex2D &pv) final;
    void SetDefaultPhysics(const bool fromMouseClick) final;
-   ItemTypeEnum HitableGetItemType() const final { return eItemPlunger; }
 
    void WriteRegDefaults() final;
 

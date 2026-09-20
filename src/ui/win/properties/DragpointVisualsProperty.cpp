@@ -7,7 +7,7 @@
 #include "ui/win/resource.h"
 
 
-DragpointVisualsProperty::DragpointVisualsProperty(int id, const VectorProtected<ISelect> *pvsel) : BasePropertyDialog(id, pvsel), m_id(id)
+DragpointVisualsProperty::DragpointVisualsProperty(int id, const vector<IWinUIPart *> *pvsel) : BasePropertyDialog(id, pvsel), m_id(id)
 {
     m_posXEdit.SetDialog(this);
     m_posYEdit.SetDialog(this);
@@ -20,11 +20,11 @@ void DragpointVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
 {
     const DragPoint *prev = nullptr;
 
-    for (int i = 0; i < m_pvsel->size(); i++)
+    for (int i = 0; i < SelCount(); i++)
     {
-        if ((m_pvsel->ElementAt(i) == nullptr) || (m_pvsel->ElementAt(i)->GetItemType() != eItemDragPoint))
+        if ((SelAt(i) == nullptr) || (SelAt(i)->GetItemType() != eItemDragPoint))
             continue;
-        const DragPoint * const dpoint = (DragPoint *)m_pvsel->ElementAt(i);
+        const DragPoint * const dpoint = SelAt(i)->GetDragPoint();
 
         PropertyDialog::SetCheckboxState(GetDlgItem(3), dpoint->m_smooth);
         if (prev!=nullptr)
@@ -67,36 +67,36 @@ void DragpointVisualsProperty::UpdateVisuals(const int dispid/*=-1*/)
 
 void DragpointVisualsProperty::UpdateProperties(const int dispid)
 {
-    for (int i = 0; i < m_pvsel->size(); i++)
+    for (int i = 0; i < SelCount(); i++)
     {
-        if ((m_pvsel->ElementAt(i) == nullptr) || (m_pvsel->ElementAt(i)->GetItemType() != eItemDragPoint))
+        if ((SelAt(i) == nullptr) || (SelAt(i)->GetItemType() != eItemDragPoint))
             continue;
-        DragPoint * const dpoint = (DragPoint *)m_pvsel->ElementAt(i);
+        DragPoint * const dpoint = SelAt(i)->GetDragPoint();
 
         switch (dispid)
         {
             case 1:
                 if (m_posXEdit.IsWindow() && !m_posXEdit.GetWindowText().IsEmpty())
-                    CHECK_UPDATE_ITEM(dpoint->m_v.x, PropertyDialog::GetFloatTextbox(m_posXEdit), dpoint);
+                    CHECK_UPDATE_ITEM(dpoint->m_v.x, PropertyDialog::GetFloatTextbox(m_posXEdit), dpoint->GetIEditable());
                 break;
             case 2:
                 if (m_posYEdit.IsWindow() && !m_posYEdit.GetWindowText().IsEmpty())
-                    CHECK_UPDATE_ITEM(dpoint->m_v.y, PropertyDialog::GetFloatTextbox(m_posYEdit), dpoint);
+                    CHECK_UPDATE_ITEM(dpoint->m_v.y, PropertyDialog::GetFloatTextbox(m_posYEdit), dpoint->GetIEditable());
                 break;
             case 4:
-                CHECK_UPDATE_ITEM(dpoint->m_autoTexture, PropertyDialog::GetCheckboxState(GetDlgItem(4)), dpoint);
+                CHECK_UPDATE_ITEM(dpoint->m_autoTexture, PropertyDialog::GetCheckboxState(GetDlgItem(4)), dpoint->GetIEditable());
                 break;
             case 5:
                 if (m_textureCoordEdit.IsWindow() && !m_textureCoordEdit.GetWindowText().IsEmpty())
-                    CHECK_UPDATE_ITEM(dpoint->m_texturecoord, PropertyDialog::GetFloatTextbox(m_textureCoordEdit), dpoint);
+                    CHECK_UPDATE_ITEM(dpoint->m_texturecoord, PropertyDialog::GetFloatTextbox(m_textureCoordEdit), dpoint->GetIEditable());
                 break;
             case 6:
                 if (m_heightOffsetEdit.IsWindow() && !m_heightOffsetEdit.GetWindowText().IsEmpty())
-                    CHECK_UPDATE_ITEM(dpoint->m_v.z, PropertyDialog::GetFloatTextbox(m_heightOffsetEdit), dpoint);
+                    CHECK_UPDATE_ITEM(dpoint->m_v.z, PropertyDialog::GetFloatTextbox(m_heightOffsetEdit), dpoint->GetIEditable());
                 break;
             case IDC_CALC_HEIGHT_EDIT:
                 if (m_realHeightEdit.IsWindow() && !m_realHeightEdit.GetWindowText().IsEmpty())
-                    CHECK_UPDATE_ITEM(dpoint->m_calcHeight, PropertyDialog::GetFloatTextbox(m_realHeightEdit), dpoint);
+                    CHECK_UPDATE_ITEM(dpoint->m_calcHeight, PropertyDialog::GetFloatTextbox(m_realHeightEdit), dpoint->GetIEditable());
                 break;
             default:
                 break;
@@ -167,20 +167,20 @@ BOOL DragpointVisualsProperty::OnCommand(WPARAM wParam, LPARAM lParam)
     {
         case IDC_POINT_COPY_BUTTON:
         {
-            ISelect *const pItem = m_pvsel->ElementAt(0);
-            if ((m_pvsel->size() == 1) && (pItem->GetItemType() == eItemDragPoint))
+            IWinUIPart *const pItem = SelAt(0);
+            if ((SelCount() == 1) && (pItem->GetItemType() == eItemDragPoint))
             {
-                DragPoint * const pPoint = (DragPoint *)pItem;
+                DragPoint * const pPoint = pItem->GetDragPoint();
                 pPoint->Copy();
             }
             return TRUE;
         }
         case IDC_POINT_PASTE_BUTTON:
         {
-            ISelect *const pItem = m_pvsel->ElementAt(0);
-            if ((m_pvsel->size() == 1) && (pItem->GetItemType() == eItemDragPoint))
+            IWinUIPart *const pItem = SelAt(0);
+            if ((SelCount() == 1) && (pItem->GetItemType() == eItemDragPoint))
             {
-                DragPoint * const pPoint = (DragPoint *)pItem;
+                DragPoint * const pPoint = pItem->GetDragPoint();
                 pPoint->Paste();
             }
             return TRUE;
@@ -200,12 +200,14 @@ BOOL DragpointVisualsProperty::OnCommand(WPARAM wParam, LPARAM lParam)
         {
             if (dispID == 3)
             {
-                for (int i = 0; i < m_pvsel->size(); i++)
+                for (int i = 0; i < SelCount(); i++)
                 {
-                    if ((m_pvsel->ElementAt(i) == nullptr) || (m_pvsel->ElementAt(i)->GetItemType() != eItemDragPoint))
+                    if ((SelAt(i) == nullptr) || (SelAt(i)->GetItemType() != eItemDragPoint))
                         continue;
-                    DragPoint * const dpoint = (DragPoint *)m_pvsel->ElementAt(i);
-                    dpoint->DoCommand(ID_POINTMENU_SMOOTH, 0, 0);
+                    DragPoint * const dpoint = SelAt(i)->GetDragPoint();
+                    PropertyDialog::StartUndo(dpoint->GetIEditable());
+                    dpoint->ToggleSmooth();
+                    PropertyDialog::EndUndo(dpoint->GetIEditable());
                 }
             }
             UpdateProperties(dispID);

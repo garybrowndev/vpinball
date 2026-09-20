@@ -9,8 +9,6 @@
 #include "renderer/Renderer.h"
 #include "renderer/Shader.h"
 #include "renderer/trace.h"
-#include "ui/win/sur.h"
-#include "ui/win/WinEditor.h"
 #include "utils/color.h"
 
 
@@ -45,7 +43,6 @@ void Textbox::SetDefaults(const bool fromMouseClick)
    LinkProp(m_d.m_fontcolor, FontColor);
    LinkProp(m_d.m_transparent, Transparent);
    LinkProp(m_d.m_isDMD, DMD);
-   LinkProp(m_d.m_backcolor, BackColor);
    LinkProp(m_d.m_intensity_scale, IntensityScale);
    LinkProp(m_d.m_text, Text);
    LinkProp(m_d.m_talign, TextAlignment);
@@ -74,7 +71,6 @@ void Textbox::WriteRegDefaults()
    LinkProp(m_d.m_fontcolor, FontColor);
    LinkProp(m_d.m_transparent, Transparent);
    LinkProp(m_d.m_isDMD, DMD);
-   LinkProp(m_d.m_backcolor, BackColor);
    LinkProp(m_d.m_intensity_scale, IntensityScale);
    LinkProp(m_d.m_text, Text);
    LinkProp(m_d.m_talign, TextAlignment);
@@ -167,45 +163,13 @@ STDMETHODIMP Textbox::InterfaceSupportsErrorInfo(REFIID riid)
    return S_FALSE;
 }
 
-void Textbox::UIRenderPass1(Sur * const psur)
+void Textbox::Translate(const Vertex2D &offset)
 {
-   psur->SetBorderColor(-1, false, 0);
-   psur->SetFillColor(m_d.m_backcolor);
-   psur->SetObject(this);
+   m_d.m_v1.x += offset.x;
+   m_d.m_v1.y += offset.y;
 
-   psur->Rectangle(m_d.m_v1.x, m_d.m_v1.y, m_d.m_v2.x, m_d.m_v2.y);
-}
-
-void Textbox::UIRenderPass2(Sur * const psur)
-{
-   psur->SetBorderColor(RGB(0, 0, 0), false, 0);
-   psur->SetFillColor(-1);
-   psur->SetObject(this);
-   psur->SetObject(nullptr);
-
-   psur->Rectangle(m_d.m_v1.x, m_d.m_v1.y, m_d.m_v2.x, m_d.m_v2.y);
-}
-
-void Textbox::SetObjectPos()
-{
-    m_vpinball->SetObjectPosCur(m_d.m_v1.x, m_d.m_v1.y);
-}
-
-void Textbox::MoveOffset(const float dx, const float dy)
-{
-   m_d.m_v1.x += dx;
-   m_d.m_v1.y += dy;
-
-   m_d.m_v2.x += dx;
-   m_d.m_v2.y += dy;
-}
-
-void Textbox::PutCenter(const Vertex2D& pv)
-{
-   m_d.m_v2.x = pv.x + m_d.m_v2.x - m_d.m_v1.x;
-   m_d.m_v2.y = pv.y + m_d.m_v2.y - m_d.m_v1.y;
-
-   m_d.m_v1 = pv;
+   m_d.m_v2.x += offset.x;
+   m_d.m_v2.y += offset.y;
 }
 
 
@@ -307,11 +271,11 @@ void Textbox::Render(const unsigned int renderMask)
          { vx1, vy1, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f }
       };
 
-      m_renderer->UpdateDesktopBackdropShaderMatrix(true, false, true);
-
-      PinballPlugin::ResURIResolver::DisplayState dmd = g_pplayer->m_resURIResolver.GetDmdDisplayState("ctrl://default/display"s);
+      PinballPlugin::ResURIResolver::DisplayState dmd = g_pplayer->m_resURIResolver.GetDisplayState("ctrl://default/display?dmd_only=1"s);
       if (dmd.state.frame == nullptr)
          return;
+
+      m_renderer->UpdateDesktopBackdropShaderMatrix(true, false, true);
       if (!m_hasUploadedFrame || (m_texture == nullptr) || (dmd.state.frameId != m_uploadedFrameId) || (*dmd.source != m_uploadedSrc))
       {
          BaseTexture::Update(m_texture, dmd.source->width, dmd.source->height,
@@ -325,7 +289,7 @@ void Textbox::Render(const unsigned int renderMask)
       }
       // DMD support for textbox is for backward compatibility only, so only use compatibility style #0
       const vec3 color = m_texture->m_format == BaseTexture::BW_FP32 ? convertColor(m_d.m_fontcolor) : vec3(1.f, 1.f, 1.f);
-      m_renderer->SetupDMDRender(0, true, color, m_d.m_intensity_scale, m_texture, 1.f, Renderer::Reinhard, nullptr,
+      m_renderer->SetupDMDRender(0, true, color, m_d.m_intensity_scale, m_texture, 1.f, 0.f, Renderer::Reinhard, nullptr,
          vec4(0.f, 0.f, 0.f, 0.f), vec3(1.f, 1.f, 1.f), 0.f,
          nullptr, vec4(), vec3(0.f, 0.f, 0.f));
       m_renderer->m_renderDevice->DrawTexturedQuad(m_renderer->m_renderDevice->m_DMDShader, vertices);
@@ -497,7 +461,11 @@ STDMETHODIMP Textbox::get_BackColor(OLE_COLOR *pVal)
 
 STDMETHODIMP Textbox::put_BackColor(OLE_COLOR newVal)
 {
-   m_d.m_backcolor = newVal;
+   if (m_d.m_backcolor != newVal)
+   {
+      m_textureDirty = true;
+      m_d.m_backcolor = newVal;
+   }
    return S_OK;
 }
 
@@ -509,7 +477,11 @@ STDMETHODIMP Textbox::get_FontColor(OLE_COLOR *pVal)
 
 STDMETHODIMP Textbox::put_FontColor(OLE_COLOR newVal)
 {
-   m_d.m_fontcolor = newVal;
+   if (m_d.m_fontcolor != newVal)
+   {
+      m_textureDirty = true;
+      m_d.m_fontcolor = newVal;
+   }
    return S_OK;
 }
 
@@ -542,12 +514,6 @@ STDMETHODIMP Textbox::get_Font(IFontDisp **pVal)
 #endif
 }
 
-STDMETHODIMP Textbox::put_Font(IFontDisp *newVal)
-{
-   // Does anybody use this way of setting the font?  Need to add to idl file.
-   return S_OK;
-}
-
 STDMETHODIMP Textbox::putref_Font(IFontDisp* pFont)
 {
    //We know that our own property browser gives us the same pointer
@@ -560,7 +526,8 @@ STDMETHODIMP Textbox::putref_Font(IFontDisp* pFont)
    }
 #endif
 
-   SetDirtyDraw();
+   if (PinTable *const table = GetPTable())
+      table->SetDirtyDraw();
 
    return S_OK;
 }
@@ -592,9 +559,6 @@ STDMETHODIMP Textbox::put_Height(float newVal)
 STDMETHODIMP Textbox::get_X(float *pVal)
 {
    *pVal = m_d.m_v1.x;
-   if (m_vpinball)
-      m_vpinball->SetStatusBarUnitInfo(string(), true);
-
    return S_OK;
 }
 
@@ -642,7 +606,11 @@ STDMETHODIMP Textbox::get_Alignment(TextAlignment *pVal)
 
 STDMETHODIMP Textbox::put_Alignment(TextAlignment newVal)
 {
-   m_d.m_talign = newVal;
+   if (m_d.m_talign != newVal)
+   {
+      m_textureDirty = true;
+      m_d.m_talign = newVal;
+   }
    return S_OK;
 }
 

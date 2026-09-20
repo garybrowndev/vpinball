@@ -32,7 +32,26 @@ static constexpr char vbsReservedWords[] =
 "boolean byte currency date double integer long object single string type "
 "variant option explicit randomize";
 
-static const string VBvalidChars("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"s);
+static const string VBvalidChars("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"s); // keep in sync with below
+// Same characters as in VBvalidChars, less overhead
+static constexpr bool IsVBValidChar(const char c)
+{
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || (c == '_');
+}
+
+// Constructs looked for while parsing. SureFind() takes a string, so avoid building one each call
+static const string VBkeyDim("DIM"s);
+static const string VBkeyConst("CONST"s);
+static const string VBkeySub("SUB"s);
+static const string VBkeyFunction("FUNCTION"s);
+static const string VBkeyClass("CLASS"s);
+static const string VBkeyProperty("PROPERTY"s);
+static const string VBkeyGet("GET"s);
+static const string VBkeyLet("LET"s);
+static const string VBkeySet("SET"s);
+static const string VBkeyEnd("END"s);
+static const string VBkeyExit("EXIT"s);
+static const string VBkeyByVal("byval"s); // Lower case, as SureFindNoCase requires
 
 INT_PTR CALLBACK CVPrefProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
@@ -1122,46 +1141,6 @@ void CodeViewer::Replace()
 #endif
 }
 
-void CodeViewer::SaveToStream(IStream *pistream, const HCRYPTHASH hcrypthash)
-{
-#ifndef __STANDALONE__
-   size_t cchar = ::SendMessage(m_hwndScintilla, SCI_GETTEXTLENGTH, 0, 0);
-   char * szText = new char[cchar + 1];
-   ::SendMessage(m_hwndScintilla, SCI_GETTEXT, cchar + 1, (size_t)szText);
-
-   // if there was an external vbs loaded, save the script to that file
-   // and ask if to save the original script also to the table
-   bool save_external_script_to_table = true;
-   if (!m_table->m_external_script_name.empty())
-   {
-      FILE* fScript;
-      if ((fopen_s(&fScript, m_table->m_external_script_name.string().c_str(), "wb") == 0) && fScript)
-      {
-         fwrite(szText, 1, cchar, fScript);
-         fclose(fScript);
-      }
-
-      save_external_script_to_table = (MessageBox("Save externally loaded .vbs script also to .vpx table?", "Visual Pinball", MB_YESNO | MB_DEFBUTTON2) == IDYES);
-
-      if (!save_external_script_to_table)
-      {
-         delete[] szText;
-         szText = m_table->m_original_table_script.data();
-         cchar = m_table->m_original_table_script.size();
-      }
-   }
-
-   ULONG writ = 0;
-   pistream->Write(&cchar, (ULONG)sizeof(int), &writ);
-   pistream->Write(szText, (ULONG)(cchar*sizeof(char)), &writ);
-
-   CryptHashData(hcrypthash, (BYTE *)szText, (DWORD)cchar, 0);
-
-   if (save_external_script_to_table)
-      delete[] szText;
-#endif
-}
-
 void CodeViewer::ColorLine(const int line)
 {
    //!!
@@ -1198,11 +1177,11 @@ void CodeViewer::TellHostToSelectItem()
    const size_t index = ::SendMessage(m_hwndItemList, CB_GETCURSEL, 0, 0);
    IScriptable * const pscript = (IScriptable *)::SendMessage(m_hwndItemList, CB_GETITEMDATA, index, 0);
 
-   m_table->SelectItem(pscript);
+   m_table->m_tableEditor->SelectItem(pscript);
 #endif
 }
 
-string CodeViewer::GetParamsFromEvent(const UINT iEvent)
+string CodeViewer::GetParamsFromEvent(const UINT iEvent) const
 {
 #ifndef __STANDALONE__
    const size_t index = ::SendMessage(m_hwndItemList, CB_GETCURSEL, 0, 0);
@@ -1286,28 +1265,39 @@ void CodeViewer::ListEventsFromItem()
 #endif
 }
 
+#ifndef __STANDALONE__
+// Fetches the text of a combo box item. CB_GETLBTEXT takes no destination size, so it has to be sized beforehand
+// from CB_GETLBTEXTLEN, plus the one byte for the null terminator which is written as well
+static string GetComboBoxItemText(const HWND combo, const WPARAM index)
+{
+   const LRESULT length = ::SendMessage(combo, CB_GETLBTEXTLEN, index, 0);
+   if (length <= 0) // CB_ERR (no such item) or empty text
+      return string();
+   string text;
+   text.resize(length + 1);
+   ::SendMessage(combo, CB_GETLBTEXT, index, (LPARAM)text.data());
+   text.resize(length);
+   return text;
+}
+#endif
+
 void CodeViewer::FindCodeFromEvent()
 {
 #ifndef __STANDALONE__
    bool found = false;
 
-   char szItemName[512]; // Can't be longer than 32 chars, but use this buffer for concatenating
-   szItemName[0] = '\0';
-   char szEventName[512];
-   szEventName[0] = '\0';
    size_t index = ::SendMessage(m_hwndItemList, CB_GETCURSEL, 0, 0);
-   ::SendMessage(m_hwndItemList, CB_GETLBTEXT, index, (size_t)szItemName);
+   string szItemName = GetComboBoxItemText(m_hwndItemList, index);
    index = ::SendMessage(m_hwndEventList, CB_GETCURSEL, 0, 0);
-   ::SendMessage(m_hwndEventList, CB_GETLBTEXT, index, (size_t)szEventName);
    const size_t iEventIndex = ::SendMessage(m_hwndEventList, CB_GETITEMDATA, index, 0);
-   strcat_s(szItemName, "_"); // VB Specific event names
-   strcat_s(szItemName, szEventName);
+   szItemName += '_'; // VB Specific event names
+   szItemName += GetComboBoxItemText(m_hwndEventList, index);
    size_t codelen = ::SendMessage(m_hwndScintilla, SCI_GETTEXTLENGTH, 0, 0);
    const size_t stopChar = codelen;
    ::SendMessage(m_hwndScintilla, SCI_TARGETWHOLEDOCUMENT, 0, 0);
    ::SendMessage(m_hwndScintilla, SCI_SETSEARCHFLAGS, SCFIND_WHOLEWORD, 0);
    LRESULT posFind;
-   while ((posFind = ::SendMessage(m_hwndScintilla, SCI_SEARCHINTARGET, strlen(szItemName), (LPARAM)szItemName)) != -1)
+   while ((posFind = ::SendMessage(m_hwndScintilla, SCI_SEARCHINTARGET, szItemName.length(), (LPARAM)szItemName.c_str())) != -1)
    {
       const size_t line = ::SendMessage(m_hwndScintilla, SCI_LINEFROMPOSITION, posFind, 0);
       // Check for 'sub' and make sure we're not in a comment
@@ -1704,26 +1694,28 @@ static void RemoveComment(const HWND m_hwndScintilla)
 }
 #endif
 
-// Makes sure what is found has only VBS Chars in..
+// Makes sure the match of 'Length' chars at 'Pos' is a whole VB word, and not part of a longer identifier
+static bool IsWholeVBWord(const string &LineIn, const size_t Pos, const size_t Length)
+{
+	return !IsVBValidChar(LineIn[Pos + Length]) // Extra char on end - not what we want
+	    && (Pos == 0 || !IsVBValidChar(LineIn[Pos - 1]));
+}
+
 size_t CodeViewer::SureFind(const string &LineIn, const string &ToFind)
 {
 	const size_t Pos = LineIn.find(ToFind);
-	if (Pos == string::npos)
+	return (Pos != string::npos) && IsWholeVBWord(LineIn, Pos, ToFind.length()) ? Pos : string::npos;
+}
+
+// Case insensitive SureFind. Only the line is lowercased, so 'ToFind' has to be given in lower case
+size_t CodeViewer::SureFindNoCase(const string &LineIn, const string &ToFind)
+{
+	const auto match = std::ranges::search(LineIn, ToFind, [](const char a, const char b) { return cLower(a) == b; });
+	if (match.empty())
 		return string::npos;
 
-	const char EndChr = LineIn[Pos + ToFind.length()];
-	size_t IsValidVBChr = VBvalidChars.find(EndChr);
-	if (IsValidVBChr != string::npos) // Extra char on end - not what we want
-		return string::npos;
-
-	if (Pos > 0)
-	{
-		const char StartChr = LineIn[Pos - 1];
-		IsValidVBChr = VBvalidChars.find(StartChr);
-		if (IsValidVBChr != string::npos)
-			return string::npos;
-	}
-	return Pos;
+	const size_t Pos = (size_t)std::distance(LineIn.begin(), match.begin());
+	return IsWholeVBWord(LineIn, Pos, ToFind.length()) ? Pos : string::npos;
 }
 
 void CodeViewer::PreCreate(CREATESTRUCT& cs)
@@ -1761,8 +1753,8 @@ void CodeViewer::PreRegisterClass(WNDCLASS& wc)
 //false is a fail/syntax error
 bool CodeViewer::ParseStructureName(fi_vector<UserData>& ListIn, const UserData& ud_org, const string& UCline, const string& line, const int Lineno)
 {
-	const size_t endIdx = SureFind(UCline,"END"s); 
-	const size_t exitIdx = SureFind(UCline,"EXIT"s); 
+	const size_t endIdx = SureFind(UCline,VBkeyEnd); 
+	const size_t exitIdx = SureFind(UCline,VBkeyExit); 
 
 	if (endIdx == string::npos && exitIdx == string::npos)
 	{
@@ -1916,60 +1908,60 @@ bool CodeViewer::ParseStructureName(fi_vector<UserData>& ListIn, const UserData&
 	return false;
 }
 
-string CodeViewer::ParseDelimtByColon(string &wholeline)
+// Returns the next ':' separated statement of 'wholeline' from 'pos', advancing 'pos' past the delimiter.
+// A statement which itself starts with ':' is returned whole, which is what the previous implementation did.
+// Walking an index instead of erasing from the front of the line keeps this linear in its length
+string CodeViewer::ParseDelimtByColon(const string &wholeline, size_t &pos)
 {
-	string result;
-	const size_t idx = wholeline.find(':');
-	if (idx == string::npos || idx == 0)
+	const size_t idx = wholeline.find(':', pos);
+	if (idx == string::npos || idx == pos)
 	{
-		result = wholeline;
-		wholeline.clear();
-	}
-	else
-	{
-		result = wholeline.substr(0, idx);
-		wholeline.erase(0, idx + 1);
+		string result = wholeline.substr(pos);
+		pos = wholeline.length();
+		return result;
 	}
 
+	string result = wholeline.substr(pos, idx - pos);
+	pos = idx + 1;
 	return result;
 }
 
 void CodeViewer::ParseFindConstruct(size_t &Pos, const string &UCLineIn, WordType &Type, int &ConstructSize)
 {
-	if ((Pos = SureFind(UCLineIn, "DIM"s)) != string::npos)
+	if ((Pos = SureFind(UCLineIn, VBkeyDim)) != string::npos)
 	{
 		ConstructSize = 3;
 		Type = eDim;
 		return;
 	}
-	if ((Pos = SureFind(UCLineIn, "CONST"s)) != string::npos)
+	if ((Pos = SureFind(UCLineIn, VBkeyConst)) != string::npos)
 	{
 		ConstructSize = 5;
 		Type = eConst;
 		return;
 	}
-	if ((Pos = SureFind(UCLineIn, "SUB"s)) != string::npos)
+	if ((Pos = SureFind(UCLineIn, VBkeySub)) != string::npos)
 	{
 		ConstructSize = 3;
 		Type = eSub;
 		return;
 	}
-	if ((Pos = SureFind(UCLineIn, "FUNCTION"s)) != string::npos)
+	if ((Pos = SureFind(UCLineIn, VBkeyFunction)) != string::npos)
 	{
 		ConstructSize = 8;
 		Type = eFunction;
 		return;
 	}
-	if ((Pos = SureFind(UCLineIn, "CLASS"s)) != string::npos)
+	if ((Pos = SureFind(UCLineIn, VBkeyClass)) != string::npos)
 	{
 		ConstructSize = 5;
 		Type = eClass;
 		return;
 	}
-	if ((Pos = SureFind(UCLineIn, "PROPERTY"s)) != string::npos)
+	if ((Pos = SureFind(UCLineIn, VBkeyProperty)) != string::npos)
 	{
 		size_t GetLetPos;
-		if ((GetLetPos = SureFind(UCLineIn, "GET"s)) != string::npos)
+		if ((GetLetPos = SureFind(UCLineIn, VBkeyGet)) != string::npos)
 		{
 			if (Pos < GetLetPos)
 			{
@@ -1979,7 +1971,7 @@ void CodeViewer::ParseFindConstruct(size_t &Pos, const string &UCLineIn, WordTyp
 				return;
 			}
 		}
-		if ((GetLetPos = SureFind(UCLineIn, "LET"s)) != string::npos)
+		if ((GetLetPos = SureFind(UCLineIn, VBkeyLet)) != string::npos)
 		{
 			if (Pos < GetLetPos)
 			{
@@ -1989,7 +1981,7 @@ void CodeViewer::ParseFindConstruct(size_t &Pos, const string &UCLineIn, WordTyp
 				return;
 			}
 		}
-		if ((GetLetPos = SureFind(UCLineIn, "SET"s)) != string::npos)
+		if ((GetLetPos = SureFind(UCLineIn, VBkeySet)) != string::npos)
 		{
 			if (Pos < GetLetPos)
 			{
@@ -2009,9 +2001,10 @@ void CodeViewer::ParseFindConstruct(size_t &Pos, const string &UCLineIn, WordTyp
 void CodeViewer::ReadLineToParseBrain(string wholeline, const int linecount, fi_vector<UserData>& ListIn)
 {
 	const string comment = ParseRemoveVBSLineComments(wholeline);
-	while (wholeline.length() > 1)
+	size_t pos = 0;
+	while (wholeline.length() - pos > 1)
 	{
-		string line = ParseDelimtByColon(wholeline);
+		string line = ParseDelimtByColon(wholeline, pos);
 		RemovePadding(line);
 		const string UCline = upperCase(line);
 		UserData UD;
@@ -2037,10 +2030,10 @@ void CodeViewer::ReadLineToParseBrain(string wholeline, const int linecount, fi_
 void CodeViewer::RemoveByVal(string &line)
 {
 	const size_t LL = line.length();
-	size_t Pos = SureFind(lowerCase(line), "byval"s);
+	size_t Pos = SureFindNoCase(line, VBkeyByVal);
 	if (Pos != string::npos)
 	{
-		Pos += 5;
+		Pos += VBkeyByVal.length();
 		if ((SSIZE_T)(LL-Pos) < 0) return;
 		line = line.substr(Pos, (LL-Pos));
 	}
@@ -2105,13 +2098,12 @@ void CodeViewer::ParseForFunction() // Subs & Collections WIP
 	size_t CBCount = ::SendMessage(m_hwndItemList, CB_GETCOUNT, 0, 0)-1; //Zero Based
 	while ((SSIZE_T)CBCount >= 0)
 	{
-		const LRESULT s = ::SendMessage(m_hwndItemList, CB_GETLBTEXTLEN, CBCount, 0);
-		if (s > 1)
+		string keyName = GetComboBoxItemText(m_hwndItemList, CBCount);
+		if (keyName.length() > 1)
 		{
 			UserData ud;
-			ud.m_keyName.resize(s, '\0');
-			::SendMessage(m_hwndItemList, CB_GETLBTEXT, CBCount, (LPARAM)ud.m_keyName.data());
-			ud.m_uniqueKey = lowerCase(ud.m_keyName);
+			ud.m_uniqueKey = lowerCase(keyName);
+			ud.m_keyName = std::move(keyName);
 			FindOrInsertUD(m_componentsDict,ud);
 		}
 		CBCount--;
@@ -2271,12 +2263,10 @@ BOOL CodeViewer::ParseSelChangeEvent(const int id, const SCNotification *pSCN)
          pcv->ShowFindDialog();
          return TRUE;
       }
-      case ID_SAVE: // accelerator, the frame only knows the menu's save command, fixes ctrl+s in script editor
-         pcv->m_table->DoCodeViewCommand(IDM_SAVE); return TRUE;
+      case ID_SAVE: g_pvp->ParseCommand(IDM_SAVE, false); return TRUE; // accelerator, the frame only knows the menu's save command, fixes ctrl+s in script editor
       case ID_TABLE_CAMERAMODE:
       case ID_TABLE_LIVEEDIT:
-      case ID_TABLE_PLAY:
-         pcv->m_table->DoCodeViewCommand(id); return TRUE;
+      case ID_TABLE_PLAY: g_pvp->ParseCommand(id, false); return TRUE;
       case ID_EDIT_FINDNEXT:
          pcv->Find(); return TRUE;
       case ID_REPLACE:
@@ -2411,18 +2401,12 @@ BOOL CodeViewer::OnCommand(WPARAM wparam, LPARAM lparam)
             pcv->UncolorError();
          pcv->m_table->SetDirtyScript(eSaveDirty);
 
+         // Called on every single edit, so fetch straight into the table's script
          const size_t cchar = ::SendMessage(m_hwndScintilla, SCI_GETTEXTLENGTH, 0, 0);
-         if (cchar == 0)
-         {
-            pcv->m_table->m_script_text = "";
-         }
-         else
-         {
-            string script;
-            script.resize(cchar + 1);
-            ::SendMessage(m_hwndScintilla, SCI_GETTEXT, cchar + 1, (LPARAM)script.data());
-            pcv->m_table->m_script_text = script;
-         }
+         string& script = pcv->m_table->m_script_text;
+         script.resize(cchar + 1); // Scintilla expects a buffer with an extra byte for the null terminator
+         ::SendMessage(m_hwndScintilla, SCI_GETTEXT, cchar + 1, (LPARAM)script.data());
+         script.resize(cchar); // remove that terminator again
          return TRUE;
       }
       case CBN_SETFOCUS:

@@ -105,9 +105,8 @@ void SearchSelectDialog::Update()
       ListView_DeleteAllItems(m_hElementList);
 
    int idx = 0;
-   for (int i = 0; i < m_curTable->m_table->m_vcollection.size(); i++)
+   for (auto pcol : m_curTable->m_table->GetCollections())
    {
-      CComObject<Collection> *const pcol = m_curTable->m_table->m_vcollection.ElementAt(i);
       LVITEM lv;
       lv.mask = LVIF_TEXT | LVIF_PARAM;
       lv.iItem = idx;
@@ -128,7 +127,7 @@ void SearchSelectDialog::Update()
          lv.iItem = idx;
          lv.iSubItem = 0;
          lv.lParam = (LPARAM)piscript;
-         const string szTemp = PinTable::GetElementName(piedit);
+         const string szTemp = piedit->GetName();
          lv.pszText = (char*)szTemp.c_str();
          ListView_InsertItem(m_hElementList, &lv);
          AddSearchItemToList(piedit, idx);
@@ -172,7 +171,7 @@ void SearchSelectDialog::SelectElement()
 {
     const int count = ListView_GetSelectedCount(m_hElementList);
 
-    m_curTable->m_table->ClearMultiSel();
+    m_curTable->ClearMultiSel();
     int iItem = -1;
     for (int i = 0; i < count; i++)
     {
@@ -187,11 +186,10 @@ void SearchSelectDialog::SelectElement()
            if (szType == "Collection"sv)
            {
               CComObject<Collection> *const pcol = (CComObject<Collection>*)lv.lParam;
-              if (!pcol->m_visel.empty())
+              if (!pcol->GetParts().empty())
               {
-                 ISelect *const pisel = pcol->m_visel.ElementAt(0);
-                 if (pisel)
-                    m_curTable->m_table->AddMultiSel(pisel, false, true, false);
+                 if (IWinUIPart *const pisel = m_curTable->GetUIPart(pcol->GetParts()[0]); pisel)
+                    m_curTable->AddMultiSel(pisel, false, true, false);
               }
            }
            else
@@ -201,8 +199,8 @@ void SearchSelectDialog::SelectElement()
               {
                  if (pscript == pedit->GetIScriptable())
                  {
-                    if (ISelect *const pisel = pedit->GetISelect(); pisel)
-                       m_curTable->m_table->AddMultiSel(pisel, true, true, false);
+                    if (IWinUIPart *const pisel = m_curTable->GetUIPart(pedit); pisel)
+                       m_curTable->AddMultiSel(pisel, true, true, false);
                     break;
                  }
               }

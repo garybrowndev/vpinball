@@ -12,8 +12,6 @@
 #include "renderer/Shader.h"
 #include "renderer/trace.h"
 #include "renderer/VertexBuffer.h"
-#include "ui/win/sur.h"
-#include "ui/win/WinEditor.h"
 #include "utils/objloader.h"
 
 
@@ -26,14 +24,6 @@ Spinner *Spinner::CopyForPlay() const
 {
    STANDARD_EDITABLE_COPY_FOR_PLAY_IMPL(Spinner)
    return dst;
-}
-
-void Spinner::UpdateStatusBarInfo()
-{
-   if (!m_vpinball)
-      return;
-   const string tbuf = std::format("Length: {:.3f} | Height: {:.3f}", m_vpinball->ConvertToUnit(m_d.m_length), m_vpinball->ConvertToUnit(m_d.m_height));
-   m_vpinball->SetStatusBarUnitInfo(tbuf, true);
 }
 
 float Spinner::GetAngleMax() const { return m_phitspinner ? RADTOANG(m_phitspinner->m_spinnerMover.m_angleMax) : m_d.m_angleMax; }
@@ -142,38 +132,6 @@ void Spinner::SetDefaultPhysics(const bool fromMouseClick)
    LinkProp(m_d.m_damping, AntiFriction);
 }
 #undef LinkProp
-
-void Spinner::UIRenderPass1(Sur * const psur)
-{
-}
-
-void Spinner::UIRenderPass2(Sur * const psur)
-{
-   psur->SetBorderColor(RGB(0, 0, 0), false, 0);
-   psur->SetLineColor(RGB(0, 0, 0), false, 3);
-   psur->SetObject(this);
-
-   const float halflength = m_d.m_length * 0.5f;
-
-   const float radangle = ANGTORAD(m_d.m_rotation);
-   float sn = sinf(radangle);
-   float cs = cosf(radangle);
-
-   psur->Line(m_d.m_vCenter.x + cs*halflength, m_d.m_vCenter.y + sn*halflength,
-      m_d.m_vCenter.x - cs*halflength, m_d.m_vCenter.y - sn*halflength);
-
-   psur->SetLineColor(RGB(0, 0, 0), false, 1);
-   psur->SetObject(this);
-
-   psur->Line(m_d.m_vCenter.x + cs*halflength, m_d.m_vCenter.y + sn*halflength,
-      m_d.m_vCenter.x - cs*halflength, m_d.m_vCenter.y - sn*halflength);
-
-   if (sn == 0.0f) sn = 1.0f;
-   if (cs == 0.0f) cs = 1.0f;
-   psur->Rectangle(m_d.m_vCenter.x - cs * halflength * 0.65f, m_d.m_vCenter.y - sn * halflength * 0.65f,
-                   m_d.m_vCenter.x + cs * halflength * 0.65f, m_d.m_vCenter.y + sn * halflength * 0.65f);
-}
-
 
 #pragma region Physics
 
@@ -388,7 +346,8 @@ void Spinner::Render(const unsigned int renderMask)
       m_renderer->m_renderDevice->DrawMesh(m_renderer->m_renderDevice->m_basicShader, false, pos, 0.f, m_bracketMeshBuffer, RenderDevice::TRIANGLELIST, 0, spinnerBracketNumFaces);
    }
 
-   if (m_phitspinner->m_spinnerMover.m_visible && !isStaticOnly)
+   const bool plateVisible = m_phitspinner ? m_phitspinner->m_spinnerMover.m_visible : m_d.m_visible;
+   if (plateVisible && !isStaticOnly)
    {
       UpdatePlate(nullptr);
       Vertex3Ds pos(m_d.m_vCenter.x, m_d.m_vCenter.y, m_posZ);
@@ -399,13 +358,16 @@ void Spinner::Render(const unsigned int renderMask)
 
 void Spinner::UpdatePlate(Vertex3D_NoTex2 * const vertBuffer)
 {
+   const float angle = m_phitspinner ? m_phitspinner->m_spinnerMover.m_angle
+      : clamp(0.f, ANGTORAD(min(m_d.m_angleMin, m_d.m_angleMax)), ANGTORAD(max(m_d.m_angleMin, m_d.m_angleMax)));
+
    // early out in case still same rotation
-   if (m_phitspinner->m_spinnerMover.m_angle == m_vertexBuffer_spinneranimangle)
+   if (angle == m_vertexBuffer_spinneranimangle)
        return;
 
-   m_vertexBuffer_spinneranimangle = m_phitspinner->m_spinnerMover.m_angle;
+   m_vertexBuffer_spinneranimangle = angle;
 
-   const Matrix3D fullMatrix = Matrix3D::MatrixRotateX(-m_phitspinner->m_spinnerMover.m_angle)
+   const Matrix3D fullMatrix = Matrix3D::MatrixRotateX(-angle)
                              * Matrix3D::MatrixRotateZ(ANGTORAD(m_d.m_rotation));
 
    Vertex3D_NoTex2 *buf;
@@ -436,25 +398,15 @@ void Spinner::UpdatePlate(Vertex3D_NoTex2 * const vertBuffer)
 #pragma endregion
 
 
-void Spinner::SetObjectPos()
+void Spinner::Translate(const Vertex2D &offset)
 {
-   m_vpinball->SetObjectPosCur(m_d.m_vCenter.x, m_d.m_vCenter.y);
-}
-
-void Spinner::MoveOffset(const float dx, const float dy)
-{
-   m_d.m_vCenter.x += dx;
-   m_d.m_vCenter.y += dy;
+   m_d.m_vCenter.x += offset.x;
+   m_d.m_vCenter.y += offset.y;
 }
 
 Vertex2D Spinner::GetCenter() const
 {
    return m_d.m_vCenter;
-}
-
-void Spinner::PutCenter(const Vertex2D& pv)
-{
-   m_d.m_vCenter = pv;
 }
 
 void Spinner::Save(IObjectWriter& writer, const bool saveForUndo)

@@ -124,8 +124,8 @@ void ScriptInterpreter::Start(PinTable* table)
    AddItem(table, false);
    AddItem((ScriptGlobalTable*) table->m_psgt, true);
    AddItem(m_pdm, false);
-   for (int i = 0; i < table->m_vcollection.size(); i++)
-      AddItem(&table->m_vcollection[i], false);
+   for (auto pcol : table->GetCollections())
+      AddItem(pcol, false);
    for (auto editable : table->GetParts())
       if (editable->GetIScriptable())
          AddItem(editable->GetIScriptable(), false);
@@ -165,8 +165,8 @@ void ScriptInterpreter::Stop(PinTable *table, bool interruptDirectly)
    RemoveItem(table);
    RemoveItem((ScriptGlobalTable *)table->m_psgt);
    RemoveItem(m_pdm);
-   for (int i = 0; i < table->m_vcollection.size(); i++)
-      RemoveItem(&table->m_vcollection[i]);
+   for (auto pcol : table->GetCollections())
+      RemoveItem(pcol);
    for (auto editable : table->GetParts())
       if (editable->GetIScriptable())
          RemoveItem(editable->GetIScriptable());
@@ -616,7 +616,7 @@ STDMETHODIMP ScriptInterpreter::DebuggerModule::Print(VARIANT *pvar)
    if (g_pplayer->m_ptable->IsLocked())
       return S_OK;
 
-   if (!g_app->m_settings.GetEditor_EnableLog() || !g_app->m_settings.GetEditor_LogScriptOutput())
+   if (!g_app->m_settings.GetGlobal_EnableLog() || !g_app->m_settings.GetGlobal_LogScriptOutput())
       return S_OK;
 
    if (V_VT(pvar) == VT_EMPTY || V_VT(pvar) == VT_NULL || V_VT(pvar) == VT_ERROR)

@@ -40,7 +40,6 @@ class DispReel :
    public EventProxy<DispReel, &DIID_IDispReelEvents>,
    public IConnectionPointContainerImpl<DispReel>,
    public IProvideClassInfo2Impl<&CLSID_DispReel, &DIID_IDispReelEvents, &LIBID_VPinballLib>,
-   public ISelect,
    public IEditable,
    public IScriptable,
    public IFireEvents,
@@ -75,13 +74,11 @@ public:
       CONNECTION_POINT_ENTRY(DIID_IDispReelEvents)
    END_CONNECTION_POINT_MAP()
 
-   STANDARD_EDITABLE_DECLARES_NO_HITABLE(DispReel, eItemDispReel, DISPREEL, VIEW_BACKGLASS)
+   STANDARD_EDITABLE_DECLARES_NO_HITABLE(DispReel, eItemDispReel, DISPREEL)
 
-   void MoveOffset(const float dx, const float dy) final;
-   void SetObjectPos() final;
+   void Translate(const Vertex2D &offset) final;
    // Multi-object manipulation
    Vertex2D GetCenter() const final;
-   void PutCenter(const Vertex2D &pv) final;
 
    void WriteRegDefaults() final;
 

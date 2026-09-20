@@ -8,6 +8,7 @@
 #include "parts/pintable.h"
 #include "ui/win/resource.h"
 #include "ui/win/WinEditor.h"
+#include "ui/win/WinUIPartRegistry.h"
 
 ToolbarDialog::ToolbarDialog() : CDialog(IDD_TOOLBAR)
 {
@@ -29,6 +30,16 @@ LRESULT ToolbarDialog::OnMouseActivate(UINT msg, WPARAM wparam, LPARAM lparam)
 
 void ToolbarDialog::OnDestroy()
 {
+}
+
+void ToolbarDialog::OnOK()
+{
+   // Don't call CDialog::OnOk() as this modeless dialog is hosted inside a docked pane, and the default implementation would destroy it
+}
+
+void ToolbarDialog::OnCancel()
+{
+   // Don't call CDialog::OnCancel() as this modeless dialog is hosted inside a docked pane, and the default implementation would destroy it
 }
 
 BOOL ToolbarDialog::OnInitDialog()
@@ -340,12 +351,12 @@ BOOL ToolbarDialog::OnCommand(WPARAM wParam, LPARAM lParam)
         case ID_INSERT_FLASHER:
         case ID_INSERT_RUBBER:
         {
-            const ItemTypeEnum type = EditableRegistry::TypeFromToolID((int)id);
-            if (type != eItemInvalid)
-            {
-                g_pvp->m_ToolCur = (int)id;
-                return TRUE;
-            }
+           const ItemTypeEnum type = WinUIPartRegistry::TypeFromToolID((int)id);
+           if (type != eItemInvalid)
+           {
+              g_pvp->m_ToolCur = (int)id;
+              return TRUE;
+           }
             break;
         }
         case IDC_SELECT:

@@ -35,7 +35,6 @@ class Gate :
    public EventProxy<Gate, &DIID_IGateEvents>,
    public IConnectionPointContainerImpl<Gate>,
    public IProvideClassInfo2Impl<&CLSID_Gate, &DIID_IGateEvents, &LIBID_VPinballLib>,
-   public ISelect,
    public IEditable,
    public IHitable,
    public IRenderable,
@@ -72,7 +71,7 @@ public:
       CONNECTION_POINT_ENTRY(DIID_IGateEvents)
    END_CONNECTION_POINT_MAP()
 
-   STANDARD_EDITABLE_DECLARES(Gate, eItemGate, GATE, VIEW_PLAYFIELD)
+   STANDARD_EDITABLE_DECLARES(Gate, eItemGate, GATE)
 
    //DECLARE_NOT_AGGREGATABLE(Gate)
    // Remove the comment from the line above if you don't want your object to
@@ -82,18 +81,12 @@ public:
    // ISupportsErrorInfo
    STDMETHOD(InterfaceSupportsErrorInfo)(REFIID riid);
 
-   void MoveOffset(const float dx, const float dy) final;
-   void SetObjectPos() final;
+   void Translate(const Vertex2D &offset) final;
    // Multi-object manipulation
    Vertex2D GetCenter() const final;
-   void PutCenter(const Vertex2D &pv) final;
    void SetDefaultPhysics(const bool fromMouseClick) final;
 
-   void RenderBlueprint(Sur *psur, const bool solid) final;
    void ExportMesh(ObjLoader &loader) final;
-
-   ItemTypeEnum HitableGetItemType() const final { return eItemGate; }
-   void UpdateStatusBarInfo() final;
 
    void WriteRegDefaults() final;
 

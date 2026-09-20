@@ -39,7 +39,6 @@ class Textbox :
    public EventProxy<Textbox, &DIID_ITextboxEvents>,
    public IConnectionPointContainerImpl<Textbox>,
    public IProvideClassInfo2Impl<&CLSID_Textbox, &DIID_ITextboxEvents, &LIBID_VPinballLib>,
-   public ISelect,
    public IEditable,
    public IScriptable,
    public IFireEvents,
@@ -72,13 +71,11 @@ public:
       CONNECTION_POINT_ENTRY(DIID_ITextboxEvents)
    END_CONNECTION_POINT_MAP()
 
-   STANDARD_EDITABLE_DECLARES_NO_HITABLE(Textbox, eItemTextbox, TEXTBOX, VIEW_BACKGLASS)
+   STANDARD_EDITABLE_DECLARES_NO_HITABLE(Textbox, eItemTextbox, TEXTBOX)
 
-   void MoveOffset(const float dx, const float dy) final;
-   void SetObjectPos() final;
+   void Translate(const Vertex2D &offset) final;
    // Multi-object manipulation
    Vertex2D GetCenter() const final { return m_d.m_v1; }
-   void PutCenter(const Vertex2D& pv) final;
 
    void WriteRegDefaults() final;
 
@@ -127,7 +124,6 @@ public:
    STDMETHOD(get_Width)(/*[out, retval]*/ float *pVal);
    STDMETHOD(put_Width)(/*[in]*/ float newVal);
    STDMETHOD(get_Font)(/*[out, retval]*/ IFontDisp **pVal);
-   STDMETHOD(put_Font)(/*[in]*/ IFontDisp *newVal);
    STDMETHOD(putref_Font)(IFontDisp* pFont);
    STDMETHOD(get_Text)(/*[out, retval]*/ BSTR *pVal);
    STDMETHOD(put_Text)(/*[in]*/ BSTR newVal);

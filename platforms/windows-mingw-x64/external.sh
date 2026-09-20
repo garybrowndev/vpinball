@@ -21,6 +21,7 @@ echo "  LIBDOF_SHA: ${LIBDOF_SHA}"
 echo "  FFMPEG_SHA: ${FFMPEG_SHA}"
 echo "  LIBWINEVBS_SHA: ${LIBWINEVBS_SHA}"
 echo "  LIBZIP_SHA: ${LIBZIP_SHA}"
+echo "  LIBBACKTRACE_SHA: ${LIBBACKTRACE_SHA}"
 echo ""
 
 mkdir -p "external/windows-x64-mingw/${BUILD_TYPE}"
@@ -230,7 +231,9 @@ if [ "${OPENXR_EXPECTED_SHA}" != "${OPENXR_FOUND_SHA}" ]; then
    sed -i.bak 's/set_target_properties(openxr_loader PROPERTIES FOLDER ${LOADER_FOLDER})/set_target_properties(openxr_loader PROPERTIES FOLDER ${LOADER_FOLDER} OUTPUT_NAME "openxr_loader64" PREFIX "")/g' src/loader/CMakeLists.txt
    sed -i.bak 's|\${CMAKE_CURRENT_BINARY_DIR}/$<CONFIGURATION>/openxr_loader|\${CMAKE_CURRENT_BINARY_DIR}/$<CONFIGURATION>/openxr_loader64|g' src/loader/CMakeLists.txt
    cmake \
+      -DBUILD_WITH_SYSTEM_JSONCPP=OFF \
       -DBUILD_TESTS=OFF \
+      -DBUILD_API_LAYERS=OFF \
       -DDYNAMIC_LOADER=ON \
       -DOPENXR_DEBUG_POSTFIX='' \
       -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
@@ -446,6 +449,36 @@ if [ "${LIBZIP_EXPECTED_SHA}" != "${LIBZIP_FOUND_SHA}" ]; then
 fi
 
 #
+# build libbacktrace
+#
+
+LIBBACKTRACE_EXPECTED_SHA="${LIBBACKTRACE_SHA}"
+LIBBACKTRACE_FOUND_SHA="$([ -f libbacktrace/cache.txt ] && cat libbacktrace/cache.txt || echo "")"
+
+if [ "${LIBBACKTRACE_EXPECTED_SHA}" != "${LIBBACKTRACE_FOUND_SHA}" ]; then
+   echo "Building libbacktrace. Expected: ${LIBBACKTRACE_EXPECTED_SHA}, Found: ${LIBBACKTRACE_FOUND_SHA}"
+
+   rm -rf libbacktrace
+   mkdir libbacktrace
+   cd libbacktrace
+
+   curl -sL https://github.com/ianlancetaylor/libbacktrace/archive/${LIBBACKTRACE_SHA}.tar.gz -o libbacktrace-${LIBBACKTRACE_SHA}.tar.gz
+   tar xzf libbacktrace-${LIBBACKTRACE_SHA}.tar.gz
+   mv libbacktrace-${LIBBACKTRACE_SHA} libbacktrace
+   cd libbacktrace
+   ./configure \
+      --enable-static \
+      --disable-shared \
+      CFLAGS="-g1 -O2"
+   make -j${NUM_PROCS}
+   cd ..
+
+   echo "$LIBBACKTRACE_EXPECTED_SHA" > cache.txt
+
+   cd ..
+fi
+
+#
 # copy libraries
 #
 
@@ -482,7 +515,8 @@ cp pinmame/pinmame/src/libpinmame/PinMAMEPlugin.h ../../../third-party/include/p
 
 cp openxr/openxr/build/src/loader/openxr_loader64.dll ../../../third-party/runtime-libs/windows-mingw-x64
 cp openxr/openxr/build/src/loader/libopenxr_loader64.dll.a ../../../third-party/build-libs/windows-mingw-x64
-cp -r openxr/openxr/include/openxr ../../../third-party/include
+mkdir -p ../../../third-party/include/openxr
+cp openxr/openxr/build/include/openxr/*.h ../../../third-party/include/openxr
 
 cp libdmdutil/libdmdutil/build/dmdutil64.dll ../../../third-party/runtime-libs/windows-mingw-x64
 cp libdmdutil/libdmdutil/build/dmdutil64.dll.a ../../../third-party/build-libs/windows-mingw-x64
@@ -549,3 +583,7 @@ cp libzip/libzip/build/lib/libzip64.dll ../../../third-party/runtime-libs/window
 cp libzip/libzip/build/lib/libzip64.dll.a ../../../third-party/build-libs/windows-mingw-x64
 cp libzip/libzip/build/zipconf.h ../../../third-party/include
 cp libzip/libzip/lib/zip.h ../../../third-party/include
+
+cp libbacktrace/libbacktrace/.libs/libbacktrace.a ../../../third-party/build-libs/windows-mingw-x64
+cp libbacktrace/libbacktrace/backtrace.h ../../../third-party/include
+cp libbacktrace/libbacktrace/backtrace-supported.h ../../../third-party/include

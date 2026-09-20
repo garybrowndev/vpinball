@@ -34,12 +34,16 @@
 #include "ui/win/codeview.h"
 #include "ui/win/PinTableMDI.h"
 #include "ui/win/resource.h"
+#include "ui/win/WinUIPartRegistry.h"
 #include "ui/win/worker.h"
+#include "utils/fileio.h"
+#include "utils/objloader.h"
 
 #ifndef __STANDALONE__
 #include <iostream>
 #include "FreeImage.h"
 #include "dialogs/DrawingOrderDialog.h"
+#include "ui/win/dialogs/Win32ProgressBar.h"
 #else
 #include "standalone/FreeImage.h"
 #endif
@@ -113,6 +117,7 @@ WinEditor::WinEditor(HINSTANCE appInstance)
    m_closing = false;
    m_unloadingTable = false;
    m_cref = 0;				//inits Reference Count for IUnknown Interface. Every com Object must 
+   WinUIPartRegistry::InitRegistry(); 
    //implement this and StdMethods QueryInterface, AddRef and Release
 
    m_mouseCursorPosition.x = 0.0f;
@@ -240,10 +245,10 @@ void WinEditor::LoadEditorSetupFromSettings()
    m_convertToUnit = g_app->m_settings.GetEditor_Units();
 }
 
-void WinEditor::SetClipboard(vector<IStream*> * const pvstm)
+void WinEditor::SetClipboard(vector<InMemStream *> *const pvstm)
 {
    for (size_t i = 0; i < m_vstmclipboard.size(); i++)
-      m_vstmclipboard[i]->Release();
+      delete m_vstmclipboard[i];
    m_vstmclipboard.clear();
 
    if (pvstm)
@@ -251,10 +256,10 @@ void WinEditor::SetClipboard(vector<IStream*> * const pvstm)
          m_vstmclipboard.push_back((*pvstm)[i]);
 }
 
-void WinEditor::SetCursorCur(HINSTANCE hInstance, LPCTSTR lpCursorName)
+void WinEditor::SetCursorCur(LPCTSTR lpCursorName)
 {
 #ifndef __STANDALONE__
-   const HCURSOR hcursor = LoadCursor(hInstance, lpCursorName);
+   const HCURSOR hcursor = LoadCursor(NULL, lpCursorName);
    SetCursor(hcursor);
 #endif
 }
@@ -481,7 +486,7 @@ float WinEditor::ConvertToUnit(const float value) const
    return 0;
 }
 
-void WinEditor::SetPropSel(VectorProtected<ISelect> &pvsel)
+void WinEditor::SetPropSel(const vector<IWinUIPart *> &pvsel)
 {
 #ifndef __STANDALONE__
    if (m_propertyDialog && m_propertyDialog->IsWindow())
@@ -493,12 +498,17 @@ void WinEditor::SetPropSel(VectorProtected<ISelect> &pvsel)
 
 void WinEditor::RenameEditable(IEditable *editable, const string &name)
 {
+#ifndef __STANDALONE__
+   PinTable *const pt = editable->GetPTable();
+   pt->m_tableEditor->BeginUndo();
+   pt->m_tableEditor->MarkForUndo(editable);
+#endif
+
    const string oldName = MakeString(editable->GetIScriptable()->m_wzName);
    editable->SetName(MakeWString(name));
 
 #ifndef __STANDALONE__
-   PinTable *const pt = editable->GetPTable();
-   g_pvp->SetPropSel(pt->m_vmultisel);
+   g_pvp->SetPropSel(pt->m_tableEditor->GetMultiSelParts());
    g_pvp->GetLayersListDialog()->Update();
 
    if (editable->GetItemType() == eItemSurface && g_pvp->MessageBox("Replace the name also in all table elements that use this surface?", "Replace", MB_ICONQUESTION | MB_YESNO) == IDYES)
@@ -525,6 +535,9 @@ void WinEditor::RenameEditable(IEditable *editable, const string &name)
             ((Trigger *)pedit)->m_d.m_szSurface = name;
       }
    }
+
+   pt->m_tableEditor->EndUndo();
+   pt->SetDirtyDraw();
 #endif
 }
 
@@ -563,7 +576,7 @@ bool WinEditor::ParseCommand(const size_t code, const bool notify)
 {
 #ifndef __STANDALONE__
    // check if it's an Editable tool
-   const ItemTypeEnum type = EditableRegistry::TypeFromToolID((int)code);
+   const ItemTypeEnum type = WinUIPartRegistry::TypeFromToolID((int)code);
    if (type != eItemInvalid)
    {
       m_ToolCur = (int)code;
@@ -621,21 +634,30 @@ bool WinEditor::ParseCommand(const size_t code, const bool notify)
       {
          if (ptCur->IsLocked())
          {
-            if (IDYES == MessageBox("This table is locked to avoid modification.\n\nYou do not need to unlock it to adjust settings like the camera or rendering options.\n\nAre you sure you want to unlock the table ?", "Table Unlocking", MB_YESNO | MB_ICONINFORMATION))
+            if (IDYES
+               == MessageBox("This table is locked to avoid modification.\n\nYou do not need to unlock it to adjust settings like the camera or rendering options.\n\nAre you sure you want "
+                             "to unlock the table ?",
+                  "Table Unlocking", MB_YESNO | MB_ICONINFORMATION))
+            {
+               ptCur->m_tableEditor->StartUndo();
                ptCur->ToggleLock();
+               ptCur->m_tableEditor->StopUndo();
+            }
          }
          else if (!ptCur->IsLocked())
          {
             if (IDYES == MessageBox("This will lock the table to prevent unexpected modifications.\n\nAre you sure you want to lock the table ?", "Table locking", MB_YESNO | MB_ICONINFORMATION))
             {
+               ptCur->m_tableEditor->StartUndo();
                ptCur->ToggleLock();
+               ptCur->m_tableEditor->StopUndo();
                string msg = ptCur->AuditTable(true);
                InfoDialog info(msg);
                info.DoModal();
             }
          }
-         ptCur->ClearMultiSel(nullptr);
-         SetPropSel(ptCur->m_vmultisel);
+         ptCur->m_tableEditor->ClearMultiSel();
+         SetPropSel(ptCur->m_tableEditor->GetMultiSelParts());
          GetLayersListDialog()->ResetView();
          ToggleToolbar();
          SetEnableMenuItems();
@@ -666,8 +688,7 @@ bool WinEditor::ParseCommand(const size_t code, const bool notify)
    }
    case ID_LOCK:
    {
-      CComObject<PinTable> * const ptCur = GetActiveTable();
-      if (ptCur)
+      if (const auto ptCur = GetActiveTableEditor(); ptCur)
          ptCur->LockElements();
       return true;
    }
@@ -767,7 +788,7 @@ bool WinEditor::ParseCommand(const size_t code, const bool notify)
 
    case ID_EDIT_UNDO:
       if (CComObject<PinTable> *const ptCur = GetActiveTable(); ptCur)
-         ptCur->Undo();
+         ptCur->m_tableEditor->Undo();
       return true;
 
    case ID_FILE_EXPORT_BLUEPRINT:
@@ -776,17 +797,18 @@ bool WinEditor::ParseCommand(const size_t code, const bool notify)
       return true;
 
    case ID_EXPORT_TABLEMESH:
-      if (CComObject<PinTable> *const ptCur = GetActiveTable(); ptCur)
-         ptCur->ExportTableMesh();
+   {
+      ExportTableMesh();
       return true;
+   }
 
    case ID_IMPORT_BACKDROPPOV:
-      if (CComObject<PinTable> *const ptCur = GetActiveTable(); ptCur)
-         ptCur->ImportBackdropPOV(string());
+      if (const auto ptCur = GetActiveTableEditor(); ptCur)
+         ptCur->ImportBackdropPOV();
       return true;
 
    case ID_EXPORT_BACKDROPPOV:
-      if (CComObject<PinTable> *const ptCur = GetActiveTable(); ptCur)
+      if (const auto ptCur = GetActiveTableEditor(); ptCur)
          ptCur->ExportBackdropPOV();
       return true;
 
@@ -838,7 +860,7 @@ bool WinEditor::ParseCommand(const size_t code, const bool notify)
       return true;
 
    case ID_TABLE_FONTMANAGER:
-      if (CComObject<PinTable> *const ptCur = GetActiveTable(); ptCur)
+      if (PinTableWnd *const ptCur = GetActiveTableEditor(); ptCur)
          /*const DWORD foo =*/ DialogBoxParam(m_instance, MAKEINTRESOURCE(IDD_FONTDIALOG), GetHwnd(), FontManagerProc, (size_t)ptCur);
       return true;
 
@@ -905,6 +927,9 @@ void WinEditor::DoPlay(const int playMode)
       return;
    }
 
+   if (playMode == 0 && g_app->m_settings.GetGlobal_ResetLogOnPlay())
+      Logger::Truncate();
+
    PLOGI << "Starting Play mode [table: " << table->m_tableName << ", play mode: " << playMode << ']';
 
    // Create the player on a (shallow) copy of the table, that will be animated by the script, animations, ...
@@ -960,7 +985,7 @@ void WinEditor::DoPlay(const int playMode)
    SetForegroundWindow();
 
    table->SetDirtyDraw();
-   table->RefreshProperties();
+   tableEditor->RefreshProperties();
    tableEditor->BeginAutoSaveCounter();
    tableEditor->EnableWindow();
    tableEditor->SetFocus();
@@ -977,7 +1002,7 @@ void WinEditor::DoPlay(const int playMode)
    }
 }
 
-bool WinEditor::LoadFile(const bool updateEditor, VPXFileFeedback* feedback)
+bool WinEditor::LoadFile(const bool updateEditor)
 {
    const string& szInitialDir = g_app->m_settings.GetRecentDir_LoadDir();
 
@@ -990,12 +1015,12 @@ bool WinEditor::LoadFile(const bool updateEditor, VPXFileFeedback* feedback)
    if (index != string::npos)
       g_app->m_settings.SetRecentDir_LoadDir(filename[0].substr(0, index), false);
 
-   LoadFileName(filename[0], updateEditor, feedback);
+   LoadFileName(filename[0], updateEditor);
 
    return true;
 }
 
-void WinEditor::LoadFileName(const string& filename, const bool updateEditor, VPXFileFeedback* feedback)
+void WinEditor::LoadFileName(const string& filename, const bool updateEditor)
 {
    if (m_vtable.size() == MAX_OPEN_TABLES)
    {
@@ -1013,7 +1038,12 @@ void WinEditor::LoadFileName(const string& filename, const bool updateEditor, VP
 
    PinTableMDI * const mdiTable = new PinTableMDI(this);
    PinTableWnd *const ppt = mdiTable->GetTableWnd();
-   const HRESULT hr = feedback != nullptr ? ppt->m_table->LoadGameFromFilename(filename, *feedback) : ppt->m_table->LoadGameFromFilename(filename);
+#ifndef __STANDALONE__
+   Win32ProgressBar feedback(g_app->GetInstanceHandle(), m_hwndStatusBar);
+#else
+   VPXFileFeedback feedback;
+#endif
+   const HRESULT hr = ppt->m_table->LoadGameFromFilename(filename, feedback);
 
    const bool hashing_error = (hr == APPX_E_BLOCK_HASH_INVALID || hr == APPX_E_CORRUPT_CONTENT);
    if (hashing_error)
@@ -1044,7 +1074,7 @@ void WinEditor::LoadFileName(const string& filename, const bool updateEditor, VP
       g_app->m_settings.SetRecentDir_LoadDir(tablePath.string(), false);
       UpdateRecentFileList(filename);
 
-      ppt->m_table->AddMultiSel(ppt->m_table, false, true, false);
+      ppt->AddMultiSel(ppt->GetUIPart(ppt->m_table), false, true, false);
       if (updateEditor)
       {
 #ifndef __STANDALONE__
@@ -1082,7 +1112,7 @@ CComObject<PinTable>* WinEditor::GetActiveTable()
    return nullptr;
 }
 
-bool WinEditor::CanClose()
+bool WinEditor::CloseWhatIsPossible()
 {
    while (!m_vtable.empty())
    {
@@ -1402,8 +1432,8 @@ void WinEditor::OnClose()
          Sleep(THREADS_PAUSE);
 
 #ifndef __STANDALONE__
-   const bool canClose = CanClose();
-   if (canClose)
+   const bool allClosed = CloseWhatIsPossible();
+   if (allClosed)
    {
       WINDOWPLACEMENT winpl;
       winpl.length = sizeof(winpl);
@@ -1841,7 +1871,7 @@ INT_PTR CALLBACK SecurityOptionsProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPA
 INT_PTR CALLBACK FontManagerProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 #ifndef __STANDALONE__
-   CCO(PinTable) *pt = (CCO(PinTable) *)GetWindowLongPtr(hwndDlg, GWLP_USERDATA);
+   PinTableWnd *pt = (PinTableWnd *)GetWindowLongPtr(hwndDlg, GWLP_USERDATA);
 
    switch (uMsg)
    {
@@ -1861,7 +1891,7 @@ INT_PTR CALLBACK FontManagerProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM 
       lvcol.cx = 200;
       ListView_InsertColumn(GetDlgItem(hwndDlg, IDC_SOUNDLIST), 1, &lvcol);
 
-      pt = (CCO(PinTable) *)GetWindowLongPtr(hwndDlg, GWLP_USERDATA);
+      pt = (PinTableWnd *)GetWindowLongPtr(hwndDlg, GWLP_USERDATA);
 
       pt->ListFonts(GetDlgItem(hwndDlg, IDC_SOUNDLIST));
 
@@ -1929,7 +1959,7 @@ INT_PTR CALLBACK FontManagerProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM 
                   ListView_GetItem(GetDlgItem(hwndDlg, IDC_SOUNDLIST), &lvitem);
                   PinFont * const ppf = (PinFont *)lvitem.lParam;
                   ListView_DeleteItem(GetDlgItem(hwndDlg, IDC_SOUNDLIST), sel);
-                  pt->RemoveFont(ppf);
+                  pt->m_table->RemoveFont(ppf);
                }
             }
          }
@@ -1993,7 +2023,7 @@ void WinEditor::ToggleBackglassView()
    CComObject<PinTable> * const ptCur = GetActiveTable();
    if (ptCur)
       // Set selection to something in the new view (unless hiding table elements)
-      ptCur->AddMultiSel((ISelect *)ptCur, false, true, false);
+      ptCur->m_tableEditor->AddMultiSel(ptCur->m_tableEditor->GetUIPart(ptCur), false, true, false);
 
    ToggleToolbar();
 }
@@ -2027,10 +2057,11 @@ void WinEditor::SetDefaultPhysics()
       const int answ = MessageBox(LocalString(IDS_DEFAULTPHYSICS).m_szbuffer, "Continue?", MB_YESNO | MB_ICONWARNING);
       if (answ == IDYES)
       {
-         ptCur->BeginUndo();
-         for (int i = 0; i < ptCur->m_vmultisel.size(); i++)
-            ptCur->m_vmultisel[i].SetDefaultPhysics(true);
-         ptCur->EndUndo();
+         ptCur->m_tableEditor->BeginUndo();
+         for (IWinUIPart *const uiPart : ptCur->m_tableEditor->GetMultiSelParts())
+            if (IEditable *const editable = uiPart->GetEditable(); editable)
+               editable->SetDefaultPhysics(true);
+         ptCur->m_tableEditor->EndUndo();
       }
    }
 }
@@ -2080,42 +2111,59 @@ void WinEditor::AddControlPoint()
    if (ptCur == nullptr)
       return;
 
-   if (!ptCur->m_table->m_vmultisel.empty())
+   if (IWinUIPart *const psel = ptCur->GetSelectedItem(); psel != nullptr)
    {
-      ISelect * const psel = ptCur->m_table->m_vmultisel.ElementAt(0);
-      if (psel != nullptr)
+      const POINT pt = ptCur->GetScreenPoint();
+      const Vertex2D v = ptCur->TransformPoint(pt.x, pt.y);
+      switch (psel->GetItemType())
       {
-         const POINT pt = ptCur->GetScreenPoint();
-         switch (psel->GetItemType())
-         {
-         case eItemRamp:
-         {
-            Ramp * const pRamp = (Ramp *)psel;
-            pRamp->AddPoint(pt.x, pt.y, false);
-            break;
-         }
-         case eItemLight:
-         {
-            Light * const pLight = (Light *)psel;
-            pLight->AddPoint(pt.x, pt.y, false);
-            break;
-         }
-         case eItemSurface:
-         {
-            Surface * const pSurf = (Surface *)psel;
-            pSurf->AddPoint(pt.x, pt.y, false);
-            break;
-         }
-         case eItemRubber:
-         {
-            Rubber * const pRub = (Rubber *)psel;
-            pRub->AddPoint(pt.x, pt.y, false);
-            break;
-         }
-         default:
-            break;
-         }
-      } //if (psel != nullptr)
+      case eItemRamp:
+      {
+         Ramp *const pRamp = (Ramp *)psel->GetEditable();
+         ptCur->BeginUndo();
+         ptCur->MarkForUndo(pRamp);
+         pRamp->AddPoint(v, false);
+         ptCur->EndUndo();
+         if (pRamp->GetPTable())
+            pRamp->GetPTable()->SetDirtyDraw();
+         break;
+      }
+      case eItemLight:
+      {
+         Light *const pLight = (Light *)psel->GetEditable();
+         ptCur->BeginUndo();
+         ptCur->MarkForUndo(pLight);
+         pLight->AddPoint(v, false);
+         ptCur->EndUndo();
+         if (pLight->GetPTable())
+            pLight->GetPTable()->SetDirtyDraw();
+         break;
+      }
+      case eItemSurface:
+      {
+         Surface *const pSurf = (Surface *)psel->GetEditable();
+         ptCur->BeginUndo();
+         ptCur->MarkForUndo(pSurf);
+         pSurf->AddPoint(v, false);
+         ptCur->EndUndo();
+         if (pSurf->GetPTable())
+            pSurf->GetPTable()->SetDirtyDraw();
+         break;
+      }
+      case eItemRubber:
+      {
+         Rubber *const pRub = (Rubber *)psel->GetEditable();
+         ptCur->BeginUndo();
+         ptCur->MarkForUndo(pRub);
+         pRub->AddPoint(v, false);
+         ptCur->EndUndo();
+         if (pRub->GetPTable())
+            pRub->GetPTable()->SetDirtyDraw();
+         break;
+      }
+      default:
+         break;
+      }
    }
 }
 
@@ -2125,43 +2173,102 @@ void WinEditor::AddSmoothControlPoint()
    if (ptCur == nullptr)
       return;
 
-   if (!ptCur->m_table->m_vmultisel.empty())
+   if (IWinUIPart *const psel = ptCur->GetSelectedItem(); psel != nullptr)
    {
-      ISelect *const psel = ptCur->m_table->m_vmultisel.ElementAt(0);
-      if (psel != nullptr)
+      const POINT pt = ptCur->GetScreenPoint();
+      const Vertex2D v = ptCur->TransformPoint(pt.x, pt.y);
+      switch (psel->GetItemType())
       {
-         const POINT pt = ptCur->GetScreenPoint();
-         switch (psel->GetItemType())
-         {
-         case eItemRamp:
-         {
-            Ramp * const pRamp = (Ramp *)psel;
-            pRamp->AddPoint(pt.x, pt.y, true);
+      case eItemRamp:
+      {
+         Ramp *const pRamp = (Ramp *)psel->GetEditable();
+         ptCur->BeginUndo();
+         ptCur->MarkForUndo(pRamp);
+         pRamp->AddPoint(v, true);
+            ptCur->EndUndo();
+            if (pRamp->GetPTable())
+               pRamp->GetPTable()->SetDirtyDraw();
             break;
          }
          case eItemLight:
          {
-            Light * const pLight = (Light *)psel;
-            pLight->AddPoint(pt.x, pt.y, true);
+            Light *const pLight = (Light *)psel->GetEditable();
+            ptCur->BeginUndo();
+            ptCur->MarkForUndo(pLight);
+            pLight->AddPoint(v, true);
+            ptCur->EndUndo();
+            if (pLight->GetPTable())
+               pLight->GetPTable()->SetDirtyDraw();
             break;
          }
          case eItemSurface:
          {
-            Surface * const pSurf = (Surface *)psel;
-            pSurf->AddPoint(pt.x, pt.y, true);
+            Surface *const pSurf = (Surface *)psel->GetEditable();
+            ptCur->BeginUndo();
+            ptCur->MarkForUndo(pSurf);
+            pSurf->AddPoint(v, true);
+            ptCur->EndUndo();
+            if (pSurf->GetPTable())
+               pSurf->GetPTable()->SetDirtyDraw();
             break;
          }
          case eItemRubber:
          {
-            Rubber * const pRub = (Rubber *)psel;
-            pRub->AddPoint(pt.x, pt.y, true);
-            break;
-         }
-         default:
-            break;
-         }
+            Rubber *const pRub = (Rubber *)psel->GetEditable();
+            ptCur->BeginUndo();
+            ptCur->MarkForUndo(pRub);
+         pRub->AddPoint(v, true);
+         ptCur->EndUndo();
+         if (pRub->GetPTable())
+            pRub->GetPTable()->SetDirtyDraw();
+         break;
+      }
+      default:
+         break;
       }
    }
+}
+
+void WinEditor::ExportTableMesh()
+{
+#ifndef __STANDALONE__
+   CComObject<PinTable> *const ptCur = GetActiveTable();
+   if (ptCur == nullptr)
+      return;
+
+   //need to get a file name
+   OPENFILENAME ofn = {};
+   ofn.lStructSize = sizeof(OPENFILENAME);
+   ofn.hInstance = g_app->GetInstanceHandle();
+   ofn.hwndOwner = GetHwnd();
+   // TEXT
+   ofn.lpstrFilter = "Wavefront obj(*.obj)\0*.obj\0";
+
+   std::filesystem::path objPath = ptCur->m_filename;
+   objPath.replace_extension(".obj");
+   char szObjFileName[MAXSTRING];
+   strncpy_s(szObjFileName, std::size(szObjFileName), objPath.string().c_str());
+   ofn.lpstrFile = szObjFileName;
+   ofn.nMaxFile = std::size(szObjFileName);
+   ofn.lpstrDefExt = "obj";
+   ofn.Flags = OFN_NOREADONLYRETURN | OFN_CREATEPROMPT | OFN_OVERWRITEPROMPT | OFN_EXPLORER;
+
+   const int ret = GetSaveFileName(&ofn);
+
+   // user cancelled
+   if (ret == 0)
+      return;
+
+   ObjLoader loader;
+   loader.ExportStart(szObjFileName);
+   ptCur->ExportMesh(loader);
+   for (const auto pedit : ptCur->GetParts())
+      if (pedit->IsUIVisible(false) && pedit->m_desktopBackdrop == m_desktopBackdropView)
+         pedit->ExportMesh(loader);
+   loader.ExportEnd();
+
+   MessageBox("Export finished!", "Info", MB_OK | MB_ICONEXCLAMATION);
+#endif
 }
 
 void WinEditor::SaveTable(const bool saveAs)
@@ -2218,7 +2325,12 @@ void WinEditor::SaveTable(const bool saveAs)
       SetCaption(ptCur->m_title.c_str());
    }
 
-   hr = ptCur->Save();
+   Win32ProgressBar feedback(g_app->GetInstanceHandle(), m_hwndStatusBar);
+   SetActionCur(LocalString(IDS_SAVING).m_szbuffer);
+   SetCursorCur(IDC_WAIT);
+   hr = ptCur->Save(feedback);
+   SetActionCur(string());
+   SetCursorCur(IDC_ARROW);
    if (hr == S_OK)
       UpdateRecentFileList(ptCur->m_filename);
 #endif
@@ -2247,7 +2359,8 @@ void WinEditor::OpenNewTable(size_t tableId)
    ppt->m_glassTopHeight = ppt->m_glassBottomHeight = 210;
    for (int i = 0; i < 16; i++)
       ppt->m_rgcolorcustom[i] = RGB(0, 0, 0);
-   ppt->LoadGameFromFilename(g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, path));
+   Win32ProgressBar feedback(g_app->GetInstanceHandle(), m_hwndStatusBar);
+   ppt->LoadGameFromFilename(g_app->m_fileLocator.GetAppPath(FileLocator::AppSubFolder::Assets, path), feedback);
    ppt->m_title = LocalString(IDS_TABLE).m_szbuffer /*"Table"*/ + std::to_string(m_NextTableID);
    m_NextTableID++;
    ppt->m_settings.SetIniPath(std::filesystem::path());
@@ -2255,7 +2368,7 @@ void WinEditor::OpenNewTable(size_t tableId)
 
    m_vtable.push_back(mdiTable->GetTableWnd());
    AddMDIChild(mdiTable);
-   mdiTable->GetTable()->AddMultiSel(mdiTable->GetTable(), false, true, false);
+   mdiTable->GetTableWnd()->AddMultiSel(mdiTable->GetTableWnd()->GetUIPart(mdiTable->GetTable()), false, true, false);
    GetLayersListDialog()->ResetView();
    ToggleToolbar();
    if (m_dockNotes != nullptr)
@@ -2267,9 +2380,8 @@ void WinEditor::OpenNewTable(size_t tableId)
 
 void WinEditor::ProcessDeleteElement()
 {
-   CComObject<PinTable> * const ptCur = GetActiveTable();
-   if (ptCur)
-      ptCur->OnDelete();
+   if (const auto ptCur = GetActiveTableEditor(); ptCur)
+      ptCur->DeleteSelection();
 }
 
 void WinEditor::OpenRecentFile(const size_t menuId)
@@ -2290,17 +2402,17 @@ void WinEditor::CopyPasteElement(const CopyPasteModes mode)
       {
       case COPY:
       {
-         ptCur->m_table->Copy(ptCursor.x, ptCursor.y);
+         ptCur->Copy(ptCursor.x, ptCursor.y);
          break;
       }
       case PASTE:
       {
-         ptCur->m_table->Paste(false, ptCursor.x, ptCursor.y);
+         ptCur->Paste(false, ptCursor.x, ptCursor.y);
          break;
       }
       case PASTE_AT:
       {
-         ptCur->m_table->Paste(true, ptCursor.x, ptCursor.y);
+         ptCur->Paste(true, ptCursor.x, ptCursor.y);
          break;
       }
       default:

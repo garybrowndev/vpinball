@@ -37,12 +37,10 @@ class Rubber :
    public EventProxy<Rubber, &DIID_IRubberEvents>,
    public IConnectionPointContainerImpl<Rubber>,
    public IProvideClassInfo2Impl<&CLSID_Rubber, &DIID_IRubberEvents, &LIBID_VPinballLib>,
-   public ISelect,
    public IEditable,
    public IHitable,
    public IRenderable,
    public IScriptable,
-   public IHaveDragPoints,
    public IFireEvents,
    public IPerPropertyBrowsing // Ability to fill in dropdown in property browser
 {
@@ -54,8 +52,8 @@ public:
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
    Rubber()
+      : m_curve(this, 2)
    {
-      m_menuid = IDR_SURFACEMENU;
       m_d.m_collidable = true;
       m_d.m_visible = true;
       m_timerEnabled = false;
@@ -77,55 +75,52 @@ public:
       CONNECTION_POINT_ENTRY(DIID_IRubberEvents)
    END_CONNECTION_POINT_MAP()
 
-   STANDARD_EDITABLE_DECLARES(Rubber, eItemRubber, RUBBER, VIEW_PLAYFIELD)
+   STANDARD_EDITABLE_DECLARES(Rubber, eItemRubber, RUBBER)
 
-      //DECLARE_NOT_AGGREGATABLE(Rubber)
-      // Remove the comment from the line above if you don't want your object to
-      // support aggregation.
+   //DECLARE_NOT_AGGREGATABLE(Rubber)
+   // Remove the comment from the line above if you don't want your object to
+   // support aggregation.
 
-      DECLARE_REGISTRY_RESOURCEID(IDR_RUBBER)
+   DECLARE_REGISTRY_RESOURCEID(IDR_RUBBER)
    // ISupportsErrorInfo
    STDMETHOD(InterfaceSupportsErrorInfo)(REFIID riid);
 
-   void RenderBlueprint(Sur *psur, const bool solid) final;
-
    void ClearForOverwrite() final;
-
-   void MoveOffset(const float dx, const float dy) final;
-   void SetObjectPos() final;
-
-#ifndef __STANDALONE__
-   void DoCommand(int icmd, int x, int y) final;
-#endif
-
-   int GetMinimumPoints() const final { return 2; }
 
    void FlipY(const Vertex2D& pvCenter) final;
    void FlipX(const Vertex2D& pvCenter) final;
    void Rotate(const float ang, const Vertex2D& pvCenter, const bool useElementCenter) final;
    void Scale(const float scalex, const float scaley, const Vertex2D& pvCenter, const bool useElementCenter) final;
-   void Translate(const Vertex2D &pvOffset) final;
-   void AddPoint(int x, int y, const bool smooth) final;
-   void AddDragPoint(const Vertex3Ds& dragPoint);
-
-   Vertex2D GetCenter() const final { return GetPointCenter(); }
-   void PutCenter(const Vertex2D& pv) final { PutPointCenter(pv); }
+   void Translate(const Vertex2D &offset) final;
+   void AddDragPoint(const Vertex3Ds& dragPoint); // Ball History: builds the drawn line/corridor geometry
+   Vertex2D GetCenter() const final { return m_curve.GetCenter(); }
 
    void GetBoundingVertices(vector<Vertex3Ds> &bounds, vector<Vertex3Ds> *const legacy_bounds) final;
 
    float GetDepth(const Vertex3Ds& viewDir) const final;
-   ItemTypeEnum HitableGetItemType() const final { return eItemRubber; }
    void SetDefaultPhysics(const bool fromMouseClick) final;
    void ExportMesh(ObjLoader& loader) final;
 
    void WriteRegDefaults() final;
-   void UpdateStatusBarInfo() final;
+
+   void AddPoint(const Vertex2D &v, const bool smooth);
 
 #if 0
    float GetSurfaceHeight(float x, float y) const final;
 #endif
 
    RubberData m_d;
+
+   // The rubber outline curve (drag points defining the rubber band shape)
+   DragPointCurve m_curve;
+
+   // Fills 'outline' with the closed 2D outline of the rubber for editor display, and optionally
+   // 'crossFlags' with one flag per curve vertex marking the ones located at a control point.
+   void GetEditorOutline(vector<Vertex2D> &outline, vector<bool> *crossFlags, const float accuracy) const;
+
+   // Fills 'edges' with pairs of 2D vertices forming the wireframe of the generated mesh for editor display.
+   // This actually regenerate the mesh
+   void GetEditorWireframe(vector<Vertex2D> &edges);
 
 private:
    void AddHitEdge(class PhysicsEngine *physics, ankerl::unordered_dense::set<std::pair<unsigned, unsigned>> &addedEdges, const unsigned i, const unsigned j, const bool isUI);
@@ -155,7 +150,6 @@ private:
 
    void UpdateRubber(const bool updateVB, const float height);
    void GenerateMesh(const int _accuracy = -1, const bool createHitShape = false);
-   void DrawRubberMesh(Sur * const psur);
 
    // IRubber
 public:

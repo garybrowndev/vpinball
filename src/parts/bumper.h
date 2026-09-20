@@ -42,7 +42,6 @@ class Bumper :
    public EventProxy<Bumper, &DIID_IBumperEvents>,
    public IConnectionPointContainerImpl<Bumper>,
    public IProvideClassInfo2Impl<&CLSID_Bumper, &DIID_IBumperEvents, &LIBID_VPinballLib>,
-   public ISelect,
    public IEditable,
    public IHitable,
    public IRenderable,
@@ -73,7 +72,7 @@ public:
    // Remove the comment from the line above if you don't want your object to
    // support aggregation.
 
-   STANDARD_EDITABLE_DECLARES(Bumper, eItemBumper, BUMPER, VIEW_PLAYFIELD)
+   STANDARD_EDITABLE_DECLARES(Bumper, eItemBumper, BUMPER)
 
    BEGIN_CONNECTION_POINT_MAP(Bumper)
       CONNECTION_POINT_ENTRY(DIID_IBumperEvents)
@@ -84,20 +83,13 @@ public:
    // ISupportsErrorInfo
    STDMETHOD(InterfaceSupportsErrorInfo)(REFIID riid);
 
-   // ISelect implementation
-   void MoveOffset(const float dx, const float dy) final;
-   void SetObjectPos() final;
+   void Translate(const Vertex2D &offset) final;
    Vertex2D GetCenter() const final;
-   void PutCenter(const Vertex2D &pv) final;
    void SetDefaultPhysics(const bool fromMouseClick) final;
    void ExportMesh(ObjLoader &loader) final;
 
    // IEditable implementation
-   void RenderBlueprint(Sur *psur, const bool solid) final;
    void WriteRegDefaults() final;
-
-   // IHitable implementation
-   ItemTypeEnum HitableGetItemType() const final { return eItemBumper; }
 
    // IBumper
    STDMETHOD(get_BaseMaterial)(/*[out, retval]*/ BSTR *pVal);

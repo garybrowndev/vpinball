@@ -23,9 +23,6 @@ import org.vpinball.app.ui.screens.landing.LandingScreenViewModel
 class SettingsViewModel : ViewModel() {
     // General
 
-    var haptics by mutableStateOf(false)
-        private set
-
     var renderingModeOverride by mutableStateOf(false)
         private set
 
@@ -67,18 +64,12 @@ class SettingsViewModel : ViewModel() {
     var webServerPort by mutableIntStateOf(0)
         private set
 
-    // Advanced
-
-    var resetLogOnPlay by mutableStateOf(false)
-        private set
-
     var needsTableReload by mutableStateOf(false)
         private set
 
     fun loadSettings() {
         // General
 
-        haptics = VPinballManager.loadValue(STANDALONE, "Haptics", true)
         renderingModeOverride = (VPinballManager.loadValue(STANDALONE, "RenderingModeOverride", -1) == 2)
         gfxBackend = VPinballGfxBackend.fromString(VPinballManager.loadValue(PLAYER, "GfxBackend", VPinballGfxBackend.OPENGLES.value))
 
@@ -122,18 +113,9 @@ class SettingsViewModel : ViewModel() {
 
         webServer = VPinballManager.loadValue(STANDALONE, "WebServer", false)
         webServerPort = VPinballManager.loadValue(STANDALONE, "WebServerPort", 2112)
-
-        // Advanced
-
-        resetLogOnPlay = VPinballManager.loadValue(STANDALONE, "ResetLogOnPlay", true)
     }
 
     // General
-
-    fun handleHaptics(value: Boolean) {
-        haptics = value
-        VPinballManager.saveValue(STANDALONE, "Haptics", haptics)
-    }
 
     fun handleRenderingModeOverride(value: Boolean) {
         renderingModeOverride = value
@@ -221,13 +203,6 @@ class SettingsViewModel : ViewModel() {
         webServerPort = value
         VPinballManager.saveValue(STANDALONE, "WebServerPort", webServerPort)
         VPinballManager.updateWebServer()
-    }
-
-    // Advanced
-
-    fun handleResetLogOnPlay(value: Boolean) {
-        resetLogOnPlay = value
-        VPinballManager.saveValue(STANDALONE, "ResetLogOnPlay", resetLogOnPlay)
     }
 
     // Reset

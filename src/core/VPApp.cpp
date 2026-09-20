@@ -9,12 +9,11 @@
 #include "parts/Collection.h"
 #include "plugins/VPXPlugin.h"
 
-#ifdef CRASH_HANDLER
+#if defined(CRASH_HANDLER) || defined(VPX_STANDALONE_CRASH_HANDLER)
 #include "utils/CrashHandler.h"
 #include "utils/BlackBox.h"
 #endif
 
-#include "ui/win/resource.h"
 #include <initguid.h>
 
 #define SET_CRT_DEBUG_FIELD(a) _CrtSetDbgFlag((a) | _CrtSetDbgFlag(_CRTDBG_REPORT_FLAG))
@@ -148,7 +147,7 @@ VPApp::VPApp()
    SetThreadName("Main"s);
 #endif
 
-   #ifdef CRASH_HANDLER
+   #if defined(CRASH_HANDLER) || defined(VPX_STANDALONE_CRASH_HANDLER)
       rde::CrashHandler::Init();
    #endif
 
@@ -273,7 +272,7 @@ int VPApp::GetLogicalNumberOfProcessors() const
    return m_logicalNumberOfProcessors;
 }
 
-void VPApp::InitInstance()
+void VPApp::InitInstance(bool isPlay)
 {
    std::filesystem::path iniFileName = m_commandLineCustomSettingsFileName;
    // Define settings location and load them
@@ -328,7 +327,10 @@ void VPApp::InitInstance()
    libwinevbs_init(&callbacks);
 #endif
 
-   Logger::SetupLogger(m_settings.GetEditor_EnableLog());
+   Logger::SetupLogger(m_settings.GetGlobal_EnableLog());
+   if (isPlay && m_settings.GetGlobal_ResetLogOnPlay())
+      Logger::Truncate();
+
    PLOGI << "Starting VPX - " << VP_VERSION_STRING_FULL_LITERAL;
    PLOGI << "Settings file was loaded from " << m_settings.GetIniPath();
    PLOGI << "Number of logical CPU cores: " << GetLogicalNumberOfProcessors();
@@ -359,6 +361,25 @@ BOOL VPApp::WinApp::OnIdle(LONG)
       g_pplayer->m_pluginManager.ProcessAsyncCallbacks();
    return FALSE;
 }
+static bool IsRealDialogWindow(HWND hWnd)
+{
+   if (hWnd == nullptr)
+      return false;
+
+   WCHAR className[256];
+   if (::GetClassNameW(hWnd, className, _countof(className)) == 0)
+      return false;
+
+   WNDCLASSEXW wc = { sizeof(wc) };
+   HINSTANCE hInst = reinterpret_cast<HINSTANCE>(::GetWindowLongPtrW(hWnd, GWLP_HINSTANCE));
+
+   // GetClassInfoEx wants the instance the class was registered against;
+   // try the window's own instance first, then fall back to NULL (system classes).
+   if (!::GetClassInfoExW(hInst, className, &wc) && !::GetClassInfoExW(nullptr, className, &wc))
+      return false;
+
+   return wc.cbWndExtra >= DLGWINDOWEXTRA;
+}
 BOOL VPApp::WinApp::PreTranslateMessage(MSG &msg)
 {
    if (g_pvp && g_pvp->IsWindow() && msg.message >= WM_KEYFIRST && msg.message <= WM_KEYLAST)
@@ -367,12 +388,12 @@ BOOL VPApp::WinApp::PreTranslateMessage(MSG &msg)
       if (const int keyPressed = LOWORD(msg.wParam); (keyPressed >= VK_F1 && keyPressed <= VK_F12))
          return __super::PreTranslateMessage(msg);
 
-      // Skip accelerators for Edit control of the main editor (property pane edits, to avoid Delete, Copy/Paste, Undo,... conflicts)
+      // Skip accelerators for control of the main editor embedded dialogs (property pane edits, to avoid Delete, Copy/Paste, Undo,... conflicts, support tabbing through pane control)
       if (CWnd focus = g_pvp->GetFocus(); focus != nullptr && g_pvp->IsChild(focus) && focus.GetClassName() == WC_EDIT)
       {
          while (focus != nullptr)
          {
-            if (focus.GetClassName() == WC_TABCONTROL)
+            if (IsRealDialogWindow(focus))
             {
                return focus.IsDialogMessage(msg);
             }

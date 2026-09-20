@@ -15,8 +15,6 @@
 #include "renderer/Shader.h"
 #include "renderer/trace.h"
 #include "renderer/VertexBuffer.h"
-#include "ui/win/sur.h"
-#include "ui/win/WinEditor.h"
 #include "utils/objloader.h"
 
 Gate::~Gate()
@@ -32,7 +30,7 @@ Gate *Gate::CopyForPlay() const
 
 void Gate::SetGateType(GateType type)
 {
-    switch (m_d.m_type)
+    switch (type)
     {
     case GateWireW:
     {
@@ -70,14 +68,6 @@ void Gate::SetGateType(GateType type)
         ShowError("Unknown Gate type");
         break;
     }
-}
-
-void Gate::UpdateStatusBarInfo()
-{
-   if (!m_vpinball)
-      return;
-   const string tbuf = std::format("Length: {:.3f} | Height: {:.3f}", m_vpinball->ConvertToUnit(m_d.m_length), m_vpinball->ConvertToUnit(m_d.m_height));
-   m_vpinball->SetStatusBarUnitInfo(tbuf, true);
 }
 
 HRESULT Gate::Init(const float x, const float y, const bool fromMouseClick, const bool forPlay)
@@ -186,101 +176,6 @@ void Gate::SetCloseAngle(const float angle)
    }
    else
       m_d.m_angleMin = newVal;
-}
-
-void Gate::UIRenderPass1(Sur * const psur)
-{
-}
-
-void Gate::UIRenderPass2(Sur * const psur)
-{
-   psur->SetBorderColor(RGB(0, 0, 0), false, 0);
-   psur->SetLineColor(RGB(0, 0, 0), false, 2);
-   psur->SetObject(this);
-
-   const float halflength = m_d.m_length * 0.5f;
-   const float len1 = halflength *0.5f;
-   const float len2 = len1 * 0.5f;
-   Vertex2D tmp;
-
-   psur->Ellipse(m_d.m_vCenter.x, m_d.m_vCenter.y, halflength);
-
-   {
-      const float radangle = ANGTORAD(m_d.m_rotation);
-      {
-         const float sn = sinf(radangle);
-         const float cs = cosf(radangle);
-
-         psur->Line(m_d.m_vCenter.x + cs*halflength, m_d.m_vCenter.y + sn*halflength,
-            m_d.m_vCenter.x - cs*halflength, m_d.m_vCenter.y - sn*halflength);
-
-         // Draw Arrow
-         psur->SetLineColor(RGB(0, 0, 0), false, 1);
-
-         tmp.x = m_d.m_vCenter.x + sn*len1;
-         tmp.y = m_d.m_vCenter.y - cs*len1;
-
-         psur->Line(tmp.x, tmp.y,
-            m_d.m_vCenter.x, m_d.m_vCenter.y);
-      }
-
-   {
-      const float arrowang = radangle + 0.6f;
-      const float sn = sinf(arrowang);
-      const float cs = cosf(arrowang);
-
-      psur->Line(tmp.x, tmp.y,
-         m_d.m_vCenter.x + sn*len2, m_d.m_vCenter.y - cs*len2);
-   }
-   }
-
-   {
-      const float arrowang = ANGTORAD(m_d.m_rotation) - 0.6f;
-      const float sn = sinf(arrowang);
-      const float cs = cosf(arrowang);
-
-      psur->Line(tmp.x, tmp.y,
-         m_d.m_vCenter.x + sn*len2, m_d.m_vCenter.y - cs*len2);
-
-   }
-
-   if (m_d.m_twoWay)
-   {
-      const float radangle = ANGTORAD(m_d.m_rotation - 180.f);
-      {
-         const float sn = sinf(radangle);
-         const float cs = cosf(radangle);
-
-         // Draw Arrow
-         psur->SetLineColor(RGB(0, 0, 0), false, 1);
-
-         tmp.x = m_d.m_vCenter.x + sn*len1;
-         tmp.y = m_d.m_vCenter.y - cs*len1;
-
-         psur->Line(tmp.x, tmp.y,
-            m_d.m_vCenter.x, m_d.m_vCenter.y);
-      }
-
-       {
-          const float arrowang = radangle + 0.6f;
-          const float sn = sinf(arrowang);
-          const float cs = cosf(arrowang);
-
-          psur->Line(tmp.x, tmp.y,
-             m_d.m_vCenter.x + sn*len2, m_d.m_vCenter.y - cs*len2);
-       }
-
-       const float arrowang = radangle - 0.6f;
-       const float sn = sinf(arrowang);
-       const float cs = cosf(arrowang);
-
-       psur->Line(tmp.x, tmp.y,
-          m_d.m_vCenter.x + sn*len2, m_d.m_vCenter.y - cs*len2);
-   }
-}
-
-void Gate::RenderBlueprint(Sur *psur, const bool solid)
-{
 }
 
 
@@ -422,11 +317,11 @@ void Gate::Render(const unsigned int renderMask)
    || (isReflectionPass && !m_d.m_reflectionEnabled))
       return;
 
-   if (m_phitgate->m_gateMover.m_angle != m_vertexbuffer_angle)
+   if (float angle = m_phitgate ? m_phitgate->m_gateMover.m_angle : 0.f; angle != m_vertexbuffer_angle)
    {
-      m_vertexbuffer_angle = m_phitgate->m_gateMover.m_angle;
+      m_vertexbuffer_angle = angle;
 
-      const Matrix3D fullMatrix = Matrix3D::MatrixRotateX(m_d.m_twoWay ? m_phitgate->m_gateMover.m_angle : -m_phitgate->m_gateMover.m_angle)
+      const Matrix3D fullMatrix = Matrix3D::MatrixRotateX(m_d.m_twoWay ? angle : -angle)
                                 * Matrix3D::MatrixRotateZ(ANGTORAD(m_d.m_rotation));
       const Matrix3D vertMatrix = (fullMatrix
                                  * Matrix3D::MatrixScale(m_d.m_length, m_d.m_length, m_d.m_length))
@@ -538,25 +433,15 @@ void Gate::GenerateWireMesh(Vertex3D_NoTex2 *buf) const
    world.TransformVertices(m_vertices, buf, m_numVertices);
 }
 
-void Gate::SetObjectPos()
+void Gate::Translate(const Vertex2D &offset)
 {
-   m_vpinball->SetObjectPosCur(m_d.m_vCenter.x, m_d.m_vCenter.y);
-}
-
-void Gate::MoveOffset(const float dx, const float dy)
-{
-   m_d.m_vCenter.x += dx;
-   m_d.m_vCenter.y += dy;
+   m_d.m_vCenter.x += offset.x;
+   m_d.m_vCenter.y += offset.y;
 }
 
 Vertex2D Gate::GetCenter() const
 {
    return m_d.m_vCenter;
-}
-
-void Gate::PutCenter(const Vertex2D& pv)
-{
-   m_d.m_vCenter = pv;
 }
 
 void Gate::Save(IObjectWriter& writer, const bool saveForUndo)

@@ -35,20 +35,13 @@
 #include "ui/VPXFileFeedback.h"
 #include "ui/live/LiveUI.h"
 #include "ui/win/codeview.h"
-#include "ui/win/DragPointDialogs.h"
-#include "ui/win/hitsur.h"
 #include "ui/win/PinTableWnd.h"
 #include "ui/win/resource.h"
-#include "ui/win/WinEditor.h"
 #include "utils/BiffReader.h"
 #include "utils/BiffWriter.h"
 #include "utils/hash.h"
 #include "utils/objloader.h"
 #include "utils/ushock_output.h"
-
-#ifndef __STANDALONE__
-#include "ui/win/dialogs/Win32ProgressBar.h"
-#endif
 
 #include <algorithm>
 #include <fstream>
@@ -83,10 +76,8 @@ static inline std::from_chars_result my_from_chars(const char* first, const char
 
 PinTable::PinTable()
    : m_settings(&(g_app->m_settings))
-   , m_undo(this)
 {
    m_renderSolid = m_settings.GetEditor_RenderSolid();
-   ClearMultiSel();
 
    SetDefaultPhysics(false);
 
@@ -97,9 +88,9 @@ PinTable::PinTable()
    CComObject<ScriptGlobalTable>::CreateInstance(&m_psgt);
    m_psgt->AddRef();
    m_psgt->Init(this);
-   m_scriptableNames[L"debug"s] = nullptr; // Debug global object (for Debug.Print)
-   for (const wstring& methodName : m_psgt->GetMethodNames()) // Add all global methods as reserved keywords
-      m_scriptableNames[lowerCase(methodName)] = nullptr;
+   m_scriptableNames.insert(L"debug"s); // Debug global object (for Debug.Print)
+   for (const wstring &methodName : m_psgt->GetMethodNames()) // Add all global methods as reserved keywords
+      m_scriptableNames.insert(lowerCase(methodName));
 
    Settings::SetTableOverride_Difficulty_Default(m_difficulty);
    m_globalDifficulty = m_settings.GetTableOverride_Difficulty();
@@ -149,30 +140,14 @@ PinTable::~PinTable()
    for (size_t i = 0; i < m_vrenderprobe.size(); ++i)
       delete m_vrenderprobe[i];
 
-   for (int i = 0; i < m_vcollection.size(); i++)
-      m_vcollection.ElementAt(i)->Release();
+   for (auto pcol : m_vcollection)
+      pcol->Release();
 
    m_psgt->Release();
    m_psgt = nullptr;
 
    if (m_liveBaseTable)
       m_liveBaseTable->Release();
-}
-
-void PinTable::UpdatePropertyImageList()
-{
-#ifndef __STANDALONE__
-    // just update the combo boxes in the property dialog
-    g_pvp->GetPropertiesDocker()->GetContainProperties()->GetPropertyDialog()->UpdateTabs(m_vmultisel);
-#endif
-}
-
-void PinTable::UpdatePropertyMaterialList()
-{
-#ifndef __STANDALONE__
-    // just update the combo boxes in the property dialog
-    g_pvp->GetPropertiesDocker()->GetContainProperties()->GetPropertyDialog()->UpdateTabs(m_vmultisel);
-#endif
 }
 
 void PinTable::ClearForOverwrite()
@@ -184,13 +159,6 @@ void PinTable::ClearForOverwrite()
    for (size_t i = 0; i < m_vrenderprobe.size(); i++)
       delete m_vrenderprobe[i];
    m_vrenderprobe.clear();
-}
-
-void PinTable::SetMouseCapture()
-{
-#ifndef __STANDALONE__
-   m_tableEditor->SetCapture();
-#endif
 }
 
 #define CLEAN_MATERIAL(pEditMaterial) \
@@ -383,12 +351,14 @@ void PinTable::AddPart(IEditable *const part)
    part->AddRef();
    part->m_ptable = this;
    m_vedit.push_back(part);
+   if (m_tableEditor)
+      m_tableEditor->OnPartAdded(part);
    if (auto scriptable = part->GetIScriptable(); scriptable)
    {
       assert(!scriptable->m_wzName.empty());
       const auto id = lowerCase(scriptable->m_wzName);
       assert(m_scriptableNames.find(id) == m_scriptableNames.end());
-      m_scriptableNames[id] = part;
+      m_scriptableNames.insert(id);
       if (m_tableEditor)
          m_tableEditor->m_pcv->AddItem(scriptable, false);
    }
@@ -400,6 +370,8 @@ void PinTable::RemovePart(IEditable *const part)
    assert(it2 != m_vedit.end());
    assert(part->m_ptable == this);
    m_vedit.erase(it2);
+   if (m_tableEditor)
+      m_tableEditor->OnPartRemoved(part);
    if (auto scriptable = part->GetIScriptable(); scriptable)
    {
       assert(!part->GetIScriptable()->m_wzName.empty());
@@ -423,7 +395,7 @@ void PinTable::RenamePart(IEditable *const part, const wstring& newName)
    m_scriptableNames.erase(it);
    const auto id = lowerCase(newName);
    assert(m_scriptableNames.find(id) == m_scriptableNames.end());
-   m_scriptableNames[id] = part;
+   m_scriptableNames.insert(id);
    scriptable->m_wzName = newName;
    if (m_tableEditor)
       m_tableEditor->m_pcv->ReplaceName(scriptable, newName);
@@ -445,49 +417,38 @@ void PinTable::MovePartToBack(IEditable* part)
 
 void PinTable::ReorderParts(bool isDrawingOrder)
 {
-   SetNonUndoableDirty(eSaveDirty);
-   if (isDrawingOrder)
+   const vector<IWinUIPart *> &selection = isDrawingOrder ? m_tableEditor->GetMultiSelParts() : m_tableEditor->m_allHitElements;
+   if (!selection.empty())
    {
-      for (int i = m_vmultisel.size() - 1; i >= 0; i--)
+      SetNonUndoableDirty(eSaveDirty);
+      for (size_t i = selection.size() - 1; i >= 0; i--)
       {
-         IEditable *const pedit = m_vmultisel[i].GetIEditable();
+         IEditable *const pedit = selection[i]->GetEditable();
          RemoveFromVectorSingle(m_vedit, pedit);
       }
 
-      for (int i = m_vmultisel.size() - 1; i >= 0; i--)
+      for (size_t i = selection.size() - 1; i >= 0; i--)
       {
-         IEditable *const pedit = m_vmultisel[i].GetIEditable();
-         m_vedit.push_back(pedit);
-      }
-   }
-   else
-   {
-      for (SSIZE_T i = m_allHitElements.size() - 1; i >= 0; i--)
-      {
-         IEditable *const pedit = m_allHitElements[i]->GetIEditable();
-         RemoveFromVectorSingle(m_vedit, pedit);
-      }
-
-      for (SSIZE_T i = m_allHitElements.size() - 1; i >= 0; i--)
-      {
-         IEditable *const pedit = m_allHitElements[i]->GetIEditable();
+         IEditable *const pedit = selection[i]->GetEditable();
+         if (FindIndexOf(m_vedit, pedit) != -1)
+            continue; // Already re-added: the selection may contain multiple selects of a part (part and sub parts)
          m_vedit.push_back(pedit);
       }
    }
 }
 
-void PinTable::AddCollection(Collection* collection)
+void PinTable::AddCollection(CComObject<Collection> *collection)
 {
    const auto id = lowerCase(collection->m_wzName);
    assert(m_scriptableNames.find(id) == m_scriptableNames.end());
    collection->AddRef();
    m_vcollection.push_back(collection);
-   m_scriptableNames[id] = nullptr;
+   m_scriptableNames.insert(id);
    if (m_tableEditor)
       m_tableEditor->m_pcv->AddItem((IScriptable *)collection, false);
 }
 
-void PinTable::RemoveCollection(Collection *collection)
+void PinTable::RemoveCollection(CComObject<Collection> *collection)
 {
 #ifndef __STANDALONE__
    auto it = m_scriptableNames.find(lowerCase(collection->m_wzName));
@@ -495,7 +456,10 @@ void PinTable::RemoveCollection(Collection *collection)
    m_scriptableNames.erase(it);
    if (m_tableEditor)
       m_tableEditor->m_pcv->RemoveItem((IScriptable *)collection);
-   m_vcollection.find_erase(collection);
+   const int idx = FindIndexOf(m_vcollection, collection);
+   assert(idx != -1);
+   if (idx != -1)
+      m_vcollection.erase(m_vcollection.begin() + idx);
    collection->Release();
 #endif
 }
@@ -508,7 +472,7 @@ void PinTable::RenameCollection(Collection *collection, const wstring &newName)
    m_scriptableNames.erase(it);
    const auto id = lowerCase(newName);
    assert(m_scriptableNames.find(id) == m_scriptableNames.end());
-   m_scriptableNames[id] = nullptr;
+   m_scriptableNames.insert(id);
    collection->m_wzName = newName;
    if (m_tableEditor)
       m_tableEditor->m_pcv->ReplaceName(collection, newName);
@@ -519,7 +483,15 @@ bool PinTable::IsNameUnique(const wstring &name) const
 
 void PinTable::GetUniqueName(const ItemTypeEnum type, wstring &wzUniqueName) const
 {
-   const wstring root = GetTypeNameForType(type);
+   UINT strID;
+   switch (type)
+   {
+   case eItemTable: strID = IDS_TABLE; break;
+   case eItemLightCenter: strID = IDS_TB_LIGHT; break;
+   case eItemDragPoint: strID = IDS_CONTROLPOINT; break;
+   default: strID = EditableRegistry::GetTypeNameStringID(type); break;
+   }
+   const wstring root = LocalStringW(strID).m_buffer;
    wzUniqueName = GetUniqueName(root);
 }
 
@@ -544,14 +516,14 @@ void PinTable::SetDirtyDraw()
       m_tableEditor->Redraw();
 }
 
-PinTable* PinTable::CopyForPlay()
+PinTable* PinTable::CopyForPlay() const
 {
-   PinTable * const src = this;
+   const PinTable * const src = this;
    CComObject<PinTable> *live_table;
    CComObject<PinTable>::CreateInstance(&live_table);
    live_table->AddRef();
-   live_table->m_liveBaseTable = this;
-   AddRef(); // as the live table holds a reference on this
+   live_table->m_liveBaseTable = const_cast<PinTable*>(this);
+   const_cast<PinTable *>(this)->AddRef(); // as the live table holds a reference on this
 
    CComObject<PinTable> *dst = live_table;
 
@@ -678,24 +650,23 @@ PinTable* PinTable::CopyForPlay()
 
    PLOGI << "Duplicating collections"; // For profiling
    live_table->m_vcollection.reserve(m_vcollection.size() + live_table->m_vcollection.size());
-   for (int i = 0; i < m_vcollection.size(); i++)
+   for (auto srccol : m_vcollection)
    {
       CComObject<Collection> *pcol;
       CComObject<Collection>::CreateInstance(&pcol);
       pcol->AddRef();
-      pcol->m_wzName = m_vcollection[i].m_wzName;
-      pcol->m_fireEvents = m_vcollection[i].m_fireEvents;
-      pcol->m_stopSingleEvents = m_vcollection[i].m_stopSingleEvents;
-      pcol->m_groupElements = m_vcollection[i].m_groupElements;
-      for (int j = 0; j < m_vcollection[i].m_visel.size(); ++j)
+      pcol->m_wzName = srccol->m_wzName;
+      pcol->m_fireEvents = srccol->m_fireEvents;
+      pcol->m_stopSingleEvents = srccol->m_stopSingleEvents;
+      pcol->m_groupElements = srccol->m_groupElements;
+      for (IEditable *const ed : srccol->GetParts())
       {
-         IEditable* ed = m_vcollection[i].m_visel[j].GetIEditable();
          if (dst->m_startupToLive.find(ed) != dst->m_startupToLive.end())
          {
             auto edit_item = (IEditable *)dst->m_startupToLive[ed];
             edit_item->m_vCollection.push_back(pcol);
-            edit_item->m_viCollection.push_back(pcol->m_visel.size());
-            pcol->m_visel.push_back(edit_item->GetISelect());
+            edit_item->m_viCollection.push_back(static_cast<int>(pcol->GetParts().size()));
+            pcol->AddPart(edit_item);
          }
       }
       live_table->AddCollection(pcol);
@@ -749,46 +720,46 @@ void PinTable::SetupLookUpTables(bool isPlaying)
    }
 }
 
-HRESULT PinTable::Save()
+HRESULT PinTable::Save(VPXFileFeedback &feedback)
 {
+   HRESULT hr = S_OK;
 #ifndef __STANDALONE__
    // Get file name if needed
    std::filesystem::path vpxPath = m_filename;
    vpxPath.replace_extension(".vpx");
 
-   STGOPTIONS stg;
-   stg.usVersion = 1;
-   stg.reserved = 0;
-   stg.ulSectorSize = 4096;
-
-   HRESULT hr;
-   IStorage* pstgRoot;
-   if (FAILED(hr = StgCreateStorageEx(vpxPath.wstring().c_str(), STGM_TRANSACTED | STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE,
-      STGFMT_DOCFILE, 0, &stg, nullptr, IID_IStorage, (void**)&pstgRoot)))
-   {
-      ShowError(LocalString(IDS_SAVEERROR).m_szbuffer);
-      return hr;
-   }
-
-   m_vpinball->SetActionCur(LocalString(IDS_SAVING).m_szbuffer);
-   m_vpinball->SetCursorCur(nullptr, IDC_WAIT);
-
    RemoveInvalidReferences();
 
-   hr = SaveToStorage(pstgRoot);
+   InMemStructuredStorage storage;
+   hr = SaveToStorage(&storage, feedback);
    if (SUCCEEDED(hr))
    {
-      pstgRoot->Commit(STGC_DEFAULT);
-      pstgRoot->Release();
-
-      m_undo.SetCleanPoint(eSaveClean);
-      if (m_tableEditor)
-         m_tableEditor->m_pcv->SetClean(eSaveClean);
-      SetNonUndoableDirty(eSaveClean);
+      POLE::Storage fileStorage(vpxPath.string().c_str());
+      if (!fileStorage.open(true, true) || fileStorage.result() != POLE::Storage::Ok)
+      {
+         ShowError(LocalString(IDS_SAVEERROR).m_szbuffer);
+         hr = E_FAIL;
+      }
+      else
+      {
+         if (!storage.WriteToStorage(fileStorage))
+         {
+            ShowError(LocalString(IDS_SAVEERROR).m_szbuffer);
+            hr = E_FAIL;
+         }
+         fileStorage.close();
+      }
    }
 
-   m_vpinball->SetActionCur(string());
-   m_vpinball->SetCursorCur(nullptr, IDC_ARROW);
+   if (SUCCEEDED(hr))
+   {
+      if (m_tableEditor)
+      {
+         m_tableEditor->SetCleanPoint(eSaveClean);
+         m_tableEditor->m_pcv->SetClean(eSaveClean);
+      }
+      SetNonUndoableDirty(eSaveClean);
+   }
 #endif
 
    // Save user custom settings file (if any) along the table file
@@ -797,21 +768,10 @@ HRESULT PinTable::Save()
    m_settings.SetIniPath(GetSettingsFileName());
    m_settings.Save();
 
-   return S_OK;
+   return hr;
 }
 
-HRESULT PinTable::SaveToStorage(IStorage *pstgRoot)
-{
-#ifndef __STANDALONE__
-   Win32ProgressBar feedback(g_app->GetInstanceHandle(), m_vpinball->m_hwndStatusBar);
-#else
-   VPXFileFeedback feedback;
-#endif
-
-   return SaveToStorage(pstgRoot, feedback);
-}
-
-HRESULT PinTable::SaveToStorage(IStorage *pstgRoot, VPXFileFeedback& feedback)
+HRESULT PinTable::SaveToStorage(InMemStructuredStorage *pstgRoot, VPXFileFeedback &feedback)
 {
 #ifndef __STANDALONE__
    m_savingActive = true;
@@ -834,165 +794,100 @@ HRESULT PinTable::SaveToStorage(IStorage *pstgRoot, VPXFileFeedback& feedback)
 
    feedback.SetLength(ctotalitems);
 
+   HRESULT hr = S_OK;
+
    //first save our own data
-   IStorage* pstgData;
-   HRESULT hr;
-   if (SUCCEEDED(hr = pstgRoot->CreateStorage(L"GameStg", STGM_DIRECT/*STGM_TRANSACTED*/ | STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE, 0, 0, &pstgData)))
+   InMemStream *const pstmGame = pstgRoot->CreateStream("GameStg/GameData"s);
+
+   InMemStream *pstmItem = pstgRoot->CreateStream("GameStg/Version"s);
+   int version = CURRENT_FILE_FORMAT_VERSION;
+   CryptHashData(hch, (BYTE *)&version, sizeof(version), 0);
+   pstmItem->Write(&version, sizeof(version));
+
+   SaveInfo(pstgRoot, hch);
+
+   pstmItem = pstgRoot->CreateStream("GameStg/CustomInfoTags"s);
+   SaveCustomInfo(pstgRoot, pstmItem, hch);
+
+   BiffWriter writer(pstmGame, hch);
+   Save(writer, false);
+   if (!writer.HasError())
    {
-      IStream *pstmGame;
-      if (SUCCEEDED(hr = pstgData->CreateStream(L"GameData", STGM_DIRECT | STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE, 0, 0, &pstmGame)))
+      // Move PartGroup ahead of objects they contain, so that they are saved first
+      std::ranges::stable_partition(m_vedit.begin(), m_vedit.end(), [](IEditable *p) { return p->GetItemType() == ItemTypeEnum::eItemPartGroup; });
+      for (size_t i = 0; i < m_vedit.size(); i++)
       {
-         IStream *pstmItem;
-         if (SUCCEEDED(hr = pstgData->CreateStream(L"Version", STGM_DIRECT | STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE, 0, 0, &pstmItem)))
-         {
-            int version = CURRENT_FILE_FORMAT_VERSION;
-            CryptHashData(hch, (BYTE *)&version, sizeof(version), 0);
-            ULONG writ;
-            pstmItem->Write(&version, sizeof(version), &writ);
-            pstmItem->Release();
-            pstmItem = nullptr;
-         }
+         pstmItem = pstgRoot->CreateStream(std::format("GameStg/GameItem{}", i));
 
-         IStorage *pstgInfo;
-         if (SUCCEEDED(hr = pstgRoot->CreateStorage(L"TableInfo", STGM_TRANSACTED | STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE, 0, 0, &pstgInfo)))
-         {
-            SaveInfo(pstgInfo, hch);
+         IEditable *const piedit = m_vedit[i];
+         const ItemTypeEnum type = piedit->GetItemType();
+         pstmItem->Write(&type, sizeof(int));
+         BiffWriter writer(pstmItem, 0);
+         piedit->Save(writer, false);
 
-            if (SUCCEEDED(hr = pstgData->CreateStream(L"CustomInfoTags", STGM_DIRECT | STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE, 0, 0, &pstmItem)))
-            {
-               SaveCustomInfo(pstgInfo, pstmItem, hch);
-               pstmItem->Release();
-               pstmItem = nullptr;
-            }
-
-            pstgInfo->Release();
-         }
-
-         BiffWriter writer(pstmGame, hch);
-         Save(writer, false);
-         if (!writer.HasError())
-         {
-            // Move PartGroup ahead of objects they contain, so that they are saved first
-            std::ranges::stable_partition(m_vedit.begin(), m_vedit.end(), [](IEditable *p) { return p->GetItemType() == ItemTypeEnum::eItemPartGroup; });
-            for (size_t i = 0; i < m_vedit.size(); i++)
-            {
-               const wstring wStmName = L"GameItem" + std::to_wstring(i);
-
-               if (SUCCEEDED(hr = pstgData->CreateStream(wStmName.c_str(), STGM_DIRECT | STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE, 0, 0, &pstmItem)))
-               {
-                  ULONG writ;
-                  IEditable *const piedit = m_vedit[i];
-                  const ItemTypeEnum type = piedit->GetItemType();
-                  pstmItem->Write(&type, sizeof(int), &writ);
-                  BiffWriter writer(pstmItem, 0);
-                  piedit->Save(writer, false);
-                  pstmItem->Release();
-                  pstmItem = nullptr;
-                  //if (FAILED(hr)) goto Error;
-               }
-
-               csaveditems++;
-               feedback.SetProgress(csaveditems);
-            }
-
-            for (size_t i = 0; i < m_vsound.size(); i++)
-            {
-               const wstring wStmName = L"Sound" + std::to_wstring(i);
-
-               if (SUCCEEDED(hr = pstgData->CreateStream(wStmName.c_str(), STGM_DIRECT | STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE, 0, 0, &pstmItem)))
-               {
-                  m_vsound[i]->SaveToStream(pstmItem);
-                  pstmItem->Release();
-                  pstmItem = nullptr;
-               }
-
-               csaveditems++;
-               feedback.SetProgress(csaveditems);
-            }
-
-            for (size_t i = 0; i < m_vimage.size(); i++)
-            {
-               const wstring wStmName = L"Image" + std::to_wstring(i);
-
-               if (SUCCEEDED(hr = pstgData->CreateStream(wStmName.c_str(), STGM_DIRECT | STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE, 0, 0, &pstmItem)))
-               {
-                  BiffWriter imageWriter(pstmItem, 0);
-                  m_vimage[i]->Save(imageWriter, this);
-                  pstmItem->Release();
-                  pstmItem = nullptr;
-               }
-
-               csaveditems++;
-               feedback.SetProgress(csaveditems);
-            }
-
-            for (size_t i = 0; i < m_vfont.size(); i++)
-            {
-               const wstring wStmName = L"Font" + std::to_wstring(i);
-
-               if (SUCCEEDED(hr = pstgData->CreateStream(wStmName.c_str(), STGM_DIRECT | STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE, 0, 0, &pstmItem)))
-               {
-                  BiffWriter writer(pstmItem, 0);
-                  m_vfont[i]->Save(writer);
-                  pstmItem->Release();
-                  pstmItem = nullptr;
-               }
-
-               csaveditems++;
-               feedback.SetProgress(csaveditems);
-            }
-
-            for (int i = 0; i < m_vcollection.size(); i++)
-            {
-               const wstring wStmName = L"Collection" + std::to_wstring(i);
-
-               if (SUCCEEDED(hr = pstgData->CreateStream(wStmName.c_str(), STGM_DIRECT | STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE, 0, 0, &pstmItem)))
-               {
-                  BiffWriter writer(pstmItem, hch);
-                  m_vcollection[i].Save(writer, false);
-                  pstmItem->Release();
-                  pstmItem = nullptr;
-               }
-
-               csaveditems++;
-               feedback.SetProgress(csaveditems);
-            }
-
-         }
-         pstmGame->Release();
+         csaveditems++;
+         feedback.SetProgress(csaveditems);
       }
 
-      // Authentication block
-      BYTE hashval[256];
-      DWORD hashlen = 256;
-      foo = CryptGetHashParam(hch, HP_HASHSIZE, hashval, &hashlen, 0);
-      hashlen = 256;
-      foo = CryptGetHashParam(hch, HP_HASHVAL, hashval, &hashlen, 0);
-
-      IStream* pstmItem;
-      if (SUCCEEDED(hr = pstgData->CreateStream(L"MAC", STGM_DIRECT | STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE, 0, 0, &pstmItem)))
+      for (size_t i = 0; i < m_vsound.size(); i++)
       {
-         ULONG writ;
-         //int version = CURRENT_FILE_FORMAT_VERSION;
-         pstmItem->Write(hashval, hashlen, &writ);
-         pstmItem->Release();
-         pstmItem = nullptr;
+         pstmItem = pstgRoot->CreateStream(std::format("GameStg/Sound{}", i));
+         m_vsound[i]->SaveToStream(pstmItem);
+
+         csaveditems++;
+         feedback.SetProgress(csaveditems);
       }
 
-      foo = CryptDestroyHash(hch);
-      foo = CryptReleaseContext(hcp, 0);
-      // End Authentication block
-
-      if (SUCCEEDED(hr))
-         pstgData->Commit(STGC_DEFAULT);
-      else
+      for (size_t i = 0; i < m_vimage.size(); i++)
       {
-         pstgData->Revert();
-         pstgRoot->Revert();
-         ShowError(LocalString(IDS_SAVEERROR).m_szbuffer);
+         pstmItem = pstgRoot->CreateStream(std::format("GameStg/Image{}", i));
+         BiffWriter imageWriter(pstmItem, 0);
+         m_vimage[i]->Save(imageWriter, this);
+
+         csaveditems++;
+         feedback.SetProgress(csaveditems);
       }
-      pstgData->Release();
+
+      for (size_t i = 0; i < m_vfont.size(); i++)
+      {
+         pstmItem = pstgRoot->CreateStream(std::format("GameStg/Font{}", i));
+         BiffWriter writer(pstmItem, 0);
+         m_vfont[i]->Save(writer);
+
+         csaveditems++;
+         feedback.SetProgress(csaveditems);
+      }
+
+      int i = 0;
+      for (auto pcol : m_vcollection)
+      {
+         pstmItem = pstgRoot->CreateStream(std::format("GameStg/Collection{}", i++));
+         BiffWriter writer(pstmItem, hch);
+         pcol->Save(writer, false);
+
+         csaveditems++;
+         feedback.SetProgress(csaveditems);
+      }
    }
+   else
+   {
+      hr = E_FAIL;
+      ShowError(LocalString(IDS_SAVEERROR).m_szbuffer);
+   }
+
+   // Authentication block
+   BYTE hashval[256];
+   DWORD hashlen = 256;
+   foo = CryptGetHashParam(hch, HP_HASHSIZE, hashval, &hashlen, 0);
+   hashlen = 256;
+   foo = CryptGetHashParam(hch, HP_HASHVAL, hashval, &hashlen, 0);
+
+   pstmItem = pstgRoot->CreateStream("GameStg/MAC"s);
+   pstmItem->Write(hashval, hashlen);
+
+   foo = CryptDestroyHash(hch);
+   foo = CryptReleaseContext(hcp, 0);
+   // End Authentication block
 
    m_savingActive = false;
 
@@ -1002,29 +897,24 @@ HRESULT PinTable::SaveToStorage(IStorage *pstgRoot, VPXFileFeedback& feedback)
 #endif
 }
 
-HRESULT PinTable::WriteInfoValue(IStorage* pstg, const wstring& wzName, const string& szValue, HCRYPTHASH hcrypthash)
+HRESULT PinTable::WriteInfoValue(InMemStructuredStorage *pstg, const string &name, const string &szValue, HCRYPTHASH hcrypthash)
 {
 #ifndef __STANDALONE__
    if (szValue.empty())
       return S_OK;
 
-   IStream *pstm;
-   HRESULT hr = pstg->CreateStream(wzName.c_str(), STGM_DIRECT | STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE, 0, 0, &pstm);
-   if (FAILED(hr))
-      return hr;
+   InMemStream *const pstm = pstg->CreateStream("TableInfo/" + name);
 
    BiffWriter writer(pstm, hcrypthash);
    const wstring wzT = MakeWString(szValue);
 
 #if (WCHAR_T_SIZE == 4) // Linux, macOS
    const std::u16string wzT_utf16 = utf32_to_utf16(wzT);
-   writer.WriteBytes(wzT_utf16.c_str(), static_cast<ULONG>(wzT_utf16.length() * 2));
+   writer.WriteBytes(wzT_utf16.c_str(), wzT_utf16.length() * 2);
 #else // Windows
-   writer.WriteBytes(wzT.c_str(), static_cast<ULONG>(wzT.length() * sizeof(WCHAR)));
+   writer.WriteBytes(wzT.c_str(), wzT.length() * sizeof(WCHAR));
 #endif
 
-   pstm->Release();
-   pstm = nullptr;
    return S_OK;
 #else
    return 0L;
@@ -1032,18 +922,18 @@ HRESULT PinTable::WriteInfoValue(IStorage* pstg, const wstring& wzName, const st
 }
 
 
-HRESULT PinTable::SaveInfo(IStorage* pstg, HCRYPTHASH hcrypthash)
+HRESULT PinTable::SaveInfo(InMemStructuredStorage *pstg, HCRYPTHASH hcrypthash)
 {
 #ifndef __STANDALONE__
-   WriteInfoValue(pstg, L"TableName"s, m_tableName, hcrypthash);
-   WriteInfoValue(pstg, L"AuthorName"s, m_author, hcrypthash);
-   WriteInfoValue(pstg, L"TableVersion"s, m_version, hcrypthash);
-   WriteInfoValue(pstg, L"ReleaseDate"s, m_releaseDate, hcrypthash);
-   WriteInfoValue(pstg, L"AuthorEmail"s, m_authorEMail, hcrypthash);
-   WriteInfoValue(pstg, L"AuthorWebSite"s, m_webSite, hcrypthash);
-   WriteInfoValue(pstg, L"TableBlurb"s, m_blurb, hcrypthash);
-   WriteInfoValue(pstg, L"TableDescription"s, m_description, hcrypthash);
-   WriteInfoValue(pstg, L"TableRules"s, m_rules, hcrypthash);
+   WriteInfoValue(pstg, "TableName"s, m_tableName, hcrypthash);
+   WriteInfoValue(pstg, "AuthorName"s, m_author, hcrypthash);
+   WriteInfoValue(pstg, "TableVersion"s, m_version, hcrypthash);
+   WriteInfoValue(pstg, "ReleaseDate"s, m_releaseDate, hcrypthash);
+   WriteInfoValue(pstg, "AuthorEmail"s, m_authorEMail, hcrypthash);
+   WriteInfoValue(pstg, "AuthorWebSite"s, m_webSite, hcrypthash);
+   WriteInfoValue(pstg, "TableBlurb"s, m_blurb, hcrypthash);
+   WriteInfoValue(pstg, "TableDescription"s, m_description, hcrypthash);
+   WriteInfoValue(pstg, "TableRules"s, m_rules, hcrypthash);
    time_t hour_machine;
    time(&hour_machine);
    tm local_hour;
@@ -1051,33 +941,24 @@ HRESULT PinTable::SaveInfo(IStorage* pstg, HCRYPTHASH hcrypthash)
    char buffer[256];
    asctime_s(buffer, &local_hour);
    buffer[strnlen_s(buffer,std::size(buffer))-1] = '\0'; // remove line break
-   WriteInfoValue(pstg, L"TableSaveDate"s, buffer, NULL);
+   WriteInfoValue(pstg, "TableSaveDate"s, buffer, NULL);
    _itoa_s(++m_numTimesSaved, buffer, 10);
-   WriteInfoValue(pstg, L"TableSaveRev"s, buffer, NULL);
+   WriteInfoValue(pstg, "TableSaveRev"s, buffer, NULL);
 
    Texture * const pin = GetImage(m_screenShot);
    if (pin)
    {
-      IStream *pstm;
-      HRESULT hr;
-
-      if (SUCCEEDED(hr = pstg->CreateStream(L"Screenshot", STGM_DIRECT | STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_CREATE, 0, 0, &pstm)))
-      {
-         BiffWriter writer(pstm, hcrypthash);
-         writer.WriteBytes(pin->GetFileRaw(), static_cast<ULONG>(pin->GetFileSize()));
-         pstm->Release();
-         pstm = nullptr;
-      }
+      InMemStream *const pstm = pstg->CreateStream("TableInfo/Screenshot"s);
+      BiffWriter writer(pstm, hcrypthash);
+      writer.WriteBytes(pin->GetFileRaw(), pin->GetFileSize());
    }
-
-   pstg->Commit(STGC_DEFAULT);
 #endif
 
    return S_OK;
 }
 
 
-HRESULT PinTable::SaveCustomInfo(IStorage* pstg, IStream *pstmTags, HCRYPTHASH hcrypthash)
+HRESULT PinTable::SaveCustomInfo(InMemStructuredStorage *pstg, InMemStream *pstmTags, HCRYPTHASH hcrypthash)
 {
 #ifndef __STANDALONE__
    BiffWriter writer(pstmTags, hcrypthash);
@@ -1086,9 +967,7 @@ HRESULT PinTable::SaveCustomInfo(IStorage* pstg, IStream *pstmTags, HCRYPTHASH h
    writer.EndObject();
 
    for (size_t i = 0; i < m_vCustomInfoTag.size(); i++)
-      WriteInfoValue(pstg, MakeWString(m_vCustomInfoTag[i]), m_vCustomInfoContent[i], hcrypthash);
-
-   pstg->Commit(STGC_DEFAULT);
+      WriteInfoValue(pstg, m_vCustomInfoTag[i], m_vCustomInfoContent[i], hcrypthash);
 #endif
 
    return S_OK;
@@ -1351,7 +1230,7 @@ void PinTable::Save(IObjectWriter& writer, const bool saveForUndo)
       writer.WriteInt(FID(SSND), (int)m_vsound.size());
       writer.WriteInt(FID(SIMG), (int)m_vimage.size());
       writer.WriteInt(FID(SFNT), (int)m_vfont.size());
-      writer.WriteInt(FID(SCOL), m_vcollection.size());
+      writer.WriteInt(FID(SCOL), (int)m_vcollection.size());
 
       writer.WriteWideString(FID(NAME), m_wzName);
 
@@ -1360,7 +1239,7 @@ void PinTable::Save(IObjectWriter& writer, const bool saveForUndo)
       string script = m_script_text;
       if (!m_external_script_name.empty())
       {
-         std::ofstream file(m_external_script_name);
+         std::ofstream file(m_external_script_name, std::ios::binary);
          if (file)
          {
             file.write(script.data(), script.size());
@@ -1374,20 +1253,6 @@ void PinTable::Save(IObjectWriter& writer, const bool saveForUndo)
    writer.WriteInt(FID(TLCK), m_tablelocked);
    writer.EndObject();
 #endif
-}
-
-HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename)
-{
-#ifndef __STANDALONE__
-   if (m_vpinball)
-   {
-      Win32ProgressBar feedback(g_app->GetInstanceHandle(), m_vpinball->m_hwndStatusBar);
-      return LoadGameFromFilename(filename, feedback);
-   }
-#endif
-
-   VPXFileFeedback feedback;
-   return LoadGameFromFilename(filename, feedback);
 }
 
 HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VPXFileFeedback &feedback)
@@ -1540,7 +1405,7 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
                {
                   POLE::Stream stream(&rootStorage, streamName);
 
-                  ItemTypeEnum type = ItemTypeEnum::eItemTypeCount;
+                  ItemTypeEnum type = ItemTypeEnum::eItemInvalid;
                   stream.read(reinterpret_cast<unsigned char *>(&type), sizeof(int));
 
                   IEditable *const piedit = EditableRegistry::Create(type);
@@ -1632,14 +1497,13 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
          {
             // Process unnamed parts after named parts
             std::ranges::stable_partition(parts.begin(), parts.end(), [](IEditable *p) { return p && !p->GetIScriptable()->m_wzName.empty(); });
-            for (size_t i = 0; i < parts.size(); ++i)
+            for (size_t i = 0; i < parts.size(); )
             {
                IEditable * const part = parts[i];
                if (part == nullptr)
                {
                   PLOGE << "Failed to load one of the table parts";
                   parts.erase(parts.begin() + i);
-                  --i;
                }
                else
                {
@@ -1654,6 +1518,7 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
                   }
                   AddPart(part);
                   part->Release();
+                  i++;
                }
             }
 
@@ -1751,7 +1616,6 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
                            center += (miny + 0.5f * backglassHeight) * planeYAxis;
                            center.x += (minx + 0.5f * backglassWidth); // since planeXAxis is (1, 0, 0)
                            backglass->Translate(Vertex2D(center.x, center.y));
-                           backglass->m_d.m_vCenter = Vertex2D(center.x, center.y);
                            backglass->m_d.m_height = center.z;
                            backglass->m_d.m_rotX = -180.f - RADTOANG(atan2(planeNormal.y, planeNormal.z)); // since planeXAxis is (1, 0, 0)
                            backglass->m_d.m_renderMode = FlasherData::EXT_RENDER;
@@ -1781,9 +1645,10 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
                else if (i < m_vsound.size() - 1)
                {
                   for (size_t i2 = i + 1; i2 < m_vsound.size(); ++i2)
-                     if (sound->GetName() == m_vsound[i2]->GetName())
+                     if (StrCompareNoCase(sound->GetName(), m_vsound[i2]->GetName()))
                      {
                         PLOGW << "Duplicate sound name found: " << sound->GetName() << ", dropping it!";
+                        delete m_vsound[i2];
                         m_vsound.erase(m_vsound.begin() + i2);
                         --i2;
                      }
@@ -1801,9 +1666,10 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
                else if (i < m_vimage.size() - 1)
                {
                   for (size_t i2 = i + 1; i2 < m_vimage.size(); ++i2)
-                     if (image->m_name == m_vimage[i2]->m_name)
+                     if (StrCompareNoCase(image->m_name, m_vimage[i2]->m_name))
                      {
                         PLOGW << "Duplicate image name found: " << image->GetName() << ", dropping it!";
+                        delete m_vimage[i2];
                         m_vimage.erase(m_vimage.begin() + i2);
                         --i2;
                      }
@@ -1897,6 +1763,7 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
                   }
                   newGroup->m_wzName = layerName;
                   AddPart(newGroup);
+                  newGroup->Release();
                   part->SetPartGroup(newGroup);
                }
             }
@@ -1906,8 +1773,8 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
          std::ranges::stable_partition(m_vedit.begin(), m_vedit.end(), [](IEditable *p) { return p->GetItemType() == ItemTypeEnum::eItemPartGroup; });
 
          // Resolve collection parts
-         for (int i = 0; i < m_vcollection.size(); i++)
-            m_vcollection[i].InitPostLoad(this);
+         for (auto pcol : m_vcollection)
+            pcol->InitPostLoad(this);
       }
 
       // Authentication block
@@ -2046,9 +1913,9 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
                   return; // Conflict with another part name
                if ((shortName.find_first_not_of(L"0123456789") != std::string::npos) && script.find(shortNameLCaseS) != std::string::npos) //!!
                   return; // (Potential) conflict with a script variable
-               for (int i = 0; i < m_vcollection.size(); i++)
+               for (auto pcol : m_vcollection)
                {
-                  if (lowerCase(m_vcollection.ElementAt(i)->m_wzName) == shortNameLCase)
+                  if (lowerCase(pcol->m_wzName) == shortNameLCase)
                      return; // Conflict with a collection name
                }
                RenamePart(editable, shortName);
@@ -2078,15 +1945,15 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
                dmd->m_d.m_renderStyle = 0; // Legacy rendering style
                dmd->m_d.m_imagealignment = ImageModeWrap;
                dmd->m_d.m_color = textbox->m_d.m_fontcolor;
-               dmd->m_d.m_addBlend = false;
+               dmd->m_d.m_addBlend = FlasherData::AB_NONE;
                dmd->m_d.m_modulate_vs_add = 1.f; // Actually alpha
                dmd->m_d.m_alpha = static_cast<int>(100.f * textbox->m_d.m_intensity_scale); // Actually brightness
                dmd->m_d.m_intensity_scale = 1.f; // Actually brightness scale
                dmd->m_vCollection.insert(dmd->m_vCollection.begin(), textbox->m_vCollection.begin(), textbox->m_vCollection.end());
                for (Collection *const pcollection : textbox->m_vCollection)
                {
-                  pcollection->m_visel.find_erase(textbox->GetISelect());
-                  pcollection->m_visel.push_back(dmd);
+                  pcollection->RemovePart(textbox);
+                  pcollection->AddPart(dmd);
                }
                m_vedit[i] = dmd;
                AddPart(dmd);
@@ -2119,7 +1986,7 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
 
    PLOGI << "InitTablePostLoad"; // For profiling
 
-   m_scriptableNames[lowerCase(m_wzName)] = this;
+   m_scriptableNames.insert(lowerCase(m_wzName));
 
    for (unsigned int i = 1; i < NUM_BG_SETS; ++i)
       if (mViewSetups[i].mFOV == FLT_MAX) // old table, copy FS and/or FSS settings over from old DT setting
@@ -2147,9 +2014,9 @@ HRESULT PinTable::LoadGameFromFilename(const std::filesystem::path &filename, VP
    // Auto-import POV settings, if it exists. This is kept for backward compatibility as POV settings
    // are now normal settings stored with others in app/table ini file. It will be only imported if there is no table ini file
    if (const std::filesystem::path filenameAuto = tablePath / tableFile.replace_extension(".pov"); !FileExists(GetSettingsFileName()) && FileExists(filenameAuto))
-      ImportBackdropPOV(filenameAuto);
+      ImportBackdropPOV(filenameAuto, true);
    else if (const std::filesystem::path filenameAuto2 = tablePath / "autopov.pov"sv; FileExists(filenameAuto2))
-      ImportBackdropPOV(filenameAuto2);
+      ImportBackdropPOV(filenameAuto2, true);
 
    // auto-import VBS table script, if it exists...
    if (std::filesystem::path filenameAuto = g_app->m_fileLocator.SearchScript(this, tableFile.replace_extension(".vbs")); !filenameAuto.empty())
@@ -2466,23 +2333,32 @@ void PinTable::Load(IObjectReader& reader)
             // This is hacky and should be removed when 10.9 is out (added to avoid loosing tables edited while 10.8 was in alpha)
             if (reader.GetVersion() < 1080 || m_materials.size() == m_numMaterials)
             {
+               // MATE and PHMA records are saved as parallel arrays, so physics properties can be applied by index.
+               // The name based fallback must use an exact match as old tables may contain material names that only differ by their case.
+               const bool applyByIndex = m_materials.size() == m_numMaterials;
                for (int i = 0; i < m_numMaterials; i++)
                {
-                  bool found = true;
-                  Material *pmat = GetMaterial(mats[i].szName);
-                  if (pmat == m_dummyMaterial.get())
+                  Material *pmat = nullptr;
+                  if (applyByIndex)
+                     pmat = m_materials[i];
+                  else
+                     for (Material *mat : m_materials)
+                        if (mat->m_name == mats[i].szName)
+                        {
+                           pmat = mat;
+                           break;
+                        }
+                  if (pmat == nullptr)
                   {
                      assert(!"SaveMaterial not found");
                      pmat = new Material();
                      pmat->m_name = mats[i].szName;
-                     found = false;
+                     m_materials.push_back(pmat);
                   }
                   pmat->m_fElasticity = mats[i].fElasticity;
                   pmat->m_fElasticityFalloff = mats[i].fElasticityFallOff;
                   pmat->m_fFriction = mats[i].fFriction;
                   pmat->m_fScatterAngle = mats[i].fScatterAngle;
-                  if (!found)
-                     m_materials.push_back(pmat);
                }
             }
             break;
@@ -2543,6 +2419,19 @@ void PinTable::Load(IObjectReader& reader)
          }
          return true;
       });
+
+   // Detect & remove duplicate material names (differing only by case), keeping the last loaded
+   // one as it is the one the player resolves to (the material lookup map keeps the last entry)
+   for (size_t i = 0; i < m_materials.size(); ++i)
+      for (size_t i2 = i + 1; i2 < m_materials.size(); ++i2)
+         if (StrCompareNoCase(m_materials[i]->m_name, m_materials[i2]->m_name))
+         {
+            PLOGW << "Duplicate material name found: " << m_materials[i]->m_name << ", dropping it!";
+            delete m_materials[i];
+            m_materials.erase(m_materials.begin() + i);
+            --i;
+            break;
+         }
 }
 
 bool PinTable::ExportSound(VPX::Sound *const pps, const std::filesystem::path &filename)
@@ -2565,25 +2454,18 @@ bool PinTable::ExportSound(VPX::Sound *const pps, const std::filesystem::path &f
 
 void PinTable::ReImportSound(VPX::Sound *const pps, const std::filesystem::path &filename)
 {
-#ifndef __STANDALONE__
    vector<uint8_t> data = read_file(filename);
    if (!data.empty())
       pps->SetFromFileData(filename, data);
-#endif
 }
-
 
 VPX::Sound *PinTable::ImportSound(const std::filesystem::path &filename)
 {
-#ifndef __STANDALONE__
    VPX::Sound *const pps = VPX::Sound::CreateFromFile(filename);
    if (pps == nullptr)
       return nullptr;
    m_vsound.push_back(pps);
    return pps;
-#else
-   return nullptr;
-#endif
 }
 
 void PinTable::RemoveSound(VPX::Sound *const pps)
@@ -2593,22 +2475,7 @@ void PinTable::RemoveSound(VPX::Sound *const pps)
    delete pps;
 }
 
-void PinTable::ImportFont(HWND hwndListView, const string& filename)
-{
-#ifndef __STANDALONE__
-   PinFont * const ppb = new PinFont();
-
-   ppb->ReadFromFile(filename);
-
-   if (!ppb->m_buffer.empty())
-   {
-      m_vfont.push_back(ppb);
-      const int index = AddListBinary(hwndListView, ppb);
-      ListView_SetItemState(hwndListView, index, LVIS_SELECTED, LVIS_SELECTED);
-      ppb->Register();
-   }
-#endif
-}
+void PinTable::AddFont(PinFont *const ppf) { m_vfont.push_back(ppf); }
 
 void PinTable::RemoveFont(PinFont * const ppf)
 {
@@ -2618,108 +2485,15 @@ void PinTable::RemoveFont(PinFont * const ppf)
    delete ppf;
 }
 
-void PinTable::ListFonts(HWND hwndListView)
-{
-   for (size_t i = 0; i < m_vfont.size(); i++)
-      AddListBinary(hwndListView, m_vfont[i]);
-}
-
-int PinTable::AddListBinary(HWND hwndListView, PinBinary *ppb)
-{
-#ifndef __STANDALONE__
-   LVITEM lvitem;
-   lvitem.mask = LVIF_DI_SETITEM | LVIF_TEXT | LVIF_PARAM;
-   lvitem.iItem = 0;
-   lvitem.iSubItem = 0;
-   lvitem.pszText = (LPSTR)ppb->m_name.c_str();
-   lvitem.lParam = (size_t)ppb;
-
-   const int index = ListView_InsertItem(hwndListView, &lvitem);
-
-   ListView_SetItemText_Safe(hwndListView, index, 1, ppb->m_path.string().c_str());
-
-   return index;
-#else
-   return 0;
-#endif
-}
-
-void PinTable::NewCollection(const HWND hwndListView, const bool fromSelection)
-{
-   CComObject<Collection> *pcol;
-   CComObject<Collection>::CreateInstance(&pcol);
-   pcol->AddRef();
-
-   pcol->m_wzName = GetUniqueName(LocalStringW(IDS_COLLECTION).m_buffer);
-
-   if (fromSelection && !MultiSelIsEmpty())
-   {
-      for (int i = 0; i < m_vmultisel.size(); i++)
-      {
-         ISelect * const pisel = m_vmultisel.ElementAt(i);
-         IEditable * const piedit = pisel->GetIEditable();
-         if (piedit)
-         {
-            if (piedit->GetISelect() == pisel) // Do this check so we don't put walls in a collection when we only have the control point selected
-            {
-               piedit->m_vCollection.push_back(pcol);
-               piedit->m_viCollection.push_back(pcol->m_visel.size());
-               pcol->m_visel.push_back(m_vmultisel.ElementAt(i));
-            }
-         }
-      }
-   }
-
-   const int index = AddListCollection(hwndListView, pcol);
-
-#ifndef __STANDALONE__
-   ListView_SetItemState(hwndListView, index, LVIS_SELECTED, LVIS_SELECTED);
-#endif
-
-   AddCollection(pcol);
-   pcol->Release();
-}
-
-int PinTable::AddListCollection(HWND hwndListView, CComObject<Collection> *pcol)
-{
-#ifndef __STANDALONE__
-   LVITEM lvitem;
-   lvitem.mask = LVIF_DI_SETITEM | LVIF_TEXT | LVIF_PARAM;
-   lvitem.iItem = 0;
-   lvitem.iSubItem = 0;
-   string name = MakeString(pcol->m_wzName);
-   lvitem.pszText = name.data();
-   lvitem.lParam = (size_t)pcol;
-
-   const int index = ListView_InsertItem(hwndListView, &lvitem);
-   ListView_SetItemText_Safe(hwndListView, index, 1, std::to_string(pcol->m_visel.size()).c_str());
-   return index;
-#else
-   return 0;
-#endif
-}
-
-void PinTable::ListCollections(HWND hwndListView)
-{
-   //ListView_DeleteAllItems(hwndListView);
-
-   for (int i = 0; i < m_vcollection.size(); i++)
-   {
-      CComObject<Collection> * const pcol = m_vcollection.ElementAt(i);
-
-      AddListCollection(hwndListView, pcol);
-   }
-}
-
 void PinTable::MoveCollectionUp(CComObject<Collection> *pcol)
 {
-   const int idx = m_vcollection.find(pcol);
+   const int idx = FindIndexOf(m_vcollection, pcol);
    assert(idx >= 0);
-   m_vcollection.erase(idx);
+   m_vcollection.erase(m_vcollection.begin() + idx);
    if (idx - 1 < 0)
       m_vcollection.push_back(pcol);
    else
-      m_vcollection.insert(pcol, idx - 1);
+      m_vcollection.insert(m_vcollection.begin() + idx - 1, pcol);
 }
 
 FRect3D PinTable::GetBoundingBox() const
@@ -2775,13 +2549,13 @@ void PinTable::ComputeNearFarPlane(const Matrix3D &matWorldView, const float sca
 
 void PinTable::MoveCollectionDown(CComObject<Collection> *pcol)
 {
-   const int idx = m_vcollection.find(pcol);
+   const int idx = FindIndexOf(m_vcollection, pcol);
    assert(idx >= 0);
-   m_vcollection.erase(idx);
-   if (idx + 1 >= m_vcollection.size())
-      m_vcollection.insert(pcol, 0);
+   m_vcollection.erase(m_vcollection.begin() + idx);
+   if (idx + 1 >= (int)m_vcollection.size())
+      m_vcollection.insert(m_vcollection.begin(), pcol);
    else
-      m_vcollection.insert(pcol, idx + 1);
+      m_vcollection.insert(m_vcollection.begin() + idx + 1, pcol);
 }
 
 void PinTable::FireOptionEvent(OptionEventType eventType)
@@ -2799,39 +2573,6 @@ void PinTable::FireOptionEvent(OptionEventType eventType)
    FireDispID(DISPID_GameEvents_OptionEvent, &dispparams);
 }
 
-void PinTable::AssignSelectionToPartGroup(PartGroup* group)
-{
-   STARTUNDO
-   bool show = false, hide = false;
-   for (const IEditable* const e : GetParts())
-      if (e->GetPartGroup() == group && e->GetISelect())
-      {
-         show |= e->m_uiVisible;
-         hide |= !e->m_uiVisible;
-      }
-   for (int t = 0; t < m_vmultisel.size(); t++)
-   {
-      ISelect *const psel = m_vmultisel.ElementAt(t);
-      IEditable *const pedit = psel->GetIEditable();
-      pedit->SetPartGroup(group);
-      if (psel->IsUIVisible() && hide && !show)
-         psel->SetUIVisible(false);
-      else if (!psel->IsUIVisible() && show && !hide)
-         psel->SetUIVisible(true);
-   }
-   STOPUNDO
-#ifndef __STANDALONE__
-   g_pvp->GetLayersListDialog()->Update();
-#endif
-}
-
-string PinTable::GetElementName(IEditable *pedit)
-{
-   if (pedit)
-      return pedit->GetName();
-   return string();
-}
-
 IEditable *PinTable::GetElementByName(const char * const name) const
 {
    const wstring wname = MakeWString(name);
@@ -2841,142 +2582,65 @@ IEditable *PinTable::GetElementByName(const char * const name) const
    return nullptr;
 }
 
-bool PinTable::FMutilSelLocked()
+void PinTable::ToggleCollectionMembership(const int colIndex, const vector<IEditable *> &selection)
 {
-   for (int i = 0; i < m_vmultisel.size(); i++)
-      if (m_vmultisel[i].IsUILocked())
-         return true;
-
-   return false;
-}
-
-#ifndef __STANDALONE__
-void PinTable::DoCommand(int icmd, int x, int y)
-{
-   if (((icmd & 0x000FFFFF) >= 0x40000) && ((icmd & 0x000FFFFF) < 0x40020))
-   {
-      UpdateCollection(icmd & 0x000000FF);
+   if (colIndex < 0 || (size_t)colIndex >= m_vcollection.size() || selection.empty())
       return;
-   }
 
-   constexpr unsigned int ID_ASSIGN_TO_LAYER_MAX = ID_ASSIGN_TO_LAYER1 + NUM_ASSIGN_LAYERS - 1;
-   if ((icmd >= ID_ASSIGN_TO_LAYER1) && (icmd <= ID_ASSIGN_TO_LAYER_MAX))
+   // if the selection is part of the selected collection remove only these elements
+   bool removeOnly = false;
+   for (IEditable *const part : selection)
    {
-      PartGroup *group = nullptr;
-      int layerIndex = icmd - ID_ASSIGN_TO_LAYER1;
-      for (IEditable *edit : m_vedit)
+      for (IEditable *const collectionPart : m_vcollection[colIndex]->GetParts())
       {
-         if (edit->GetItemType() == eItemPartGroup && edit->GetPartGroup() == nullptr)
+         if (part == collectionPart)
          {
-            if (layerIndex == 0)
-               group = static_cast<PartGroup *>(edit);
-            layerIndex--;
-            if (layerIndex < 0)
-               break;
+            m_vcollection[colIndex]->RemovePart(part);
+            removeOnly = true;
+            break;
          }
       }
-      if (group)
-         AssignSelectionToPartGroup(group);
+   }
+
+   if (removeOnly)
       return;
-   }
 
-   if ((icmd & 0x0000FFFF) == ID_SELECT_ELEMENT)
+   // selected elements are not part of the selected collection and can be added
+   for (IEditable *const part : selection)
    {
-      const int i = (icmd & 0x00FF0000) >> 16;
-      ISelect * const pisel = m_allHitElements[i];
-      pisel->DoCommand(icmd, x, y);
-      return;
-   }
-
-   switch (icmd)
-   {
-       case ID_DRAWINFRONT:
-       case ID_DRAWINBACK:
-       {
-           for (int i = 0; i < m_vmultisel.size(); i++)
-           {
-               ISelect *const psel = m_vmultisel.ElementAt(i);
-               _ASSERTE(psel != this); // Would make an infinite loop
-               psel->DoCommand(icmd, x, y);
-           }
-           break;
-       }
-       case ID_ASSIGN_TO_CURRENT_LAYER: m_vpinball->GetLayersListDialog()->AssignToSelectedGroup(); break;
-       case ID_EDIT_DRAWINGORDER_HIT: m_vpinball->ShowDrawingOrderDialog(false); break;
-       case ID_EDIT_DRAWINGORDER_SELECT: m_vpinball->ShowDrawingOrderDialog(true); break;
-       case ID_LOCK: LockElements(); break;
-       case ID_WALLMENU_FLIP: FlipY(GetCenter()); break;
-       case ID_WALLMENU_MIRROR: FlipX(GetCenter()); break;
-       case IDC_COPY: Copy(x, y); break;
-       case IDC_PASTE: Paste(false, x, y); break;
-       case IDC_PASTEAT: Paste(true, x, y); break;
-       case ID_WALLMENU_ROTATE: VPX::WinUI::RotatePointsDialog(this); break;
-       case ID_WALLMENU_SCALE: VPX::WinUI::ScalePointsDialog(this); break;
-       case ID_WALLMENU_TRANSLATE: VPX::WinUI::TranslatePointsDialog(this); break;
-   }
-}
-#endif
-
-void PinTable::UpdateCollection(const int index)
-{
-   if (index < m_vcollection.size())
-   {
-      if (!m_vmultisel.empty())
-      {
-         bool removeOnly = false;
-         /* if the selection is part of the selected collection remove only these elements*/
-         for (int t = 0; t < m_vmultisel.size(); t++)
-         {
-            ISelect * const ptr = m_vmultisel.ElementAt(t);
-            for (int k = 0; k < m_vcollection[index].m_visel.size(); k++)
-            {
-               if (ptr == m_vcollection[index].m_visel.ElementAt(k))
-               {
-                  m_vcollection[index].m_visel.find_erase(ptr);
-                  removeOnly = true;
-                  break;
-               }
-            }
-         }
-
-         if (removeOnly)
-            return;
-
-         /*selected elements are not part of the selected collection and can be added*/
-         for (int t = 0; t < m_vmultisel.size(); t++)
-         {
-            ISelect * const ptr = m_vmultisel.ElementAt(t);
-            m_vcollection.ElementAt(index)->m_visel.push_back(ptr);
-        }
-      }
+      // Multi-select may contain a part together with its sub parts (drag points, light centers): add each part only once
+      if (FindIndexOf(m_vcollection[colIndex]->GetParts(), part) == -1)
+         m_vcollection[colIndex]->AddPart(part);
    }
 }
 
-bool PinTable::GetCollectionIndex(const ISelect * const element, int &collectionIndex, int &elementIndex)
+bool PinTable::GetCollectionIndex(const IEditable * const element, int &collectionIndex, int &elementIndex)
 {
-   for (int i = 0; i < m_vcollection.size(); i++)
+   int i = 0;
+   for (auto pcol : m_vcollection)
    {
-      for (int t = 0; t < m_vcollection[i].m_visel.size(); t++)
+      for (int t = 0; t < static_cast<int>(pcol->GetParts().size()); t++)
       {
-         if (element == m_vcollection[i].m_visel.ElementAt(t))
+         if (element == pcol->GetParts()[t])
          {
             collectionIndex = i;
             elementIndex = t;
             return true;
          }
       }
+      i++;
    }
    return false;
 }
 
-const wstring& PinTable::GetCollectionNameByElement(const ISelect * const element) const
+const wstring& PinTable::GetCollectionNameByElement(const IEditable * const element) const
 {
-    for (int i = 0; i < m_vcollection.size(); i++)
-        for (int t = 0; t < m_vcollection[i].m_visel.size(); t++)
-            if (element == m_vcollection[i].m_visel.ElementAt(t))
-                return m_vcollection[i].m_wzName;
-    static wstring emptyString;
-    return emptyString;
+   for (auto pcol : m_vcollection)
+      for (const IEditable *const part : pcol->GetParts())
+         if (element == part)
+            return pcol->m_wzName;
+   static wstring emptyString;
+   return emptyString;
 }
 
 Vertex2D PinTable::EvaluateGlassHeight() const
@@ -3064,7 +2728,7 @@ Vertex2D PinTable::EvaluateGlassHeight() const
          if (const Surface *const surf = static_cast<Surface *>(edit); surf->m_d.m_visible)
          {
             vector<RenderVertex> vertices;
-            surf->GetRgVertex(vertices, true);
+            surf->m_curve.GetRgVertex(vertices, true);
             const float h = max(surf->m_d.m_heightbottom, surf->m_d.m_heighttop);
             RenderVertex prev = vertices.back();
             for (const auto &v : vertices)
@@ -3080,7 +2744,7 @@ Vertex2D PinTable::EvaluateGlassHeight() const
          if (const Ramp *const ramp = static_cast<Ramp *>(edit); ramp->m_d.m_visible)
          {
             vector<RenderVertex> vertices;
-            ramp->GetRgVertex(vertices, false);
+            ramp->m_curve.GetRgVertex(vertices, false);
             RenderVertex prev = vertices.back();
             bool first = true; // Skip first as we do not loop
             for (const auto &v : vertices)
@@ -3112,94 +2776,6 @@ Vertex2D PinTable::EvaluateGlassHeight() const
       PLOGI << "Evaluated glass height to " << VPUTOINCHES(result.x) << "\" (" << upperEditableX->GetName() << ") - " << VPUTOINCHES(result.y) << "\" (" << upperEditableY->GetName() << ')';
    }
    return result;
-}
-
-void PinTable::LockElements()
-{
-   BeginUndo();
-   const bool lock = !FMutilSelLocked();
-   for (int i = 0; i < m_vmultisel.size(); i++)
-   {
-      ISelect * const psel = m_vmultisel.ElementAt(i);
-      if (psel)
-      {
-         IEditable * const pedit = psel->GetIEditable();
-         if (pedit)
-         {
-            pedit->MarkForUndo();
-            pedit->m_uiLocked = lock;
-         }
-      }
-   }
-   EndUndo();
-   SetDirtyDraw();
-}
-
-void PinTable::FlipY(const Vertex2D& pvCenter)
-{
-   BeginUndo();
-   for (int i = 0; i < m_vmultisel.size(); i++)
-      m_vmultisel[i].FlipY(pvCenter);
-   EndUndo();
-}
-
-void PinTable::FlipX(const Vertex2D& pvCenter)
-{
-   BeginUndo();
-   for (int i = 0; i < m_vmultisel.size(); i++)
-      m_vmultisel[i].FlipX(pvCenter);
-   EndUndo();
-}
-
-void PinTable::Rotate(const float ang, const Vertex2D& pvCenter, const bool useElementCenter)
-{
-   BeginUndo();
-   for (int i = 0; i < m_vmultisel.size(); i++)
-      m_vmultisel[i].Rotate(ang, pvCenter, useElementCenter);
-   EndUndo();
-}
-
-void PinTable::Scale(const float scalex, const float scaley, const Vertex2D& pvCenter, const bool useElementCenter)
-{
-   BeginUndo();
-   for (int i = 0; i < m_vmultisel.size(); i++)
-      m_vmultisel[i].Scale(scalex, scaley, pvCenter, useElementCenter);
-   EndUndo();
-}
-
-void PinTable::Translate(const Vertex2D &pvOffset)
-{
-   BeginUndo();
-   for (int i = 0; i < m_vmultisel.size(); i++)
-      m_vmultisel[i].Translate(pvOffset);
-   EndUndo();
-}
-
-Vertex2D PinTable::GetCenter() const
-{
-   float minx = FLT_MAX;
-   float maxx = -FLT_MAX;
-   float miny = FLT_MAX;
-   float maxy = -FLT_MAX;
-
-   for (int i = 0; i < m_vmultisel.size(); i++)
-   {
-      const ISelect * const psel = m_vmultisel.ElementAt(i);
-      const Vertex2D vCenter = psel->GetCenter();
-
-      minx = min(minx, vCenter.x);
-      maxx = max(maxx, vCenter.x);
-      miny = min(miny, vCenter.y);
-      maxy = max(maxy, vCenter.y);
-      //tx += m_vdpoint[i]->m_v.x;
-      //ty += m_vdpoint[i]->m_v.y;
-   }
-
-   return {(maxx + minx)*0.5f, (maxy + miny)*0.5f};
-}
-
-void PinTable::PutCenter(const Vertex2D& pv)
-{
 }
 
 void PinTable::ExportMesh(ObjLoader& loader)
@@ -3258,77 +2834,24 @@ void PinTable::ExportMesh(ObjLoader& loader)
    loader.UpdateFaceOffset(4);
 }
 
-void PinTable::ExportTableMesh()
-{
-#ifndef __STANDALONE__
-   char szObjFileName[MAXSTRING];
-   strncpy_s(szObjFileName, std::size(szObjFileName), m_filename.string().c_str());
-   const size_t idx = m_filename.string().find_last_of('.');
-   if (idx != string::npos && idx < std::size(szObjFileName))
-      szObjFileName[idx] = '\0';
-   OPENFILENAME ofn = {};
-   ofn.lStructSize = sizeof(OPENFILENAME);
-   ofn.hInstance = g_app->GetInstanceHandle();
-   ofn.hwndOwner = m_vpinball->GetHwnd();
-   // TEXT
-   ofn.lpstrFilter = "Wavefront obj(*.obj)\0*.obj\0";
-   ofn.lpstrFile = szObjFileName;
-   ofn.nMaxFile = std::size(szObjFileName);
-   ofn.lpstrDefExt = "obj";
-   ofn.Flags = OFN_NOREADONLYRETURN | OFN_CREATEPROMPT | OFN_OVERWRITEPROMPT | OFN_EXPLORER;
-
-   const int ret = GetSaveFileName(&ofn);
-
-   // user cancelled
-   if (ret == 0)
-      return;// S_FALSE;
-   const string filename = szObjFileName;
-
-   ObjLoader loader;
-   loader.ExportStart(filename);
-   ExportMesh(loader);
-   for (const auto pedit : m_vedit)
-      if (pedit->m_uiVisible && pedit->m_desktopBackdrop == m_vpinball->m_desktopBackdropView)
-         pedit->ExportMesh(loader);
-
-   loader.ExportEnd();
-   m_vpinball->MessageBox("Export finished!", "Info", MB_OK | MB_ICONEXCLAMATION);
-#endif
-}
-
 // Import Point of View file. This can be either:
 // - a UI interaction from table author, loading to table **properties** after file selection,
 // - without UI interaction, triggered to load user settings preference to table **settings**.
-void PinTable::ImportBackdropPOV(const std::filesystem::path &filename)
+void PinTable::ImportBackdropPOV(const std::filesystem::path &filename, const bool toUserSettings)
 {
-   std::filesystem::path file = filename;
-   const bool toUserSettings = !filename.empty();
-   const bool wasModified = m_settings.IsModified();
-   if (!toUserSettings)
-   {
-      if (IsLocked())
-         return;
-#ifndef __STANDALONE__
-      const string& initialDir = m_settings.GetRecentDir_POVDir();
-      vector<string> fileNames;
-      if (!m_vpinball->OpenFileDialog(initialDir, fileNames,
-         "User settings file (*.ini)\0*.ini\0Old POV file (*.pov)\0*.pov\0Legacy POV file(*.xml)\0*.xml\0",
-         "ini", 0, toUserSettings ? "Import POV to user settings"s : "Import POV to table properties"s))
-         return;
-      file = fileNames[0];
-      if(file.has_parent_path())
-         g_app->m_settings.SetRecentDir_POVDir(file.parent_path().string(), false);
-#endif
-   }
+   if (filename.empty())
+      return;
 
-   const string ext = lowerCase(file.extension().string());
+   const bool wasModified = m_settings.IsModified();
+
+   const string ext = lowerCase(filename.extension().string());
 
    static const string vsPrefix[3] = { "ViewDT"s, "ViewCab"s, "ViewFSS"s };
    static const char *vsFields[15] = { "Mode", "ScaleX", "ScaleY", "ScaleZ", "PlayerX", "PlayerY", "PlayerZ", "LookAt", "Rotation", "FOV", "Layback", "HOfs", "VOfs", "WindowTop", "WindowBot" };
    if (ext == ".ini")
    {
       Settings settings;
-      settings.SetIniPath(file);
+      settings.SetIniPath(filename);
       settings.Load(false);
       for (int id = 0; id < 3; id++)
       {
@@ -3349,7 +2872,7 @@ void PinTable::ImportBackdropPOV(const std::filesystem::path &filename)
       try
       {
          std::stringstream buffer;
-         std::ifstream myFile(file);
+         std::ifstream myFile(filename);
          buffer << myFile.rdbuf();
          myFile.close();
          const string& xml = buffer.str();
@@ -3524,77 +3047,36 @@ void PinTable::ImportBackdropPOV(const std::filesystem::path &filename)
    }
 
    // If loaded without UI interaction, do not mark settings as modified
-   if (!filename.empty())
+   if (toUserSettings)
       m_settings.SetModified(wasModified);
 
    // update properties UI
    if (!toUserSettings)
       SetNonUndoableDirty(eSaveDirty);
-   m_vpinball->SetPropSel(m_vmultisel);
+   if (m_tableEditor)
+      m_tableEditor->RefreshProperties();
 }
 
 // Select file and export the point of view definition
-void PinTable::ExportBackdropPOV() const
+void PinTable::ExportBackdropPOV(const std::filesystem::path &filename) const
 {
-   string iniFileName;
-#ifndef __STANDALONE__
-	OPENFILENAME ofn = {};
-	ofn.lStructSize = sizeof(OPENFILENAME);
-	ofn.hInstance = g_app->GetInstanceHandle();
-	ofn.hwndOwner = m_vpinball->GetHwnd();
-	// TEXT
-	ofn.lpstrFilter = "INI file(*.ini)\0*.ini\0";
-	char szFileName[MAXSTRING];
-   strncpy_s(szFileName, std::size(szFileName), m_filename.string().c_str());
-   const size_t idx = m_filename.string().find_last_of('.');
-	if(idx != string::npos && idx < std::size(szFileName))
-		szFileName[idx] = '\0';
-	ofn.lpstrFile = szFileName;
-	ofn.nMaxFile = std::size(szFileName);
-	ofn.lpstrDefExt = "ini";
-	ofn.Flags = OFN_NOREADONLYRETURN | OFN_CREATEPROMPT | OFN_OVERWRITEPROMPT | OFN_EXPLORER;
-	const int ret = GetSaveFileName(&ofn);
-	// user cancelled
-	if (ret == 0)
-		return;// S_FALSE;
-	iniFileName = szFileName;
-#endif
-
    // Save view setups (only overriden properties if we are given a reference view setup set)
    Settings settings;
    for (int i = 0; i < 3; i++)
       mViewSetups[i].SaveToTableOverrideSettings(settings, (ViewSetupID)i);
    if (settings.IsModified())
    {
-      settings.SetIniPath(iniFileName);
+      settings.SetIniPath(filename);
       settings.Save();
       if (g_pplayer)
-         g_pplayer->m_liveUI->PushNotification("POV exported to " + iniFileName, 5000);
+         g_pplayer->m_liveUI->PushNotification("POV exported to " + filename.string(), 5000);
    }
    else if (g_pplayer)
    {
-      g_pplayer->m_liveUI->PushNotification("POV was not exported to " + iniFileName + " (nothing to save)", 5000);
+      g_pplayer->m_liveUI->PushNotification("POV was not exported to " + filename.string() + " (nothing to save)", 5000);
    }
 
-   PLOGI << "View setup exported to '" << iniFileName << '\'';
-}
-
-void PinTable::SelectItem(IScriptable *piscript)
-{
-   for (const auto pedit : m_vedit)
-   {
-      if (piscript == pedit->GetIScriptable())
-      {
-         if (ISelect *const pisel = pedit->GetISelect(); pisel)
-            AddMultiSel(pisel, false, true, false);
-         break;
-      }
-   }
-}
-
-void PinTable::DoCodeViewCommand(int command)
-{
-   g_pvp->ParseCommand(command, false);
+   PLOGI << "View setup exported to '" << filename << '\'';
 }
 
 void PinTable::SetDirtyScript(SaveDirtyState sds)
@@ -3635,165 +3117,26 @@ bool PinTable::FDirty() const
    return (m_sdsCurrentDirtyState > eSaveClean);
 }
 
-void PinTable::BeginUndo()
-{
-   m_undo.BeginUndo();
-}
-
-void PinTable::EndUndo()
-{
-   m_undo.EndUndo();
-}
-
-void PinTable::Undo()
-{
-   m_undo.Undo();
-
-   if (m_tableEditor)
-      m_tableEditor->OnPartChanged(this);
-}
-
 void PinTable::Uncreate(IEditable *pie)
 {
-   if (pie->GetISelect()->m_selectstate != SelectState::NotSelected)
-      AddMultiSel(pie->GetISelect(), true, true, false); // Remove the item from the multi-select list
+   IWinUIPart *const uiPart = m_tableEditor ? m_tableEditor->GetUIPart(pie) : nullptr;
+   if (uiPart && uiPart->m_selectstate != IWinUIPart::SelectState::NotSelected)
+      m_tableEditor->AddMultiSel(uiPart, true, true, false); // Remove the item from the multi-select list
 
-   pie->GetISelect()->Uncreate();
+   RemovePart(pie);
+
    pie->Release();
 }
 
 void PinTable::Undelete(IEditable *pie)
 {
    AddPart(pie);
-   pie->Undelete();
+   for (size_t i = 0; i < pie->m_vCollection.size(); i++)
+   {
+      Collection *const pcollection = pie->m_vCollection[i];
+      pcollection->AddPart(pie);
+   }
    SetDirtyDraw();
-}
-
-void PinTable::Copy(int x, int y)
-{
-#ifndef __STANDALONE__
-   if (MultiSelIsEmpty()) // Can't copy table
-      return;
-
-   if (m_vmultisel.size() == 1)
-   {
-       // special check if the user selected a Control Point and wants to copy the coordinates
-       ISelect *const pItem = m_tableEditor->HitTest(x, y);
-       if (pItem->GetItemType() == eItemDragPoint)
-       {
-           DragPoint *pPoint = (DragPoint*)pItem;
-           pPoint->Copy();
-           return;
-       }
-   }
-
-   vector<IStream*> vstm;
-   //m_vstmclipboard
-   for (int i = 0; i < m_vmultisel.size(); i++)
-   {
-       const HGLOBAL hglobal = GlobalAlloc(GMEM_MOVEABLE, 1);
-
-       IStream *pstm;
-       CreateStreamOnHGlobal(hglobal, TRUE, &pstm);
-
-       IEditable * const pe = m_vmultisel[i].GetIEditable();
-
-       ////////!! BUG!  With multi-select, if you have multiple dragpoints on
-       //////// a surface selected, the surface will get copied multiple times
-       const int type = pe->GetItemType();
-       ULONG writ = 0;
-       pstm->Write(&type, sizeof(int), &writ);
-
-       BiffWriter writer(pstm, 0);
-       pe->Save(writer, false);
-
-       vstm.push_back(pstm);
-   }
-
-   m_vpinball->SetClipboard(&vstm);
-#endif
-}
-
-void PinTable::Paste(const bool atLocation, const int x, const int y)
-{
-#ifndef __STANDALONE__
-   bool error = false;
-   int cpasted = 0;
-
-   if (m_vmultisel.size() == 1)
-   {
-       // User wants to paste the copied coordinates of a Control Point
-       ISelect * const pItem = m_tableEditor->HitTest(x, y);
-       if (pItem->GetItemType() == eItemDragPoint)
-       {
-           DragPoint * const pPoint = (DragPoint*)pItem;
-           pPoint->Paste();
-           SetDirtyDraw();
-           return;
-       }
-   }
-
-   const unsigned viewflag = (m_vpinball->m_desktopBackdropView ? VIEW_BACKGLASS : VIEW_PLAYFIELD);
-
-   // Do a backwards loop, so that the primary selection we had when
-   // copying will again be the primary selection, since it will be
-   // selected last.  Purely cosmetic.
-   for (SSIZE_T i = m_vpinball->m_vstmclipboard.size() - 1; i >= 0; i--)
-   //for (size_t i=0; i<m_vpinball->m_vstmclipboard.size(); i++)
-   {
-      IStream* const pstm = m_vpinball->m_vstmclipboard[i];
-
-      // Go back to beginning of stream to load
-      LARGE_INTEGER foo;
-      foo.QuadPart = 0;
-      pstm->Seek(foo, STREAM_SEEK_SET, nullptr);
-
-      ULONG writ = 0;
-      ItemTypeEnum type;
-      /*const HRESULT hr =*/ pstm->Read(&type, sizeof(int), &writ);
-
-      if (!(EditableRegistry::GetAllowedViews(type) & viewflag))
-      {
-         error = true;
-      }
-      else
-      {
-         IEditable* const peditNew = EditableRegistry::Create(type);
-         if (peditNew)
-         {
-            BiffReader reader(pstm, CURRENT_FILE_FORMAT_VERSION, NULL, NULL);
-            peditNew->Load(reader);
-            peditNew->m_desktopBackdrop = m_vpinball->m_desktopBackdropView;
-            //if the original name is not yet used, use that one (so there's nothing we have to do) otherwise add/increase the suffix until we find a name that's not used yet
-            if (!IsNameUnique(peditNew->GetWName()))
-            {
-               //first remove the existing suffix
-               const wstring input = peditNew->GetWName();
-               size_t lastNonDigit = input.length();
-               while (lastNonDigit > 0 && iswdigit(input[lastNonDigit - 1]))
-                  --lastNonDigit;
-               peditNew->SetName(GetUniqueName(input.substr(0, lastNonDigit)));
-            }
-            peditNew->SetPartGroup(m_vpinball->GetLayersListDialog()->GetSelectedPartGroup());
-
-            AddPart(peditNew);
-
-            AddMultiSel(peditNew->GetISelect(), (i != m_vpinball->m_vstmclipboard.size() - 1), true, false);
-            cpasted++;
-         }
-         else
-            error = true;
-      }
-   }
-   m_vpinball->GetLayersListDialog()->Update();
-
-   // Center view on newly created objects, if they are off the screen
-   if ((cpasted > 0) && atLocation)
-      Translate(TransformPoint(x, y) - GetCenter());
-
-   if (error)
-      ShowError(LocalString(IDS_NOPASTEINVIEW).m_szbuffer);
-#endif
 }
 
 void PinTable::SetDefaultPhysics(const bool fromMouseClick)
@@ -3804,288 +3147,6 @@ void PinTable::SetDefaultPhysics(const bool fromMouseClick)
    m_elasticity = DEFAULT_TABLE_ELASTICITY;
    m_elasticityFalloff = DEFAULT_TABLE_ELASTICITY_FALLOFF;
    m_scatter = DEFAULT_TABLE_PFSCATTERANGLE;
-}
-
-void PinTable::ClearMultiSel(ISelect* newSel)
-{
-   for (int i = 0; i < m_vmultisel.size(); i++)
-      m_vmultisel[i].m_selectstate = SelectState::NotSelected;
-
-   //remove the clone of the multi selection in the smart browser class
-   //to sync the clone and the actual multi-selection
-   //it will be updated again on AddMultiSel() call
-   m_vmultisel.clear();
-
-   if (newSel == nullptr)
-      newSel = this;
-   m_vmultisel.push_back(newSel);
-   newSel->m_selectstate = SelectState::Selected;
-}
-
-bool PinTable::MultiSelIsEmpty() const
-{
-   // empty selection means only the table itself is selected
-   return (m_vmultisel.size() == 1 && m_vmultisel.ElementAt(0) == this);
-}
-
-// 'update' tells us whether to go ahead and change the UI
-// based on the new selection, or whether more stuff is coming
-// down the pipe (speeds up drag-selection)
-void PinTable::AddMultiSel(ISelect *psel, const bool add, const bool update, const bool contextClick)
-{
-   const int index = m_vmultisel.find(psel);
-   ISelect *piSelect = nullptr;
-   //_ASSERTE(m_vmultisel[0].m_selectstate == eSelected);
-
-   if (IsLocked())
-      return;
-
-   if (index == -1) // If we aren't selected yet, do that
-   {
-      _ASSERTE(psel->m_selectstate == SelectState::NotSelected);
-      // If we non-shift click on an element outside the multi-select group, delete the old group
-      // If the table is currently selected, deselect it - the table can not be part of a multi-select
-      if (!add || MultiSelIsEmpty())
-      {
-         ClearMultiSel(psel);
-         if (!add && !contextClick)
-         {
-            int colIndex = -1;
-            int elemIndex = -1;
-            if (GetCollectionIndex(psel, colIndex, elemIndex))
-            {
-               CComObject<Collection> *col = m_vcollection.ElementAt(colIndex);
-               if (col->m_groupElements)
-               {
-                  for (int i = 0; i < col->m_visel.size(); i++)
-                  {
-                     col->m_visel[i].m_selectstate = SelectState::MultiSelected;
-                     // current element is already in m_vmultisel. (ClearMultiSel(psel) added it)
-                     if (col->m_visel.ElementAt(i) != psel)
-                        m_vmultisel.push_back(&col->m_visel[i]);
-                  }
-               }
-            }
-         }
-      }
-      else
-      {
-         // Make this new selection the primary one for the group
-         piSelect = m_vmultisel.ElementAt(0);
-         if (piSelect != nullptr)
-            piSelect->m_selectstate = SelectState::MultiSelected;
-         m_vmultisel.insert(psel, 0);
-      }
-
-      psel->m_selectstate = SelectState::Selected;
-
-      if (update)
-         SetDirtyDraw();
-   }
-   else if (add) // Take the element off the list
-   {
-      _ASSERTE(psel->m_selectstate != SelectState::NotSelected);
-      m_vmultisel.erase(index);
-      psel->m_selectstate = SelectState::NotSelected;
-      if (m_vmultisel.empty())
-      {
-         // Have to have something selected
-         m_vmultisel.push_back((ISelect *)this);
-      }
-      // The main element might have changed
-      piSelect = m_vmultisel.ElementAt(0);
-      if (piSelect != nullptr)
-         piSelect->m_selectstate = SelectState::Selected;
-
-      if (update)
-         SetDirtyDraw();
-   }
-   else if (m_vmultisel.ElementAt(0) != psel) // Object already in list - no change to selection, only to primary
-   {
-      int colIndex = -1;
-      int elemIndex = -1;
-      if (!GetCollectionIndex(psel, colIndex, elemIndex))
-      {
-         _ASSERTE(psel->m_selectstate != SelectState::NotSelected);
-
-         // Make this new selection the primary one for the group
-         piSelect = m_vmultisel.ElementAt(0);
-         if (piSelect != nullptr)
-            piSelect->m_selectstate = SelectState::MultiSelected;
-         m_vmultisel.erase(index);
-         m_vmultisel.insert(psel, 0);
-
-         psel->m_selectstate = SelectState::Selected;
-      }
-      else
-         ClearMultiSel(psel);
-
-      if (update)
-         SetDirtyDraw();
-   }
-
-   if (update)
-   {
-#ifndef __STANDALONE__
-       m_vpinball->SetPropSel(m_vmultisel);
-#endif
-       m_vmultisel[0].UpdateStatusBarInfo();
-   }
-
-    piSelect = m_vmultisel.ElementAt(0);
-    if (piSelect && piSelect->GetIEditable() && piSelect->GetIEditable()->GetIScriptable())
-    {
-        string info = piSelect->GetIEditable()->GetPathString(false);
-        if (piSelect->GetItemType() == eItemPrimitive)
-        {
-            const Primitive *const prim = (Primitive *)piSelect;
-            if (!prim->m_mesh.m_animationFrames.empty())
-                info += " (animated " + std::to_string((uint32_t)prim->m_mesh.m_animationFrames.size() - 1) + " frames)";
-        }
-#ifndef __STANDALONE__
-        m_vpinball->SetStatusBarElementInfo(info);
-        if (m_tableEditor)
-            m_tableEditor->m_pcv->SelectItem(piSelect->GetIEditable()->GetIScriptable());
-#endif
-    }
-
-#ifndef __STANDALONE__
-   if (m_vpinball->GetLayersListDialog()->IsSyncedOnSelection())
-      m_vpinball->GetLayersListDialog()->Update();
-#endif
-}
-
-void PinTable::RefreshProperties()
-{
-#ifndef __STANDALONE__
-   m_vpinball->SetPropSel(m_vmultisel);
-#endif
-}
-
-void PinTable::OnDelete()
-{
-#ifndef __STANDALONE__
-   vector<ISelect*> m_vseldelete;
-   m_vseldelete.reserve(m_vmultisel.size());
-
-   for (int i = 0; i < m_vmultisel.size(); i++)
-   {
-      // Can't delete these items yet - ClearMultiSel() will try to mark them as unselected
-      m_vseldelete.push_back(m_vmultisel.ElementAt(i));
-      if (m_vmultisel.ElementAt(i)->GetItemType() == ItemTypeEnum::eItemPartGroup)
-         for (const auto part : m_vedit)
-            if (part->GetPartGroup() == m_vmultisel.ElementAt(i) && std::ranges::find(m_vseldelete, part->GetISelect()) == m_vseldelete.end())
-               m_vseldelete.push_back(part->GetISelect());
-   }
-
-   ClearMultiSel();
-
-   bool inCollection = false;
-   for (size_t t = 0; t < m_vseldelete.size() && !inCollection; t++)
-   {
-      const ISelect * const ptr = m_vseldelete[t];
-      for (int i = 0; i < m_vcollection.size() && !inCollection; i++)
-      {
-         for (int k = 0; k < m_vcollection[i].m_visel.size(); k++)
-         {
-            // Identify Editable in collection, as well as sub part of collection's editable (like light center for example)
-            if (ptr == m_vcollection[i].m_visel.ElementAt(k) || ptr->GetIEditable() == m_vcollection[i].m_visel.ElementAt(k)->GetIEditable())
-            {
-               inCollection = true;
-               break;
-            }
-         }
-      }
-   }
-   if (inCollection)
-   {
-      const int ans = m_tableEditor->MessageBox(LocalString(IDS_DELETE_ELEMENTS).m_szbuffer /*"Selected elements are part of one or more collections.\nDo you really want to delete them?"*/,
-         "Visual Pinball", MB_YESNO | MB_DEFBUTTON2);
-      if (ans != IDYES)
-         return;
-   }
-
-   for (size_t i = 0; i < m_vseldelete.size(); i++)
-      if (m_vseldelete[i] != nullptr)
-         m_vseldelete[i]->Delete();
-   m_vpinball->GetLayersListDialog()->Update();
-   // update properties to show the properties of the table
-   m_vpinball->SetPropSel(m_vmultisel);
-   if (m_tableEditor)
-      m_tableEditor->OnPartChanged(this);
-
-   SetDirtyDraw();
-#endif
-}
-
-void PinTable::UseTool(int x, int y, int tool)
-{
-#ifndef __STANDALONE__
-   const Vertex2D v = TransformPoint(x, y);
-
-   const ItemTypeEnum type = EditableRegistry::TypeFromToolID(tool);
-   IEditable * const pie = EditableRegistry::CreateAndInit(type, this, v.x, v.y);
-
-   if (pie)
-   {
-      if (auto scriptable = pie->GetIScriptable(); scriptable)
-         GetUniqueName(type, scriptable->m_wzName);
-      pie->m_desktopBackdrop = m_vpinball->m_desktopBackdropView;
-      AddPart(pie);
-      pie->SetPartGroup(m_vpinball->GetLayersListDialog()->GetSelectedPartGroup());
-      m_vpinball->GetLayersListDialog()->Update();
-
-      if (m_tableEditor)
-         m_tableEditor->OnPartChanged(this);
-
-      BeginUndo();
-      m_undo.MarkForCreate(pie);
-      EndUndo();
-      AddMultiSel(pie->GetISelect(), false, true, false);
-   }
-
-   m_vpinball->ParseCommand(IDC_SELECT, false);
-#endif
-}
-
-Vertex2D PinTable::TransformPoint(int x, int y) const
-{
-#ifndef __STANDALONE__
-   const CRect rc = m_tableEditor->GetClientRect();
-#else
-   const CRect rc(m_left, m_top, m_right, m_bottom);
-#endif
-   const HitSur phs(nullptr, m_tableEditor->GetZoom(), m_tableEditor->GetViewOffset().x, m_tableEditor->GetViewOffset().y, rc.right - rc.left, rc.bottom - rc.top, 0, 0, nullptr);
-
-   const Vertex2D result = phs.ScreenToSurface(x, y);
-
-   return result;
-}
-
-void PinTable::OnLButtonDown(int x, int y)
-{
-#ifndef __STANDALONE__
-   const Vertex2D v = TransformPoint(x, y);
-
-   m_rcDragRect.left = v.x;
-   m_rcDragRect.right = v.x;
-   m_rcDragRect.top = v.y;
-   m_rcDragRect.bottom = v.y;
-
-   m_dragging = true;
-
-   m_tableEditor->SetCapture();
-
-   SetDirtyDraw();
-#endif
-}
-
-HRESULT PinTable::GetTypeName(BSTR *pVal) const
-{
-   const int stringid = (!m_vpinball->m_desktopBackdropView) ? IDS_TABLE : IDS_TB_BACKGLASS;
-   const LocalStringW lsw(stringid);
-   *pVal = SysAllocStringLen(lsw.m_buffer.c_str(),static_cast<UINT>(lsw.m_buffer.length()));
-   return S_OK;
 }
 
 STDMETHODIMP PinTable::get_FileName(BSTR *pVal)
@@ -4220,11 +3281,6 @@ Texture* PinTable::GetImage(const string &szName) const
    return nullptr;
 }
 
-bool PinTable::ExportImage(const Texture * const ppi, const string &filename)
-{
-   return ppi->SaveFile(filename);
-}
-
 Texture *PinTable::ImportImage(const std::filesystem::path &filename, const string &imagename)
 {
    Texture *existing = nullptr;
@@ -4266,16 +3322,10 @@ void PinTable::RemoveImage(Texture * const ppi)
    delete ppi;
 }
 
-void PinTable::ListMaterials(HWND hwndListView)
-{
-   for (size_t i = 0; i < m_materials.size(); i++)
-      AddListMaterial(hwndListView, m_materials[i]);
-}
-
 bool PinTable::IsMaterialNameUnique(const string &name) const
 {
    for (size_t i = 0; i < m_materials.size(); i++)
-      if(m_materials[i]->m_name == name)
+      if (StrCompareNoCase(m_materials[i]->m_name, name))
          return false;
 
    return true;
@@ -4299,7 +3349,7 @@ Material* PinTable::GetMaterial(const string &name) const
    }
 
    for (size_t i = 0; i < m_materials.size(); i++)
-      if(m_materials[i]->m_name == name)
+      if (StrCompareNoCase(m_materials[i]->m_name, name))
          return m_materials[i];
 
    return m_dummyMaterial.get();
@@ -4323,137 +3373,6 @@ void PinTable::AddMaterial(Material * const pmat)
    }
 
    m_materials.push_back(pmat);
-}
-
-int PinTable::AddListMaterial(HWND hwndListView, Material * const pmat)
-{
-#ifndef __STANDALONE__
-   constexpr char usedStringYes[] = "X";
-   constexpr char usedStringNo[] = " ";
-
-   LVITEM lvitem;
-   lvitem.mask = LVIF_DI_SETITEM | LVIF_TEXT | LVIF_PARAM;
-   lvitem.iItem = 0;
-   lvitem.iSubItem = 0;
-   lvitem.pszText = (LPSTR)pmat->m_name.c_str();
-   lvitem.lParam = (size_t)pmat;
-
-   const int index = ListView_InsertItem(hwndListView, &lvitem);
-   ListView_SetItemText_Safe(hwndListView, index, 1, usedStringNo);
-   if(pmat->m_name == m_playfieldMaterial)
-   {
-      ListView_SetItemText_Safe(hwndListView, index, 1, usedStringYes);
-   }
-   else
-   {
-      for (const auto pEdit : m_vedit)
-      {
-         bool inUse = false;
-         if (pEdit == nullptr)
-            continue;
-
-         switch (pEdit->GetItemType())
-         {
-         case eItemPrimitive:
-         {
-            const Primitive * const pPrim = (Primitive*)pEdit;
-            if (StrCompareNoCase(pPrim->m_d.m_szMaterial, pmat->m_name) || StrCompareNoCase(pPrim->m_d.m_szPhysicsMaterial, pmat->m_name))
-               inUse = true;
-            break;
-         }
-         case eItemRamp:
-         {
-            const Ramp * const pRamp = (Ramp*)pEdit;
-            if (StrCompareNoCase(pRamp->m_d.m_szMaterial, pmat->m_name) || StrCompareNoCase(pRamp->m_d.m_szPhysicsMaterial, pmat->m_name))
-               inUse = true;
-            break;
-         }
-         case eItemSurface:
-         {
-            const Surface * const pSurf = (Surface*)pEdit;
-            if (StrCompareNoCase(pSurf->m_d.m_szPhysicsMaterial, pmat->m_name) || StrCompareNoCase(pSurf->m_d.m_szSideMaterial, pmat->m_name) || StrCompareNoCase(pSurf->m_d.m_szTopMaterial, pmat->m_name) || StrCompareNoCase(pSurf->m_d.m_szSlingShotMaterial, pmat->m_name))
-               inUse = true;
-            break;
-         }
-         case eItemDecal:
-         {
-            const Decal * const pDecal = (Decal*)pEdit;
-            if (StrCompareNoCase(pDecal->m_d.m_szMaterial, pmat->m_name))
-               inUse = true;
-            break;
-         }
-         case eItemFlipper:
-         {
-            const Flipper * const pFlip = (Flipper*)pEdit;
-            if (StrCompareNoCase(pFlip->m_d.m_szRubberMaterial, pmat->m_name) || StrCompareNoCase(pFlip->m_d.m_szMaterial, pmat->m_name))
-               inUse = true;
-            break;
-         }
-         case eItemHitTarget:
-         {
-            const HitTarget * const pHit = (HitTarget*)pEdit;
-            if (StrCompareNoCase(pHit->m_d.m_szMaterial, pmat->m_name) || StrCompareNoCase(pHit->m_d.m_szPhysicsMaterial, pmat->m_name))
-               inUse = true;
-            break;
-         }
-         case eItemPlunger:
-         {
-            const Plunger * const pPlung = (Plunger*)pEdit;
-            if (StrCompareNoCase(pPlung->m_d.m_szMaterial, pmat->m_name))
-               inUse = true;
-            break;
-         }
-         case eItemSpinner:
-         {
-            const Spinner * const pSpin = (Spinner*)pEdit;
-            if (StrCompareNoCase(pSpin->m_d.m_szMaterial, pmat->m_name))
-               inUse = true;
-            break;
-         }
-         case eItemRubber:
-         {
-            const Rubber * const pRub = (Rubber*)pEdit;
-            if (StrCompareNoCase(pRub->m_d.m_szMaterial, pmat->m_name) || StrCompareNoCase(pRub->m_d.m_szPhysicsMaterial, pmat->m_name))
-               inUse = true;
-            break;
-         }
-         case eItemBumper:
-         {
-            const Bumper * const pBump = (Bumper*)pEdit;
-            if (StrCompareNoCase(pBump->m_d.m_szCapMaterial, pmat->m_name) || StrCompareNoCase(pBump->m_d.m_szBaseMaterial, pmat->m_name) ||
-                StrCompareNoCase(pBump->m_d.m_szSkirtMaterial, pmat->m_name) || StrCompareNoCase(pBump->m_d.m_szRingMaterial, pmat->m_name))
-               inUse = true;
-            break;
-         }
-         case eItemKicker:
-         {
-            const Kicker * const pKick = (Kicker*)pEdit;
-            if (StrCompareNoCase(pKick->m_d.m_szMaterial, pmat->m_name))
-               inUse = true;
-            break;
-         }
-         case eItemTrigger:
-         {
-            const Trigger * const pTrig = (Trigger*)pEdit;
-            if (StrCompareNoCase(pTrig->m_d.m_szMaterial, pmat->m_name))
-               inUse = true;
-            break;
-         }
-         default:
-            break;
-         }
-
-         if (inUse)
-         {
-            ListView_SetItemText_Safe(hwndListView, index, 1, usedStringYes);
-            break;
-         }
-      }//for
-   }
-   return index;
-#else
-   return 0;
-#endif
 }
 
 void PinTable::RemoveMaterial(Material * const pmat)
@@ -4736,32 +3655,6 @@ string PinTable::AuditTable(bool log) const
    return msg;
 }
 
-void PinTable::ListCustomInfo(HWND hwndListView)
-{
-   for (size_t i = 0; i < m_vCustomInfoTag.size(); i++)
-      AddListItem(hwndListView, m_vCustomInfoTag[i], m_vCustomInfoContent[i], NULL);
-}
-
-int PinTable::AddListItem(HWND hwndListView, const string& szName, const string& szValue1, LPARAM lparam)
-{
-#ifndef __STANDALONE__
-   LVITEM lvitem;
-   lvitem.mask = LVIF_DI_SETITEM | LVIF_TEXT | LVIF_PARAM;
-   lvitem.iItem = 0;
-   lvitem.iSubItem = 0;
-   lvitem.pszText = (LPSTR)szName.c_str();
-   lvitem.lParam = lparam;
-
-   const int index = ListView_InsertItem(hwndListView, &lvitem);
-
-   ListView_SetItemText_Safe(hwndListView, index, 1, szValue1.c_str());
-
-   return index;
-#else
-   return 0;
-#endif
-}
-
 STDMETHODIMP PinTable::get_Image(BSTR *pVal)
 {
    *pVal = MakeWideBSTR(m_image);
@@ -4778,9 +3671,7 @@ STDMETHODIMP PinTable::put_Image(BSTR newVal)
        return E_FAIL;
    }
 
-   STARTUNDO
    m_image = szImage;
-   STOPUNDO
 
    return S_OK;
 }
@@ -4910,18 +3801,20 @@ STDMETHODIMP PinTable::GetPredefinedStrings(DISPID dispID, CALPOLESTR *pcaString
       wcsncpy_s(rgstr[0], 7, L"<None>");
       rgdw[0] = ~0u;
 
-      for (size_t ivar = 0; ivar < cvar; ivar++)
+      size_t ivar = 0;
+      for (auto pcol : m_vcollection)
       {
-         const size_t len = m_vcollection[(int)ivar].m_wzName.length();
+         const size_t len = pcol->m_wzName.length();
          rgstr[ivar + 1] = (WCHAR *)CoTaskMemAlloc((len + 1) * sizeof(WCHAR));
          if (rgstr[ivar + 1] == nullptr)
             ShowError("DISPID_Collection alloc failed (1)");
          else
          {
-            memcpy(rgstr[ivar + 1], m_vcollection[(int)ivar].m_wzName.c_str(), len * sizeof(WCHAR));
+            memcpy(rgstr[ivar + 1], pcol->m_wzName.c_str(), len * sizeof(WCHAR));
             rgstr[ivar + 1][len] = L'\0';
          }
          rgdw[ivar + 1] = (uint32_t)ivar;
+         ivar++;
       }
       cvar++;
    }
@@ -5084,9 +3977,9 @@ STDMETHODIMP PinTable::GetPredefinedValue(DISPID dispID, DWORD dwCookie, VARIANT
       }
       else
       {
-         const size_t len = m_vcollection[(int)dwCookie].m_wzName.length();
+         const size_t len = m_vcollection[dwCookie]->m_wzName.length();
          wzDst = new WCHAR[len+1];
-         memcpy(wzDst, m_vcollection[(int)dwCookie].m_wzName.c_str(), len * sizeof(WCHAR));
+         memcpy(wzDst, m_vcollection[dwCookie]->m_wzName.c_str(), len * sizeof(WCHAR));
          wzDst[len] = L'\0';
       }
    }
@@ -5177,36 +4070,6 @@ Texture* PinTable::GetSurfaceImage(const wstring& name) const
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-STDMETHODIMP PinTable::get_DisplayGrid(VARIANT_BOOL *pVal)
-{
-   *pVal = FTOVB(m_tableEditor->GetDisplayGrid());
-   return S_OK;
-}
-
-STDMETHODIMP PinTable::put_DisplayGrid(VARIANT_BOOL newVal)
-{
-   STARTUNDO
-   m_tableEditor->SetDisplayGrid(VBTOb(newVal));
-   STOPUNDO
-
-   return S_OK;
-}
-
-STDMETHODIMP PinTable::get_DisplayBackdrop(VARIANT_BOOL *pVal)
-{
-   *pVal = FTOVB(m_tableEditor->GetDisplayBackdrop());
-   return S_OK;
-}
-
-STDMETHODIMP PinTable::put_DisplayBackdrop(VARIANT_BOOL newVal)
-{
-   STARTUNDO
-   m_tableEditor->SetDisplayBackdrop(VBTOb(newVal));
-   STOPUNDO
-
-   return S_OK;
-}
-
 STDMETHODIMP PinTable::get_GlassHeight(float *pVal)
 {
    *pVal = m_glassTopHeight;
@@ -5215,9 +4078,7 @@ STDMETHODIMP PinTable::get_GlassHeight(float *pVal)
 
 STDMETHODIMP PinTable::put_GlassHeight(float newVal)
 {
-   STARTUNDO
    m_glassTopHeight = newVal;
-   STOPUNDO
 
    return S_OK;
 }
@@ -5240,9 +4101,7 @@ STDMETHODIMP PinTable::get_Width(float *pVal)
 
 STDMETHODIMP PinTable::put_Width(float newVal)
 {
-   STARTUNDO
    SetTableWidth(newVal);
-   STOPUNDO
 
    m_tableEditor->SetMyScrollInfo();
    return S_OK;
@@ -5276,9 +4135,7 @@ STDMETHODIMP PinTable::get_Height(float *pVal)
 
 STDMETHODIMP PinTable::put_Height(float newVal)
 {
-   STARTUNDO
    SetHeight(newVal);
-   STOPUNDO
 
    m_tableEditor->SetMyScrollInfo();
    return S_OK;
@@ -5292,9 +4149,7 @@ STDMETHODIMP PinTable::get_PlayfieldMaterial(BSTR *pVal)
 
 STDMETHODIMP PinTable::put_PlayfieldMaterial(BSTR newVal)
 {
-   STARTUNDO
    m_playfieldMaterial = MakeString(newVal);
-   STOPUNDO
 
    return S_OK;
 }
@@ -5307,9 +4162,7 @@ STDMETHODIMP PinTable::get_LightAmbient(OLE_COLOR *pVal)
 
 STDMETHODIMP PinTable::put_LightAmbient(OLE_COLOR newVal)
 {
-   STARTUNDO
    m_lightAmbient = newVal;
-   STOPUNDO
 
    return S_OK;
 }
@@ -5322,9 +4175,7 @@ STDMETHODIMP PinTable::get_Light0Emission(OLE_COLOR *pVal)
 
 STDMETHODIMP PinTable::put_Light0Emission(OLE_COLOR newVal)
 {
-   STARTUNDO
    m_Light[0].emission = newVal;
-   STOPUNDO
 
    return S_OK;
 }
@@ -5337,9 +4188,7 @@ STDMETHODIMP PinTable::get_LightHeight(float *pVal)
 
 STDMETHODIMP PinTable::put_LightHeight(float newVal)
 {
-   STARTUNDO
    m_lightHeight = newVal;
-   STOPUNDO
 
    return S_OK;
 }
@@ -5352,9 +4201,7 @@ STDMETHODIMP PinTable::get_LightRange(float *pVal)
 
 STDMETHODIMP PinTable::put_LightRange(float newVal)
 {
-   STARTUNDO
    m_lightRange = newVal;
-   STOPUNDO
 
    return S_OK;
 }
@@ -5367,9 +4214,7 @@ STDMETHODIMP PinTable::get_LightEmissionScale(float *pVal)
 
 STDMETHODIMP PinTable::put_LightEmissionScale(float newVal)
 {
-   STARTUNDO
    m_lightEmissionScale = newVal;
-   STOPUNDO
 
    return S_OK;
 }
@@ -5392,9 +4237,7 @@ STDMETHODIMP PinTable::get_NightDay(int *pVal)
 
 STDMETHODIMP PinTable::put_NightDay(int newVal)
 {
-   STARTUNDO
    SetGlobalEmissionScale(newVal);
-   STOPUNDO
 
    return S_OK;
 }
@@ -5407,9 +4250,7 @@ STDMETHODIMP PinTable::get_AOScale(float *pVal)
 
 STDMETHODIMP PinTable::put_AOScale(float newVal)
 {
-   STARTUNDO
    m_AOScale = newVal;
-   STOPUNDO
 
    return S_OK;
 }
@@ -5422,9 +4263,7 @@ STDMETHODIMP PinTable::get_SSRScale(float *pVal)
 
 STDMETHODIMP PinTable::put_SSRScale(float newVal)
 {
-   STARTUNDO
    m_SSRScale = newVal;
-   STOPUNDO
 
    return S_OK;
 }
@@ -5437,9 +4276,7 @@ STDMETHODIMP PinTable::get_EnvironmentEmissionScale(float *pVal)
 
 STDMETHODIMP PinTable::put_EnvironmentEmissionScale(float newVal)
 {
-   STARTUNDO
    m_envEmissionScale = newVal;
-   STOPUNDO
 
    return S_OK;
 }
@@ -5454,10 +4291,7 @@ STDMETHODIMP PinTable::get_BallReflection(UserDefaultOnOff *pVal)
 STDMETHODIMP PinTable::put_BallReflection(UserDefaultOnOff newVal)
 {
    // FIXME Deprecated
-   //STARTUNDO
    //m_useReflectionForBalls = (int)newVal;
-   //STOPUNDO
-
    return S_OK;
 }
 
@@ -5479,9 +4313,7 @@ STDMETHODIMP PinTable::get_PlayfieldReflectionStrength(int *pVal)
 
 STDMETHODIMP PinTable::put_PlayfieldReflectionStrength(int newVal)
 {
-   STARTUNDO
    SetPlayfieldReflectionStrength(newVal);
-   STOPUNDO
 
    return S_OK;
 }
@@ -5520,9 +4352,7 @@ STDMETHODIMP PinTable::get_BallPlayfieldReflectionScale(float *pVal)
 
 STDMETHODIMP PinTable::put_BallPlayfieldReflectionScale(float newVal)
 {
-   STARTUNDO
    m_ballPlayfieldReflectionStrength = newVal;
-   STOPUNDO
 
    return S_OK;
 }
@@ -5535,9 +4365,7 @@ STDMETHODIMP PinTable::get_DefaultBulbIntensityScale(float *pVal)
 
 STDMETHODIMP PinTable::put_DefaultBulbIntensityScale(float newVal)
 {
-   STARTUNDO
    m_defaultBulbIntensityScaleOnBall = newVal;
-   STOPUNDO
 
    return S_OK;
 }
@@ -5550,9 +4378,7 @@ STDMETHODIMP PinTable::get_BloomStrength(float *pVal)
 
 STDMETHODIMP PinTable::put_BloomStrength(float newVal)
 {
-   STARTUNDO
    m_bloom_strength = newVal;
-   STOPUNDO
 
    return S_OK;
 }
@@ -5575,9 +4401,7 @@ STDMETHODIMP PinTable::get_TableSoundVolume(int *pVal)
 
 STDMETHODIMP PinTable::put_TableSoundVolume(int newVal)
 {
-   STARTUNDO
    SetTableSoundVolume(newVal);
-   STOPUNDO
 
    return S_OK;
 }
@@ -5602,9 +4426,7 @@ STDMETHODIMP PinTable::get_BallDecalMode(VARIANT_BOOL *pVal)
 
 STDMETHODIMP PinTable::put_BallDecalMode(VARIANT_BOOL newVal)
 {
-   STARTUNDO
    m_BallDecalMode = VBTOb(newVal);
-   STOPUNDO
 
    return S_OK;
 }
@@ -5627,9 +4449,7 @@ STDMETHODIMP PinTable::get_TableMusicVolume(int *pVal)
 
 STDMETHODIMP PinTable::put_TableMusicVolume(int newVal)
 {
-   STARTUNDO
    SetTableMusicVolume(newVal);
-   STOPUNDO
 
    return S_OK;
 }
@@ -5642,9 +4462,7 @@ STDMETHODIMP PinTable::get_BackdropColor(OLE_COLOR *pVal)
 
 STDMETHODIMP PinTable::put_BackdropColor(OLE_COLOR newVal)
 {
-   STARTUNDO
    m_colorbackdrop = newVal;
-   STOPUNDO
 
    return S_OK;
 }
@@ -5657,9 +4475,7 @@ STDMETHODIMP PinTable::get_BackdropImageApplyNightDay(VARIANT_BOOL *pVal)
 
 STDMETHODIMP PinTable::put_BackdropImageApplyNightDay(VARIANT_BOOL newVal)
 {
-   STARTUNDO
    m_ImageBackdropNightDay = VBTOb(newVal);
-   STOPUNDO
 
    return S_OK;
 }
@@ -5704,9 +4520,7 @@ STDMETHODIMP PinTable::get_BackdropImage_DT(BSTR *pVal)
 
 STDMETHODIMP PinTable::put_BackdropImage_DT(BSTR newVal) //!! HDR??
 {
-   STARTUNDO
    m_BG_image[0] = MakeString(newVal);
-   STOPUNDO
 
    return S_OK;
 }
@@ -5719,9 +4533,7 @@ STDMETHODIMP PinTable::get_BackdropImage_FS(BSTR *pVal)
 
 STDMETHODIMP PinTable::put_BackdropImage_FS(BSTR newVal) //!! HDR??
 {
-   STARTUNDO
    m_BG_image[1] = MakeString(newVal);
-   STOPUNDO
 
    return S_OK;
 }
@@ -5734,9 +4546,7 @@ STDMETHODIMP PinTable::get_BackdropImage_FSS(BSTR *pVal)
 
 STDMETHODIMP PinTable::put_BackdropImage_FSS(BSTR newVal) //!! HDR??
 {
-   STARTUNDO
    m_BG_image[2] = MakeString(newVal);
-   STOPUNDO
 
    return S_OK;
 }
@@ -5757,9 +4567,7 @@ STDMETHODIMP PinTable::put_ColorGradeImage(BSTR newVal)
       return E_FAIL;
    }
 
-   STARTUNDO
    m_imageColorGrade = szImage;
-   STOPUNDO
 
    return S_OK;
 }
@@ -5785,19 +4593,13 @@ STDMETHODIMP PinTable::put_Gravity(float newVal)
 {
    if (newVal < 0.f) newVal = 0.f;
 
+   SetGravity(newVal);
+
    if (g_pplayer)
    {
-      SetGravity(newVal);
-
       const float slope = (m_overridePhysics ? GetPlayfieldOverridenSlope() : GetPlayfieldSlope());
       const float strength = (m_overridePhysics ? m_fOverrideGravityConstant : m_Gravity);
       g_pplayer->m_physics->SetGravity(slope, strength);
-   }
-   else
-   {
-      STARTUNDO
-      SetGravity(newVal);
-      STOPUNDO
    }
 
    return S_OK;
@@ -5816,9 +4618,7 @@ void PinTable::SetFriction(const float value)
 
 STDMETHODIMP PinTable::put_Friction(float newVal)
 {
-   STARTUNDO
    SetFriction(newVal);
-   STOPUNDO
 
    return S_OK;
 }
@@ -5831,9 +4631,7 @@ STDMETHODIMP PinTable::get_Elasticity(float *pVal)
 
 STDMETHODIMP PinTable::put_Elasticity(float newVal)
 {
-   STARTUNDO
    m_elasticity = newVal;
-   STOPUNDO
 
    return S_OK;
 }
@@ -5846,9 +4644,7 @@ STDMETHODIMP PinTable::get_ElasticityFalloff(float *pVal)
 
 STDMETHODIMP PinTable::put_ElasticityFalloff(float newVal)
 {
-   STARTUNDO
    m_elasticityFalloff = newVal;
-   STOPUNDO
 
    return S_OK;
 }
@@ -5861,9 +4657,7 @@ STDMETHODIMP PinTable::get_Scatter(float *pVal)
 
 STDMETHODIMP PinTable::put_Scatter(float newVal)
 {
-   STARTUNDO
    m_scatter = newVal;
-   STOPUNDO
 
    return S_OK;
 }
@@ -5876,9 +4670,7 @@ STDMETHODIMP PinTable::get_DefaultScatter(float *pVal)
 
 STDMETHODIMP PinTable::put_DefaultScatter(float newVal)
 {
-   STARTUNDO
    m_defaultScatter = newVal;
-   STOPUNDO
 
    return S_OK;
 }
@@ -5891,9 +4683,7 @@ STDMETHODIMP PinTable::get_NudgeTime(float *pVal)
 
 STDMETHODIMP PinTable::put_NudgeTime(float newVal)
 {
-   STARTUNDO
    m_nudgeTime = newVal;
-   STOPUNDO
 
    return S_OK;
 }
@@ -5906,9 +4696,7 @@ STDMETHODIMP PinTable::get_PhysicsLoopTime(int *pVal)
 
 STDMETHODIMP PinTable::put_PhysicsLoopTime(int newVal)
 {
-   STARTUNDO
    m_PhysicsMaxLoops = newVal;
-   STOPUNDO
 
    return S_OK;
 }
@@ -5923,17 +4711,9 @@ STDMETHODIMP PinTable::get_SlopeMax(float *pVal)
 
 STDMETHODIMP PinTable::put_SlopeMax(float newVal)
 {
+   m_angletiltMax = newVal;
    if (g_pplayer)
-   {
-      m_angletiltMax = newVal;
       g_pplayer->m_physics->SetGravity(GetPlayfieldSlope(), m_overridePhysics ? m_fOverrideGravityConstant : m_Gravity);
-   }
-   else
-   {
-      STARTUNDO
-      m_angletiltMax = newVal;
-      STOPUNDO
-   }
 
    return S_OK;
 }
@@ -5946,17 +4726,9 @@ STDMETHODIMP PinTable::get_SlopeMin(float *pVal)
 
 STDMETHODIMP PinTable::put_SlopeMin(float newVal)
 {
+   m_angletiltMin = newVal;
    if (g_pplayer)
-   {
-      m_angletiltMin = newVal;
       g_pplayer->m_physics->SetGravity(GetPlayfieldSlope(), m_overridePhysics ? m_fOverrideGravityConstant : m_Gravity);
-   }
-   else
-   {
-      STARTUNDO
-      m_angletiltMin = newVal;
-      STOPUNDO
-   }
 
    return S_OK;
 }
@@ -5969,9 +4741,7 @@ STDMETHODIMP PinTable::get_BallImage(BSTR *pVal)
 
 STDMETHODIMP PinTable::put_BallImage(BSTR newVal)
 {
-   STARTUNDO
    m_ballImage = MakeString(newVal);
-   STOPUNDO
 
    return S_OK;
 }
@@ -5992,9 +4762,7 @@ STDMETHODIMP PinTable::put_EnvironmentImage(BSTR newVal)
       return E_FAIL;
    }
 
-   STARTUNDO
    m_envImage = szImage;
-   STOPUNDO
 
    return S_OK;
 }
@@ -6009,9 +4777,7 @@ STDMETHODIMP PinTable::put_EnableSSR(UserDefaultOnOff newVal)
 {
    if (newVal == UserDefaultOnOff::Default)
       return E_FAIL;
-   STARTUNDO
    m_enableSSR = (int)newVal;
-   STOPUNDO
    return S_OK;
 }
 
@@ -6025,9 +4791,7 @@ STDMETHODIMP PinTable::put_EnableAO(UserDefaultOnOff newVal)
 {
    if (newVal == UserDefaultOnOff::Default)
       return E_FAIL;
-   STARTUNDO
    m_enableAO = (int)newVal;
-   STOPUNDO
    return S_OK;
 }
 
@@ -6039,9 +4803,7 @@ STDMETHODIMP PinTable::get_OverridePhysics(PhysicsSet *pVal)
 
 STDMETHODIMP PinTable::put_OverridePhysics(PhysicsSet newVal)
 {
-   STARTUNDO
    m_overridePhysics = (int)newVal;
-   STOPUNDO
 
    return S_OK;
 }
@@ -6054,30 +4816,12 @@ STDMETHODIMP PinTable::get_OverridePhysicsFlippers(VARIANT_BOOL *pVal)
 
 STDMETHODIMP PinTable::put_OverridePhysicsFlippers(VARIANT_BOOL newVal)
 {
-   STARTUNDO
    m_overridePhysicsFlipper = VBTOb(newVal);
-   STOPUNDO
 
    return S_OK;
 }
 
 //
-
-STDMETHODIMP PinTable::ImportPhysics()
-{
-   const string& szInitialDir = m_settings.GetRecentDir_PhysicsDir();
-   vector<string> filename;
-   if (!m_vpinball->OpenFileDialog(szInitialDir, filename, "Visual Pinball Physics (*.vpp)\0*.vpp\0", "vpp", 0))
-      return S_OK;
-
-   const size_t index = filename[0].find_last_of(PATH_SEPARATOR_CHAR);
-   if (index != string::npos)
-      g_app->m_settings.SetRecentDir_PhysicsDir(filename[0].substr(0, index), false);
-
-   ImportVPP(filename[0]);
-
-   return S_OK;
-}
 
 std::array<string,18> PinTable::VPPelementNames{"gravityConstant"s, "contactFriction"s, "elasticity"s, "elasticityFalloff"s, "playfieldScatter"s, "defaultElementScatter"s, "playfieldminslope"s, "playfieldmaxslope"s,
                                /*flippers:*/    "speed"s, "strength"s, "elasticity"s, "scatter"s, "eosTorque"s, "eosTorqueAngle"s, "returnStrength"s, "elasticityFalloff"s, "friction"s, "coilRampUp"s};
@@ -6197,61 +4941,8 @@ void PinTable::ImportVPP(const std::filesystem::path &filename)
    tab->InsertEndChild(node); \
 }
 
-STDMETHODIMP PinTable::ExportPhysics()
+void PinTable::ExportVPP(const std::filesystem::path &filename, Flipper *const flipper)
 {
-#ifndef __STANDALONE__
-   bool foundflipper = false;
-   size_t i;
-   for (i = 0; i < m_vedit.size(); i++)
-   {
-      if (m_vedit[i]->GetItemType() == eItemFlipper)
-      {
-         foundflipper = true;
-         break;
-      }
-   }
-
-   if (!foundflipper)
-   {
-      ShowError("No Flipper found to copy settings from");
-      return S_OK;
-   }
-
-   Flipper * const flipper = (Flipper *)m_vedit[i];
-
-   char szFileName[MAXSTRING];
-   strncpy_s(szFileName, std::size(szFileName), m_filename.string().c_str());
-   const size_t idx = m_filename.string().find_last_of('.');
-   if (idx != string::npos && idx < std::size(szFileName))
-      szFileName[idx] = '\0';
-
-   OPENFILENAME ofn = {};
-   ofn.lStructSize = sizeof(OPENFILENAME);
-   ofn.hInstance = g_app->GetInstanceHandle();
-   ofn.hwndOwner = m_vpinball->GetHwnd();
-   // TEXT
-   ofn.lpstrFilter = "Visual Pinball Physics (*.vpp)\0*.vpp\0";
-   ofn.lpstrFile = szFileName;
-   ofn.nMaxFile = std::size(szFileName);
-   ofn.lpstrDefExt = "vpp";
-   ofn.Flags = OFN_OVERWRITEPROMPT | OFN_HIDEREADONLY;
-
-   string szInitialDir = m_settings.GetRecentDir_PhysicsDir();
-
-   ofn.lpstrInitialDir = szInitialDir.c_str();
-
-   const int ret = GetSaveFileName(&ofn);
-   if (ret == 0)
-      return S_OK;
-
-   const string filename(ofn.lpstrFile);
-   const size_t index = filename.find_last_of(PATH_SEPARATOR_CHAR);
-   if (index != string::npos)
-   {
-      const string newInitDir(filename.substr(0, index));
-      g_app->m_settings.SetRecentDir_PhysicsDir(newInitDir, false);
-   }
-
    tinyxml2::XMLDocument xmlDoc;
 
    auto root = xmlDoc.NewElement("physics");
@@ -6290,12 +4981,9 @@ STDMETHODIMP PinTable::ExportPhysics()
    tinyxml2::XMLPrinter prn;
    xmlDoc.Print(&prn);
 
-   std::ofstream myfile(ofn.lpstrFile);
+   std::ofstream myfile(filename);
    myfile << prn.CStr();
    myfile.close();
-#endif
-
-   return S_OK;
 }
 
 //
@@ -6308,9 +4996,7 @@ STDMETHODIMP PinTable::get_EnableDecals(VARIANT_BOOL *pVal)
 
 STDMETHODIMP PinTable::put_EnableDecals(VARIANT_BOOL newVal)
 {
-   STARTUNDO
    m_renderDecals = VBTOb(newVal);
-   STOPUNDO
 
    return S_OK;
 }
@@ -6329,9 +5015,7 @@ STDMETHODIMP PinTable::get_EnableEMReels(VARIANT_BOOL *pVal)
 
 STDMETHODIMP PinTable::put_EnableEMReels(VARIANT_BOOL newVal)
 {
-   STARTUNDO
    m_renderEMReels = VBTOb(newVal);
-   STOPUNDO
 
    return S_OK;
 }
@@ -6357,11 +5041,7 @@ STDMETHODIMP PinTable::get_GlobalDifficulty(float *pVal)
 STDMETHODIMP PinTable::put_GlobalDifficulty(float newVal)
 {
    if (!g_pplayer) // VP Editor
-   {
-       STARTUNDO
-       SetGlobalDifficulty(newVal);
-       STOPUNDO
-   }
+      SetGlobalDifficulty(newVal);
 
    return S_OK;
 }
@@ -6433,9 +5113,7 @@ STDMETHODIMP PinTable::put_BallFrontDecal(BSTR newVal)
       return E_FAIL;
    }
 
-   STARTUNDO
    m_ballImageDecal = szImage;
-   STOPUNDO
 
    return S_OK;
 }
@@ -7128,10 +5806,7 @@ STDMETHODIMP PinTable::get_FieldOfView(float *pVal)
 STDMETHODIMP PinTable::put_FieldOfView(float newVal)
 {
    PLOGW << "FieldOfView is deprecated";
-   STARTUNDO
    mViewSetups[m_viewMode].mFOV = newVal;
-   STOPUNDO
-
    return S_OK;
 }
 
@@ -7145,10 +5820,7 @@ STDMETHODIMP PinTable::get_Inclination(float *pVal)
 STDMETHODIMP PinTable::put_Inclination(float newVal)
 {
    PLOGW << "Inclination is deprecated";
-   STARTUNDO
    mViewSetups[m_viewMode].mLookAt = newVal;
-   STOPUNDO
-
    return S_OK;
 }
 
@@ -7162,10 +5834,7 @@ STDMETHODIMP PinTable::get_Layback(float *pVal)
 STDMETHODIMP PinTable::put_Layback(float newVal)
 {
    PLOGW << "Layback is deprecated";
-   STARTUNDO
    mViewSetups[m_viewMode].mLayback = newVal;
-   STOPUNDO
-
    return S_OK;
 }
 
@@ -7179,10 +5848,7 @@ STDMETHODIMP PinTable::get_Rotation(float *pVal)
 STDMETHODIMP PinTable::put_Rotation(float newVal)
 {
    PLOGW << "Rotation is deprecated";
-   STARTUNDO
    mViewSetups[m_viewMode].mViewportRotation = newVal;
-   STOPUNDO
-
    return S_OK;
 }
 
@@ -7196,10 +5862,7 @@ STDMETHODIMP PinTable::get_Scalex(float *pVal)
 STDMETHODIMP PinTable::put_Scalex(float newVal)
 {
    PLOGW << "Scalex is deprecated";
-   STARTUNDO
    mViewSetups[m_viewMode].mSceneScaleX = newVal;
-   STOPUNDO
-
    return S_OK;
 }
 
@@ -7213,10 +5876,7 @@ STDMETHODIMP PinTable::get_Scaley(float *pVal)
 STDMETHODIMP PinTable::put_Scaley(float newVal)
 {
    PLOGW << "Scaley is deprecated";
-   STARTUNDO
    mViewSetups[m_viewMode].mSceneScaleY = newVal;
-   STOPUNDO
-
    return S_OK;
 }
 
@@ -7230,10 +5890,7 @@ STDMETHODIMP PinTable::get_Scalez(float *pVal)
 STDMETHODIMP PinTable::put_Scalez(float newVal)
 {
    PLOGW << "Scalez is deprecated";
-   STARTUNDO
    mViewSetups[m_viewMode].mSceneScaleZ = newVal;
-   STOPUNDO
-
    return S_OK;
 }
 
@@ -7247,10 +5904,7 @@ STDMETHODIMP PinTable::get_Xlatex(float *pVal)
 STDMETHODIMP PinTable::put_Xlatex(float newVal)
 {
    PLOGW << "Xlatex is deprecated";
-   STARTUNDO
    mViewSetups[m_viewMode].mViewX = newVal;
-   STOPUNDO
-
    return S_OK;
 }
 
@@ -7264,10 +5918,7 @@ STDMETHODIMP PinTable::get_Xlatey(float *pVal)
 STDMETHODIMP PinTable::put_Xlatey(float newVal)
 {
    PLOGW << "Xlatey is deprecated";
-   STARTUNDO
    mViewSetups[m_viewMode].mViewY = newVal;
-   STOPUNDO
-
    return S_OK;
 }
 
@@ -7281,9 +5932,6 @@ STDMETHODIMP PinTable::get_Xlatez(float *pVal)
 STDMETHODIMP PinTable::put_Xlatez(float newVal)
 {
    PLOGW << "Xlatez is deprecated";
-   STARTUNDO
    mViewSetups[m_viewMode].mViewZ = newVal;
-   STOPUNDO
-
    return S_OK;
 }

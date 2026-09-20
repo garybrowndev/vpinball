@@ -107,7 +107,6 @@ class Ball :
    public IConnectionPointContainerImpl<Ball>,
    public IProvideClassInfo2Impl<&IID_IBall, &DIID_IBallEvents, &LIBID_VPinballLib>,
 
-   public ISelect,
    public IEditable,
    public IHitable,
    public IRenderable,
@@ -139,7 +138,7 @@ public:
       COM_INTERFACE_ENTRY(IProvideClassInfo2)
    END_COM_MAP()
 
-   STANDARD_EDITABLE_DECLARES(Ball, eItemBall, BALL, VIEW_PLAYFIELD)
+   STANDARD_EDITABLE_DECLARES(Ball, eItemBall, BALL)
 
    BEGIN_CONNECTION_POINT_MAP(Ball)
       CONNECTION_POINT_ENTRY(DIID_IBallEvents)
@@ -147,20 +146,14 @@ public:
 
    DECLARE_REGISTRY_RESOURCEID(IDR_BALL)
 
+   // IHitable implementation
    bool PhysicUpdate(class PhysicsEngine *physics, const bool isUI) final;
 
-   // ISelect implementation
-   void MoveOffset(const float dx, const float dy) final;
-   void SetObjectPos() final;
+   void Translate(const Vertex2D &offset) final;
    Vertex2D GetCenter() const final;
-   void PutCenter(const Vertex2D &pv) final;
 
    // IEditable implementation
-   void RenderBlueprint(Sur *psur, const bool solid) final;
    void WriteRegDefaults() final;
-
-   // IHitable implementation
-   ItemTypeEnum HitableGetItemType() const final { return eItemBall; }
 
    // IBall implementation
    STDMETHOD(get_FrontDecal)(/*[out, retval]*/ BSTR *pVal);

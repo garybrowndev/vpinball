@@ -232,7 +232,9 @@ if [ "${OPENXR_EXPECTED_SHA}" != "${OPENXR_FOUND_SHA}" ]; then
    sed -i.bak 's|\${CMAKE_CURRENT_BINARY_DIR}/$<CONFIGURATION>/openxr_loader|\${CMAKE_CURRENT_BINARY_DIR}/$<CONFIGURATION>/openxr_loader64|g' src/loader/CMakeLists.txt
    cmake \
       -G "Visual Studio 18 2026" \
+      -DBUILD_WITH_SYSTEM_JSONCPP=OFF \
       -DBUILD_TESTS=OFF \
+      -DBUILD_API_LAYERS=OFF \
       -DDYNAMIC_LOADER=ON \
       -DOPENXR_DEBUG_POSTFIX="" \
       -B build
@@ -458,7 +460,8 @@ cp pinmame/pinmame/src/libpinmame/PinMAMEPlugin.h ../../../third-party/include/p
 
 cp openxr/openxr/build/src/loader/${BUILD_TYPE}/openxr_loader64.lib ../../../third-party/build-libs/windows-x64
 cp openxr/openxr/build/src/loader/${BUILD_TYPE}/openxr_loader64.dll ../../../third-party/runtime-libs/windows-x64
-cp -r openxr/openxr/include/openxr ../../../third-party/include
+mkdir -p ../../../third-party/include/openxr
+cp openxr/openxr/build/include/openxr/*.h ../../../third-party/include/openxr
 
 cp libdmdutil/libdmdutil/build/${BUILD_TYPE}/dmdutil64.lib ../../../third-party/build-libs/windows-x64
 cp libdmdutil/libdmdutil/build/${BUILD_TYPE}/dmdutil64.dll ../../../third-party/runtime-libs/windows-x64

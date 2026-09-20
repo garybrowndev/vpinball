@@ -5,6 +5,8 @@
 #include "pole/pole.h"
 
 
+class InMemStream;
+
 namespace VPX
 {
 
@@ -38,7 +40,7 @@ public:
    void SetFromFileData(const std::filesystem::path& filename, vector<uint8_t> filedata);
 
    bool SaveToFile(const std::filesystem::path& filename) const;
-   void SaveToStream(IStream* pstm) const;
+   void SaveToStream(InMemStream* pstm) const;
 
    // What type of sound? table or backglass?  Used to route sound to the right device or channel. set by pintable
    SoundOutTypes GetOutputTarget() const { return m_outputTarget; }
@@ -69,7 +71,7 @@ private:
    int m_volume = 0;
    int m_pan = 0;
    int m_frontRearFade = 0;
-   SoundOutTypes m_outputTarget = SoundOutTypes::SNDOUT_BACKGLASS; //Is it table sound device or BG sound device.
+   SoundOutTypes m_outputTarget = SoundOutTypes::SNDOUT_TABLE;
 };
 
 }

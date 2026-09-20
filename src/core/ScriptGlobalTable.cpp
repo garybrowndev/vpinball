@@ -8,8 +8,8 @@
 #include "core/VPXPluginAPIImpl.h"
 #include "parts/ball.h"
 #include "physics/cabinet/NudgeHandler.h"
+#include "pole/pole.h"
 #include "renderer/Renderer.h"
-#include "ui/win/WinEditor.h"
 
 #ifndef __STANDALONE__
 #include <atlsafe.h>
@@ -24,7 +24,7 @@ ScriptGlobalTable::~ScriptGlobalTable()
 
 void ScriptGlobalTable::Init(PinTable *pt)
 {
-   m_pt = pt;
+   m_table = pt;
 }
 
 STDMETHODIMP ScriptGlobalTable::BeginModal()
@@ -69,45 +69,45 @@ STDMETHODIMP ScriptGlobalTable::NudgeSetCalibration(int XMax, int YMax, int XGai
 
 STDMETHODIMP ScriptGlobalTable::NudgeSensorStatus(VARIANT *XNudge, VARIANT *YNudge)
 {
-   CComVariant(m_pt->m_tblNudgeRead.x).Detach(XNudge);
-   CComVariant(m_pt->m_tblNudgeRead.y).Detach(YNudge);
-   m_pt->m_tblNudgeRead = Vertex2D(0.f,0.f);
+   CComVariant(m_table->m_tblNudgeRead.x).Detach(XNudge);
+   CComVariant(m_table->m_tblNudgeRead.y).Detach(YNudge);
+   m_table->m_tblNudgeRead = Vertex2D(0.f,0.f);
 
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::NudgeTiltStatus(VARIANT *XPlumb, VARIANT *YPlumb, VARIANT *Tilt)
 {
-   CComVariant(m_pt->m_tblNudgePlumb.x).Detach(XPlumb);
-   CComVariant(m_pt->m_tblNudgePlumb.y).Detach(YPlumb);
-   m_pt->m_tblNudgePlumb = Vertex2D(0.f,0.f);
-   CComVariant(m_pt->m_tblNudgeReadTilt).Detach(Tilt);
-   m_pt->m_tblNudgeReadTilt = 0.0f;
+   CComVariant(m_table->m_tblNudgePlumb.x).Detach(XPlumb);
+   CComVariant(m_table->m_tblNudgePlumb.y).Detach(YPlumb);
+   m_table->m_tblNudgePlumb = Vertex2D(0.f,0.f);
+   CComVariant(m_table->m_tblNudgeReadTilt).Detach(Tilt);
+   m_table->m_tblNudgeReadTilt = 0.0f;
 
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::PlaySound(BSTR bstr, LONG LoopCount, float volume, float pan, float randompitch, LONG pitch, VARIANT_BOOL usesame, VARIANT_BOOL restart, float front_rear_fade)
 {
-   m_pt->PlaySound(bstr, LoopCount, volume, pan, randompitch, pitch, usesame, restart, front_rear_fade);
+   m_table->PlaySound(bstr, LoopCount, volume, pan, randompitch, pitch, usesame, restart, front_rear_fade);
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::FireKnocker(int Count)
 {
-   if (g_pplayer) m_pt->FireKnocker(Count);
+   m_table->FireKnocker(Count);
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::QuitPlayer(int CloseType)
 {
-   if (g_pplayer) m_pt->QuitPlayer(CloseType);
+   m_table->QuitPlayer(CloseType);
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::StopSound(BSTR soundName)
 {
-   m_pt->StopSound(soundName);
+   m_table->StopSound(soundName);
    return S_OK;
 }
 
@@ -123,11 +123,11 @@ STDMETHODIMP ScriptGlobalTable::PlayMusic(BSTR str, float volume)
 
       const std::filesystem::path musicPath = normalize_path_separators(musicNameStr);
 
-      const std::filesystem::path musicDir = g_app->m_fileLocator.GetTablePath(g_pplayer ? g_pplayer->m_ptable : g_pvp ? g_pvp->GetActiveTable() : nullptr, FileLocator::TableSubFolder::Music, false);
+      const std::filesystem::path musicDir = g_app->m_fileLocator.GetTablePath(m_table, FileLocator::TableSubFolder::Music, false);
       const std::filesystem::path path = find_case_insensitive_file_path(musicDir / musicPath.relative_path());
       if (!path.empty() && !path.lexically_relative(musicDir).empty() && g_pplayer->m_audioPlayer->PlayMusic(path.string()))
       {
-         g_pplayer->m_audioPlayer->SetMusicVolume(m_pt->m_TableMusicVolume * volume);
+         g_pplayer->m_audioPlayer->SetMusicVolume(m_table->m_TableMusicVolume * volume);
       }
       else
       {
@@ -321,7 +321,7 @@ STDMETHODIMP ScriptGlobalTable::get_Setting(BSTR Section, BSTR SettingName, BSTR
 {
    const string sectionSz = MakeString(Section);
    const string settingSz = MakeString(SettingName);
-   Settings &settings = g_pplayer ? g_pplayer->m_ptable->m_settings : g_app->m_settings;
+   Settings &settings = m_table->m_settings;
    const auto propId = Settings::GetRegistry().GetPropertyId(sectionSz, settingSz);
    if (propId.has_value())
    {
@@ -343,9 +343,11 @@ STDMETHODIMP ScriptGlobalTable::get_Setting(BSTR Section, BSTR SettingName, BSTR
 
 STDMETHODIMP ScriptGlobalTable::GetTextFile(BSTR FileName, BSTR *pContents)
 {
+   if (g_pplayer == nullptr)
+      return E_FAIL;
    const string szFileName = MakeString(FileName);
    const std::filesystem::path filepath = normalize_path_separators(szFileName);
-   if (std::filesystem::path file = g_app->m_fileLocator.SearchScript(g_pplayer ? g_pplayer->m_ptable : g_pvp ? g_pvp->GetActiveTable() : nullptr, filepath); !file.empty())
+   if (std::filesystem::path file = g_app->m_fileLocator.SearchScript(m_table, filepath); !file.empty())
    {
       std::ifstream scriptFile;
       scriptFile.open(file, std::ifstream::in);
@@ -369,10 +371,7 @@ STDMETHODIMP ScriptGlobalTable::GetTextFile(BSTR FileName, BSTR *pContents)
 
 STDMETHODIMP ScriptGlobalTable::get_UserDirectory(BSTR *pVal)
 {
-   const auto table = g_pplayer ? g_pplayer->m_ptable : g_pvp ? g_pvp->GetActiveTable() : nullptr;
-   if (table == nullptr)
-      return E_FAIL;
-   const std::filesystem::path path = g_app->m_fileLocator.GetTablePath(table, FileLocator::TableSubFolder::User, true) / ""sv;
+   const std::filesystem::path path = g_app->m_fileLocator.GetTablePath(m_table, FileLocator::TableSubFolder::User, true) / ""sv;
    if (!DirExists(path))
       return E_FAIL;
    *pVal = MakeWideBSTR(path.native());
@@ -394,10 +393,7 @@ STDMETHODIMP ScriptGlobalTable::get_MusicDirectory(VARIANT pSubDir, BSTR *pVal)
    // Optional sub directory parameter must be either missing or a string
    if (V_VT(&pSubDir) != VT_ERROR && V_VT(&pSubDir) != VT_EMPTY && V_VT(&pSubDir) != VT_BSTR)
       return E_FAIL;
-   const PinTable * const table = g_pplayer ? g_pplayer->m_ptable : g_pvp ? g_pvp->GetActiveTable() : nullptr;
-   if (table == nullptr)
-      return E_FAIL;
-   std::filesystem::path path = g_app->m_fileLocator.GetTablePath(table, FileLocator::TableSubFolder::Music, false);
+   std::filesystem::path path = g_app->m_fileLocator.GetTablePath(m_table, FileLocator::TableSubFolder::Music, false);
    if (V_VT(&pSubDir) == VT_BSTR)
       path = path / V_BSTR(&pSubDir);
    if (!DirExists(path))
@@ -505,7 +501,7 @@ static BSTR BstrFromVariant(VARIANT *pvar, LCID lcid)
 STDMETHODIMP ScriptGlobalTable::SaveValue(BSTR TableName, BSTR ValueName, VARIANT Value)
 {
    mINI::INIStructure ini;
-   mINI::INIFile file(g_app->m_fileLocator.GetTablePath(g_pplayer->m_ptable, FileLocator::TableSubFolder::User, true) / "VPReg.ini"sv);
+   mINI::INIFile file(g_app->m_fileLocator.GetTablePath(m_table, FileLocator::TableSubFolder::User, true) / "VPReg.ini"sv);
    file.read(ini);
 
    string szTableName = MakeString(TableName);
@@ -527,10 +523,10 @@ STDMETHODIMP ScriptGlobalTable::SaveValue(BSTR TableName, BSTR ValueName, VARIAN
 
 STDMETHODIMP ScriptGlobalTable::LoadValue(BSTR TableName, BSTR ValueName, VARIANT *Value)
 {
-   Settings *const pSettings = &g_pplayer->m_ptable->m_settings;
+   Settings *const pSettings = &m_table->m_settings;
 
    mINI::INIStructure ini;
-   mINI::INIFile file(g_app->m_fileLocator.GetTablePath(g_pplayer->m_ptable, FileLocator::TableSubFolder::User, false) / "VPReg.ini"sv);
+   mINI::INIFile file(g_app->m_fileLocator.GetTablePath(m_table, FileLocator::TableSubFolder::User, false) / "VPReg.ini"sv);
    file.read(ini);
 
    string szTableName = MakeString(TableName);
@@ -546,52 +542,31 @@ STDMETHODIMP ScriptGlobalTable::LoadValue(BSTR TableName, BSTR ValueName, VARIAN
 #ifndef __STANDALONE__
       // VPX used to save table persisted values in a OLE container. When the value is missing, try to locate & load from a legacy file.
       {
-         HRESULT hr;
+         const std::filesystem::path path = g_app->m_fileLocator.GetTablePath(m_table, FileLocator::TableSubFolder::User, false) / "VPReg.stg"sv;
 
-         const std::filesystem::path path = g_app->m_fileLocator.GetTablePath(g_pplayer->m_ptable, FileLocator::TableSubFolder::User, false) / "VPReg.stg"sv;
-
-         IStorage *pstgRoot;
-         if (FAILED(StgOpenStorage(path.wstring().c_str(), nullptr, STGM_TRANSACTED | STGM_READWRITE | STGM_SHARE_EXCLUSIVE, nullptr, 0, &pstgRoot)))
+         POLE::Storage storage(path.string().c_str());
+         if (!storage.open() || storage.result() != POLE::Storage::Ok)
          {
             SetVarBstr(Value, SysAllocString(L""));
             return S_OK;
          }
 
-         IStorage *pstgTable;
-         if (FAILED(pstgRoot->OpenStorage(TableName, nullptr, STGM_TRANSACTED | STGM_READWRITE | STGM_SHARE_EXCLUSIVE, nullptr, 0, &pstgTable)))
+         const string streamName = szTableName + '/' + szValueName;
+         if (!storage.exists(streamName))
          {
             SetVarBstr(Value, SysAllocString(L""));
-            pstgRoot->Release();
+            storage.close();
             return S_OK;
          }
 
-         IStream *pstmValue;
-         if (FAILED(pstgTable->OpenStream(ValueName, 0, STGM_DIRECT | STGM_READ | STGM_SHARE_EXCLUSIVE, 0, &pstmValue)))
-         {
-            SetVarBstr(Value, SysAllocString(L""));
-            pstgTable->Release();
-            pstgRoot->Release();
-            return S_OK;
-         }
-
-         STATSTG statstg;
-         pstmValue->Stat(&statstg, STATFLAG_NONAME);
-
-         const unsigned int size = statstg.cbSize.LowPart / sizeof(WCHAR);
+         POLE::Stream stream(&storage, streamName);
+         const unsigned int size = static_cast<unsigned int>(stream.size()) / sizeof(WCHAR);
 
          BSTR wzT = SysAllocStringLen(nullptr, size);
-
-         DWORD read;
-         hr = pstmValue->Read(wzT, size * (int)sizeof(WCHAR), &read);
+         stream.read(reinterpret_cast<unsigned char *>(wzT), size * sizeof(WCHAR));
          wzT[size] = L'\0';
 
-         pstmValue->Release();
-
-         pstgTable->Commit(STGC_DEFAULT);
-         pstgTable->Release();
-
-         pstgRoot->Commit(STGC_DEFAULT);
-         pstgRoot->Release();
+         storage.close();
 
          SetVarBstr(Value, wzT);
       }
@@ -647,9 +622,6 @@ STDMETHODIMP ScriptGlobalTable::get_PreciseGameTime(double *pVal)
 
 STDMETHODIMP ScriptGlobalTable::get_SystemTime(LONG *pVal)
 {
-   if (!g_pplayer)
-      return E_POINTER;
-
    *pVal = msec();
    return S_OK;
 }
@@ -664,13 +636,13 @@ STDMETHODIMP ScriptGlobalTable::get_NightDay(int *pVal)
 
 STDMETHODIMP ScriptGlobalTable::get_ShowDT(VARIANT_BOOL *pVal)
 {
-   *pVal = FTOVB(m_pt->GetViewMode() == BG_DESKTOP || m_pt->GetViewMode() == BG_FSS); // DT & FSS
+   *pVal = FTOVB(m_table->GetViewMode() == BG_DESKTOP || m_table->GetViewMode() == BG_FSS); // DT & FSS
    return S_OK;
 }
 
 STDMETHODIMP ScriptGlobalTable::get_ShowFSS(VARIANT_BOOL *pVal)
 {
-   *pVal = FTOVB(m_pt->GetViewMode() == BG_FSS);
+   *pVal = FTOVB(m_table->GetViewMode() == BG_FSS);
    return S_OK;
 }
 
@@ -678,13 +650,8 @@ STDMETHODIMP ScriptGlobalTable::UpdateMaterial(BSTR pVal, float wrapLighting, fl
    OLE_COLOR base, OLE_COLOR glossy, OLE_COLOR clearcoat, VARIANT_BOOL isMetal, VARIANT_BOOL opacityActive,
    float elasticity, float elasticityFalloff, float friction, float scatterAngle)
 {
-   if (!g_pplayer)
-      return E_POINTER;
-
-   const string Name = MakeString(pVal);
-
-   Material * const pMat = m_pt->GetMaterial(Name);
-   if (pMat != g_pplayer->m_ptable->m_dummyMaterial.get())
+   Material *const pMat = m_table->GetMaterial(MakeString(pVal));
+   if (!m_table->IsDummyMaterial(pMat))
    {
       pMat->m_fWrapLighting = wrapLighting;
       pMat->m_fRoughness = roughness;
@@ -702,7 +669,6 @@ STDMETHODIMP ScriptGlobalTable::UpdateMaterial(BSTR pVal, float wrapLighting, fl
       pMat->m_fElasticityFalloff = elasticityFalloff;
       pMat->m_fFriction = friction;
       pMat->m_fScatterAngle = scatterAngle;
-
       return S_OK;
    }
    else
@@ -713,13 +679,8 @@ STDMETHODIMP ScriptGlobalTable::GetMaterial(BSTR pVal, VARIANT *wrapLighting, VA
    VARIANT *base, VARIANT *glossy, VARIANT *clearcoat, VARIANT *isMetal, VARIANT *opacityActive,
    VARIANT *elasticity, VARIANT *elasticityFalloff, VARIANT *friction, VARIANT *scatterAngle)
 {
-   if (!g_pplayer)
-      return E_POINTER;
-
-   const string Name = MakeString(pVal);
-
-   const Material * const pMat = m_pt->GetMaterial(Name);
-   if (pMat != g_pplayer->m_ptable->m_dummyMaterial.get())
+   const Material *const pMat = m_table->GetMaterial(MakeString(pVal));
+   if (!m_table->IsDummyMaterial(pMat))
    {
       CComVariant(pMat->m_fWrapLighting).Detach(wrapLighting);
       CComVariant(pMat->m_fRoughness).Detach(roughness);
@@ -737,7 +698,6 @@ STDMETHODIMP ScriptGlobalTable::GetMaterial(BSTR pVal, VARIANT *wrapLighting, VA
       CComVariant(pMat->m_fElasticityFalloff).Detach(elasticityFalloff);
       CComVariant(pMat->m_fFriction).Detach(friction);
       CComVariant(pMat->m_fScatterAngle).Detach(scatterAngle);
-
       return S_OK;
    }
    else
@@ -746,19 +706,13 @@ STDMETHODIMP ScriptGlobalTable::GetMaterial(BSTR pVal, VARIANT *wrapLighting, VA
 
 STDMETHODIMP ScriptGlobalTable::UpdateMaterialPhysics(BSTR pVal, float elasticity, float elasticityFalloff, float friction, float scatterAngle)
 {
-   if (!g_pplayer)
-      return E_POINTER;
-
-   const string Name = MakeString(pVal);
-
-   Material * const pMat = m_pt->GetMaterial(Name);
-   if (pMat != g_pplayer->m_ptable->m_dummyMaterial.get())
+   Material *const pMat = m_table->GetMaterial(MakeString(pVal));
+   if (!m_table->IsDummyMaterial(pMat))
    {
       pMat->m_fElasticity = elasticity;
       pMat->m_fElasticityFalloff = elasticityFalloff;
       pMat->m_fFriction = friction;
       pMat->m_fScatterAngle = scatterAngle;
-
       return S_OK;
    }
    else
@@ -767,19 +721,13 @@ STDMETHODIMP ScriptGlobalTable::UpdateMaterialPhysics(BSTR pVal, float elasticit
 
 STDMETHODIMP ScriptGlobalTable::GetMaterialPhysics(BSTR pVal, VARIANT *elasticity, VARIANT *elasticityFalloff, VARIANT *friction, VARIANT *scatterAngle)
 {
-   if (!g_pplayer)
-      return E_POINTER;
-
-   const string Name = MakeString(pVal);
-
-   const Material * const pMat = m_pt->GetMaterial(Name);
-   if (pMat != g_pplayer->m_ptable->m_dummyMaterial.get())
+   const Material *const pMat = m_table->GetMaterial(MakeString(pVal));
+   if (!m_table->IsDummyMaterial(pMat))
    {
       CComVariant(pMat->m_fElasticity).Detach(elasticity);
       CComVariant(pMat->m_fElasticityFalloff).Detach(elasticityFalloff);
       CComVariant(pMat->m_fFriction).Detach(friction);
       CComVariant(pMat->m_fScatterAngle).Detach(scatterAngle);
-
       return S_OK;
    }
    else
@@ -789,11 +737,8 @@ STDMETHODIMP ScriptGlobalTable::GetMaterialPhysics(BSTR pVal, VARIANT *elasticit
 // only sets the base color
 STDMETHODIMP ScriptGlobalTable::MaterialColor(BSTR pVal, OLE_COLOR newVal)
 {
-   if (!g_pplayer)
-      return E_POINTER;
-
-   Material * const pMat = m_pt->GetMaterial(MakeString(pVal));
-   if (pMat != g_pplayer->m_ptable->m_dummyMaterial.get())
+   Material * const pMat = m_table->GetMaterial(MakeString(pVal));
+   if (!m_table->IsDummyMaterial(pMat))
       pMat->m_cBase = newVal;
    else
       return E_FAIL;
@@ -810,15 +755,12 @@ STDMETHODIMP ScriptGlobalTable::CreatePluginObject(/*[in]*/ BSTR classId, /*[out
 
 STDMETHODIMP ScriptGlobalTable::LoadTexture(BSTR imageName, BSTR fileName)
 {
-   if (!g_pplayer)
-      return E_FAIL;
-
    const string szImageName = MakeString(imageName);
    // Do not allow to load an image with the same name as one of the edited table as they would conflict
-   if (m_pt->GetImage(szImageName))
+   if (m_table->GetImage(szImageName))
       return E_FAIL;
 
-   Texture *image = m_pt->ImportImage(fileName, szImageName);
+   Texture *image = m_table->ImportImage(fileName, szImageName);
    return image == nullptr ? E_FAIL : S_OK;
 }
 
@@ -878,15 +820,18 @@ STDMETHODIMP ScriptGlobalTable::put_DMDPixels(VARIANT pVal) // assumes VT_UI1 as
    if (!SafeArrayHasAtLeast(psa, size))
       return E_FAIL;
 
-   if (g_pplayer->m_dmdFrame != nullptr
-      && (g_pplayer->m_dmdFrame->width() != g_pplayer->m_dmdSize.x || g_pplayer->m_dmdFrame->height() != g_pplayer->m_dmdSize.y || g_pplayer->m_dmdFrame->m_format != BaseTexture::BW_FP32))
+   const bool unAdvertise = g_pplayer->m_dmdFrame != nullptr
+      && (g_pplayer->m_dmdFrame->width() != g_pplayer->m_dmdSize.x || g_pplayer->m_dmdFrame->height() != g_pplayer->m_dmdSize.y || g_pplayer->m_dmdFrame->m_format != BaseTexture::BW_FP32);
+   if (unAdvertise)
       g_pplayer->m_pluginAPI.OnDMDUpdated(nullptr, nullptr);
+   const BaseTexture * const prev = g_pplayer->m_dmdFrame.get();
    BaseTexture::Update(g_pplayer->m_dmdFrame, g_pplayer->m_dmdSize.x, g_pplayer->m_dmdSize.y, BaseTexture::BW_FP32, nullptr);
+   assert(unAdvertise || prev == nullptr || prev == g_pplayer->m_dmdFrame.get()); // Update() must not change the pointer as it would break async requests from Pinball Plugin API
    // Convert from linear [0..100] luminance
    VARIANT *p;
    SafeArrayAccessData(psa, (void **)&p);
    float *const __restrict data = static_cast<float*>(g_pplayer->m_dmdFrame->data());
-   for (int ofs = 0; ofs < size; ++ofs)
+   for (int ofs = 0; ofs < size; ++ofs) // To be lock free, we accept a minor race condition here as we are writing the new frame while it may be read through the plugin API
       data[ofs] = (float)V_UI4(&p[ofs]) * (float)(1.0 / 100.);
    SafeArrayUnaccessData(psa);
    g_pplayer->m_dmdFrameId++;
@@ -904,15 +849,18 @@ STDMETHODIMP ScriptGlobalTable::put_DMDColoredPixels(VARIANT pVal) //!! assumes 
    if (!SafeArrayHasAtLeast(psa, size))
       return E_FAIL;
 
-   if (g_pplayer->m_dmdFrame != nullptr
-      && (g_pplayer->m_dmdFrame->width() != g_pplayer->m_dmdSize.x || g_pplayer->m_dmdFrame->height() != g_pplayer->m_dmdSize.y || g_pplayer->m_dmdFrame->m_format != BaseTexture::SRGBA))
+   const bool unAdvertise = g_pplayer->m_dmdFrame != nullptr
+      && (g_pplayer->m_dmdFrame->width() != g_pplayer->m_dmdSize.x || g_pplayer->m_dmdFrame->height() != g_pplayer->m_dmdSize.y || g_pplayer->m_dmdFrame->m_format != BaseTexture::SRGBA);
+   if (unAdvertise)
       g_pplayer->m_pluginAPI.OnDMDUpdated(nullptr, nullptr);
+   const BaseTexture *const prev = g_pplayer->m_dmdFrame.get();
    BaseTexture::Update(g_pplayer->m_dmdFrame, g_pplayer->m_dmdSize.x, g_pplayer->m_dmdSize.y, BaseTexture::SRGBA, nullptr);
+   assert(unAdvertise || prev == nullptr || prev == g_pplayer->m_dmdFrame.get()); // Update() must not change the pointer as it would break async requests from Pinball Plugin API
    uint32_t *const __restrict data = reinterpret_cast<uint32_t *>(g_pplayer->m_dmdFrame->data());
    // gamma compressed [0..255] sRGB
    VARIANT *p;
    SafeArrayAccessData(psa, (void **)&p);
-   for (int ofs = 0; ofs < size; ++ofs)
+   for (int ofs = 0; ofs < size; ++ofs) // To be lock free, we accept a minor race condition here as we are writing the new frame while it may be read through the plugin API
       data[ofs] = V_UI4(&p[ofs]) | 0xFF000000u;
    SafeArrayUnaccessData(psa);
    g_pplayer->m_dmdFrameId++;
@@ -971,13 +919,13 @@ STDMETHODIMP ScriptGlobalTable::GetElements(LPSAFEARRAY *pVal)
    if (!pVal || !g_pplayer)
       return E_POINTER;
 
-   CComSafeArray<VARIANT> objs((ULONG)m_pt->GetParts().size());
+   CComSafeArray<VARIANT> objs((ULONG)m_table->GetParts().size());
 
-   for (size_t i = 0; i < m_pt->GetParts().size(); ++i)
+   for (size_t i = 0; i < m_table->GetParts().size(); ++i)
    {
-      IEditable *const pie = m_pt->GetParts()[i];
-
-      CComVariant v = pie->GetISelect()->GetIDispatch();
+      IEditable *const pie = m_table->GetParts()[i];
+      assert(pie->GetIScriptable());
+      CComVariant v = pie->GetIScriptable()->GetIDispatch();
       v.Detach(&objs[(LONG)i]);
    }
 
@@ -991,11 +939,11 @@ STDMETHODIMP ScriptGlobalTable::GetElementByName(BSTR name, IDispatch* *pVal)
       return E_POINTER;
 
    const std::wstring_view wname(name, SysStringLen(name));
-   for (IEditable *const pie : m_pt->GetParts())
+   for (IEditable *const pie : m_table->GetParts())
    {
       if (wname == pie->GetIScriptable()->m_wzName)
       {
-         IDispatch * const id = pie->GetISelect()->GetIDispatch();
+         IDispatch * const id = pie->GetIScriptable()->GetIDispatch();
          id->AddRef();
          *pVal = id;
 
@@ -1012,7 +960,7 @@ STDMETHODIMP ScriptGlobalTable::get_ActiveTable(ITable **pVal)
    if (!pVal || !g_pplayer)
       return E_POINTER;
 
-   m_pt->QueryInterface(IID_ITable, (void**)pVal);
+   m_table->QueryInterface(IID_ITable, (void**)pVal);
    return S_OK;
 }
 
@@ -1161,7 +1109,7 @@ STDMETHODIMP ScriptGlobalTable::get_RenderingMode(int *pVal)
 #ifndef __STANDALONE__
       *pVal = 0; // 2D
 #else
-      int val = g_pplayer->m_ptable->m_settings.GetStandalone_RenderingModeOverride();
+      int val = m_table->m_settings.GetStandalone_RenderingModeOverride();
       *pVal = (val == -1) ? 0 : val;
 #endif
    }

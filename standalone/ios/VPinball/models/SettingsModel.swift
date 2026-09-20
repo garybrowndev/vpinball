@@ -4,9 +4,7 @@ import SwiftUI
 class SettingsModel: ObservableObject {
     // General
 
-    @Published var haptics: Bool = false
     @Published var renderingModeOverride: Bool = false
-    @Published var resetLogOnPlay: Bool = false
 
     // External DMD
 
@@ -33,12 +31,6 @@ class SettingsModel: ObservableObject {
     func load() {
         // General
 
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            haptics = false
-            vpinballManager.saveValue(.standalone, "Haptics", false)
-        } else {
-            haptics = vpinballManager.loadValue(.standalone, "Haptics", true)
-        }
         renderingModeOverride = (vpinballManager.loadValue(.standalone, "RenderingModeOverride", -1) == 2)
 
         // External DMD
@@ -66,26 +58,14 @@ class SettingsModel: ObservableObject {
 
         webServer = vpinballManager.loadValue(.standalone, "WebServer", false)
         webServerPort = vpinballManager.loadValue(.standalone, "WebServerPort", 2112)
-
-        // Advanced
-
-        resetLogOnPlay = vpinballManager.loadValue(.standalone, "ResetLogOnPlay", true)
     }
 
     func reset() {
         load()
     }
 
-    func handleHaptics() {
-        vpinballManager.saveValue(.standalone, "Haptics", haptics)
-    }
-
     func handleRenderingModeOverride() {
         vpinballManager.saveValue(.standalone, "RenderingModeOverride", renderingModeOverride ? 2 : -1)
-    }
-
-    func handleResetLogOnPlay() {
-        vpinballManager.saveValue(.standalone, "ResetLogOnPlay", resetLogOnPlay)
     }
 
     func handleExternalDMD() {

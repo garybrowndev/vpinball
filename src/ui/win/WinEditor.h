@@ -46,6 +46,8 @@
 class PinTable;
 class PinTableMDI;
 class VPXFileFeedback;
+class IWinUIPart;
+class InMemStream;
 
 class WinEditor final : public CMDIDockFrame
 {
@@ -77,12 +79,15 @@ private:
    void AddControlPoint();
    void AddSmoothControlPoint();
    void SaveTable(const bool saveAs);
+   void ExportTableMesh();
    void OpenNewTable(size_t tableId);
    void ProcessDeleteElement();
    void OpenRecentFile(const size_t menuId);
    void CopyPasteElement(const CopyPasteModes mode);
    void InitTools();
-   bool CanClose();
+   // Closes every table that can be closed, stopping at the first one which refuses (so some tables may
+   // already be closed when returning false). Returns true if all of them are closed
+   bool CloseWhatIsPossible();
    void UpdateRecentFileList(const std::filesystem::path& filename);
 
 public:
@@ -95,9 +100,9 @@ public:
 
    class PinTableWnd* GetActiveTableEditor();
    CComObject<PinTable>* GetActiveTable();
-   bool LoadFile(const bool updateEditor, VPXFileFeedback* feedback = nullptr);
-   void LoadFileName(const string& szFileName, const bool updateEditor, VPXFileFeedback* feedback = nullptr);
-   void SetClipboard(vector<IStream*> * const pvstm);
+   bool LoadFile(const bool updateEditor);
+   void LoadFileName(const string& szFileName, const bool updateEditor);
+   void SetClipboard(vector<InMemStream*> * const pvstm);
 
    void DoPlay(const int playMode);
 
@@ -105,12 +110,12 @@ public:
    void SetObjectPosCur(float x, float y);
    void ClearObjectPosCur();
    float ConvertToUnit(const float value) const;
-   void SetPropSel(VectorProtected<ISelect> &pvsel);
+   void SetPropSel(const vector<IWinUIPart *> &pvsel);
 
    void RenameEditable(IEditable* editable, const string& newName);
 
    void SetActionCur(const string& szaction);
-   void SetCursorCur(HINSTANCE hInstance, LPCTSTR lpCursorName);
+   void SetCursorCur(LPCTSTR lpCursorName);
 
    void CloseTable(PinTableWnd * ppt);
 
@@ -194,9 +199,7 @@ public:
 //    HWND m_hwndToolbarMain;
    HWND m_hwndStatusBar;
 
-   int m_palettescroll;
-
-   vector<IStream*> m_vstmclipboard;
+   vector<InMemStream*> m_vstmclipboard;
 
    int m_ToolCur; // palette button currently pressed
 

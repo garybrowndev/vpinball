@@ -4,8 +4,12 @@
 
 #include "PinTableMDI.h"
 
-
 #include "ui/win/WinEditor.h"
+
+#ifndef __STANDALONE__
+#include "core/VPApp.h"
+#include "ui/win/dialogs/Win32ProgressBar.h"
+#endif
 
 static CComObject<PinTable>* CreatePinTable()
 {
@@ -44,8 +48,17 @@ bool PinTableMDI::CanClose() const
         if (result == IDCANCEL)
             return false;
 
-        if ((result == IDYES) && (m_tableWnd->m_table->Save() != S_OK))
-            MessageBox(LocalString(IDS_SAVEERROR).m_szbuffer, "Visual Pinball", MB_ICONERROR);
+        Win32ProgressBar feedback(g_app->GetInstanceHandle(), m_vpxEditor->m_hwndStatusBar);
+        if (result == IDYES)
+        {
+           m_vpxEditor->SetActionCur(LocalString(IDS_SAVING).m_szbuffer);
+           m_vpxEditor->SetCursorCur(IDC_WAIT);
+           const bool failed = m_tableWnd->m_table->Save(feedback) != S_OK;
+           m_vpxEditor->SetActionCur(string());
+           m_vpxEditor->SetCursorCur(IDC_ARROW);
+           if (failed)
+              MessageBox(LocalString(IDS_SAVEERROR).m_szbuffer, "Visual Pinball", MB_ICONERROR);
+        }
 #endif
     }
     return true;
@@ -109,7 +122,7 @@ LRESULT PinTableMDI::OnMDIActivate(UINT msg, WPARAM wparam, LPARAM lparam)
       if (m_vpxEditor->GetLayersDocker() != nullptr)
       {
          m_vpxEditor->GetLayersListDialog()->SetActiveTable(m_tableWnd->m_table);
-         m_vpxEditor->SetPropSel(m_tableWnd->m_table->m_vmultisel);
+         m_tableWnd->RefreshProperties();
       }
    }
    return CMDIChild::OnMDIActivate(msg, wparam, lparam);

@@ -8,6 +8,7 @@
 #include "parts/hittarget.h"
 #include "parts/primitive.h"
 #include "physics/hitable.h"
+#include "utils/denormals.h"
 
 #include "ThreadPool.h"
 
@@ -343,8 +344,8 @@ void HitQuadtreeNode::CreateNextLevel(HitQuadtree* const quadTree, const FRect& 
    if (m_children[3].m_items > 0)
       memcpy(&quadTree->m_vho[m_children[3].m_start], ppTmp4 + 1, m_children[3].m_items * sizeof(HitObject*));
 
-   // We only early out for Primitive and HitTarget objects
-   if ((m_unique != nullptr) && (m_unique->HitableGetItemType() != eItemPrimitive) && (m_unique->HitableGetItemType() != eItemHitTarget))
+   // We may early out if the unique Hitable in the cluster may become non collidable
+   if ((m_unique != nullptr) && (m_unique->IsConstCollidable()))
       m_unique = nullptr;
 
    // check if at least two nodes feature objects, otherwise don't bother subdividing further
@@ -382,7 +383,11 @@ void HitQuadtreeNode::CreateNextLevel(HitQuadtree* const quadTree, const FRect& 
             {
                if (quadTree->m_threadPool == nullptr)
                   quadTree->m_threadPool = new ThreadPool(g_app->GetLogicalNumberOfProcessors());
-               quadTree->m_threadPool->enqueue([child, quadTree, childBounds, level, level_empty] { child->CreateNextLevel(quadTree, childBounds, level + 1, level_empty); });
+               quadTree->m_threadPool->enqueue([child, quadTree, childBounds, level, level_empty]
+               {
+                  set_denormals_flush_to_zero_once(); // the pool's worker threads are not ours to initialize
+                  child->CreateNextLevel(quadTree, childBounds, level + 1, level_empty);
+               });
                continue;
             }
             shouldDispatch = true;
@@ -456,9 +461,7 @@ void HitQuadtree::HitTestBall(const HitBall* const pball, CollisionEvent& coll) 
 
    do
    {
-      if (current->m_unique == nullptr
-          || (current->m_unique->HitableGetItemType() == eItemPrimitive && static_cast<Primitive*>(current->m_unique)->m_d.m_collidable)
-          || (current->m_unique->HitableGetItemType() == eItemHitTarget && !static_cast<HitTarget*>(current->m_unique)->m_d.m_isDropped)) // early out if only one unique primitive/hittarget stored inside all of the subtree/current node that is also not collidable (at the moment)
+      if (current->m_unique == nullptr || current->m_unique->IsCollidable()) // early out only if one unique hitable stored inside all of the subtree/current node that is also not collidable at the moment
       {
          if (current->m_items != 0) // does node contain hitables?
          {

@@ -43,7 +43,6 @@ class PartGroup :
    public EventProxy<PartGroup, &DIID_IPartGroupEvents>,
    public IConnectionPointContainerImpl<PartGroup>,
    public IProvideClassInfo2Impl<&CLSID_PartGroup, &DIID_IPartGroupEvents, &LIBID_VPinballLib>,
-   public ISelect,
    public IEditable,
    public IScriptable,
    public IFireEvents,
@@ -72,14 +71,10 @@ public:
       CONNECTION_POINT_ENTRY(DIID_IPartGroupEvents)
    END_CONNECTION_POINT_MAP()
 
-   STANDARD_EDITABLE_DECLARES_NO_RENDERABLE_NO_HITABLE(PartGroup, eItemPartGroup, PARTGROUP, VIEW_PLAYFIELD | VIEW_BACKGLASS)
+   STANDARD_EDITABLE_DECLARES_NO_RENDERABLE_NO_HITABLE(PartGroup, eItemPartGroup, PARTGROUP)
 
-   void MoveOffset(const float dx, const float dy) final;
-   void SetObjectPos() final;
+   void Translate(const Vertex2D& offset) final;
    Vertex2D GetCenter() const final;
-   void PutCenter(const Vertex2D& pv) final;
-
-   void RenderBlueprint(Sur *psur, const bool solid) final;
 
    void WriteRegDefaults() final;
 

@@ -12,9 +12,6 @@
 #include "renderer/Shader.h"
 #include "renderer/trace.h"
 #include "renderer/VertexBuffer.h"
-#include "ui/win/DragPointDialogs.h"
-#include "ui/win/sur.h"
-#include "ui/win/WinEditor.h"
 #include "utils/bulb.h"
 #include "utils/color.h"
 
@@ -41,7 +38,7 @@ Light::~Light()
 
 Light *Light::CopyForPlay() const
 {
-   STANDARD_EDITABLE_WITH_DRAGPOINT_COPY_FOR_PLAY_IMPL(Light, m_vdpoint)
+   STANDARD_EDITABLE_WITH_DRAGPOINT_COPY_FOR_PLAY_IMPL(Light, m_curve)
    // Light specific copy and live data (not really needed)
    dst->m_currentIntensity = m_currentIntensity;
    dst->m_currentFilamentTemperature = m_currentFilamentTemperature;
@@ -52,7 +49,6 @@ Light *Light::CopyForPlay() const
    dst->m_finalLightState = m_finalLightState;
    dst->m_surfaceMaterial = m_surfaceMaterial;
    dst->m_surfaceTexture = m_surfaceTexture;
-   dst->m_lightcenter = m_lightcenter;
    dst->m_initSurfaceHeight = m_initSurfaceHeight;
    dst->m_maxDist = m_maxDist;
    return dst;
@@ -134,111 +130,6 @@ void Light::WriteRegDefaults()
 #undef LinkProp
 }
 
-void Light::UIRenderPass1(Sur * const psur)
-{
-   psur->SetBorderColor(-1, false, 0);
-   psur->SetFillColor(m_ptable->RenderSolid() ? (((m_d.m_color & 0xFEFEFE) + (m_d.m_color2 & 0xFEFEFE)) / 2) : -1);
-   psur->SetObject(this);
-
-   switch (m_d.m_shape)
-   {
-   default:
-   case ShapeCustom:
-      vector<RenderVertex> vvertex;
-      GetRgVertex(vvertex);
-
-      // Check if we should display the image in the editor.
-      psur->Polygon(vvertex);
-
-      break;
-   }
-}
-
-void Light::UIRenderPass2(Sur * const psur)
-{
-   bool drawDragpoints = ((m_selectstate != SelectState::NotSelected) || (m_vpinball->m_alwaysDrawDragPoints));
-
-   // if the item is selected then draw the dragpoints (or if we are always to draw dragpoints)
-   if (!drawDragpoints)
-   {
-      // if any of the dragpoints of this object are selected then draw all the dragpoints
-      for (size_t i = 0; i < m_vdpoint.size(); i++)
-      {
-         const CComObject<DragPoint> * const pdp = m_vdpoint[i];
-         if (pdp->m_selectstate != SelectState::NotSelected)
-         {
-            drawDragpoints = true;
-            break;
-         }
-      }
-   }
-
-   RenderOutline(psur);
-
-   if ((m_d.m_shape == ShapeCustom) && drawDragpoints)
-   {
-      for (size_t i = 0; i < m_vdpoint.size(); i++)
-      {
-         CComObject<DragPoint> * const pdp = m_vdpoint[i];
-         psur->SetFillColor(-1);
-         psur->SetBorderColor(pdp->m_dragging ? RGB(0, 255, 0) : RGB(0, 0, 200), false, 0);
-         psur->SetObject(pdp);
-
-         psur->Ellipse2(pdp->m_v.x, pdp->m_v.y, 8);
-      }
-   }
-}
-
-void Light::RenderOutline(Sur * const psur)
-{
-   psur->SetBorderColor(RGB(0, 0, 0), false, 0);
-   psur->SetLineColor(RGB(0, 0, 0), false, 0);
-   psur->SetFillColor(-1);
-   psur->SetObject(this);
-   psur->SetObject(nullptr);
-
-   switch (m_d.m_shape)
-   {
-   case ShapeCircle:
-   default:
-   {
-      psur->Ellipse(m_d.m_vCenter.x, m_d.m_vCenter.y, m_d.m_falloff /*+ m_d.m_borderwidth*/);
-      break;
-   }
-
-   case ShapeCustom:
-   {
-      vector<RenderVertex> vvertex;
-      GetRgVertex(vvertex);
-      psur->SetBorderColor(RGB(255, 0, 0), false, 0);
-      psur->Ellipse(m_d.m_vCenter.x, m_d.m_vCenter.y, m_d.m_falloff /*+ m_d.m_borderwidth*/);
-      psur->SetBorderColor(RGB(0, 0, 0), false, 0);
-      psur->Polygon(vvertex);
-
-      psur->SetObject((ISelect *)&m_lightcenter);
-      break;
-   }
-   }
-
-   if (m_d.m_shape == ShapeCustom || m_vpinball->m_alwaysDrawLightCenters)
-   {
-      psur->Line(m_d.m_vCenter.x - 10.0f, m_d.m_vCenter.y, m_d.m_vCenter.x + 10.0f, m_d.m_vCenter.y);
-      psur->Line(m_d.m_vCenter.x, m_d.m_vCenter.y - 10.0f, m_d.m_vCenter.x, m_d.m_vCenter.y + 10.0f);
-   }
-
-   if (m_d.m_showBulbMesh)
-   {
-      psur->SetBorderColor(RGB(0, 127, 255), false, 0);
-      psur->Ellipse(m_d.m_vCenter.x, m_d.m_vCenter.y, m_d.m_meshRadius * 0.5f);
-   }
-}
-
-void Light::RenderBlueprint(Sur *psur, const bool solid)
-{
-   RenderOutline(psur);
-}
-
-
 void Light::PhysicSetup(PhysicsEngine* physics, const bool isUI)
 {
    if (isUI)
@@ -258,7 +149,7 @@ void Light::PhysicSetup(PhysicsEngine* physics, const bool isUI)
       case ShapeCustom:
       {
          vector<RenderVertex> vvertex;
-         GetRgVertex(vvertex);
+         m_curve.GetRgVertex(vvertex);
          if (vvertex.empty())
             return;
 
@@ -292,10 +183,7 @@ void Light::UpdateBounds()
    m_boundingSphereCenter.Set(m_d.m_vCenter.x, m_d.m_vCenter.y, m_initSurfaceHeight);
 }
 
-void Light::ClearForOverwrite()
-{
-   ClearPointsForOverwrite();
-}
+void Light::ClearForOverwrite() { m_curve.ClearPointsForOverwrite(); }
 
 void Light::UpdateAnimation(const float diff_time_msec)
 {
@@ -430,7 +318,7 @@ void Light::RenderSetup(Renderer *renderer)
       bulbSocketVBuffer->Unlock();
    }
 
-   GetRgVertex(m_vvertex);
+   m_curve.GetRgVertex(m_vvertex);
 
    if (m_vvertex.empty())
       return;
@@ -848,25 +736,6 @@ void Light::Render(const unsigned int renderMask)
    }
 }
 
-void Light::SetObjectPos()
-{
-    m_vpinball->SetObjectPosCur(m_d.m_vCenter.x, m_d.m_vCenter.y);
-}
-
-void Light::MoveOffset(const float dx, const float dy)
-{
-   m_d.m_vCenter.x += dx;
-   m_d.m_vCenter.y += dy;
-
-   for (size_t i = 0; i < m_vdpoint.size(); i++)
-   {
-      CComObject<DragPoint> * const pdp = m_vdpoint[i];
-
-      pdp->m_v.x += dx;
-      pdp->m_v.y += dy;
-   }
-}
-
 void Light::Save(IObjectWriter& writer, const bool saveForUndo)
 {
    writer.WriteVector2(FID(VCEN), m_d.m_vCenter);
@@ -903,7 +772,7 @@ void Light::Save(IObjectWriter& writer, const bool saveForUndo)
    writer.WriteInt(FID(FADE), m_d.m_fader);
    writer.WriteBool(FID(VSBL), m_d.m_visible);
    SaveSharedEditableFields(writer);
-   SavePoints(writer);
+   m_curve.SavePoints(writer);
    writer.EndObject();
 }
 
@@ -983,7 +852,7 @@ void Light::Load(IObjectReader& reader)
          case FID(SHDW): m_d.m_shadows = static_cast<ShadowMode>(reader.AsInt()); break;
          case FID(FADE): m_d.m_fader = static_cast<Fader>(reader.AsInt()); break;
          case FID(VSBL): m_d.m_visible = reader.AsBool(); break;
-         case FID(DPNT): LoadPointToken(reader); break;
+         case FID(DPNT): m_curve.LoadPointToken(reader); break;
          default: LoadSharedEditableField(tag, reader); break;
          }
          return true;
@@ -993,34 +862,10 @@ void Light::Load(IObjectReader& reader)
       InitShape();
 }
 
-Vertex2D Light::GetPointCenter() const
+void Light::AddPoint(const Vertex2D &v, const bool smooth)
 {
-   return m_d.m_vCenter;
-}
-
-void Light::PutPointCenter(const Vertex2D& pv)
-{
-   m_d.m_vCenter = pv;
-}
-
-#ifndef __STANDALONE__
-void Light::EditMenu(CMenu &menu)
-{
-    menu.EnableMenuItem(ID_WALLMENU_FLIP, MF_BYCOMMAND | ((m_d.m_shape != ShapeCustom) ? MF_GRAYED : MF_ENABLED));
-    menu.EnableMenuItem(ID_WALLMENU_MIRROR, MF_BYCOMMAND | ((m_d.m_shape != ShapeCustom) ? MF_GRAYED : MF_ENABLED));
-    menu.EnableMenuItem(ID_WALLMENU_ROTATE, MF_BYCOMMAND | ((m_d.m_shape != ShapeCustom) ? MF_GRAYED : MF_ENABLED));
-    menu.EnableMenuItem(ID_WALLMENU_SCALE, MF_BYCOMMAND | ((m_d.m_shape != ShapeCustom) ? MF_GRAYED : MF_ENABLED));
-    menu.EnableMenuItem(ID_WALLMENU_ADDPOINT, MF_BYCOMMAND | ((m_d.m_shape != ShapeCustom) ? MF_GRAYED : MF_ENABLED));
-}
-#endif
-
-void Light::AddPoint(int x, int y, const bool smooth)
-{
-   STARTUNDO
-   const Vertex2D v = m_ptable->TransformPoint(x, y);
-
    vector<RenderVertex> vvertex;
-   GetRgVertex(vvertex);
+   m_curve.GetRgVertex(vvertex);
 
    int iSeg;
    Vertex2D vOut;
@@ -1033,53 +878,17 @@ void Light::AddPoint(int x, int y, const bool smooth)
          icp++;
 
    //if (icp == 0) // need to add point after the last point
-   //icp = m_vdpoint.size();
+   //icp = m_curve.GetPoints().size();
 
    CComObject<DragPoint> *pdp;
    CComObject<DragPoint>::CreateInstance(&pdp);
    if (pdp)
    {
       pdp->AddRef();
-      pdp->Init(this, vOut.x, vOut.y, 0.f, smooth);
-      m_vdpoint.insert(m_vdpoint.begin() + icp, pdp); // push the second point forward, and replace it with this one.  Should work when index2 wraps.
-   }
-
-   STOPUNDO
-}
-
-#ifndef __STANDALONE__
-void Light::DoCommand(int icmd, int x, int y)
-{
-   ISelect::DoCommand(icmd, x, y);
-
-   switch (icmd)
-   {
-   case ID_WALLMENU_FLIP:
-      FlipPointY(GetPointCenter());
-      break;
-
-   case ID_WALLMENU_MIRROR:
-      FlipPointX(GetPointCenter());
-      break;
-
-   case ID_WALLMENU_ROTATE:
-      VPX::WinUI::RotatePointsDialog(this);
-      break;
-
-   case ID_WALLMENU_SCALE:
-      VPX::WinUI::ScalePointsDialog(this);
-      break;
-
-   case ID_WALLMENU_TRANSLATE:
-      VPX::WinUI::TranslatePointsDialog(this);
-      break;
-
-   case ID_WALLMENU_ADDPOINT:
-      AddPoint(x, y, true);
-      break;
+      pdp->Init(&m_curve, vOut.x, vOut.y, 0.f, smooth);
+      m_curve.InsertPoint(icp, pdp); // push the second point forward, and replace it with this one.  Should work when index2 wraps.
    }
 }
-#endif
 
 STDMETHODIMP Light::InterfaceSupportsErrorInfo(REFIID riid)
 {
@@ -1144,29 +953,53 @@ STDMETHODIMP Light::put_State(float newVal)
    return S_OK;
 }
 
-void Light::FlipY(const Vertex2D& pvCenter)
+void Light::FlipX(const Vertex2D &pvCenter)
 {
-   IHaveDragPoints::FlipPointY(pvCenter);
+   m_curve.FlipPointX(pvCenter);
+   const float deltax = m_d.m_vCenter.x - pvCenter.x;
+   m_d.m_vCenter.x -= deltax * 2.0f;
 }
 
-void Light::FlipX(const Vertex2D& pvCenter)
+void Light::FlipY(const Vertex2D &pvCenter)
 {
-   IHaveDragPoints::FlipPointX(pvCenter);
+   m_curve.FlipPointY(pvCenter);
+   const float deltay = m_d.m_vCenter.y - pvCenter.y;
+   m_d.m_vCenter.y -= deltay * 2.0f;
 }
 
-void Light::Rotate(const float ang, const Vertex2D& pvCenter, const bool useElementCenter)
+void Light::Rotate(const float ang, const Vertex2D &center, const bool useElementCenter)
 {
-   IHaveDragPoints::RotatePoints(ang, pvCenter, useElementCenter);
+   m_curve.RotatePoints(ang, useElementCenter ? GetCenter() : center);
+   if (!useElementCenter)
+   {
+      const float sn = sinf(ANGTORAD(ang));
+      const float cs = cosf(ANGTORAD(ang));
+      const float dx = m_d.m_vCenter.x - center.x;
+      const float dy = m_d.m_vCenter.y - center.y;
+      const float dx2 = cs * dx - sn * dy;
+      const float dy2 = cs * dy + sn * dx;
+      m_d.m_vCenter.x = center.x + dx2;
+      m_d.m_vCenter.y = center.y + dy2;
+   }
 }
 
-void Light::Scale(const float scalex, const float scaley, const Vertex2D& pvCenter, const bool useElementCenter)
+void Light::Scale(const float scalex, const float scaley, const Vertex2D &center, const bool useElementCenter)
 {
-   IHaveDragPoints::ScalePoints(scalex, scaley, pvCenter, useElementCenter);
+   m_curve.ScalePoints(scalex, scaley, useElementCenter ? GetCenter() : center);
+   if (!useElementCenter)
+   {
+      const float dx = (m_d.m_vCenter.x - center.x) * scalex;
+      const float dy = (m_d.m_vCenter.y - center.y) * scaley;
+      m_d.m_vCenter.x = center.x + dx;
+      m_d.m_vCenter.y = center.y + dy;
+   }
 }
 
-void Light::Translate(const Vertex2D &pvOffset)
+void Light::Translate(const Vertex2D &offset)
 {
-   IHaveDragPoints::TranslatePoints(pvOffset);
+   m_curve.TranslatePoints(offset);
+   m_d.m_vCenter.x += offset.x;
+   m_d.m_vCenter.y += offset.y;
 }
 
 STDMETHODIMP Light::get_Color(OLE_COLOR *pVal)
@@ -1196,9 +1029,6 @@ STDMETHODIMP Light::put_ColorFull(OLE_COLOR newVal)
 STDMETHODIMP Light::get_X(float *pVal)
 {
    *pVal = m_d.m_vCenter.x;
-   if (m_vpinball)
-      m_vpinball->SetStatusBarUnitInfo(string(), true);
-
    return S_OK;
 }
 
@@ -1222,7 +1052,7 @@ STDMETHODIMP Light::put_Y(float newVal)
 
 void Light::InitShape()
 {
-   if (m_vdpoint.empty())
+   if (m_curve.GetPoints().empty())
    {
       // First time shape has been set to custom - set up some points
       const float x = m_d.m_vCenter.x;
@@ -1238,8 +1068,8 @@ void Light::InitShape()
          if (pdp)
          {
             pdp->AddRef();
-            pdp->Init(this, xx, yy, 0.f, true);
-            m_vdpoint.push_back(pdp);
+            pdp->Init(&m_curve, xx, yy, 0.f, true);
+            m_curve.PushPoint(pdp);
          }
       }
    }

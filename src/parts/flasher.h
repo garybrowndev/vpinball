@@ -50,14 +50,24 @@ public:
    string m_szImageB;
    bool m_displayTexture;
    bool m_isVisible = true;
-   bool m_addBlend;
+
+   // How the flasher is blended over the scene. Honored by the Flasher, DMD and Display render modes only: Alpha Segment
+   // always uses max blending and external rendering is opaque (see Render and CanAbsorbBlend).
+   // The 2 additive modes add the very same light and only differ in what they then do to the background, the
+   // 'modulate vs add' factor steering how much in both cases (its sign is what selects between them in the shaders)
+   enum AddBlendMode
+   {
+      AB_NONE = 0,  // Plain alpha blending
+      AB_ADD = 1,   // Additive, also amplifying the background, the more so the brighter the flasher is
+      AB_ABSORB = 2 // Additive, absorbing the background instead, like a reflection on glass does (fake Fresnel)
+   };
+   int m_addBlend; // AddBlendMode
 
    int m_alpha;
    float m_intensity_scale;
    float m_modulate_vs_add;
    string m_szLightmap;
 
-   Vertex2D m_vCenter;
    float m_height;
    float m_rotX, m_rotY, m_rotZ;
 };
@@ -69,11 +79,9 @@ class Flasher :
    public EventProxy<Flasher, &DIID_IFlasherEvents>,
    public IConnectionPointContainerImpl<Flasher>,
    public IProvideClassInfo2Impl<&CLSID_Flasher, &DIID_IFlasherEvents, &LIBID_VPinballLib>,
-   public ISelect,
    public IEditable,
    public IHitable, // only used for UI picking
    public IRenderable,
-   public IHaveDragPoints,
    public IScriptable,
    public IFireEvents,
    public IPerPropertyBrowsing // Ability to fill in dropdown in property browser
@@ -85,10 +93,13 @@ public:
    STDMETHOD(GetDocumentation)(MEMBERID index, BSTR *pBstrName, BSTR *pBstrDocString, DWORD *pdwHelpContext, BSTR *pBstrHelpFile);
    HRESULT FireDispID(const DISPID dispid, DISPPARAMS * const pdispparams) final;
 #endif
-   Flasher() { m_menuid = IDR_SURFACEMENU; }
+   Flasher()
+      : m_curve(this, 2)
+   {
+   }
    virtual ~Flasher();
 
-   STANDARD_EDITABLE_DECLARES(Flasher, eItemFlasher, FLASHER, VIEW_PLAYFIELD | VIEW_BACKGLASS)
+   STANDARD_EDITABLE_DECLARES(Flasher, eItemFlasher, FLASHER)
 
    BEGIN_COM_MAP(Flasher)
       COM_INTERFACE_ENTRY(IFlasher)
@@ -113,26 +124,15 @@ public:
 
    void ClearForOverwrite() final;
 
-   void RenderBlueprint(Sur *psur, const bool solid) final;
-
    void FlipY(const Vertex2D& pvCenter) final;
    void FlipX(const Vertex2D& pvCenter) final;
    void Rotate(const float ang, const Vertex2D &pvCenter, const bool useElementCenter) final;
    void Scale(const float scalex, const float scaley, const Vertex2D &pvCenter, const bool useElementCenter) final;
-   void Translate(const Vertex2D &pvOffset) final;
-   void MoveOffset(const float dx, const float dy) final;
-   void SetObjectPos() final;
+   void Translate(const Vertex2D &offset) final;
 
-   int GetMinimumPoints() const final { return 2; }
+   Vertex2D GetCenter() const final { return m_curve.GetCenter(); }
 
-   Vertex2D GetCenter() const final { return m_d.m_vCenter; }
-   void PutCenter(const Vertex2D& pv) final { m_d.m_vCenter = pv; }
-
-#ifndef __STANDALONE__
-   void DoCommand(int icmd, int x, int y) final;
-#endif
-
-   void AddPoint(int x, int y, const bool smooth) final;
+   void AddPoint(const Vertex2D &v, const bool smooth);
 
 protected:
    Renderer *m_renderer = nullptr;
@@ -142,9 +142,9 @@ public:
 
    float GetDepth(const Vertex3Ds& viewDir) const final
    {
-      return m_d.m_depthBias + viewDir.x * m_d.m_vCenter.x + viewDir.y * m_d.m_vCenter.y + viewDir.z * m_d.m_height;
+      const Vertex2D center = GetCenter();
+      return m_d.m_depthBias + viewDir.x * center.x + viewDir.y * center.y + viewDir.z * m_d.m_height;
    }
-   ItemTypeEnum HitableGetItemType() const final { return eItemFlasher; }
 
    void WriteRegDefaults() final;
 
@@ -169,24 +169,23 @@ public:
 
    FlasherData m_d;
 
+   // The flasher outline curve (drag points defining the flasher shape)
+   DragPointCurve m_curve;
+
    bool m_lockedByLS = false;
    bool m_inPlayState = false;
 
    std::shared_ptr<BaseTexture> m_dmdFrame = nullptr; // DMD defined through script API
-   unsigned int m_dmdFrameId = 0;
+   std::atomic_uint m_dmdFrameId = 0;
+
+public:
+   void InitShape(const float x, const float y);
 
 private:
-   void InitShape();
-   void UpdateCenter();
    void UploadRenderFrame(const PinballPlugin::ResURIResolver::DisplayState& display);
 
    unsigned int m_numVertices = 0;
    int m_numPolys = 0;
-   bool m_centerClean = false;
-   float m_minx = FLT_MAX;
-   float m_maxx = -FLT_MAX;
-   float m_miny = FLT_MAX;
-   float m_maxy = -FLT_MAX;
    vector<Vertex3D_NoTex2> m_vertices;
    vector<Vertex3D_NoTex2> m_transformedVertices;
 
@@ -202,7 +201,7 @@ private:
    HWND m_videoCapHwnd = nullptr;
    std::shared_ptr<BaseTexture> m_videoCapTex = nullptr;
 
-   int2 m_dmdSize = int2(0,0);
+   int2 m_dmdSize = int2(0,0); // dmd size is actually commited when pixels are commited
 
    std::shared_ptr<BaseTexture> m_renderFrame = nullptr;
 
@@ -245,6 +244,9 @@ public:
    STDMETHOD(put_DisplayTexture)(/*[in]*/ VARIANT_BOOL newVal);
    STDMETHOD(get_AddBlend)(/*[out, retval]*/ VARIANT_BOOL *pVal);
    STDMETHOD(put_AddBlend)(/*[in]*/ VARIANT_BOOL newVal);
+   STDMETHOD(get_AddBlendMode)(/*[out, retval]*/ int *pVal);
+   STDMETHOD(put_AddBlendMode)(/*[in]*/ int newVal);
+   bool CanAbsorbBlend() const; // Whether the current render mode & style honor AB_ABSORB, so that the editors only offer it there
 
    STDMETHOD(get_DMD)(/*[out, retval]*/ VARIANT_BOOL *pVal);
    STDMETHOD(put_DMD)(/*[in]*/ VARIANT_BOOL newVal);

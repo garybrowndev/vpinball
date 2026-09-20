@@ -12,8 +12,6 @@
 #include "renderer/RenderCommand.h"
 #include "renderer/Shader.h"
 #include "ui/live/LiveUI.h"
-#include "ui/win/sur.h"
-#include "ui/win/WinEditor.h"
 #include "utils/color.h"
 
 
@@ -59,26 +57,15 @@ HRESULT Ball::Init(const float x, const float y, const bool fromMouseClick, cons
    return S_OK;
 }
 
-void Ball::SetObjectPos()
+void Ball::Translate(const Vertex2D &offset)
 {
-    m_vpinball->SetObjectPosCur(m_hitBall.m_d.m_pos.x, m_hitBall.m_d.m_pos.y);
-}
-
-void Ball::MoveOffset(const float dx, const float dy)
-{
-   m_hitBall.m_d.m_pos.x += dx;
-   m_hitBall.m_d.m_pos.y += dy;
+   m_hitBall.m_d.m_pos.x += offset.x;
+   m_hitBall.m_d.m_pos.y += offset.y;
 }
 
 Vertex2D Ball::GetCenter() const
 {
    return {m_hitBall.m_d.m_pos.x, m_hitBall.m_d.m_pos.y};
-}
-
-void Ball::PutCenter(const Vertex2D& pv)
-{
-   m_hitBall.m_d.m_pos.x = pv.x;
-   m_hitBall.m_d.m_pos.y = pv.y;
 }
 
 void Ball::SetDefaults(const bool fromMouseClick)
@@ -170,27 +157,6 @@ void Ball::Load(IObjectReader& reader)
 }
 
 #pragma endregion
-
-
-void Ball::UIRenderPass1(Sur *const psur)
-{
-}
-
-void Ball::UIRenderPass2(Sur *const psur)
-{
-   psur->SetBorderColor(RGB(0, 0, 0), false, 0);
-   psur->SetFillColor(-1);
-   psur->SetObject(this);
-   psur->Ellipse(m_hitBall.m_d.m_pos.x, m_hitBall.m_d.m_pos.y, m_hitBall.m_d.m_radius);
-}
-
-void Ball::RenderBlueprint(Sur *psur, const bool solid)
-{
-   psur->SetBorderColor(RGB(0, 0, 0), false, 0);
-   psur->SetFillColor(solid ? BLUEPRINT_SOLID_COLOR : -1);
-   psur->SetObject(this);
-   psur->Ellipse(m_hitBall.m_d.m_pos.x, m_hitBall.m_d.m_pos.y, m_hitBall.m_d.m_radius);
-}
 
 
 #pragma region Physics

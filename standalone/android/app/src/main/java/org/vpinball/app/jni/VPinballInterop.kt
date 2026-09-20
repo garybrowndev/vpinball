@@ -28,6 +28,7 @@ enum class VPinballStatus(val value: Int) {
 }
 
 enum class VPinballSettingsSection(val value: String) {
+    GLOBAL("Global"),
     STANDALONE("Standalone"),
     PLAYER("Player"),
     PLUGIN_DMDUTIL("Plugin.DMDUtil");
@@ -96,10 +97,9 @@ enum class VPinballEvent(val value: Int) {
     LOADING(2),
     PRERENDERING(3),
     PLAYER_STARTED(4),
-    RUMBLE(5),
-    PLAYER_CLOSED(6),
-    WEB_SERVER(7),
-    COMMAND(8);
+    PLAYER_CLOSED(5),
+    WEB_SERVER(6),
+    COMMAND(7);
 
     val text: String?
         get() =
@@ -124,8 +124,6 @@ fun interface VPinballZipCallback {
 // VPinball Objects
 
 @Serializable data class VPinballProgressData(val progress: Int)
-
-@Serializable data class VPinballRumbleData(val lowFrequencyRumble: Int, val highFrequencyRumble: Int, val durationMs: Int)
 
 @Serializable data class VPinballWebServerData(val url: String)
 

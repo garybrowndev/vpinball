@@ -5,7 +5,6 @@
 
 #include "core/VPApp.h"
 #include "parts/Collection.h"
-#include "ui/win/WinEditor.h"
 
 
 PartGroup *PartGroup::CopyForPlay() const
@@ -55,37 +54,15 @@ void PartGroup::WriteRegDefaults()
 #undef LinkProp
 }
 
-void PartGroup::SetObjectPos()
+void PartGroup::Translate(const Vertex2D& offset)
 {
-   m_vpinball->SetObjectPosCur(m_d.m_v.x, m_d.m_v.y);
-}
-
-void PartGroup::MoveOffset(const float dx, const float dy)
-{
-   m_d.m_v.x += dx;
-   m_d.m_v.y += dy;
+   m_d.m_v.x += offset.x;
+   m_d.m_v.y += offset.y;
 }
 
 Vertex2D PartGroup::GetCenter() const
 {
    return m_d.m_v;
-}
-
-void PartGroup::PutCenter(const Vertex2D& pv)
-{
-   m_d.m_v = pv;
-}
-
-void PartGroup::UIRenderPass1(Sur * const psur)
-{
-}
-
-void PartGroup::UIRenderPass2(Sur * const psur)
-{
-}
-
-void PartGroup::RenderBlueprint(Sur *psur, const bool solid)
-{
 }
 
 #pragma endregion

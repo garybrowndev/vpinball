@@ -23,6 +23,7 @@
 #include "parts/textbox.h"
 #include "parts/timer.h"
 #include "parts/trigger.h"
+#include "ui/win/PinTableWnd.h"
 #include "ui/win/resource.h"
 #include "ui/win/WinEditor.h"
 
@@ -220,7 +221,7 @@ INT_PTR ImageDialog::DialogProc(UINT uMsg, WPARAM wParam, LPARAM lParam)
                   if (pt)
                   {
                      pt->SetNonUndoableDirty(eSaveDirty);
-                     pt->UpdatePropertyImageList();
+                     pt->m_tableEditor->UpdatePropertyImageList();
                   }
                }
                return TRUE;
@@ -491,7 +492,7 @@ void ImageDialog::Import()
          g_app->m_settings.SetRecentDir_ImageDir(szFileName[0].substr(0, index), false);
 
       pt->SetNonUndoableDirty(eSaveDirty);
-      pt->UpdatePropertyImageList();
+      pt->m_tableEditor->UpdatePropertyImageList();
       SetFocus();
    }
 }
@@ -619,7 +620,7 @@ void ImageDialog::Export()
                      }
                   }
 
-                  if (!pt->ExportImage(ppi, (selectedItemsCount>1) ? filename : g_filename)) //!! this will always export the image in its original format, no matter what was actually selected by the user
+                  if (!ppi->SaveFile((selectedItemsCount > 1) ? filename : g_filename)) //!! this will always export the image in its original format, no matter what was actually selected by the user
                      ShowError("Could not export Image");
                   sel = ListView_GetNextItem(hImageList, sel, LVNI_SELECTED);
                   lvitem.iItem = sel;
@@ -721,7 +722,7 @@ void ImageDialog::Reimport()
                      UpdateSizeText();
                   }
                   pt->SetNonUndoableDirty(eSaveDirty);
-                  pt->UpdatePropertyImageList();
+                  pt->m_tableEditor->UpdatePropertyImageList();
                }
                else
                   MessageBox(filePath.string().c_str(), "FILE NOT FOUND!", MB_OK);
@@ -768,7 +769,7 @@ void ImageDialog::UpdateAll()
                UpdateSizeText();
             }
             pt->SetNonUndoableDirty(eSaveDirty);
-            pt->UpdatePropertyImageList();
+            pt->m_tableEditor->UpdatePropertyImageList();
          }
          else
             errorOccurred = true;
@@ -833,7 +834,7 @@ void ImageDialog::ReimportFrom()
                   UpdateSizeText();
                }
                pt->SetNonUndoableDirty(eSaveDirty);
-               pt->UpdatePropertyImageList();
+               pt->m_tableEditor->UpdatePropertyImageList();
                // Display new image
                GetDlgItem(IDC_PICTUREPREVIEW).InvalidateRect(true);
             }
