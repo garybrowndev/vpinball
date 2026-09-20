@@ -76,6 +76,53 @@ Lesson: don't try to "fix" STA-bound objects with worker threads. Find the cause
 
 ---
 
+## 6. Detached part + upstream's DragPointCurve → AV opening the Ball History menu
+
+**Symptom**: press V on the cabinet, app freezes then dies instantly. No `crash.txt` (our SEH
+handler doesn't catch this path), but WER writes a ~2 GB dump to `C:\Dumps\`. First seen right
+after the 196-commit upstream merge of 2026-09-20.
+
+**Diagnostic stack** (resolved — Release now ships PDBs, so this is readable without a Debug build):
+```
+DragPointCurve::GetPTable                dragpoint.h:111
+DragPointCurve::ClearPointsForOverwrite  dragpoint.cpp:250
+Rubber::ClearForOverwrite                rubber.cpp:649
+BallHistory::DrawLine                    ballhistory.cpp:2465
+BallHistory::ProcessKeys                 ballhistory.cpp:1199
+```
+
+**Smoking gun**: analyze the WER dump on the cabinet with the CI PDB staged next to the exe —
+`cdb -z C:\Dumps\<exe>.<pid>.dmp -lines -c "$<C:\Dumps\analyze-dump.txt"`, where the script does
+`.symfix+`, `.sympath+ C:\Visual Pinball`, `.reload /f`, `!analyze -v`, `kb 40`. The exception is
+`c0000005` and frame 0 is the `GetPTable()->m_tableEditor` load.
+
+**Root cause**: upstream changed *when* `GetPTable()` is dereferenced. The old
+`IHaveDragPoints::ClearPointsForOverwrite` only reached it for a **selected** point; the new
+`DragPointCurve` version dereferences it for **every** point via
+`if (PinTableWnd *const tableEditor = GetPTable()->m_tableEditor)`. Ball History's drawn parts
+are never selected, so the old code never touched it. Meanwhile `Rubber::Init` (and
+`Light::Init`→`InitShape`) seed 8 default drag points, so the loop always runs. Ball History
+called `Init()` then `ClearForOverwrite()` while the part was still detached — `AddPart`, which
+sets `m_ptable`, came 15 lines later — so it faulted on `nullptr->m_tableEditor`. Our API misuse,
+not an upstream bug: editor parts are always attached before their points are touched.
+
+**Fix**: move `AddPart` ahead of `ClearForOverwrite` in both `BallHistory::DrawLine` and
+`BallHistory::DrawIntersectionCircle` (`ballhistory.cpp`), keeping `Init()` first. The
+intersection-circle site had the identical latent fault and would have fired on the first trainer
+corridor.
+
+**Verification**: on the cabinet — press V (menu opens), confirm drawn lines render, enter Trainer
+mode and confirm the corridor renders (that last step is what exercises the second site).
+
+**Generalise**: a VPX part that hasn't been `AddPart`'ed has `m_ptable == nullptr`. After any
+upstream refactor, re-check every Ball History call made on a *detached* part — upstream only
+ever exercises attached ones, so these faults land exclusively in our code and never show up in
+their CI.
+
+Shipped fix: commit `89d9c4faa` on integration.
+
+---
+
 ## How to add a new entry here
 
 When you ship a fix, append:

@@ -181,7 +181,7 @@ Read these on demand:
 5. **Build cap `-m:9`.** Full parallel pegs the laptop and trips C1076.
 6. **Debug PE header `SizeOfStackReserve = 0` will hang VPinMAME tables.** Always verify `dumpbin /headers` shows `100000` after build (see `known-bugs.md` for the full story).
 7. **Pull public CLR/Win32 symbols.** A `+0x239160` offset means you're NOT in the named function — you're somewhere else and that's just the nearest export. Public symbols fix this.
-8. **`-g -G` skips `-c` execution.** When using `-c "$<file"` to load a breakpoint script, drop `-g` so cdb stops at the initial breakpoint where `-c` runs.
+8. **`-g` skips `-c` execution — including inline `-c`.** `-g` ignores the initial breakpoint, which is the only place `-c` runs. With `-g` present your `sxe` filters are **never armed** and you silently get a plain attach instead of first-chance capture — the tool call succeeds, the log looks normal, and the evidence you wanted is simply absent. Drop `-g` (keep `-G`) and let the trailing `g` inside `-c` resume execution. This applies to `-c "$<file"` **and** to inline `-c "sxe ...; g"`. `launch-bp-cdb.cmd` shipped with this flaw until 2026-09-20; the tell is no `0:000> sxe` echo in the log.
 9. **DNS for `virtualpin` is flaky.** Fall back to `192.168.1.31`.
 10. **VBScript objects are STA-bound.** Calling them from a worker thread crashes with access violation. Don't dispatch FireDispID off-thread.
 11. **First-chance exceptions are silent without a debugger.** A crash/divide-by-zero/AV that CLR's SEH catches and retries leaves no log entry, no dump file — just a "hang". This is why the default launch is **always under cdb with `sxe` filters armed**. Without that, you'll spend hours guessing.

@@ -436,7 +436,16 @@ When Ball History creates visual objects (balls, lines, circles):
 2. `obj->Init(...)` 
 3. `obj->m_wzName = L"uniqueName"` (required by `AddPart`)
 4. `m_ptable->AddPart(obj)` (sets `m_ptable`, calls `AddRef`)
-5. `obj->RenderSetup(renderDevice)` (MUST be after `AddPart`)
+5. **Anything touching drag points** — `ClearForOverwrite()`, `AddDragPoint()` (MUST be after `AddPart`)
+6. `obj->RenderSetup(renderDevice)` (MUST be after `AddPart`)
+
+⚠️ **Step 5 is not optional ordering — it is a crash.** `DragPointCurve::ClearPointsForOverwrite`
+(`dragpoint.cpp`) dereferences `GetPTable()` once per point with no null guard, and a part that
+hasn't been `AddPart`'ed still has `m_ptable == nullptr`. Both `Rubber::Init` and
+`Light::Init`→`InitShape` **seed 8 default drag points**, so the loop always runs and the fault
+always fires. Upstream is safe here only because editor-created parts are always attached first.
+This bit us on 2026-09-20 — see `known-bugs.md` #6. The general rule: **a detached VPX part is a
+half-initialized part; attach it before calling anything that reaches for the table.**
 
 When destroying:
 1. `obj->RenderRelease()` (MUST be before `RemovePart`)
