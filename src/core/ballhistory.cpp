@@ -2461,6 +2461,17 @@ void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex
 
    // Common setup/update
    pLine->Init(0.0f, 0.0f, false, true);
+
+   if (isNew)
+   {
+      // Attach to the table BEFORE ClearForOverwrite, not just before RenderSetup.
+      // Init() seeds 8 default drag points, and upstream's DragPointCurve::ClearPointsForOverwrite
+      // dereferences GetPTable() once per point with no null guard. A part that has not been
+      // AddPart'ed yet still has m_ptable == nullptr, so clearing here would fault.
+      pLine->m_wzName = std::wstring(name.begin(), name.end());
+      player.m_ptable->AddPart(pLine);
+   }
+
    pLine->ClearForOverwrite();
    pLine->AddDragPoint(start);
    pLine->AddDragPoint(end);
@@ -2474,10 +2485,7 @@ void BallHistory::DrawLine(Player& player, const std::string& name, const Vertex
 
    if (isNew)
    {
-      // Add to table first (sets m_ptable which RenderSetup needs)
-      pLine->m_wzName = std::wstring(name.begin(), name.end());
-      player.m_ptable->AddPart(pLine);
-      // First-time GPU setup
+      // First-time GPU setup (AddPart above already set m_ptable, which RenderSetup needs)
       pLine->RenderSetup(player.m_renderer.get());
    }
    else
@@ -2540,6 +2548,16 @@ void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name
 
    // Common setup/update
    pIntersectionCircle->Init(position.x, position.y, false, true);
+
+   if (isNew)
+   {
+      // Same ordering requirement as DrawLine: Init() -> InitShape() seeds 8 default drag points,
+      // and DragPointCurve::ClearPointsForOverwrite dereferences GetPTable() once per point with
+      // no null guard, so the part must be attached before we clear.
+      pIntersectionCircle->m_wzName = std::wstring(name.begin(), name.end());
+      g_pplayer->m_ptable->AddPart(pIntersectionCircle);
+   }
+
    pIntersectionCircle->ClearForOverwrite();
    float defaultBallRadius = GetDefaultBallRadius();
    pIntersectionCircle->m_d.m_falloff = defaultBallRadius * (intersectionRadiusPercent / 100.0f);
@@ -2549,10 +2567,7 @@ void BallHistory::DrawIntersectionCircle(Player& player, const std::string& name
 
    if (isNew)
    {
-      // Add to table first (sets m_ptable which RenderSetup needs)
-      pIntersectionCircle->m_wzName = std::wstring(name.begin(), name.end());
-      g_pplayer->m_ptable->AddPart(pIntersectionCircle);
-      // First-time GPU setup
+      // First-time GPU setup (AddPart above already set m_ptable, which RenderSetup needs)
       pIntersectionCircle->RenderSetup(g_pplayer->m_renderer.get());
    }
    else
