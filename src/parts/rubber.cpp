@@ -547,10 +547,10 @@ void Rubber::AddDragPoint(const Vertex3Ds& dragPoint)
    {
       pdp->AddRef();
 
-      pdp->Init(this, dragPoint.x, dragPoint.y, 0.0f, true);
+      pdp->Init(&m_curve, dragPoint.x, dragPoint.y, 0.0f, true);
       pdp->m_calcHeight = dragPoint.z;
 
-      m_vdpoint.push_back(pdp);
+      m_curve.PushPoint(pdp);
    }
 }
 
